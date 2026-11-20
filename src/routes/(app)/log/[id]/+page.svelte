@@ -48,6 +48,12 @@
 
 	let log = $state<ItemState[]>(untrack(initial));
 	let notes = $state(untrack(() => data.occurrence.notes));
+	let level = $state<'minimum' | 'target' | 'stretch'>(untrack(() => data.occurrence.level));
+	const levelNames = { minimum: 'Minimum', target: 'Target', stretch: 'Stretch' } as const;
+	/** The target for a Metric at the chosen level, falling back to Target. */
+	const targetAt = (it: (typeof data.items)[number], id: string) =>
+		(level === 'minimum' ? it.minTargets[id] : level === 'stretch' ? it.stretchTargets[id] : undefined) ??
+		it.targets[id];
 	let restEnd = $state<number | null>(null);
 	let now = $state(Date.now());
 
@@ -79,7 +85,7 @@
 				if (done) entries.push({ taskId: subId, values: { done: true } });
 			}
 		});
-		return JSON.stringify({ finish, notes, entries });
+		return JSON.stringify({ finish, notes, entries, level });
 	}
 
 	function setDone(i: number, j: number, done: boolean) {
@@ -119,6 +125,17 @@
 	</div>
 	<a href="/">Back</a>
 </header>
+
+{#if data.levels}
+	<fieldset class="card levels" aria-label="Level">
+		<div class="chips">
+			{#each ['minimum', 'target', 'stretch'] as const as l (l)}
+				<button type="button" class="chip" class:on={level === l} onclick={() => (level = l)}>{levelNames[l]}</button>
+			{/each}
+		</div>
+		{#if data.levels[level]}<p class="muted small-text" style="margin: 0.4rem 0 0">{data.levels[level]}</p>{/if}
+	</fieldset>
+{/if}
 
 {#each data.items as it, i (it.slotId)}
 	{@const t = it.task}
@@ -214,7 +231,7 @@
 					{:else}
 						<label>
 							{m.name}{m.unit ? ` (${m.unit})` : m.type === 'duration' ? ' (min)' : ''}
-							{#if it.targets[m.id] !== undefined}<span class="small-text">· target {it.targets[m.id]}</span>{/if}
+							{#if targetAt(it, m.id) !== undefined}<span class="small-text">· {data.levels ? levelNames[level].toLowerCase() : 'target'} {targetAt(it, m.id)}</span>{/if}
 							<input type="number" inputmode="decimal" step="any" value={num(log[i].summary[m.id])}
 								placeholder={prev !== undefined ? `last time ${prev}` : ''}
 								oninput={(e) => (log[i].summary[m.id] = toNum(e.currentTarget.value))} />
@@ -222,7 +239,7 @@
 						{#if m.type === 'duration'}
 							<Timer
 								bind:value={() => log[i].summary[m.id] as number | null, (v) => (log[i].summary[m.id] = v)}
-								target={it.targets[m.id] ?? null}
+								target={targetAt(it, m.id) ?? null}
 								storageKey="timer:{data.occurrence.id}:{m.id}"
 							/>
 						{/if}
@@ -276,6 +293,10 @@
 {/if}
 
 <style>
+	.levels {
+		border: 1px solid var(--border);
+		margin-bottom: 0.75rem;
+	}
 	.sets {
 		width: 100%;
 		border-collapse: collapse;

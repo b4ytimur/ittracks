@@ -10,7 +10,10 @@
 
 <header class="bar">
 	<h1>Habits</h1>
-	<a class="button primary" href="/habits/new">New habit</a>
+	<div class="row" style="align-items: center">
+		<a href="/identities">Identities</a>
+		<a class="button primary" href="/habits/new">New habit</a>
+	</div>
 </header>
 
 {#if data.habits.length === 0}
@@ -25,7 +28,9 @@
 				<a class="card" href="/habits/{h.id}">
 					<strong>{h.name}</strong>
 					<div class="muted" style="font-size: 0.9rem">
-						{h.direction === 'break' ? 'Break habit' : describeSchedule(h.schedule)}
+						{h.direction === 'break' ? 'Break habit' : describeSchedule(h.schedule)}{h.cue?.time
+							? ` · ${h.cue.time}`
+							: ''}
 					</div>
 				</a>
 			</li>

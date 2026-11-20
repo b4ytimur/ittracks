@@ -1,5 +1,6 @@
 import { error, json } from '@sveltejs/kit';
-import { getHabitForm } from '$lib/server/repo/habits';
+import { getHabitForm, listHabits } from '$lib/server/repo/habits';
+import { listIdentities } from '$lib/server/repo/identities';
 import { getTaskForm } from '$lib/server/repo/tasks';
 import { toTemplate } from '$lib/template';
 import type { TaskForm } from '$lib/forms';
@@ -17,7 +18,10 @@ export const GET: RequestHandler = ({ locals, params }) => {
 			const t = getTaskForm(locals.account.id, s.taskId);
 			if (t) tasks.set(s.taskId, t);
 		}
-	const file = toTemplate(habit, tasks);
+	const file = toTemplate(habit, tasks, {
+		habits: new Map(listHabits(locals.account.id).map((h) => [h.id, h.name])),
+		identities: new Map(listIdentities(locals.account.id).map((i) => [i.id, i.statement]))
+	});
 	const slug = habit.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'habit';
 	return json(file, {
 		headers: { 'content-disposition': `attachment; filename="${slug}.ittracks.json"` }
