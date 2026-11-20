@@ -1,0 +1,43 @@
+{
+	"format": "ittracks-template",
+	"version": 3,
+	"name": "Less social media",
+	"description": "Count days without mindless scrolling, and learn what pulls you in.",
+	"meta": {
+		"category": "Break",
+		"daysPerWeek": null,
+		"minutesPerDay": null,
+		"equipment": [],
+		"area": "Mind"
+	},
+	"questions": [],
+	"habit": {
+		"name": "Less social media",
+		"direction": "break",
+		"notes": "",
+		"schedule": null,
+		"variants": [],
+		"cue": null,
+		"streakRule": {
+			"kind": "neverTwice"
+		},
+		"minimumCounts": true,
+		"levels": null,
+		"quickDone": false,
+		"identities": [
+			"I am in charge of my attention"
+		],
+		"ifThen": {
+			"when": "reach for my phone out of boredom",
+			"then": "read one page of a book"
+		},
+		"triggers": [
+			"Bored",
+			"Tired",
+			"Avoiding work",
+			"In bed",
+			"Waiting"
+		]
+	},
+	"tasks": []
+}

@@ -1,0 +1,88 @@
+{
+	"format": "ittracks-template",
+	"version": 3,
+	"name": "Morning routine",
+	"description": "A short checklist to start the day: water, bed, stretch, plan.",
+	"meta": {
+		"category": "Routine",
+		"daysPerWeek": 7,
+		"minutesPerDay": 15,
+		"equipment": [],
+		"area": "Mind"
+	},
+	"questions": [
+		{
+			"kind": "time",
+			"key": "time",
+			"label": "When do you usually get up?",
+			"default": "07:00"
+		}
+	],
+	"habit": {
+		"name": "Morning routine",
+		"direction": "build",
+		"notes": "",
+		"schedule": {
+			"kind": "interval",
+			"every": 1,
+			"start": "2026-01-05",
+			"variantId": "a"
+		},
+		"variants": [
+			{
+				"key": "a",
+				"name": "Morning",
+				"slots": [
+					{
+						"task": "morning",
+						"fillRule": null,
+						"sets": null,
+						"targets": {}
+					}
+				]
+			}
+		],
+		"cue": {
+			"time": "07:00",
+			"place": null,
+			"after": "I get up",
+			"range": null
+		},
+		"streakRule": {
+			"kind": "neverTwice"
+		},
+		"minimumCounts": true,
+		"levels": {
+			"enabled": true,
+			"minimum": "Glass of water",
+			"target": "All four",
+			"stretch": "All four plus a walk"
+		},
+		"quickDone": false,
+		"identities": [],
+		"ifThen": null,
+		"triggers": null
+	},
+	"tasks": [
+		{
+			"key": "morning",
+			"name": "Morning routine",
+			"notes": "",
+			"restTimerEnabled": false,
+			"restTimerSeconds": 90,
+			"tags": [
+				{
+					"name": "routine",
+					"level": 3
+				}
+			],
+			"metrics": [],
+			"subtasks": [
+				"Glass of water",
+				"Make the bed",
+				"Stretch for 5 minutes",
+				"Plan the day"
+			]
+		}
+	]
+}

@@ -812,6 +812,11 @@
 
 	{#if h.direction === 'build'}
 		<label style="color: var(--text)"><input type="checkbox" bind:checked={pinned} /> Add to home screen shortcuts (long-press the app icon)</label>
+		{#if !data.isNew}
+			<p class="muted small-text" style="margin: 0">
+				Quick-log link for bookmarks or a QR code: <a href="/q/{data.id}">/q/{data.id.slice(0, 8)}…</a>. Add <code>?go=1</code> to log "same as last time" in one tap.
+			</p>
+		{/if}
 	{/if}
 
 	{#if form?.error}<p class="error">{form.error}</p>{/if}

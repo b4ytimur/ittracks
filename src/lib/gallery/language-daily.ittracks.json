@@ -1,0 +1,135 @@
+{
+	"format": "ittracks-template",
+	"version": 3,
+	"name": "Language daily",
+	"description": "A little every day: minutes of study, new words, and a quick review.",
+	"meta": {
+		"category": "Learning",
+		"daysPerWeek": 7,
+		"minutesPerDay": 20,
+		"equipment": [],
+		"area": "Learning"
+	},
+	"questions": [
+		{
+			"kind": "number",
+			"key": "mins",
+			"label": "Minutes a day",
+			"unit": "min",
+			"default": 20,
+			"metrics": [
+				"studym"
+			]
+		},
+		{
+			"kind": "time",
+			"key": "time",
+			"label": "When do you want to study?",
+			"default": "08:00"
+		}
+	],
+	"habit": {
+		"name": "Language practice",
+		"direction": "build",
+		"notes": "",
+		"schedule": {
+			"kind": "interval",
+			"every": 1,
+			"start": "2026-01-05",
+			"variantId": "a"
+		},
+		"variants": [
+			{
+				"key": "a",
+				"name": "Study",
+				"slots": [
+					{
+						"task": "study",
+						"fillRule": null,
+						"sets": null,
+						"targets": {
+							"studym": 20,
+							"studyw": 10
+						}
+					}
+				]
+			}
+		],
+		"cue": {
+			"time": "08:00",
+			"place": null,
+			"after": null,
+			"range": null
+		},
+		"streakRule": {
+			"kind": "neverTwice"
+		},
+		"minimumCounts": true,
+		"levels": {
+			"enabled": true,
+			"minimum": "5 minutes",
+			"target": "20 minutes",
+			"stretch": "45 minutes"
+		},
+		"quickDone": false,
+		"identities": [],
+		"ifThen": null,
+		"triggers": null
+	},
+	"tasks": [
+		{
+			"key": "study",
+			"name": "Language study",
+			"notes": "",
+			"restTimerEnabled": false,
+			"restTimerSeconds": 90,
+			"tags": [
+				{
+					"name": "language",
+					"level": 3
+				}
+			],
+			"metrics": [
+				{
+					"key": "studym",
+					"name": "Minutes",
+					"type": "duration",
+					"unit": "min",
+					"repeats": false,
+					"choices": [],
+					"step": 5,
+					"required": true,
+					"quick": true
+				},
+				{
+					"key": "studyw",
+					"name": "New words",
+					"type": "count",
+					"unit": "",
+					"repeats": false,
+					"choices": [],
+					"step": 1,
+					"required": false,
+					"quick": true
+				},
+				{
+					"key": "studyn",
+					"name": "What I did",
+					"type": "text",
+					"unit": "",
+					"repeats": false,
+					"choices": [],
+					"step": null,
+					"required": false,
+					"quick": false,
+					"prefill": "blank"
+				}
+			],
+			"subtasks": [
+				"Review flashcards",
+				"Listen to something",
+				"Say something out loud"
+			]
+		}
+	]
+}
