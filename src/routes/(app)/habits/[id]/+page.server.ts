@@ -21,6 +21,7 @@ export const load: PageServerLoad = ({ locals, params }) => {
 	const form = isNew ? blank() : getHabitForm(accountId, params.id);
 	if (!form) error(404, 'Habit not found');
 	return {
+		id: params.id,
 		isNew,
 		habit: form,
 		tasks: listTasks(accountId).map(({ id, name }) => ({ id, name })),

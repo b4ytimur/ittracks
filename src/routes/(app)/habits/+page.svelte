@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { describeSchedule } from '$lib/describe';
 
-	let { data } = $props();
+	import { enhance } from '$app/forms';
+
+	let { data, form } = $props();
 </script>
 
 <svelte:head><title>Habits · ittracks</title></svelte:head>
@@ -30,3 +32,16 @@
 		{/each}
 	</ul>
 {/if}
+
+<details class="card" style="margin-top: 1.5rem">
+	<summary>Import a template</summary>
+	<form method="POST" action="?/import" enctype="multipart/form-data" class="stack" style="margin-top: 0.75rem" use:enhance>
+		<p class="muted" style="margin: 0">
+			A template file (.ittracks.json) creates a habit, and adds the Tasks it uses to your Library as new Tasks.
+		</p>
+		<input type="file" name="file" accept=".json,application/json" required />
+		<button>Import</button>
+	</form>
+</details>
+{#if form?.error}<p class="error">{form.error}</p>{/if}
+{#if form?.imported}<p>Imported "{form.imported}" with {form.taskCount} Tasks.</p>{/if}
