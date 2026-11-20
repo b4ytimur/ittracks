@@ -124,10 +124,10 @@
 		<div>
 			<span class="muted small-text">Parts of your day (optional). Habits can be set for a part instead of a time.</span>
 			{#each ranges as r, i (i)}
-				<div class="row range">
+				<div class="range">
 					<input class="grow" name="rangeName" bind:value={r.name} aria-label="Name" />
-					<input type="time" name="rangeStart" bind:value={r.start} aria-label="{r.name} starts" style="width: 7rem" />
-					<input type="time" name="rangeEnd" bind:value={r.end} aria-label="{r.name} ends" style="width: 7rem" />
+					<input type="time" name="rangeStart" bind:value={r.start} aria-label="{r.name} starts" />
+					<input type="time" name="rangeEnd" bind:value={r.end} aria-label="{r.name} ends" />
 					<button type="button" class="small" onclick={() => ranges.splice(i, 1)} aria-label="Remove {r.name}">×</button>
 				</div>
 			{/each}

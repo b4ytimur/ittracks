@@ -1,0 +1,91 @@
+{
+	"format": "ittracks-template",
+	"version": 3,
+	"name": "Drink water",
+	"description": "Count glasses of water through the day.",
+	"meta": {
+		"category": "Health",
+		"daysPerWeek": 7,
+		"minutesPerDay": 0,
+		"equipment": [],
+		"area": "Health"
+	},
+	"questions": [
+		{
+			"kind": "number",
+			"key": "glasses",
+			"label": "Glasses a day",
+			"unit": "",
+			"default": 8,
+			"metrics": [
+				"waterg"
+			]
+		}
+	],
+	"habit": {
+		"name": "Drink water",
+		"direction": "build",
+		"notes": "",
+		"schedule": {
+			"kind": "interval",
+			"every": 1,
+			"start": "2026-01-05",
+			"variantId": "a"
+		},
+		"variants": [
+			{
+				"key": "a",
+				"name": "Water",
+				"slots": [
+					{
+						"task": "water",
+						"fillRule": null,
+						"sets": null,
+						"targets": {
+							"waterg": 8
+						}
+					}
+				]
+			}
+		],
+		"cue": null,
+		"streakRule": {
+			"kind": "neverTwice"
+		},
+		"minimumCounts": true,
+		"levels": null,
+		"quickDone": true,
+		"identities": [],
+		"ifThen": null,
+		"triggers": null
+	},
+	"tasks": [
+		{
+			"key": "water",
+			"name": "Water",
+			"notes": "",
+			"restTimerEnabled": false,
+			"restTimerSeconds": 90,
+			"tags": [
+				{
+					"name": "health",
+					"level": 2
+				}
+			],
+			"metrics": [
+				{
+					"key": "waterg",
+					"name": "Glasses",
+					"type": "count",
+					"unit": "",
+					"repeats": false,
+					"choices": [],
+					"step": 1,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		}
+	]
+}

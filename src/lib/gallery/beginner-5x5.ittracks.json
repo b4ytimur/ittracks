@@ -1,0 +1,347 @@
+{
+	"format": "ittracks-template",
+	"version": 3,
+	"name": "Beginner 5x5 strength",
+	"description": "Two workouts, A and B, alternating with a rest day between. Five sets of five; add a little weight each time.",
+	"meta": {
+		"category": "Gym",
+		"daysPerWeek": 3,
+		"minutesPerDay": 45,
+		"equipment": [
+			"barbell",
+			"bench",
+			"rack"
+		],
+		"area": "Fitness"
+	},
+	"questions": [
+		{
+			"kind": "number",
+			"key": "start",
+			"label": "Starting weight for every lift",
+			"unit": "{weight}",
+			"default": 20,
+			"metrics": [
+				"squatw",
+				"benchw",
+				"roww",
+				"ohpw",
+				"deadw"
+			]
+		}
+	],
+	"habit": {
+		"name": "5x5 strength",
+		"direction": "build",
+		"notes": "Add 2.5 kg (5 lb) to a lift when you complete all 5x5.",
+		"schedule": {
+			"kind": "rotation",
+			"step": "variant",
+			"order": [
+				{
+					"variantId": "a",
+					"restDays": 1
+				},
+				{
+					"variantId": "b",
+					"restDays": 1
+				}
+			],
+			"onMiss": "wait",
+			"weekdays": [],
+			"start": "2026-01-05"
+		},
+		"variants": [
+			{
+				"key": "a",
+				"name": "A",
+				"slots": [
+					{
+						"task": "squat",
+						"fillRule": null,
+						"sets": 5,
+						"targets": {
+							"squatr": 5
+						}
+					},
+					{
+						"task": "bench",
+						"fillRule": null,
+						"sets": 5,
+						"targets": {
+							"benchr": 5
+						}
+					},
+					{
+						"task": "row",
+						"fillRule": null,
+						"sets": 5,
+						"targets": {
+							"rowr": 5
+						}
+					}
+				]
+			},
+			{
+				"key": "b",
+				"name": "B",
+				"slots": [
+					{
+						"task": "squat",
+						"fillRule": null,
+						"sets": 5,
+						"targets": {
+							"squatr": 5
+						}
+					},
+					{
+						"task": "ohp",
+						"fillRule": null,
+						"sets": 5,
+						"targets": {
+							"ohpr": 5
+						}
+					},
+					{
+						"task": "dead",
+						"fillRule": null,
+						"sets": 1,
+						"targets": {
+							"deadr": 5
+						}
+					}
+				]
+			}
+		],
+		"cue": null,
+		"streakRule": {
+			"kind": "neverTwice"
+		},
+		"minimumCounts": true,
+		"levels": null,
+		"quickDone": false,
+		"identities": [],
+		"ifThen": null,
+		"triggers": null
+	},
+	"tasks": [
+		{
+			"key": "squat",
+			"name": "Squat",
+			"notes": "",
+			"restTimerEnabled": true,
+			"restTimerSeconds": 150,
+			"tags": [
+				{
+					"name": "legs",
+					"level": 3
+				},
+				{
+					"name": "core",
+					"level": 1
+				}
+			],
+			"metrics": [
+				{
+					"key": "squatw",
+					"name": "Weight",
+					"type": "number",
+					"unit": "{weight}",
+					"repeats": true,
+					"choices": [],
+					"step": null,
+					"required": false,
+					"quick": true
+				},
+				{
+					"key": "squatr",
+					"name": "Reps",
+					"type": "count",
+					"unit": "",
+					"repeats": true,
+					"choices": [],
+					"step": 1,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		},
+		{
+			"key": "bench",
+			"name": "Bench press",
+			"notes": "",
+			"restTimerEnabled": true,
+			"restTimerSeconds": 120,
+			"tags": [
+				{
+					"name": "chest",
+					"level": 3
+				},
+				{
+					"name": "triceps",
+					"level": 2
+				},
+				{
+					"name": "shoulders",
+					"level": 1
+				}
+			],
+			"metrics": [
+				{
+					"key": "benchw",
+					"name": "Weight",
+					"type": "number",
+					"unit": "{weight}",
+					"repeats": true,
+					"choices": [],
+					"step": null,
+					"required": false,
+					"quick": true
+				},
+				{
+					"key": "benchr",
+					"name": "Reps",
+					"type": "count",
+					"unit": "",
+					"repeats": true,
+					"choices": [],
+					"step": 1,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		},
+		{
+			"key": "row",
+			"name": "Barbell row",
+			"notes": "",
+			"restTimerEnabled": true,
+			"restTimerSeconds": 120,
+			"tags": [
+				{
+					"name": "back",
+					"level": 3
+				},
+				{
+					"name": "biceps",
+					"level": 2
+				}
+			],
+			"metrics": [
+				{
+					"key": "roww",
+					"name": "Weight",
+					"type": "number",
+					"unit": "{weight}",
+					"repeats": true,
+					"choices": [],
+					"step": null,
+					"required": false,
+					"quick": true
+				},
+				{
+					"key": "rowr",
+					"name": "Reps",
+					"type": "count",
+					"unit": "",
+					"repeats": true,
+					"choices": [],
+					"step": 1,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		},
+		{
+			"key": "ohp",
+			"name": "Overhead press",
+			"notes": "",
+			"restTimerEnabled": true,
+			"restTimerSeconds": 120,
+			"tags": [
+				{
+					"name": "shoulders",
+					"level": 3
+				},
+				{
+					"name": "triceps",
+					"level": 2
+				}
+			],
+			"metrics": [
+				{
+					"key": "ohpw",
+					"name": "Weight",
+					"type": "number",
+					"unit": "{weight}",
+					"repeats": true,
+					"choices": [],
+					"step": null,
+					"required": false,
+					"quick": true
+				},
+				{
+					"key": "ohpr",
+					"name": "Reps",
+					"type": "count",
+					"unit": "",
+					"repeats": true,
+					"choices": [],
+					"step": 1,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		},
+		{
+			"key": "dead",
+			"name": "Deadlift",
+			"notes": "",
+			"restTimerEnabled": true,
+			"restTimerSeconds": 180,
+			"tags": [
+				{
+					"name": "back",
+					"level": 3
+				},
+				{
+					"name": "legs",
+					"level": 2
+				},
+				{
+					"name": "core",
+					"level": 2
+				}
+			],
+			"metrics": [
+				{
+					"key": "deadw",
+					"name": "Weight",
+					"type": "number",
+					"unit": "{weight}",
+					"repeats": true,
+					"choices": [],
+					"step": null,
+					"required": false,
+					"quick": true
+				},
+				{
+					"key": "deadr",
+					"name": "Reps",
+					"type": "count",
+					"unit": "",
+					"repeats": true,
+					"choices": [],
+					"step": 1,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		}
+	]
+}

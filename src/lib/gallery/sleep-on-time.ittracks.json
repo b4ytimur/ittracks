@@ -1,0 +1,60 @@
+{
+	"format": "ittracks-template",
+	"version": 3,
+	"name": "Sleep by a set time",
+	"description": "In bed by your chosen time. Nothing to fill in, just tick it off.",
+	"meta": {
+		"category": "Health",
+		"daysPerWeek": 7,
+		"minutesPerDay": 0,
+		"equipment": [],
+		"area": "Health"
+	},
+	"questions": [
+		{
+			"kind": "time",
+			"key": "time",
+			"label": "What time do you want to be in bed?",
+			"default": "22:30"
+		}
+	],
+	"habit": {
+		"name": "In bed on time",
+		"direction": "build",
+		"notes": "",
+		"schedule": {
+			"kind": "interval",
+			"every": 1,
+			"start": "2026-01-05",
+			"variantId": "a"
+		},
+		"variants": [
+			{
+				"key": "a",
+				"name": "Bed",
+				"slots": []
+			}
+		],
+		"cue": {
+			"time": "22:30",
+			"place": "in bed",
+			"after": null,
+			"range": null
+		},
+		"streakRule": {
+			"kind": "neverTwice"
+		},
+		"minimumCounts": true,
+		"levels": {
+			"enabled": true,
+			"minimum": "Phone away",
+			"target": "In bed on time",
+			"stretch": "30 minutes early"
+		},
+		"quickDone": false,
+		"identities": [],
+		"ifThen": null,
+		"triggers": null
+	},
+	"tasks": []
+}

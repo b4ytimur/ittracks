@@ -1,0 +1,109 @@
+{
+	"format": "ittracks-template",
+	"version": 3,
+	"name": "Journaling",
+	"description": "One sentence and a mood every evening. Small enough to never skip.",
+	"meta": {
+		"category": "Mind",
+		"daysPerWeek": 7,
+		"minutesPerDay": 5,
+		"equipment": [],
+		"area": "Mind"
+	},
+	"questions": [
+		{
+			"kind": "time",
+			"key": "time",
+			"label": "When do you want to write?",
+			"default": "21:30"
+		}
+	],
+	"habit": {
+		"name": "Journal",
+		"direction": "build",
+		"notes": "",
+		"schedule": {
+			"kind": "interval",
+			"every": 1,
+			"start": "2026-01-05",
+			"variantId": "a"
+		},
+		"variants": [
+			{
+				"key": "a",
+				"name": "Journal",
+				"slots": [
+					{
+						"task": "journal",
+						"fillRule": null,
+						"sets": null,
+						"targets": {}
+					}
+				]
+			}
+		],
+		"cue": {
+			"time": "21:30",
+			"place": null,
+			"after": null,
+			"range": null
+		},
+		"streakRule": {
+			"kind": "neverTwice"
+		},
+		"minimumCounts": true,
+		"levels": null,
+		"quickDone": false,
+		"identities": [],
+		"ifThen": null,
+		"triggers": null
+	},
+	"tasks": [
+		{
+			"key": "journal",
+			"name": "Journal",
+			"notes": "",
+			"restTimerEnabled": false,
+			"restTimerSeconds": 90,
+			"tags": [
+				{
+					"name": "mind",
+					"level": 2
+				}
+			],
+			"metrics": [
+				{
+					"key": "journalt",
+					"name": "Today in a sentence",
+					"type": "text",
+					"unit": "",
+					"repeats": false,
+					"choices": [],
+					"step": null,
+					"required": false,
+					"quick": true,
+					"prefill": "blank"
+				},
+				{
+					"key": "journalm",
+					"name": "Mood",
+					"type": "choice",
+					"unit": "",
+					"repeats": false,
+					"choices": [
+						"Great",
+						"Good",
+						"Okay",
+						"Low",
+						"Bad"
+					],
+					"step": null,
+					"required": false,
+					"quick": true,
+					"prefill": "blank"
+				}
+			],
+			"subtasks": []
+		}
+	]
+}

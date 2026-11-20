@@ -1,0 +1,165 @@
+{
+	"format": "ittracks-template",
+	"version": 3,
+	"name": "Running 3 days a week",
+	"description": "Two easy runs and one longer run each week.",
+	"meta": {
+		"category": "Cardio",
+		"daysPerWeek": 3,
+		"minutesPerDay": 40,
+		"equipment": [
+			"running shoes"
+		],
+		"area": "Fitness"
+	},
+	"questions": [
+		{
+			"kind": "days",
+			"key": "days",
+			"label": "Which days do you want to run?",
+			"default": [
+				1,
+				3,
+				6
+			]
+		}
+	],
+	"habit": {
+		"name": "Running",
+		"direction": "build",
+		"notes": "",
+		"schedule": {
+			"kind": "weekly",
+			"days": {
+				"1": "e",
+				"3": "e",
+				"6": "l"
+			}
+		},
+		"variants": [
+			{
+				"key": "e",
+				"name": "Easy",
+				"slots": [
+					{
+						"task": "easy",
+						"fillRule": null,
+						"sets": null,
+						"targets": {
+							"easyt": 30
+						}
+					}
+				]
+			},
+			{
+				"key": "l",
+				"name": "Long",
+				"slots": [
+					{
+						"task": "long",
+						"fillRule": null,
+						"sets": null,
+						"targets": {
+							"longt": 50
+						}
+					}
+				]
+			}
+		],
+		"cue": null,
+		"streakRule": {
+			"kind": "neverTwice"
+		},
+		"minimumCounts": true,
+		"levels": {
+			"enabled": true,
+			"minimum": "Shoes on, 10 minutes",
+			"target": "Planned run",
+			"stretch": "10 minutes extra"
+		},
+		"quickDone": false,
+		"identities": [
+			"I am a runner"
+		],
+		"ifThen": null,
+		"triggers": null
+	},
+	"tasks": [
+		{
+			"key": "easy",
+			"name": "Easy run",
+			"notes": "Conversational pace.",
+			"restTimerEnabled": false,
+			"restTimerSeconds": 90,
+			"tags": [
+				{
+					"name": "cardio",
+					"level": 3
+				}
+			],
+			"metrics": [
+				{
+					"key": "easyt",
+					"name": "Time",
+					"type": "duration",
+					"unit": "min",
+					"repeats": false,
+					"choices": [],
+					"step": 5,
+					"required": false,
+					"quick": true
+				},
+				{
+					"key": "easyd",
+					"name": "Distance",
+					"type": "number",
+					"unit": "km",
+					"repeats": false,
+					"choices": [],
+					"step": 0.5,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		},
+		{
+			"key": "long",
+			"name": "Long run",
+			"notes": "Slow and steady.",
+			"restTimerEnabled": false,
+			"restTimerSeconds": 90,
+			"tags": [
+				{
+					"name": "cardio",
+					"level": 3
+				}
+			],
+			"metrics": [
+				{
+					"key": "longt",
+					"name": "Time",
+					"type": "duration",
+					"unit": "min",
+					"repeats": false,
+					"choices": [],
+					"step": 5,
+					"required": false,
+					"quick": true
+				},
+				{
+					"key": "longd",
+					"name": "Distance",
+					"type": "number",
+					"unit": "km",
+					"repeats": false,
+					"choices": [],
+					"step": 0.5,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		}
+	]
+}
