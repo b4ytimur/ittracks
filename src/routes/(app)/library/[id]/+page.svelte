@@ -40,7 +40,7 @@
 
 	// Quick start for gym exercises: weight and reps, logged once per set.
 	function addSetMetrics() {
-		addMetric({ name: 'Weight', type: 'number', unit: 'kg', repeats: true });
+		addMetric({ name: 'Weight', type: 'number', unit: data.weightUnit, repeats: true });
 		addMetric({ name: 'Reps', type: 'count', repeats: true });
 	}
 
