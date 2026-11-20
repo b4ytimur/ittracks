@@ -15,7 +15,16 @@ Status: MVP in progress. You can set up habits, log them day to day, track slips
 | Metric | A value you log: number, count, duration, checkbox, choice or text |
 | Schedule | Weekly, frequency, rotation (by Variant or by week) or interval |
 | Occurrence / Log / Entry | A Variant on a date, what you did, and one row of values (e.g. one set) |
-| Slip | A logged lapse of a break habit; resets its counter to 0 |
+| Slip | A logged lapse of a break habit; resets its counter to 0. Can record time, place, feeling and company |
+| Identity | Who you want to be ("I am a runner"). Each done Occurrence of a linked habit is a vote for it |
+| Cue | When and where a habit happens, and what it is stacked after |
+| Level | Minimum (the two-minute version), Target and Stretch |
+| Streak rule | Strict, never miss twice (default), grace days, or consistency % |
+| If-then plan | What a break habit's user does instead when a craving comes; a resisted craving is logged too |
+
+## Reminders
+
+Habits with a cue time can send a push notification at that time. The server creates its own push keys on first start and stores them in the database, so there is nothing to configure. Turn reminders on per device in Settings. Push needs HTTPS (or `localhost`); on iPhone and iPad it works only after adding the app to the Home Screen.
 
 ## Stack
 

@@ -2,6 +2,34 @@
 // Habit > Variant > Slot > Task (from the Library) > Metric,
 // Schedule -> Occurrence -> Log -> Entry, and Slips for break habits.
 import { sqliteTable, text, integer, real, primaryKey } from 'drizzle-orm/sqlite-core';
+import type { Level, StreakRule } from '../../engine/streak';
+
+/** When and where a Habit happens, and what it is stacked after. All optional. */
+export interface Cue {
+	/** HH:MM */
+	time: string | null;
+	place: string | null;
+	/** Stacked after another Habit of this account. */
+	afterHabitId: string | null;
+	/** Or after something that isn't a Habit: "after I pour my coffee". */
+	afterText: string | null;
+}
+
+/** What Minimum, Target and Stretch mean for this Habit, in the user's words. */
+export interface Levels {
+	enabled: boolean;
+	minimum: string;
+	target: string;
+	stretch: string;
+}
+
+/** A break habit's if-then plan: "If I want a cigarette, I will do 10 push-ups." */
+export interface IfThen {
+	when: string;
+	then: string;
+	/** Optional build Habit that is the replacement. */
+	habitId: string | null;
+}
 
 const id = () => text('id').primaryKey();
 const createdAt = () =>
@@ -108,8 +136,48 @@ export const habit = sqliteTable('habit', {
 	schedule: text('schedule', { mode: 'json' }),
 	archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
 	sortOrder: integer('sort_order').notNull().default(0),
+	createdAt: createdAt(),
+	cue: text('cue', { mode: 'json' }).$type<Cue>(),
+	/** Existing habits keep the strict rule; new ones default to never miss twice (see forms). */
+	streakRule: text('streak_rule', { mode: 'json' })
+		.notNull()
+		.$type<StreakRule>()
+		.default({ kind: 'strict' }),
+	/** Does a done at the Minimum level keep the streak alive? */
+	minimumCounts: integer('minimum_counts', { mode: 'boolean' }).notNull().default(true),
+	levels: text('levels', { mode: 'json' }).$type<Levels>(),
+	/** Show a one-tap Done on Today that logs the Slot targets. */
+	quickDone: integer('quick_done', { mode: 'boolean' }).notNull().default(false),
+	/** Push a reminder at the cue time. */
+	remind: integer('remind', { mode: 'boolean' }).notNull().default(false),
+	ifThen: text('if_then', { mode: 'json' }).$type<IfThen>(),
+	/** Feelings offered when logging a Slip; user-editable. */
+	triggers: text('triggers', { mode: 'json' }).$type<string[]>()
+});
+
+/** "I am a runner." Habits vote for an Identity each time they are done. */
+export const identity = sqliteTable('identity', {
+	id: id(),
+	accountId: text('account_id')
+		.notNull()
+		.references(() => account.id, { onDelete: 'cascade' }),
+	statement: text('statement').notNull(),
+	sortOrder: integer('sort_order').notNull().default(0),
 	createdAt: createdAt()
 });
+
+export const habitIdentity = sqliteTable(
+	'habit_identity',
+	{
+		habitId: text('habit_id')
+			.notNull()
+			.references(() => habit.id, { onDelete: 'cascade' }),
+		identityId: text('identity_id')
+			.notNull()
+			.references(() => identity.id, { onDelete: 'cascade' })
+	},
+	(t) => [primaryKey({ columns: [t.habitId, t.identityId] })]
+);
 
 export const variant = sqliteTable('variant', {
 	id: id(),
@@ -132,6 +200,9 @@ export const slot = sqliteTable('slot', {
 	sets: integer('sets'),
 	/** Targets per Metric id, e.g. { "<weight id>": 60, "<reps id>": 8 }. */
 	targets: text('targets', { mode: 'json' }).$type<Record<string, number>>(),
+	/** Targets for the Minimum and Stretch levels; `targets` is the Target level. */
+	minTargets: text('min_targets', { mode: 'json' }).$type<Record<string, number>>(),
+	stretchTargets: text('stretch_targets', { mode: 'json' }).$type<Record<string, number>>(),
 	sortOrder: integer('sort_order').notNull().default(0)
 });
 
@@ -149,7 +220,9 @@ export const occurrence = sqliteTable('occurrence', {
 	/** The Tasks picked for open Slots: { slotId: taskId }. */
 	picks: text('picks', { mode: 'json' }).$type<Record<string, string>>(),
 	notes: text('notes'),
-	finishedAt: integer('finished_at', { mode: 'timestamp' })
+	finishedAt: integer('finished_at', { mode: 'timestamp' }),
+	/** Which level was reached; null means Target. */
+	level: text('level', { enum: ['minimum', 'target', 'stretch'] }).$type<Level>()
 });
 
 /** One row of Metric values for one Task, e.g. one gym set. */
@@ -174,5 +247,53 @@ export const slip = sqliteTable('slip', {
 	date: text('date').notNull(),
 	count: real('count').notNull().default(1),
 	notes: text('notes'),
+	createdAt: createdAt(),
+	/** Slip context, all optional: HH:MM, where, the feeling, and who was there. */
+	time: text('time'),
+	place: text('place'),
+	feeling: text('feeling'),
+	withWhom: text('with_whom')
+});
+
+/** A craving resisted on a break habit, usually by doing the if-then replacement. */
+export const craving = sqliteTable('craving', {
+	id: id(),
+	habitId: text('habit_id')
+		.notNull()
+		.references(() => habit.id, { onDelete: 'cascade' }),
+	date: text('date').notNull(),
+	time: text('time'),
 	createdAt: createdAt()
+});
+
+// ---------- Reminders ----------
+
+/** A browser that agreed to receive push reminders. */
+export const pushSubscription = sqliteTable('push_subscription', {
+	id: id(),
+	accountId: text('account_id')
+		.notNull()
+		.references(() => account.id, { onDelete: 'cascade' }),
+	endpoint: text('endpoint').notNull().unique(),
+	p256dh: text('p256dh').notNull(),
+	auth: text('auth').notNull(),
+	createdAt: createdAt()
+});
+
+/** One reminder per Habit per day. */
+export const reminderSent = sqliteTable(
+	'reminder_sent',
+	{
+		habitId: text('habit_id')
+			.notNull()
+			.references(() => habit.id, { onDelete: 'cascade' }),
+		date: text('date').notNull()
+	},
+	(t) => [primaryKey({ columns: [t.habitId, t.date] })]
+);
+
+/** Server-wide values, such as the push keys generated on first start. */
+export const appValue = sqliteTable('app_value', {
+	key: text('key').primaryKey(),
+	value: text('value').notNull()
 });

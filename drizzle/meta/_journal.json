@@ -8,6 +8,13 @@
       "when": 1795200077300,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1795207484545,
+      "tag": "0001_atomic_habits",
+      "breakpoints": true
     }
   ]
 }
