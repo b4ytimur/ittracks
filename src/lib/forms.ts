@@ -18,11 +18,19 @@ export const taskForm = z.object({
 			type: z.enum(metricTypes),
 			unit: z.string().trim().max(20).default(''),
 			repeats: z.boolean(),
-			choices: z.array(z.string().trim().min(1).max(40)).default([])
+			choices: z.array(z.string().trim().min(1).max(40)).default([]),
+			prefill: z.enum(['last', 'target', 'blank']).default('last'),
+			step: z.number().positive().max(10000).nullable().default(null),
+			required: z.boolean().default(false),
+			quick: z.boolean().default(true)
 		})
 	),
-	subtasks: z.array(z.object({ id, name }))
+	subtasks: z.array(z.object({ id, name })),
+	areaId: id.nullable().default(null),
+	/** Hand-picked Collections this Task is in. */
+	collectionIds: z.array(id).default([])
 });
+export type MetricForm = TaskForm['metrics'][number];
 export type TaskForm = z.infer<typeof taskForm>;
 
 export const fillRule = z.object({
@@ -63,10 +71,11 @@ export const cueForm = z.object({
 	time: time.nullable().default(null),
 	place: shortText.nullable().default(null),
 	afterHabitId: id.nullable().default(null),
-	afterText: shortText.nullable().default(null)
+	afterText: shortText.nullable().default(null),
+	range: z.string().trim().max(40).nullable().default(null)
 });
 export type CueForm = z.infer<typeof cueForm>;
-export const emptyCue = (): CueForm => ({ time: null, place: null, afterHabitId: null, afterText: null });
+export const emptyCue = (): CueForm => ({ time: null, place: null, afterHabitId: null, afterText: null, range: null });
 
 export const streakRuleForm = z.discriminatedUnion('kind', [
 	z.object({ kind: z.literal('strict') }),
@@ -170,7 +179,8 @@ export const habitForm = z
 		reward: rewardForm.default({ celebrate: false, message: '', jar: null }),
 		cost: costForm.nullable().default(null),
 		limit: limitForm.nullable().default(null),
-		progression: progressionForm.nullable().default(null)
+		progression: progressionForm.nullable().default(null),
+		areaId: id.nullable().default(null)
 	})
 	.superRefine((h, ctx) => {
 		if (h.direction === 'build' && h.variants.length === 0)

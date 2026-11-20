@@ -1,0 +1,107 @@
+{
+	"format": "ittracks-template",
+	"version": 3,
+	"name": "Daily walk",
+	"description": "A walk every day. Log minutes, and steps if you track them.",
+	"meta": {
+		"category": "Health",
+		"daysPerWeek": 7,
+		"minutesPerDay": 30,
+		"equipment": [],
+		"area": "Health"
+	},
+	"questions": [
+		{
+			"kind": "number",
+			"key": "mins",
+			"label": "Minutes a day",
+			"unit": "min",
+			"default": 30,
+			"metrics": [
+				"walkm"
+			]
+		}
+	],
+	"habit": {
+		"name": "Walk",
+		"direction": "build",
+		"notes": "",
+		"schedule": {
+			"kind": "interval",
+			"every": 1,
+			"start": "2026-01-05",
+			"variantId": "a"
+		},
+		"variants": [
+			{
+				"key": "a",
+				"name": "Walk",
+				"slots": [
+					{
+						"task": "walk",
+						"fillRule": null,
+						"sets": null,
+						"targets": {
+							"walkm": 30
+						}
+					}
+				]
+			}
+		],
+		"cue": null,
+		"streakRule": {
+			"kind": "neverTwice"
+		},
+		"minimumCounts": true,
+		"levels": {
+			"enabled": true,
+			"minimum": "Around the block",
+			"target": "30 minutes",
+			"stretch": "An hour"
+		},
+		"quickDone": false,
+		"identities": [],
+		"ifThen": null,
+		"triggers": null
+	},
+	"tasks": [
+		{
+			"key": "walk",
+			"name": "Walk",
+			"notes": "",
+			"restTimerEnabled": false,
+			"restTimerSeconds": 90,
+			"tags": [
+				{
+					"name": "cardio",
+					"level": 1
+				}
+			],
+			"metrics": [
+				{
+					"key": "walkm",
+					"name": "Minutes",
+					"type": "duration",
+					"unit": "min",
+					"repeats": false,
+					"choices": [],
+					"step": 5,
+					"required": false,
+					"quick": true
+				},
+				{
+					"key": "walks",
+					"name": "Steps",
+					"type": "count",
+					"unit": "",
+					"repeats": false,
+					"choices": [],
+					"step": 1000,
+					"required": false,
+					"quick": false
+				}
+			],
+			"subtasks": []
+		}
+	]
+}

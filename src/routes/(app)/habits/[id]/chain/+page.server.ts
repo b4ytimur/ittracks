@@ -3,7 +3,7 @@ import { asc, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { occurrence, slip } from '$lib/server/db/schema';
 import { ownedHabit } from '$lib/server/owned';
-import { todayIn } from '$lib/server/today';
+import { userToday } from '$lib/server/today';
 import { addDays, weekStart } from '$lib/engine/dates';
 import { chainCells } from '$lib/engine/chain';
 import { limitOn } from '$lib/engine/limit';
@@ -15,7 +15,7 @@ const WEEKS = 12;
 export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 	const h = ownedHabit(locals.account!.id, params.id);
 	if (!h) error(404, 'Habit not found');
-	const today = todayIn(cookies.get('tz'));
+	const today = userToday(locals.account!.id, cookies.get('tz'));
 	const weeks = Math.min(Math.max(Number(url.searchParams.get('weeks')) || WEEKS, 4), 104);
 	const from = addDays(weekStart(today), -7 * (weeks - 1));
 	const to = addDays(weekStart(today), 6);

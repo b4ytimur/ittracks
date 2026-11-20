@@ -1,0 +1,43 @@
+{
+	"format": "ittracks-template",
+	"version": 3,
+	"name": "No added sugar",
+	"description": "Count days without added sugar. Note when cravings hit.",
+	"meta": {
+		"category": "Break",
+		"daysPerWeek": null,
+		"minutesPerDay": null,
+		"equipment": [],
+		"area": "Health"
+	},
+	"questions": [],
+	"habit": {
+		"name": "No added sugar",
+		"direction": "break",
+		"notes": "",
+		"schedule": null,
+		"variants": [],
+		"cue": null,
+		"streakRule": {
+			"kind": "neverTwice"
+		},
+		"minimumCounts": true,
+		"levels": null,
+		"quickDone": false,
+		"identities": [
+			"I eat to feel good"
+		],
+		"ifThen": {
+			"when": "crave something sweet",
+			"then": "eat a piece of fruit"
+		},
+		"triggers": [
+			"Bored",
+			"Stressed",
+			"After a meal",
+			"Tired",
+			"Social"
+		]
+	},
+	"tasks": []
+}
