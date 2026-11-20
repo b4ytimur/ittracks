@@ -5,8 +5,12 @@ import { metricTypes } from './metric-types';
 import {
 	DEFAULT_TRIGGERS,
 	defaultLevels,
+	bundleForm,
+	costForm,
 	fillRule,
 	levelsForm,
+	progressionForm,
+	rewardForm,
 	streakRuleForm,
 	type HabitForm,
 	type ScheduleForm,
@@ -133,7 +137,29 @@ export const templateFile = z.object({
 		/** Identity statements, matched to the importer's identities by text. */
 		identities: z.array(z.string().min(1).max(120)).default([]),
 		ifThen: z.object({ when: z.string().max(120), then: z.string().max(120) }).nullable().default(null),
-		triggers: z.array(z.string().min(1).max(40)).max(20).nullable().default(null)
+		triggers: z.array(z.string().min(1).max(40)).max(20).nullable().default(null),
+		// Added later in version 2; older files simply leave them out.
+		reframe: z.string().max(120).default(''),
+		bundle: bundleForm.nullable().default(null),
+		prep: z.array(z.string().min(1).max(120)).max(20).default([]),
+		reward: rewardForm.nullable().default(null),
+		cost: costForm.nullable().default(null),
+		/** Reduce mode; the taper restarts from the import date. */
+		limit: z
+			.object({
+				max: z.number().int().min(0).max(1000),
+				period: z.enum(['day', 'week']),
+				taper: z
+					.object({
+						by: z.number().int().min(1).max(100),
+						every: z.enum(['week', 'month']),
+						floor: z.number().int().min(0).max(1000).default(0)
+					})
+					.nullable()
+			})
+			.nullable()
+			.default(null),
+		progression: progressionForm.nullable().default(null)
 	}),
 	tasks: z.array(templateTask)
 });
@@ -223,7 +249,14 @@ export function toTemplate(
 								(habit.ifThen.habitId ? (names.habits?.get(habit.ifThen.habitId) ?? '') : '')
 						}
 					: null,
-			triggers: habit.direction === 'break' ? habit.triggers : null
+			triggers: habit.direction === 'break' ? habit.triggers : null,
+			reframe: habit.reframe,
+			bundle: habit.bundle.reward ? habit.bundle : null,
+			prep: habit.prep,
+			reward: habit.reward.celebrate || habit.reward.message || habit.reward.jar ? habit.reward : null,
+			cost: habit.cost,
+			limit: habit.limit ? { max: habit.limit.max, period: habit.limit.period, taper: habit.limit.taper } : null,
+			progression: habit.progression
 		},
 		tasks: [...tasks].map(([id, t]) => ({
 			key: taskKey.get(id)!,
@@ -339,6 +372,13 @@ export function fromTemplate(
 		identityIds: [],
 		ifThen: { when: tpl.habit.ifThen?.when ?? '', then: tpl.habit.ifThen?.then ?? '', habitId: null },
 		triggers: tpl.habit.triggers ?? DEFAULT_TRIGGERS,
+		reframe: tpl.habit.reframe,
+		bundle: tpl.habit.bundle ?? { reward: '', strict: false },
+		prep: tpl.habit.prep,
+		reward: tpl.habit.reward ?? { celebrate: false, message: '', jar: null },
+		cost: tpl.habit.cost,
+		limit: tpl.habit.limit ? { ...tpl.habit.limit, start: startDate } : null,
+		progression: tpl.habit.progression,
 		areaId: null
 	};
 	// Rotations and intervals start from the day of import.

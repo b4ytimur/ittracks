@@ -2,8 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { error, fail } from '@sveltejs/kit';
 import { and, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { craving, habit, occurrence, slip, variant } from '$lib/server/db/schema';
-import { createOccurrence, loadToday, quickDone, reopen, sameAsLast, timeIn, userToday } from '$lib/server/today';
+import { craving, habit, occurrence, prepTick, slip, slot, variant } from '$lib/server/db/schema';
+import { createOccurrence, loadPrep, loadToday, quickDone, reopen, sameAsLast, timeIn, userToday } from '$lib/server/today';
+import { raise } from '$lib/engine/progression';
+import { addDays } from '$lib/engine/dates';
 import { getSettings, saveSettings } from '$lib/server/settings';
 import { listAreas } from '$lib/server/repo/areas';
 import { DEFAULT_RANGES, readRanges } from '$lib/engine/day';
@@ -11,7 +13,7 @@ import type { Level } from '$lib/engine/streak';
 import { ownedHabit, ownedOccurrence } from '$lib/server/owned';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = ({ locals, cookies }) => {
+export const load: PageServerLoad = ({ locals, cookies, url }) => {
 	const accountId = locals.account!.id;
 	const tz = cookies.get('tz');
 	// Reminders run on the server, so it needs to know the user's time zone.
@@ -21,6 +23,9 @@ export const load: PageServerLoad = ({ locals, cookies }) => {
 	return {
 		today,
 		...loadToday(accountId, today),
+		// The Log screen sends you back here after Finish, so the reward can show.
+		finished: url.searchParams.get('finished'),
+		prep: loadPrep(accountId, today),
 		// Asked once: when the day starts, and its named parts.
 		askDay: settings.dayStart === undefined,
 		suggestedRanges: DEFAULT_RANGES,
@@ -49,7 +54,7 @@ export const actions: Actions = {
 			.set({ status: 'done', finishedAt: new Date(), level: level === 'target' ? null : level })
 			.where(eq(occurrence.id, o.occ.id))
 			.run();
-		return { did: { occurrence: o.occ.id, habit: o.habit.name, clear: false } };
+		return { finished: o.habit.id, did: { occurrence: o.occ.id, habit: o.habit.name, clear: false } };
 	},
 	/** One tap: done at a level, logging that level's Slot targets. */
 	quick: async ({ request, locals }) => {
@@ -57,7 +62,47 @@ export const actions: Actions = {
 		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
 		if (!o) error(404);
 		quickDone(o.occ.id, levelOf(f));
-		return { did: { occurrence: o.occ.id, habit: o.habit.name, clear: true } };
+		return { finished: o.habit.id, did: { occurrence: o.occ.id, habit: o.habit.name, clear: true } };
+	},
+	/** Tick or untick a prep step for tomorrow's Occurrence. */
+	prep: async ({ request, locals, cookies }) => {
+		const f = await request.formData();
+		const h = ownedHabit(locals.account!.id, field(f, 'habit'));
+		const item = field(f, 'item');
+		if (!h || !h.prep?.includes(item)) error(404);
+		const date = addDays(userToday(locals.account!.id, cookies.get('tz')), 1);
+		const where = and(eq(prepTick.habitId, h.id), eq(prepTick.date, date), eq(prepTick.item, item));
+		if (field(f, 'done') === 'true') db.insert(prepTick).values({ habitId: h.id, date, item }).onConflictDoNothing().run();
+		else db.delete(prepTick).where(where).run();
+	},
+	/** Accept a progression suggestion: raise Target and Stretch in every Slot. */
+	raise: async ({ request, locals, cookies }) => {
+		const f = await request.formData();
+		const h = ownedHabit(locals.account!.id, field(f, 'habit'));
+		if (!h?.progression) error(404);
+		const p = h.progression;
+		const today = userToday(locals.account!.id, cookies.get('tz'));
+		db.transaction((tx) => {
+			const variants = tx.select({ id: variant.id }).from(variant).where(eq(variant.habitId, h.id)).all();
+			for (const v of variants)
+				for (const s of tx.select().from(slot).where(eq(slot.variantId, v.id)).all())
+					tx.update(slot)
+						.set({
+							targets: s.targets ? raise(s.targets, p) : s.targets,
+							stretchTargets: s.stretchTargets ? raise(s.stretchTargets, p) : s.stretchTargets
+						})
+						.where(eq(slot.id, s.id))
+						.run();
+			tx.update(habit).set({ progressionFrom: today }).where(eq(habit.id, h.id)).run();
+		});
+		return { raised: h.id };
+	},
+	/** Not yet: start counting again from today. */
+	notYet: async ({ request, locals, cookies }) => {
+		const f = await request.formData();
+		const h = ownedHabit(locals.account!.id, field(f, 'habit'));
+		if (!h) error(404);
+		db.update(habit).set({ progressionFrom: userToday(locals.account!.id, cookies.get('tz')) }).where(eq(habit.id, h.id)).run();
 	},
 	/** Same as last time: copy the last log and finish. */
 	same: async ({ request, locals }) => {
@@ -65,7 +110,7 @@ export const actions: Actions = {
 		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
 		if (!o) error(404);
 		if (o.occ.status === 'due') sameAsLast(o.occ.id);
-		return { did: { occurrence: o.occ.id, habit: o.habit.name, clear: true } };
+		return { finished: o.habit.id, did: { occurrence: o.occ.id, habit: o.habit.name, clear: true } };
 	},
 	skip: async ({ request, locals }) => {
 		const f = await request.formData();
@@ -104,10 +149,14 @@ export const actions: Actions = {
 		const f = await request.formData();
 		const h = ownedHabit(locals.account!.id, field(f, 'habit'));
 		if (!h || h.direction !== 'break') error(404);
-		const date = field(f, 'date') || userToday(locals.account!.id, cookies.get('tz'));
+		const today = userToday(locals.account!.id, cookies.get('tz'));
+		const date = field(f, 'date') || today;
 		const count = Number(field(f, 'count') || 1);
-		if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !(count > 0))
-			return fail(400, { error: 'Check the date and count.' });
+		const real = /^\d{4}-\d{2}-\d{2}$/.test(date) && new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date;
+		if (!real || date > today || date < h.startDate)
+			return fail(400, { habit: h.id, error: `Pick a date between ${h.startDate} and today.` });
+		if (!Number.isInteger(count) || count < 1 || count > 1000)
+			return fail(400, { habit: h.id, error: 'Count must be a whole number from 1 to 1000.' });
 		const clockTime = field(f, 'time');
 		const id = randomUUID();
 		db.insert(slip)

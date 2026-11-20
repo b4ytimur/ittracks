@@ -30,7 +30,7 @@ body {
 	color: var(--text);
 	font: 16px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
-h1 { font-size: 1.5rem; margin: 0; }
+h1 { font-size: 1.5rem; margin: 0; overflow-wrap: anywhere; }
 h2 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; }
 a { color: var(--accent); }
 input, select, textarea, button { font: inherit; color: inherit; }
@@ -69,6 +69,7 @@ button.small { padding: 0.25rem 0.6rem; font-size: 0.85rem; }
 .tabs a[aria-current='page'] { color: var(--accent); font-weight: 600; }
 
 .bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.bar > div { min-width: 0; }
 .stack > * + * { margin-top: 0.75rem; }
 .row { display: flex; gap: 0.5rem; align-items: end; flex-wrap: wrap; }
 .row > .grow { flex: 1; min-width: 8rem; }

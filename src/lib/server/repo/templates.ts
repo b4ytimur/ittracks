@@ -69,6 +69,6 @@ export function addTemplate(
 	for (const t of toCreate) saveTask(accountId, null, { ...t.form, areaId }, t.id);
 	habit.areaId = areaId;
 	habit.identityIds = identities.map((statement) => identityFor(accountId, statement));
-	const habitId = saveHabit(accountId, null, habit)!;
+	const habitId = saveHabit(accountId, null, habit, opts.today)!;
 	return { habitId, name: habit.name, created: toCreate.length, reused: taskMap.size };
 }
