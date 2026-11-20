@@ -1,0 +1,88 @@
+{
+	"format": "ittracks-template",
+	"version": 3,
+	"name": "Gratitude",
+	"description": "Three good things each day.",
+	"meta": {
+		"category": "Mind",
+		"daysPerWeek": 7,
+		"minutesPerDay": 3,
+		"equipment": [],
+		"area": "Mind"
+	},
+	"questions": [],
+	"habit": {
+		"name": "Gratitude",
+		"direction": "build",
+		"notes": "",
+		"schedule": {
+			"kind": "interval",
+			"every": 1,
+			"start": "2026-01-05",
+			"variantId": "a"
+		},
+		"variants": [
+			{
+				"key": "a",
+				"name": "Gratitude",
+				"slots": [
+					{
+						"task": "grat",
+						"fillRule": null,
+						"sets": null,
+						"targets": {}
+					}
+				]
+			}
+		],
+		"cue": {
+			"time": null,
+			"place": null,
+			"after": null,
+			"range": "Evening"
+		},
+		"streakRule": {
+			"kind": "neverTwice"
+		},
+		"minimumCounts": true,
+		"levels": null,
+		"quickDone": false,
+		"identities": [],
+		"ifThen": null,
+		"triggers": null
+	},
+	"tasks": [
+		{
+			"key": "grat",
+			"name": "Gratitude",
+			"notes": "",
+			"restTimerEnabled": false,
+			"restTimerSeconds": 90,
+			"tags": [
+				{
+					"name": "mind",
+					"level": 2
+				}
+			],
+			"metrics": [
+				{
+					"key": "grat1",
+					"name": "Grateful for",
+					"type": "text",
+					"unit": "",
+					"repeats": false,
+					"choices": [],
+					"step": null,
+					"required": false,
+					"quick": true,
+					"prefill": "blank"
+				}
+			],
+			"subtasks": [
+				"First thing",
+				"Second thing",
+				"Third thing"
+			]
+		}
+	]
+}

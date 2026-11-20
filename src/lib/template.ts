@@ -16,9 +16,10 @@ import {
 export const TEMPLATE_FORMAT = 'ittracks-template';
 /**
  * Version 2 adds cues, levels, streak rules, identities and break-habit plans.
- * Version 1 files still import; the new fields take their defaults.
+ * Version 3 adds per-Metric log settings, gallery details (meta) and setup questions.
+ * Older files still import; the new fields take their defaults.
  */
-export const TEMPLATE_VERSION = 2;
+export const TEMPLATE_VERSION = 3;
 
 const key = z.string().min(1).max(64);
 
@@ -37,18 +38,61 @@ const templateTask = z.object({
 				type: z.enum(metricTypes),
 				unit: z.string().max(20).default(''),
 				repeats: z.boolean().default(false),
-				choices: z.array(z.string().max(40)).default([])
+				choices: z.array(z.string().max(40)).default([]),
+				prefill: z.enum(['last', 'target', 'blank']).optional(),
+				step: z.number().positive().max(10000).nullable().default(null),
+				required: z.boolean().default(false),
+				quick: z.boolean().default(true)
 			})
 		)
 		.default([]),
 	subtasks: z.array(z.string().min(1).max(120)).default([])
 });
 
+const weekdayList = z.array(z.number().int().min(0).max(6)).max(7);
+
+/** Asked when a template is added, so one shared template fits each person. */
+export const templateQuestion = z.discriminatedUnion('kind', [
+	/** Which weekdays. Fills a weekly Schedule (Variants take turns over the days), a weekly rotation's days, or a frequency's count. */
+	z.object({ kind: z.literal('days'), key, label: z.string().min(1).max(200), default: weekdayList }),
+	/** A starting number, set as the target of the listed Metrics in every Slot. */
+	z.object({
+		kind: z.literal('number'),
+		key,
+		label: z.string().min(1).max(200),
+		unit: z.string().max(20).default(''),
+		default: z.number(),
+		metrics: z.array(key).min(1)
+	}),
+	/** The cue time. */
+	z.object({
+		kind: z.literal('time'),
+		key,
+		label: z.string().min(1).max(200),
+		default: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+	})
+]);
+export type TemplateQuestion = z.infer<typeof templateQuestion>;
+export type TemplateAnswers = Record<string, number[] | number | string>;
+
+/** What the gallery shows and filters on. */
+export const templateMeta = z.object({
+	category: z.string().max(40).default('Other'),
+	daysPerWeek: z.number().min(0).max(7).nullable().default(null),
+	minutesPerDay: z.number().int().min(0).max(600).nullable().default(null),
+	equipment: z.array(z.string().max(40)).default([]),
+	/** Suggested Area for the habit and its Tasks, matched by name. */
+	area: z.string().max(40).nullable().default(null)
+});
+export type TemplateMeta = z.infer<typeof templateMeta>;
+
 export const templateFile = z.object({
 	format: z.literal(TEMPLATE_FORMAT),
-	version: z.union([z.literal(1), z.literal(2)]),
+	version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
 	name: z.string().min(1).max(120),
 	description: z.string().max(2000).default(''),
+	meta: templateMeta.nullable().default(null),
+	questions: z.array(templateQuestion).max(10).default([]),
 	habit: z.object({
 		name: z.string().min(1).max(120),
 		direction: z.enum(['build', 'break']),
@@ -77,7 +121,8 @@ export const templateFile = z.object({
 			.object({
 				time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().default(null),
 				place: z.string().max(120).nullable().default(null),
-				after: z.string().max(120).nullable().default(null)
+				after: z.string().max(120).nullable().default(null),
+				range: z.string().max(40).nullable().default(null)
 			})
 			.nullable()
 			.default(null),
@@ -131,6 +176,8 @@ export function toTemplate(
 		version: TEMPLATE_VERSION,
 		name: habit.name,
 		description: '',
+		meta: null,
+		questions: [],
 		habit: {
 			name: habit.name,
 			direction: habit.direction,
@@ -156,7 +203,8 @@ export function toTemplate(
 							after:
 								(habit.cue.afterHabitId && names.habits?.get(habit.cue.afterHabitId)) ||
 								habit.cue.afterText ||
-								null
+								null,
+							range: habit.cue.range
 						}
 					: null,
 			streakRule: habit.streakRule,
@@ -190,7 +238,11 @@ export function toTemplate(
 				type: m.type,
 				unit: m.unit,
 				repeats: m.repeats,
-				choices: m.choices
+				choices: m.choices,
+				prefill: m.prefill,
+				step: m.step,
+				required: m.required,
+				quick: m.quick
 			})),
 			subtasks: t.subtasks.map((s) => s.name)
 		}))
@@ -222,7 +274,18 @@ export function fromTemplate(
 		const metrics = t.metrics.map((m) => {
 			const id = newId();
 			metricIds.set(m.key, id);
-			return { id, name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, choices: m.choices };
+			return {
+				id,
+				name: m.name,
+				type: m.type,
+				unit: m.unit,
+				repeats: m.repeats,
+				choices: m.choices,
+				prefill: m.prefill ?? (m.type === 'text' ? ('blank' as const) : ('last' as const)),
+				step: m.step,
+				required: m.required,
+				quick: m.quick
+			};
 		});
 		return {
 			id: taskIds.get(t.key)!,
@@ -233,7 +296,9 @@ export function fromTemplate(
 				restTimerSeconds: t.restTimerSeconds,
 				tags: t.tags,
 				metrics,
-				subtasks: t.subtasks.map((name) => ({ id: newId(), name }))
+				subtasks: t.subtasks.map((name) => ({ id: newId(), name })),
+				areaId: null,
+				collectionIds: []
 			}
 		};
 	});
@@ -261,7 +326,8 @@ export function fromTemplate(
 			time: tpl.habit.cue?.time ?? null,
 			place: tpl.habit.cue?.place ?? null,
 			afterHabitId: null,
-			afterText: tpl.habit.cue?.after ?? null
+			afterText: tpl.habit.cue?.after ?? null,
+			range: tpl.habit.cue?.range ?? null
 		},
 		// Version 1 files predate streak rules; they keep the strict rule they were made with.
 		streakRule: tpl.habit.streakRule ?? (tpl.version === 1 ? { kind: 'strict' } : { kind: 'neverTwice' }),
@@ -272,9 +338,53 @@ export function fromTemplate(
 		remind: false,
 		identityIds: [],
 		ifThen: { when: tpl.habit.ifThen?.when ?? '', then: tpl.habit.ifThen?.then ?? '', habitId: null },
-		triggers: tpl.habit.triggers ?? DEFAULT_TRIGGERS
+		triggers: tpl.habit.triggers ?? DEFAULT_TRIGGERS,
+		areaId: null
 	};
 	// Rotations and intervals start from the day of import.
 	if (habit.schedule && 'start' in habit.schedule) habit.schedule = { ...habit.schedule, start: startDate };
 	return { tasks, habit, identities: tpl.habit.identities };
+}
+
+/** Fill a template from the answers to its questions. Unanswered questions take their default. */
+export function applyAnswers(tpl: TemplateFile, answers: TemplateAnswers): TemplateFile {
+	const out: TemplateFile = structuredClone(tpl);
+	for (const q of tpl.questions) {
+		const a = answers[q.key] ?? q.default;
+		if (q.kind === 'days') {
+			const days = [...new Set((Array.isArray(a) ? a : q.default).filter((d) => d >= 0 && d <= 6))].sort();
+			if (!days.length) continue;
+			const s = out.habit.schedule as ScheduleForm | null;
+			if (s?.kind === 'weekly') {
+				// Keep the Variants' order as the template had it, then deal them out over the chosen days.
+				const order = Object.keys(s.days)
+					.map(Number)
+					.sort()
+					.map((d) => s.days[d])
+					.filter((v, i, all) => all.indexOf(v) === i);
+				const variants = order.length ? order : out.habit.variants.map((v) => v.key);
+				out.habit.schedule = {
+					...s,
+					days: Object.fromEntries(days.map((d, i) => [String(d), variants[i % variants.length]]))
+				};
+			} else if (s?.kind === 'rotation' && s.step === 'week') {
+				out.habit.schedule = { ...s, weekdays: days };
+			} else if (s?.kind === 'frequency' && s.period === 'week') {
+				out.habit.schedule = { ...s, times: days.length };
+			}
+		} else if (q.kind === 'number') {
+			const n = typeof a === 'number' && Number.isFinite(a) ? a : q.default;
+			const tasksWith = new Map(out.tasks.map((t) => [t.key, new Set(t.metrics.map((m) => m.key))]));
+			for (const v of out.habit.variants)
+				for (const slot of v.slots) {
+					const has = slot.task ? tasksWith.get(slot.task) : undefined;
+					if (!has) continue;
+					for (const m of q.metrics) if (has.has(m)) slot.targets[m] = n;
+				}
+		} else if (q.kind === 'time') {
+			const t = typeof a === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(a) ? a : q.default;
+			out.habit.cue = { time: t, place: out.habit.cue?.place ?? null, after: out.habit.cue?.after ?? null, range: out.habit.cue?.range ?? null };
+		}
+	}
+	return out;
 }
