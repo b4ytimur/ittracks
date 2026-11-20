@@ -4,6 +4,8 @@ import { settings } from './db/schema';
 
 export interface Settings {
 	weightUnit: string;
+	/** IANA zone from the browser, e.g. Europe/Berlin; used for reminders. */
+	timeZone?: string;
 }
 
 const defaults: Settings = { weightUnit: 'kg' };

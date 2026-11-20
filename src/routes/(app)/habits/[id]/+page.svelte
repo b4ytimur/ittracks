@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { deserialize } from '$app/forms';
 	import type { HabitForm, ScheduleForm } from '$lib/forms';
 	import { weekdayNames } from '$lib/describe';
 	import FillRuleEditor from './FillRuleEditor.svelte';
@@ -62,7 +63,76 @@
 				};
 		}
 	});
-	const payload = $derived(JSON.stringify({ ...h, schedule }));
+	// ----- Cue, stacking, levels, streak, identity, if-then -----
+	let afterMode = $state<'none' | 'habit' | 'text'>(
+		untrack(() => (h.cue.afterHabitId ? 'habit' : h.cue.afterText ? 'text' : 'none'))
+	);
+	const buildHabits = $derived(data.habits.filter((x) => x.direction === 'build'));
+	const cue = $derived({
+		time: h.cue.time || null,
+		place: h.cue.place?.trim() || null,
+		afterHabitId: afterMode === 'habit' ? h.cue.afterHabitId || null : null,
+		afterText: afterMode === 'text' ? h.cue.afterText?.trim() || null : null
+	});
+	const intention = $derived.by(() => {
+		const anchor = cue.afterHabitId
+			? data.habits.find((x) => x.id === cue.afterHabitId)?.name
+			: cue.afterText;
+		const what = h.name.trim() || 'do this';
+		let line = `${anchor ? `After ${anchor}, I` : 'I'} will ${what}`;
+		if (cue.time) line += ` at ${cue.time}`;
+		if (cue.place) line += ` ${cue.place}`;
+		return anchor || cue.time || cue.place ? `${line}.` : '';
+	});
+
+	function setRule(kind: HabitForm['streakRule']['kind']) {
+		h.streakRule =
+			kind === 'grace'
+				? { kind, misses: 1, period: 'week' }
+				: kind === 'consistency'
+					? { kind, days: 30 }
+					: { kind };
+	}
+
+	let identities = $state(untrack(() => [...data.identities]));
+	let newIdentity = $state('');
+	let identityError = $state('');
+	function toggleIdentity(id: string) {
+		h.identityIds = h.identityIds.includes(id)
+			? h.identityIds.filter((x) => x !== id)
+			: [...h.identityIds, id];
+	}
+	async function createIdentity() {
+		identityError = '';
+		const body = new FormData();
+		body.set('statement', newIdentity);
+		const res = await fetch('?/identity', {
+			method: 'POST',
+			body,
+			headers: { 'x-sveltekit-action': 'true' }
+		});
+		const r = deserialize(await res.text());
+		if (r.type === 'success' && r.data) {
+			const { identityId, statement } = r.data as { identityId: string; statement: string };
+			identities.push({ id: identityId, statement });
+			h.identityIds = [...h.identityIds, identityId];
+			newIdentity = '';
+		} else identityError = 'Could not add that identity.';
+	}
+
+	let newTrigger = $state('');
+	function addTrigger() {
+		const t = newTrigger.trim();
+		if (t && !h.triggers.includes(t)) h.triggers = [...h.triggers, t];
+		newTrigger = '';
+	}
+
+	function setTarget(map: Record<string, number>, metricId: string, value: string) {
+		if (value === '') delete map[metricId];
+		else map[metricId] = Number(value);
+	}
+
+	const payload = $derived(JSON.stringify({ ...h, schedule, cue }));
 
 	function addVariant() {
 		const letter = String.fromCharCode(65 + h.variants.length);
@@ -75,7 +145,9 @@
 			taskId: open ? null : (data.tasks[0]?.id ?? null),
 			fillRule: open ? { must: {}, mustNot: {}, prefer: [] } : null,
 			sets: null,
-			targets: {}
+			targets: {},
+			minTargets: {},
+			stretchTargets: {}
 		});
 	}
 
@@ -122,6 +194,41 @@
 			The habit shows the days since your last slip. Log a slip whenever it happens and the
 			counter goes back to 0.
 		</p>
+
+		<h2>If-then plan</h2>
+		<p class="muted">Decide now what you'll do when the urge comes, so you have something to do instead.</p>
+		<div class="row">
+			<label class="grow">If I <input bind:value={h.ifThen.when} placeholder="want a cigarette" /></label>
+			<label class="grow">then I will <input bind:value={h.ifThen.then} placeholder="do 10 push-ups" /></label>
+		</div>
+		{#if buildHabits.length}
+			<label
+				>Or do one of your habits instead
+				<select
+					value={h.ifThen.habitId ?? ''}
+					onchange={(e) => (h.ifThen.habitId = e.currentTarget.value || null)}
+				>
+					<option value="">None</option>
+					{#each buildHabits as b (b.id)}<option value={b.id}>{b.name}</option>{/each}
+				</select>
+			</label>
+		{/if}
+
+		<h2>Slip triggers</h2>
+		<p class="muted">Feelings you can pick when you log a slip. Over time Today shows which ones come up most.</p>
+		<div class="chips">
+			{#each h.triggers as t, ti (t)}
+				<span class="chip on"
+					>{t}
+					<button type="button" class="link" onclick={() => h.triggers.splice(ti, 1)} aria-label="Remove {t}">×</button></span
+				>
+			{/each}
+		</div>
+		<div class="row">
+			<input class="grow" bind:value={newTrigger} placeholder="Add a feeling" aria-label="New trigger"
+				onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), addTrigger())} />
+			<button type="button" onclick={addTrigger}>Add</button>
+		</div>
 	{:else}
 		<h2>{h.variants.length > 1 ? 'Variants' : 'What you do'}</h2>
 		{#if h.variants.length > 1}
@@ -167,6 +274,35 @@
 								oninput={(e) => (s.sets = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
 							/>
 						</label>
+						{#if !s.fillRule && s.taskId && data.metrics[s.taskId]?.length}
+							<table class="targets">
+								<thead>
+									<tr>
+										<th></th>
+										{#if h.levels.enabled}<th>Minimum</th>{/if}
+										<th>Target</th>
+										{#if h.levels.enabled}<th>Stretch</th>{/if}
+									</tr>
+								</thead>
+								<tbody>
+									{#each data.metrics[s.taskId] as m (m.id)}
+										<tr>
+											<td>{m.name}{m.unit ? ` (${m.unit})` : ''}</td>
+											{#if h.levels.enabled}
+												<td><input type="number" step="any" inputmode="decimal" value={s.minTargets[m.id] ?? ''}
+													oninput={(e) => setTarget(s.minTargets, m.id, e.currentTarget.value)} aria-label="{m.name} minimum" /></td>
+											{/if}
+											<td><input type="number" step="any" inputmode="decimal" value={s.targets[m.id] ?? ''}
+												oninput={(e) => setTarget(s.targets, m.id, e.currentTarget.value)} aria-label="{m.name} target" /></td>
+											{#if h.levels.enabled}
+												<td><input type="number" step="any" inputmode="decimal" value={s.stretchTargets[m.id] ?? ''}
+													oninput={(e) => setTarget(s.stretchTargets, m.id, e.currentTarget.value)} aria-label="{m.name} stretch" /></td>
+											{/if}
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						{/if}
 					</div>
 				{/each}
 
@@ -277,7 +413,109 @@
 				</select>
 			</label>
 		{/if}
+
+		<h2>When and where</h2>
+		<p class="muted">Optional. A clear time and place make a habit easier to start.</p>
+		<div class="row">
+			<label style="width: 8rem"
+				>Time
+				<input type="time" value={h.cue.time ?? ''} oninput={(e) => (h.cue.time = e.currentTarget.value || null)} />
+			</label>
+			<label class="grow"
+				>Where <input value={h.cue.place ?? ''} oninput={(e) => (h.cue.place = e.currentTarget.value)} placeholder="in the park" />
+			</label>
+		</div>
+		<label
+			>After
+			<select bind:value={afterMode}>
+				<option value="none">Nothing in particular</option>
+				{#if buildHabits.length}<option value="habit">Another habit</option>{/if}
+				<option value="text">Something else I do</option>
+			</select>
+		</label>
+		{#if afterMode === 'habit'}
+			<select
+				value={h.cue.afterHabitId ?? ''}
+				onchange={(e) => (h.cue.afterHabitId = e.currentTarget.value || null)}
+				aria-label="Habit to stack after"
+			>
+				<option value="">Pick a habit</option>
+				{#each buildHabits as b (b.id)}<option value={b.id}>{b.name}</option>{/each}
+			</select>
+		{:else if afterMode === 'text'}
+			<input value={h.cue.afterText ?? ''} oninput={(e) => (h.cue.afterText = e.currentTarget.value)}
+				placeholder="I pour my morning coffee" aria-label="What this comes after" />
+		{/if}
+		{#if intention}<p class="intention">{intention}</p>{/if}
+		<label style="color: var(--text)"
+			><input type="checkbox" bind:checked={h.remind} disabled={!h.cue.time} /> Remind me at this time</label
+		>
+		{#if h.remind}
+			<p class="muted small-text">Turn on reminders for this device in <a href="/settings">Settings</a>.</p>
+		{/if}
+
+		<h2>Levels</h2>
+		<label style="color: var(--text)"
+			><input type="checkbox" bind:checked={h.levels.enabled} /> Use levels: a two-minute Minimum, your Target, and a Stretch</label
+		>
+		{#if h.levels.enabled}
+			<label>Minimum <input bind:value={h.levels.minimum} placeholder="Put on running shoes" /></label>
+			<label>Target <input bind:value={h.levels.target} placeholder="Run 5 km" /></label>
+			<label>Stretch <input bind:value={h.levels.stretch} placeholder="Run 10 km" /></label>
+			<label style="color: var(--text)"
+				><input type="checkbox" bind:checked={h.minimumCounts} /> Doing the Minimum keeps the streak alive</label
+			>
+			<p class="muted small-text">Set numbers for each level per Task in the Slots above.</p>
+		{/if}
+		{#if h.variants.some((v) => v.slots.length)}
+			<label style="color: var(--text)"
+				><input type="checkbox" bind:checked={h.quickDone} /> One-tap Done on Today (logs your targets)</label
+			>
+		{/if}
+
+		<h2>Streak</h2>
+		<label
+			>How the streak counts
+			<select value={h.streakRule.kind} onchange={(e) => setRule(e.currentTarget.value as HabitForm['streakRule']['kind'])}>
+				<option value="neverTwice">Never miss twice: one miss is forgiven</option>
+				<option value="strict">Strict: any miss resets it</option>
+				<option value="grace">Grace days: a few misses allowed</option>
+				<option value="consistency">Consistency: % done, no streak</option>
+			</select>
+		</label>
+		{#if h.streakRule.kind === 'grace'}
+			<div class="row">
+				<label style="width: 6rem">Misses <input type="number" min="1" max="15" bind:value={h.streakRule.misses} /></label>
+				<label class="grow"
+					>Per
+					<select bind:value={h.streakRule.period}>
+						<option value="week">week</option>
+						<option value="month">month</option>
+					</select>
+				</label>
+			</div>
+		{:else if h.streakRule.kind === 'consistency'}
+			<label style="width: 10rem">Over the last N days <input type="number" min="7" max="365" bind:value={h.streakRule.days} /></label>
+		{/if}
 	{/if}
+
+	<h2>Identity</h2>
+	<p class="muted">Who does this habit make you? Each time you do it is a vote for that identity.</p>
+	{#if identities.length}
+		<div class="chips">
+			{#each identities as i (i.id)}
+				<button type="button" class="chip" class:on={h.identityIds.includes(i.id)} onclick={() => toggleIdentity(i.id)}
+					>{i.statement}</button
+				>
+			{/each}
+		</div>
+	{/if}
+	<div class="row">
+		<input class="grow" bind:value={newIdentity} placeholder="I am a runner" aria-label="New identity"
+			onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), newIdentity.trim() && createIdentity())} />
+		<button type="button" onclick={createIdentity} disabled={!newIdentity.trim()}>Add</button>
+	</div>
+	{#if identityError}<p class="error">{identityError}</p>{/if}
 
 	<label>Notes <textarea bind:value={h.notes} rows="2"></textarea></label>
 
@@ -304,5 +542,26 @@
 	}
 	fieldset {
 		border: 1px solid var(--border);
+	}
+	.intention {
+		font-style: italic;
+		margin: 0.25rem 0;
+	}
+	.small-text {
+		font-size: 0.85rem;
+	}
+	.targets {
+		width: 100%;
+		border-collapse: collapse;
+	}
+	.targets th {
+		text-align: left;
+		font-size: 0.8rem;
+		color: var(--muted);
+		font-weight: 500;
+	}
+	.targets td {
+		padding: 0.15rem 0.25rem 0.15rem 0;
+		font-size: 0.9rem;
 	}
 </style>
