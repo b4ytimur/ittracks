@@ -50,9 +50,10 @@ To try the app without setting everything up, create your account and then add e
 
 ```sh
 docker compose exec ittracks node scripts/seed-demo.mjs --today "$(date +%F)"
+docker compose restart
 ```
 
-It only adds rows, never changes what you made, and refuses to run twice. Outside Docker, run `node scripts/seed-demo.mjs`.
+It only adds rows, never changes what you made, and refuses to run twice. Restart the app afterwards so it picks up the new rows. Outside Docker, run `node scripts/seed-demo.mjs`.
 
 ## Templates
 
