@@ -2,7 +2,7 @@
 
 A fully customizable, self-hostable habit tracker. Build a habit out of your own Variants and Tasks, choose what to log (weight, sets, reps, minutes, words, yes or no), and schedule it with weekdays, rotations with rest days, or intervals. It also tracks bad habits with a slip counter and has a built-in timer.
 
-Status: early MVP work. Nothing is usable yet.
+Status: MVP in progress. You can set up habits, log them day to day, track slips, and share habits as template files.
 
 ## Concepts
 
@@ -38,7 +38,13 @@ After changing `src/lib/server/db/schema.ts`, run `npm run db:generate` to creat
 docker compose up -d
 ```
 
-The app listens on port 3000 and keeps its database in `./data`. Set `ORIGIN` in `docker-compose.yml` to the address you open it at.
+The app listens on port 3000 and keeps its database in `./data`. Set `ORIGIN` in `docker-compose.yml` to the address you open it at. On first visit you create the account for your server.
+
+To install it on your phone, open it in the browser and choose "Add to Home Screen". Phones only offer this over HTTPS, so put the app behind a reverse proxy with a certificate (for example Caddy or Traefik).
+
+## Templates
+
+Any habit can be exported from its editor as a `.ittracks.json` file and imported on any ittracks server from the Habits tab. A template holds the habit, its Variants, schedule and Fill rules, and the Tasks it uses. It never contains your logs. The format is defined in `src/lib/template.ts` (version 1).
 
 ## License
 

@@ -1,0 +1,87 @@
+import { describe, expect, it } from 'vitest';
+import { fromTemplate, templateFile, toTemplate } from './template';
+import { habitForm, type HabitForm, type TaskForm } from './forms';
+
+const T1 = '00000000-0000-4000-8000-000000000001';
+const M1 = '00000000-0000-4000-8000-000000000002';
+const M2 = '00000000-0000-4000-8000-000000000003';
+const VA = '00000000-0000-4000-8000-000000000004';
+const VB = '00000000-0000-4000-8000-000000000005';
+const S1 = '00000000-0000-4000-8000-000000000006';
+const S2 = '00000000-0000-4000-8000-000000000007';
+
+const bench: TaskForm = {
+	name: 'Bench press',
+	notes: '',
+	restTimerEnabled: true,
+	restTimerSeconds: 120,
+	tags: [{ name: 'chest', level: 3 }],
+	metrics: [
+		{ id: M1, name: 'Weight', type: 'number', unit: 'kg', repeats: true, choices: [] },
+		{ id: M2, name: 'Reps', type: 'count', unit: '', repeats: true, choices: [] }
+	],
+	subtasks: [{ id: '00000000-0000-4000-8000-000000000008', name: 'Warm-up set' }]
+};
+
+const gym: HabitForm = {
+	name: 'Gym',
+	direction: 'build',
+	notes: '',
+	startDate: '2026-11-01',
+	variants: [
+		{ id: VA, name: 'A', slots: [{ id: S1, taskId: T1, fillRule: null, sets: 3, targets: { [M2]: 8 } }] },
+		{
+			id: VB,
+			name: 'B',
+			slots: [
+				{ id: S2, taskId: null, fillRule: { must: { triceps: 3 }, mustNot: {}, prefer: [] }, sets: null, targets: {} }
+			]
+		}
+	],
+	schedule: {
+		kind: 'rotation',
+		step: 'variant',
+		onMiss: 'wait',
+		weekdays: [],
+		start: '2026-11-01',
+		order: [
+			{ variantId: VA, restDays: 2 },
+			{ variantId: VB, restDays: 1 }
+		]
+	}
+};
+
+describe('templates', () => {
+	const tpl = toTemplate(gym, new Map([[T1, bench]]));
+
+	it('exports a valid file with no ids from the database', () => {
+		expect(templateFile.safeParse(JSON.parse(JSON.stringify(tpl))).success).toBe(true);
+		const text = JSON.stringify(tpl);
+		for (const id of [T1, M1, M2, VA, VB, S1]) expect(text).not.toContain(id);
+	});
+
+	it('round-trips into a valid Habit with fresh ids', () => {
+		let n = 100;
+		const id = () => `00000000-0000-4000-8000-${String(n++).padStart(12, '0')}`;
+		const { tasks, habit } = fromTemplate(tpl, '2026-12-01', id);
+
+		expect(tasks).toHaveLength(1);
+		expect(tasks[0].form.name).toBe('Bench press');
+		expect(tasks[0].form.subtasks[0].name).toBe('Warm-up set');
+		expect(habitForm.safeParse(habit).success).toBe(true);
+
+		// Slots point at the new Task, targets at its new Metric, and the schedule at the new Variants.
+		const slotA = habit.variants[0].slots[0];
+		expect(slotA.taskId).toBe(tasks[0].id);
+		const reps = tasks[0].form.metrics.find((m) => m.name === 'Reps')!;
+		expect(slotA.targets).toEqual({ [reps.id]: 8 });
+		const s = habit.schedule!;
+		expect(s.kind === 'rotation' && s.order.map((o) => o.variantId)).toEqual(habit.variants.map((v) => v.id));
+		expect(s.kind === 'rotation' && s.start).toBe('2026-12-01');
+		expect(habit.variants[1].slots[0].fillRule).toEqual({ must: { triceps: 3 }, mustNot: {}, prefer: [] });
+	});
+
+	it('rejects files that are not templates', () => {
+		expect(templateFile.safeParse({ format: 'something-else' }).success).toBe(false);
+	});
+});

@@ -1,6 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import { firstError, taskForm, type TaskForm } from '$lib/forms';
 import { deleteTask, getTaskForm, listTagNames, saveTask } from '$lib/server/repo/tasks';
+import { getSettings } from '$lib/server/settings';
 import type { Actions, PageServerLoad } from './$types';
 
 const blank = (): TaskForm => ({
@@ -18,7 +19,7 @@ export const load: PageServerLoad = ({ locals, params }) => {
 	const isNew = params.id === 'new';
 	const form = isNew ? blank() : getTaskForm(accountId, params.id);
 	if (!form) error(404, 'Task not found');
-	return { isNew, task: form, allTags: listTagNames(accountId) };
+	return { isNew, task: form, allTags: listTagNames(accountId), weightUnit: getSettings(accountId).weightUnit };
 };
 
 export const actions: Actions = {

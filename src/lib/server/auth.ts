@@ -19,7 +19,7 @@ export async function createAccount(username: string, password: string) {
 		.values({ id, username, passwordHash: await hash(password) })
 		.run();
 	db.insert(settings)
-		.values({ accountId: id, data: { units: { weight: 'kg', distance: 'km' } } })
+		.values({ accountId: id, data: { weightUnit: 'kg' } })
 		.run();
 	return id;
 }
