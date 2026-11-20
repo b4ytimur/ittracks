@@ -84,6 +84,13 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 			.map((r) => r.id),
 		ifThen,
 		triggers: h.triggers ?? DEFAULT_TRIGGERS,
+		reframe: h.reframe ?? '',
+		bundle: h.bundle ?? { reward: '', strict: false },
+		prep: h.prep ?? [],
+		reward: h.reward ?? { celebrate: false, message: '', jar: null },
+		cost: h.cost ?? null,
+		limit: h.limit ? { ...h.limit, taper: h.limit.taper ? { floor: 0, ...h.limit.taper } : null } : null,
+		progression: h.progression ?? null,
 		areaId: h.areaId,
 		variants: variants.map((v) => ({
 			id: v.id,
@@ -133,8 +140,25 @@ export function checkLinks(accountId: string, id: string | null, f: HabitForm): 
 }
 
 /** Create or update a Habit with its Variants and Slots. Returns its id, or null if not found. */
-export function saveHabit(accountId: string, id: string | null, f: HabitForm): string | null {
+export function saveHabit(
+	accountId: string,
+	id: string | null,
+	f: HabitForm,
+	today: string = new Date().toISOString().slice(0, 10)
+): string | null {
 	return db.transaction((tx) => {
+		// A changed limit or taper applies from today, so past days keep the limit they had.
+		if (f.limit) {
+			const before = id
+				? tx.select({ limit: habit.limit }).from(habit).where(eq(habit.id, id)).get()?.limit
+				: null;
+			const same =
+				before &&
+				before.max === f.limit.max &&
+				before.period === f.limit.period &&
+				JSON.stringify(before.taper ?? null) === JSON.stringify(f.limit.taper ?? null);
+			f = { ...f, limit: { ...f.limit, start: same ? before.start : today } };
+		}
 		const habitId = id ?? randomUUID();
 		const isBreak = f.direction === 'break';
 		const cue = {
@@ -158,6 +182,13 @@ export function saveHabit(accountId: string, id: string | null, f: HabitForm): s
 			remind: f.remind && !!cue.time,
 			ifThen: isBreak && (f.ifThen.when || f.ifThen.then || f.ifThen.habitId) ? f.ifThen : null,
 			triggers: isBreak ? f.triggers : null,
+			reframe: f.reframe || null,
+			bundle: f.bundle.reward ? f.bundle : null,
+			prep: !isBreak && f.prep.length ? f.prep : null,
+			reward: !isBreak && (f.reward.celebrate || f.reward.message || f.reward.jar) ? f.reward : null,
+			cost: isBreak ? f.cost : null,
+			limit: isBreak ? f.limit : null,
+			progression: isBreak ? null : f.progression,
 			areaId: f.areaId
 		};
 		if (id) {

@@ -190,7 +190,7 @@ export const actions: Actions = {
 				.where(eq(occurrence.id, o.occ.id))
 				.run();
 		});
-		if (p.finish && !p.stay) redirect(303, `/?did=${o.occ.id}`);
+		if (p.finish && !p.stay) redirect(303, `/?did=${o.occ.id}&finished=${o.habit.id}`);
 		return { saved: true };
 	},
 

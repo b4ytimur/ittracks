@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { metricTypes } from './metric-types';
 
 const id = z.string().uuid();
-const name = z.string().trim().min(1, 'A name is required').max(120);
+const name = z.string().trim().min(1, 'A name is required').max(120, 'Keep names to 120 characters or fewer');
 
 export const taskForm = z.object({
 	name,
@@ -104,6 +104,40 @@ export const ifThenForm = z.object({
 });
 export type IfThenForm = z.infer<typeof ifThenForm>;
 
+export const bundleForm = z.object({ reward: shortText.default(''), strict: z.boolean().default(false) });
+export const rewardForm = z.object({
+	celebrate: z.boolean().default(false),
+	message: shortText.default(''),
+	jar: z
+		.object({ amount: z.number().positive().max(1_000_000), unit: z.string().trim().max(20), goal: shortText })
+		.nullable()
+		.default(null)
+});
+export const costForm = z.object({
+	amount: z.number().positive().max(1_000_000),
+	unit: z.string().trim().max(20),
+	perDay: z.number().positive().max(10_000).nullable().default(null)
+});
+export const limitForm = z.object({
+	max: z.number().int().min(0).max(1000),
+	period: z.enum(['day', 'week']),
+	taper: z
+		.object({
+			by: z.number().int().min(1).max(100),
+			every: z.enum(['week', 'month']),
+			floor: z.number().int().min(0).max(1000).default(0)
+		})
+		.nullable()
+		.default(null),
+	start: z.string().date()
+});
+export const progressionForm = z.object({
+	after: z.number().int().min(2).max(60),
+	by: z.number().positive().max(1000),
+	unit: z.enum(['percent', 'amount'])
+});
+export type RewardForm = z.infer<typeof rewardForm>;
+
 export const DEFAULT_TRIGGERS = ['Bored', 'Stressed', 'Tired', 'Social', 'After a meal'];
 
 export const habitForm = z
@@ -139,6 +173,13 @@ export const habitForm = z
 		identityIds: z.array(id).default([]),
 		ifThen: ifThenForm.default({ when: '', then: '', habitId: null }),
 		triggers: z.array(z.string().trim().min(1).max(40)).max(20).default(DEFAULT_TRIGGERS),
+		reframe: shortText.default(''),
+		bundle: bundleForm.default({ reward: '', strict: false }),
+		prep: z.array(z.string().trim().min(1).max(120)).max(20).default([]),
+		reward: rewardForm.default({ celebrate: false, message: '', jar: null }),
+		cost: costForm.nullable().default(null),
+		limit: limitForm.nullable().default(null),
+		progression: progressionForm.nullable().default(null),
 		areaId: id.nullable().default(null)
 	})
 	.superRefine((h, ctx) => {

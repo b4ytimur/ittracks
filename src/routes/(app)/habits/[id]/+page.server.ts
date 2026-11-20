@@ -17,7 +17,7 @@ import {
 	saveHabit,
 	setHabitArchived
 } from '$lib/server/repo/habits';
-import { addIdentity, listIdentities } from '$lib/server/repo/identities';
+import { identityFor, listIdentities } from '$lib/server/repo/identities';
 import { listTagNames, listTasks, saveTask } from '$lib/server/repo/tasks';
 import { listAreas } from '$lib/server/repo/areas';
 import { getSettings, saveSettings } from '$lib/server/settings';
@@ -46,13 +46,11 @@ function numericMetrics(taskIds: string[]) {
 	return out;
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
-
-const blank = (): HabitForm => ({
+const blank = (today: string): HabitForm => ({
 	name: '',
 	direction: 'build',
 	notes: '',
-	startDate: today(),
+	startDate: today,
 	variants: [],
 	schedule: null,
 	cue: emptyCue(),
@@ -64,6 +62,13 @@ const blank = (): HabitForm => ({
 	identityIds: [],
 	ifThen: { when: '', then: '', habitId: null },
 	triggers: DEFAULT_TRIGGERS,
+	reframe: '',
+	bundle: { reward: '', strict: false },
+	prep: [],
+	reward: { celebrate: false, message: '', jar: null },
+	cost: null,
+	limit: null,
+	progression: null,
 	areaId: null
 });
 
@@ -73,7 +78,7 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 	const settings = getSettings(accountId);
 	const from = url.searchParams.get('from');
 	const source = isNew && from ? getHabitForm(accountId, from) : null;
-	const form = isNew ? (source ? copyHabitForm(source) : blank()) : getHabitForm(accountId, params.id);
+	const form = isNew ? (source ? copyHabitForm(source) : blank(userToday(accountId, cookies.get('tz')))) : getHabitForm(accountId, params.id);
 	if (!form) error(404, 'Habit not found');
 	if (isNew) {
 		form.startDate = userToday(accountId, cookies.get('tz'));
@@ -118,7 +123,7 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
 
 export const actions: Actions = {
-	save: async ({ request, locals, params }) => {
+	save: async ({ request, locals, params, cookies }) => {
 		let json: unknown;
 		try {
 			json = JSON.parse(String((await request.formData()).get('payload')));
@@ -130,7 +135,7 @@ export const actions: Actions = {
 		const accountId = locals.account!.id;
 		const linkError = checkLinks(accountId, params.id === 'new' ? null : params.id, parsed.data);
 		if (linkError) return fail(400, { error: linkError });
-		const id = saveHabit(accountId, params.id === 'new' ? null : params.id, parsed.data);
+		const id = saveHabit(accountId, params.id === 'new' ? null : params.id, parsed.data, userToday(accountId, cookies.get('tz')));
 		if (!id) error(404, 'Habit not found');
 		// Home screen shortcut, kept in Settings so the manifest can list it.
 		const pin = (json as { pinned?: unknown }).pinned;
@@ -177,7 +182,7 @@ export const actions: Actions = {
 	identity: async ({ request, locals }) => {
 		const statement = String((await request.formData()).get('statement') ?? '').trim().slice(0, 120);
 		if (!statement) return fail(400, { error: 'Write the identity as a sentence.' });
-		return { identityId: addIdentity(locals.account!.id, statement), statement };
+		return { identityId: identityFor(locals.account!.id, statement), statement };
 	},
 	pause: async ({ request, locals, params }) => {
 		const f = await request.formData();

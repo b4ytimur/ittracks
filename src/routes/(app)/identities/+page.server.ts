@@ -1,7 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import { userToday } from '$lib/server/today';
 import {
-	addIdentity,
+	identityFor,
 	deleteIdentity,
 	identityVotes,
 	renameIdentity
@@ -18,7 +18,7 @@ export const actions: Actions = {
 	add: async ({ request, locals }) => {
 		const statement = statementOf(await request.formData());
 		if (!statement) return fail(400, { error: 'Write the identity as a sentence, like "I am a runner".' });
-		addIdentity(locals.account!.id, statement);
+		identityFor(locals.account!.id, statement);
 	},
 	rename: async ({ request, locals }) => {
 		const f = await request.formData();

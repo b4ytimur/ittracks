@@ -4,6 +4,7 @@
 	import type { HabitForm, ScheduleForm } from '$lib/forms';
 	import { describeSchedule, weekdayNames } from '$lib/describe';
 	import FillRuleEditor from './FillRuleEditor.svelte';
+	import { limitOn, nextDrop } from '$lib/engine/limit';
 
 	let { data, form } = $props();
 
@@ -24,7 +25,7 @@
 	// ----- Schedule editor state, seeded from the saved Schedule -----
 	const s0 = untrack(() => data.habit.schedule);
 	const savedStart = untrack(() => data.habit.startDate);
-	let kind = $state<ScheduleForm['kind']>(s0?.kind ?? 'weekly');
+	let kind = $state<ScheduleForm['kind']>(s0?.kind ?? 'interval');
 	let weeklyDays = $state<Record<string, string>>(s0?.kind === 'weekly' ? { ...s0.days } : {});
 	let times = $state(s0?.kind === 'frequency' ? s0.times : 3);
 	let period = $state<'week' | 'month'>(s0?.kind === 'frequency' ? s0.period : 'week');
@@ -84,12 +85,12 @@
 		const anchor = cue.afterHabitId
 			? data.habits.find((x) => x.id === cue.afterHabitId)?.name
 			: cue.afterText;
-		const what = h.name.trim() || 'do this';
-		let line = `${anchor ? `After ${anchor}, I` : 'I'} will ${what}`;
-		if (cue.time) line += ` at ${cue.time}`;
-		else if (cue.range) line += ` in the ${cue.range.toLowerCase()}`;
-		if (cue.place) line += ` ${cue.place}`;
-		return anchor || cue.time || cue.place || cue.range ? `${line}.` : '';
+		if (!anchor && !cue.time && !cue.place && !cue.range) return '';
+		// Habit names are nouns as often as verbs ("Gym", "Spanish"), so the name leads.
+		const place = cue.place && (/^(in|at|on|by|near|under|inside|outside)\s/i.test(cue.place) ? cue.place : `at ${cue.place}`);
+		const when = cue.time ? `at ${cue.time}` : cue.range ? `in the ${cue.range.toLowerCase()}` : null;
+		const parts = [anchor ? `after ${anchor}` : null, when, place].filter(Boolean);
+		return `${h.name.trim() || 'This habit'}: ${parts.join(', ')}.`;
 	});
 
 	function setRule(kind: HabitForm['streakRule']['kind']) {
@@ -139,7 +140,48 @@
 		else map[metricId] = Number(value);
 	}
 
-	const payload = $derived(JSON.stringify({ ...h, schedule, cue, pinned }));
+	let newPrep = $state('');
+	function addPrep() {
+		const t = newPrep.trim();
+		if (t && !h.prep.includes(t)) h.prep = [...h.prep, t];
+		newPrep = '';
+	}
+	const hasTargets = $derived(h.variants.some((v) => v.slots.some((s) => Object.keys(s.targets).length)));
+	const numOrNull = (v: string) => (v === '' ? null : Number(v));
+
+	/** "Today's limit: 10. Drops to 9 on Fri 27 Nov." A changed limit applies from today. */
+	const limitPreview = $derived.by(() => {
+		if (!h.limit) return '';
+		const today = new Date().toLocaleDateString('en-CA');
+		const saved = data.habit.limit;
+		const unchanged =
+			saved &&
+			saved.max === h.limit.max &&
+			saved.period === h.limit.period &&
+			JSON.stringify(saved.taper) === JSON.stringify(h.limit.taper);
+		const l = { ...h.limit, start: unchanged ? saved.start : today };
+		const per = l.period === 'week' ? 'this week' : 'today';
+		const next = nextDrop(l, today);
+		const when = (d: string) =>
+			new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+		return `Limit ${per}: ${limitOn(l, today)}.${next ? ` Drops to ${next.max} on ${when(next.date)}.` : ''}${unchanged ? '' : ' Changes apply from today.'}`;
+	});
+
+	// Text typed into "add" boxes but not added yet still counts when saving.
+	const pendingPrep = $derived(newPrep.trim() && !h.prep.includes(newPrep.trim()) ? [newPrep.trim()] : []);
+	const pendingTrigger = $derived(
+		newTrigger.trim() && !h.triggers.includes(newTrigger.trim()) ? [newTrigger.trim()] : []
+	);
+	const payload = $derived(
+		JSON.stringify({
+			...h,
+			schedule,
+			cue,
+			pinned,
+			prep: [...h.prep, ...pendingPrep],
+			triggers: [...h.triggers, ...pendingTrigger]
+		})
+	);
 
 	// ----- Schedule presets: one tap fills the schedule editor -----
 	type Preset = 'daily' | 'weekdays' | 'mwf' | 'three' | 'ab';
@@ -583,8 +625,13 @@
 {#snippet breakPart()}
 	<label>Counting from <input type="date" bind:value={h.startDate} required /></label>
 	<p class="muted">
-		The habit shows the days since your last slip. Log a slip whenever it happens and the
-		counter goes back to 0.
+		{#if h.limit}
+			You have a limit set below. Log each one as it happens; the counter shows how many days in a
+			row you stayed within the limit.
+		{:else}
+			The habit shows the days since your last slip. Log a slip whenever it happens and the counter
+			goes back to 0. To cut down instead of quitting, set a limit below.
+		{/if}
 	</p>
 
 	<h2>If-then plan</h2>
@@ -621,6 +668,71 @@
 			onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), addTrigger())} />
 		<button type="button" onclick={addTrigger}>Add</button>
 	</div>
+
+	<h2>Cost</h2>
+	<label style="color: var(--text)"
+		><input
+			type="checkbox"
+			checked={!!h.cost}
+			onchange={(e) => (h.cost = e.currentTarget.checked ? { amount: 1, unit: '€', perDay: null } : null)}
+		/> Show what slips cost and what staying clean saves</label
+	>
+	{#if h.cost}
+		<div class="row">
+			<label style="width: 7rem">Cost per slip <input type="number" min="0" step="any" bind:value={h.cost.amount} /></label>
+			<label style="width: 6rem">Unit <input bind:value={h.cost.unit} placeholder="€, kcal, min" /></label>
+			<label class="grow"
+				>Slips a day before you started
+				<input type="number" min="0" step="any" value={h.cost.perDay ?? ''}
+					oninput={(e) => h.cost && (h.cost.perDay = numOrNull(e.currentTarget.value))} placeholder="optional, e.g. 10" />
+			</label>
+		</div>
+	{/if}
+
+	<h2>Reduce instead of quitting</h2>
+	<label style="color: var(--text)"
+		><input
+			type="checkbox"
+			checked={!!h.limit}
+			onchange={(e) =>
+				(h.limit = e.currentTarget.checked
+					? { max: 3, period: 'day', taper: null, start: h.startDate }
+					: null)}
+		/> Allow up to a limit; the counter tracks days within it</label
+	>
+	{#if h.limit}
+		<div class="row">
+			<label style="width: 6rem">Up to <input type="number" min="0" max="1000" bind:value={h.limit.max} /></label>
+			<label class="grow"
+				>Per
+				<select bind:value={h.limit.period}>
+					<option value="day">day</option>
+					<option value="week">week</option>
+				</select>
+			</label>
+		</div>
+		<label style="color: var(--text)"
+			><input
+				type="checkbox"
+				checked={!!h.limit.taper}
+				onchange={(e) => h.limit && (h.limit.taper = e.currentTarget.checked ? { by: 1, every: 'week', floor: 0 } : null)}
+			/> Lower the limit over time</label
+		>
+		{#if h.limit.taper}
+			<div class="row">
+				<label style="width: 6rem">By <input type="number" min="1" max="100" bind:value={h.limit.taper.by} /></label>
+				<label class="grow"
+					>Every
+					<select bind:value={h.limit.taper.every}>
+						<option value="week">week</option>
+						<option value="month">month</option>
+					</select>
+				</label>
+				<label style="width: 7rem">Down to <input type="number" min="0" max="1000" bind:value={h.limit.taper.floor} /></label>
+			</div>
+		{/if}
+		{#if limitPreview}<p class="muted small-text">{limitPreview}</p>{/if}
+	{/if}
 {/snippet}
 
 {#if mode === 'choose'}
@@ -648,6 +760,7 @@
 	<h1>{data.isNew ? (data.copiedFrom ? `Copy of ${data.copiedFrom}` : 'New habit') : 'Edit habit'}</h1>
 	<div class="row">
 		{#if !data.isNew}
+			<a href="/habits/{data.id}/chain">Chain</a>
 			<a href="/habits/new?from={data.id}" data-sveltekit-reload>Duplicate</a>
 			<a href="/habits/{data.id}/template.json" download>Export template</a>
 		{/if}
@@ -673,7 +786,7 @@
 		</ol>
 
 		{#if step === 0}
-			<label>What's the habit called? <input bind:value={h.name} placeholder="Gym, Spanish, Read" required /></label>
+			<label>What's the habit called? <input bind:value={h.name} placeholder="Gym, Spanish, Read" maxlength="120" required /></label>
 			{@render typePart()}
 			{@render areaPart()}
 			{#if h.direction === 'build'}
@@ -722,7 +835,7 @@
 		</div>
 		<p class="muted small-text"><button type="button" class="link" onclick={() => (mode = 'full')}>Skip to the full editor</button></p>
 	{:else}
-	<label>Name <input bind:value={h.name} placeholder="Gym" required /></label>
+	<label>Name <input bind:value={h.name} placeholder="Gym, Read, Spanish" maxlength="120" required /></label>
 
 	{@render typePart()}
 	{@render areaPart()}
@@ -789,7 +902,89 @@
 				<label style="width: 10rem">Over the last N days <input type="number" min="7" max="365" bind:value={h.streakRule.days} /></label>
 			{/if}
 		{/if}
+
+		<details class="extras" open={!!(h.bundle.reward || h.prep.length || h.reward.celebrate || h.reward.jar || h.progression)}>
+			<summary>More ways to make it stick (optional)</summary>
+		<h3>Pair it with something you enjoy</h3>
+		<label
+			>Pair with
+			<input bind:value={h.bundle.reward} placeholder="my favourite podcast" />
+		</label>
+		{#if h.bundle.reward}
+			<label style="color: var(--text)"
+				><input type="checkbox" bind:checked={h.bundle.strict} /> Save it as a treat for after the habit is done</label
+			>
+		{/if}
+
+		<h3>Prepare the day before</h3>
+		<p class="muted">Steps that make tomorrow easier. They show on Today the day before this habit is due.</p>
+		{#each h.prep as item, pi (item)}
+			<div class="row">
+				<span class="grow">{item}</span>
+				<button type="button" class="small danger" onclick={() => h.prep.splice(pi, 1)}>Remove</button>
+			</div>
+		{/each}
+		<div class="row">
+			<input class="grow" bind:value={newPrep} placeholder="Lay out gym clothes" aria-label="New prep step"
+				onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), addPrep())} />
+			<button type="button" onclick={addPrep}>Add</button>
+		</div>
+
+		<h3>Reward</h3>
+		<label style="color: var(--text)"
+			><input type="checkbox" bind:checked={h.reward.celebrate} /> Celebrate when I finish</label
+		>
+		{#if h.reward.celebrate}
+			<label>Message <input bind:value={h.reward.message} placeholder="Another vote for the runner you are" /></label>
+		{/if}
+		<label style="color: var(--text)"
+			><input
+				type="checkbox"
+				checked={!!h.reward.jar}
+				onchange={(e) => (h.reward.jar = e.currentTarget.checked ? { amount: 2, unit: '€', goal: '' } : null)}
+			/> Fill a jar toward a reward</label
+		>
+		{#if h.reward.jar}
+			<div class="row">
+				<label style="width: 7rem">Each time, add <input type="number" min="0" step="any" bind:value={h.reward.jar.amount} /></label>
+				<label style="width: 5rem">Unit <input bind:value={h.reward.jar.unit} placeholder="€, points" /></label>
+				<label class="grow">Saving for <input bind:value={h.reward.jar.goal} placeholder="new running shoes" /></label>
+			</div>
+			<p class="muted small-text">A pretend jar that fills up as you go. Treat yourself when it's full.</p>
+		{/if}
+
+		{#if hasTargets}
+			<h3>Progression</h3>
+			<label style="color: var(--text)"
+				><input
+					type="checkbox"
+					checked={!!h.progression}
+					onchange={(e) => (h.progression = e.currentTarget.checked ? { after: 6, by: 5, unit: 'percent' } : null)}
+				/> Suggest raising my targets when I keep hitting them</label
+			>
+			{#if h.progression}
+				<div class="row">
+					<label style="width: 8rem">After hitting them <input type="number" min="2" max="60" bind:value={h.progression.after} /></label>
+					<span style="padding-bottom: 0.6rem">times in a row, raise by</span>
+					<label style="width: 5rem"><input type="number" min="0" step="any" bind:value={h.progression.by} aria-label="Raise by" /></label>
+					<label style="width: 7rem"
+						><select bind:value={h.progression.unit} aria-label="Raise unit">
+							<option value="percent">%</option>
+							<option value="amount">units</option>
+						</select></label
+					>
+				</div>
+				<p class="muted small-text">ittracks only suggests it. Nothing changes until you accept.</p>
+			{/if}
+		{/if}
+		</details>
 	{/if}
+
+	<h2>Reframe</h2>
+	<label
+		>A line to see on the card
+		<input bind:value={h.reframe} placeholder={h.direction === 'break' ? 'I am free of this' : 'I get to do this today'} />
+	</label>
 
 	{#if open.identity}
 		<h2>Identity</h2>
@@ -862,6 +1057,23 @@
 {/if}
 
 <style>
+	.extras {
+		margin-top: 1.25rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 0.6rem 0.9rem;
+	}
+	.extras > * + * {
+		margin-top: 0.6rem;
+	}
+	.extras summary {
+		cursor: pointer;
+		font-weight: 600;
+	}
+	.extras h3 {
+		font-size: 1rem;
+		margin: 1rem 0 0.25rem;
+	}
 	.slot {
 		border-top: 1px solid var(--border);
 		padding-top: 0.75rem;

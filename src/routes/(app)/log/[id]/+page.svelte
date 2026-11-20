@@ -175,7 +175,10 @@
 			if (!t) return;
 			const s = log[i];
 			const repeatingIds = t.metrics.filter((m) => m.repeats).map((m) => m.id);
-			for (const set of s.sets.filter((x) => x.done || (quickMode && finish))) {
+			// Finish saves every set with a value typed in, ticked or not; Save for later keeps only ticked ones.
+			const hasValue = (set: { done: boolean; values: Values }) =>
+				set.done || (quickMode && finish) || (finish && repeatingIds.some((id) => set.values[id] !== null && set.values[id] !== undefined && set.values[id] !== ''));
+			for (const set of s.sets.filter(hasValue)) {
 				entries.push({
 					taskId: t.id,
 					values: Object.fromEntries(repeatingIds.map((id) => [id, set.values[id] ?? null]))

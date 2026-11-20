@@ -5,6 +5,7 @@ import { db } from './db';
 import {
 	craving,
 	entry,
+	prepTick,
 	habit,
 	metric,
 	occurrence,
@@ -28,7 +29,9 @@ import {
 } from '$lib/engine/streak';
 import { orderByCue } from '$lib/engine/stack';
 import { topTriggers, type Trigger } from '$lib/engine/triggers';
-import { weekStart } from '$lib/engine/dates';
+import { addDays, weekStart } from '$lib/engine/dates';
+import { limitOn, nextDrop, usedIn, withinStreak } from '$lib/engine/limit';
+import { hitsInARow, raise, type Progression } from '$lib/engine/progression';
 import { DEFAULT_TRIGGERS, type ScheduleForm } from '$lib/forms';
 import { identitiesByHabit } from './repo/identities';
 import { getSettings } from './settings';
@@ -236,6 +239,11 @@ export interface TodayItem {
 	levels: { minimum: string; target: string; stretch: string } | null;
 	quickDone: boolean;
 	identities: string[];
+	reframe: string | null;
+	bundle: { reward: string; strict: boolean } | null;
+	reward: { celebrate: boolean; message: string; jar: { total: number; unit: string; goal: string } | null } | null;
+	/** Targets have been hit this many times in a row; suggest raising them. */
+	progression: { hits: number; by: number; unit: 'percent' | 'amount'; changes: string[] } | null;
 	/** Started on the log screen and saved, not finished yet. */
 	inProgress: boolean;
 	/** A finished log exists to copy with "Same as last time". */
@@ -245,9 +253,19 @@ export interface TodayItem {
 	pausedUntil: string | null;
 }
 
+export interface PrepItem {
+	habitId: string;
+	name: string;
+	/** The date of the Occurrence this prepares for. */
+	date: string;
+	items: { item: string; done: boolean }[];
+}
+
 export interface BreakItem {
 	habitId: string;
 	name: string;
+	/** The earliest date a slip can be logged for. */
+	startDate: string;
 	days: number;
 	longest: number;
 	slippedToday: number;
@@ -257,6 +275,16 @@ export interface BreakItem {
 	top: Trigger[];
 	resistedThisWeek: number;
 	identities: string[];
+	reframe: string | null;
+	cost: { unit: string; month: number; saved: number | null } | null;
+	/** Reduce mode: used and allowed in the current day or week. */
+	limit: {
+		used: number;
+		max: number;
+		period: 'day' | 'week';
+		/** When a taper lowers the limit next, and to what. */
+		next: { date: string; max: number } | null;
+	} | null;
 	areaId: string | null;
 }
 
@@ -297,7 +325,10 @@ export function loadToday(accountId: string, today: string) {
 			breaking.push({
 				habitId: h.id,
 				name: h.name,
-				days: daysSinceSlip(dates, h.startDate, today),
+				startDate: h.startDate,
+				days: h.limit
+					? withinStreak(h.limit, slips, h.startDate, today)
+					: daysSinceSlip(dates, h.startDate, today),
 				longest: longestRun(dates, h.startDate, today),
 				slippedToday: slips.filter((s) => s.date === today).reduce((n, s) => n + s.count, 0),
 				ifThen: h.ifThen
@@ -317,6 +348,36 @@ export function loadToday(accountId: string, today: string) {
 					.all()
 					.filter((c) => c.date >= monday && c.date <= today).length,
 				identities: idents.get(h.id) ?? [],
+				reframe: h.reframe,
+				cost: h.cost
+					? {
+							unit: h.cost.unit,
+							month:
+								slips
+									.filter((s) => s.date.slice(0, 7) === today.slice(0, 7))
+									.reduce((n, s) => n + s.count, 0) * h.cost.amount,
+							// Saved = what the old daily rate would have cost since the start, minus what
+							// slips cost. Only finished days count, so today doesn't count before it ends.
+							saved: h.cost.perDay
+								? Math.max(
+										0,
+										(daysBetweenInclusive(h.startDate, addDays(today, -1)) * h.cost.perDay -
+											slips
+												.filter((s) => s.date >= h.startDate && s.date < today)
+												.reduce((n, s) => n + s.count, 0)) *
+											h.cost.amount
+									)
+								: null
+						}
+					: null,
+				limit: h.limit
+					? {
+							used: usedIn(h.limit, slips, today),
+							max: limitOn(h.limit, today),
+							period: h.limit.period,
+							next: nextDrop(h.limit, today)
+						}
+					: null,
 				areaId: h.areaId
 			});
 			continue;
@@ -368,6 +429,25 @@ export function loadToday(accountId: string, today: string) {
 				: null,
 			quickDone: h.quickDone,
 			identities: idents.get(h.id) ?? [],
+			reframe: h.reframe,
+			bundle: h.bundle?.reward ? h.bundle : null,
+			reward:
+				h.reward && (h.reward.celebrate || h.reward.jar)
+					? {
+							celebrate: h.reward.celebrate,
+							message: h.reward.message,
+							jar: h.reward.jar
+								? {
+										total:
+											Math.round(marks.filter((m) => m.status === 'done').length * h.reward.jar.amount * 100) /
+											100,
+										unit: h.reward.jar.unit,
+										goal: h.reward.jar.goal
+									}
+								: null
+						}
+					: null,
+			progression: progressionFor(h.progression, marks, h.progressionFrom, variants.map((v) => v.id)),
 			inProgress:
 				!!occ &&
 				occ.status === 'due' &&
@@ -437,6 +517,85 @@ function slotsOf(occ: typeof occurrence.$inferSelect) {
 	return slots.map((s) => ({ slot: s, taskId: picks[s.id] ?? s.taskId }));
 }
 
+const daysBetweenInclusive = (a: string, b: string) =>
+	Math.max(0, Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000) + 1);
+
+function progressionFor(
+	p: Progression | null,
+	marks: Parameters<typeof hitsInARow>[0],
+	since: string | null,
+	variantIds: string[]
+) {
+	if (!p) return null;
+	const hits = hitsInARow(marks, since);
+	return hits >= p.after ? { hits, by: p.by, unit: p.unit, changes: previewRaise(p, variantIds) } : null;
+}
+
+/** What Raise would change, as "Bench press: Reps 8→9, Weight 80→84", one line per Task. */
+function previewRaise(p: Progression, variantIds: string[]): string[] {
+	if (!variantIds.length) return [];
+	const slots = db
+		.select()
+		.from(slot)
+		.where(inArray(slot.variantId, variantIds))
+		.orderBy(asc(slot.sortOrder))
+		.all()
+		.filter((s) => s.taskId && s.targets && Object.keys(s.targets).length);
+	const lines: string[] = [];
+	for (const s of slots) {
+		const t = db.select({ name: task.name }).from(task).where(eq(task.id, s.taskId!)).get();
+		const names = new Map(
+			db.select({ id: metric.id, name: metric.name }).from(metric).where(eq(metric.taskId, s.taskId!)).all().map((m) => [m.id, m.name])
+		);
+		const next = raise(s.targets!, p);
+		const parts = Object.entries(s.targets!)
+			.filter(([k]) => names.has(k))
+			.map(([k, v]) => `${names.get(k)} ${v}→${next[k]}`);
+		const line = `${t?.name ?? 'Task'}: ${parts.join(', ')}`;
+		if (parts.length && !lines.includes(line)) lines.push(line);
+	}
+	return lines.length > 4 ? [...lines.slice(0, 3), `and ${lines.length - 3} more`] : lines;
+}
+
+/** Prep checklists for build habits due tomorrow. */
+export function loadPrep(accountId: string, today: string): PrepItem[] {
+	const tomorrow = addDays(today, 1);
+	const habits = db
+		.select()
+		.from(habit)
+		.where(and(eq(habit.accountId, accountId), eq(habit.archived, false), eq(habit.direction, 'build')))
+		.orderBy(asc(habit.sortOrder), asc(habit.name))
+		.all()
+		.filter((h) => h.prep?.length && h.schedule);
+	const out: PrepItem[] = [];
+	for (const h of habits) {
+		// Assume today's due Occurrence gets done, so a rotation looks one step ahead.
+		const past = history(h.id, tomorrow);
+		const todayOcc = db
+			.select()
+			.from(occurrence)
+			.where(and(eq(occurrence.habitId, h.id), eq(occurrence.date, today)))
+			.get();
+		if (todayOcc?.status === 'due') past.push({ date: today, variantId: todayOcc.variantId, status: 'done' });
+		if (!dueOn(h.schedule as Schedule, past, tomorrow)) continue;
+		const ticks = new Set(
+			db
+				.select({ item: prepTick.item })
+				.from(prepTick)
+				.where(and(eq(prepTick.habitId, h.id), eq(prepTick.date, tomorrow)))
+				.all()
+				.map((t) => t.item)
+		);
+		out.push({
+			habitId: h.id,
+			name: h.name,
+			date: tomorrow,
+			items: h.prep!.map((item) => ({ item, done: ticks.has(item) }))
+		});
+	}
+	return out;
+}
+
 /**
  * Mark an Occurrence done at a level without opening the Log screen: every fixed Slot
  * gets Entries from that level's targets (falling back to Target), so History shows them.
@@ -445,8 +604,9 @@ export function quickDone(occurrenceId: string, level: Level | null) {
 	const occ = db.select().from(occurrence).where(eq(occurrence.id, occurrenceId)).get();
 	if (!occ) return;
 	db.transaction((tx) => {
-		const hasEntries = tx.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, occ.id)).get();
-		if (!hasEntries) {
+		// One tap logs that level's targets, replacing anything an earlier tap or log left behind.
+		tx.delete(entry).where(eq(entry.occurrenceId, occ.id)).run();
+		{
 			let order = 0;
 			for (const { slot: s, taskId } of slotsOf(occ)) {
 				if (!taskId) continue;

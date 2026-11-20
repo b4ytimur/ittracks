@@ -63,7 +63,7 @@
 <details class="card" style="margin-top: 1rem">
 	<summary>Import a template file</summary>
 	<form method="POST" action="?/import" enctype="multipart/form-data" class="stack" style="margin-top: 0.75rem" use:enhance>
-		<input type="file" name="file" accept=".json,application/json" required />
+		<input type="file" name="file" accept=".json,application/json" required aria-label="Template file" />
 		<label style="color: var(--text)"><input type="checkbox" name="separate" /> Make new Tasks even if the Library has ones with the same name</label>
 		<button>Import</button>
 	</form>
