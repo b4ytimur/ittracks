@@ -1,0 +1,45 @@
+# ittracks
+
+A fully customizable, self-hostable habit tracker. Build a habit out of your own Variants and Tasks, choose what to log (weight, sets, reps, minutes, words, yes or no), and schedule it with weekdays, rotations with rest days, or intervals. It also tracks bad habits with a slip counter and has a built-in timer.
+
+Status: early MVP work. Nothing is usable yet.
+
+## Concepts
+
+| Term | Meaning |
+| --- | --- |
+| Habit | What you track, either *build* (do more) or *break* (do less) |
+| Variant | A named version of a habit, e.g. Push day A, Pull day B |
+| Slot | A position in a Variant, fixed to a Task or auto-filled by a Fill rule |
+| Task | A reusable thing you do, kept in your Library, with Tags and Metrics |
+| Metric | A value you log: number, count, duration, checkbox, choice or text |
+| Schedule | Weekly, frequency, rotation (by Variant or by week) or interval |
+| Occurrence / Log / Entry | A Variant on a date, what you did, and one row of values (e.g. one set) |
+| Slip | A logged lapse of a break habit; resets its counter to 0 |
+
+## Stack
+
+SvelteKit (TypeScript), SQLite through Drizzle ORM, Vitest. It ships as one Docker container.
+
+## Develop
+
+```sh
+npm install
+npm run dev        # http://localhost:5173
+npm test           # schedule, fill and streak rules
+npm run check      # type check
+```
+
+After changing `src/lib/server/db/schema.ts`, run `npm run db:generate` to create a migration. Migrations run automatically on startup.
+
+## Self-host
+
+```sh
+docker compose up -d
+```
+
+The app listens on port 3000 and keeps its database in `./data`. Set `ORIGIN` in `docker-compose.yml` to the address you open it at.
+
+## License
+
+[AGPL-3.0](LICENSE). You can self-host, modify and share it. If you run a modified version as a service for others, you must publish your changes.
