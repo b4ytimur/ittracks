@@ -29,7 +29,7 @@ export const actions: Actions = {
 		const accountId = locals.account!.id;
 		for (const t of tasks) saveTask(accountId, null, t.form, t.id);
 		habit.identityIds = identities.map((statement) => identityFor(accountId, statement));
-		saveHabit(accountId, null, habit);
+		saveHabit(accountId, null, habit, todayIn(cookies.get('tz')));
 		return { imported: habit.name, taskCount: tasks.length };
 	}
 };

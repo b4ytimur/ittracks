@@ -44,9 +44,9 @@
 		<p class="muted" style="margin: 0">
 			A template file (.ittracks.json) creates a habit, and adds the Tasks it uses to your Library as new Tasks.
 		</p>
-		<input type="file" name="file" accept=".json,application/json" required />
+		<input type="file" name="file" accept=".json,application/json" required aria-label="Template file" />
 		<button>Import</button>
 	</form>
 </details>
 {#if form?.error}<p class="error">{form.error}</p>{/if}
-{#if form?.imported}<p>Imported "{form.imported}" with {form.taskCount} Tasks.</p>{/if}
+{#if form?.imported}<p>Imported "{form.imported}" with {form.taskCount} {form.taskCount === 1 ? 'Task' : 'Tasks'}.</p>{/if}

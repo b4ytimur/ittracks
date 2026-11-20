@@ -104,7 +104,13 @@ export const templateFile = z.object({
 			.object({
 				max: z.number().int().min(0).max(1000),
 				period: z.enum(['day', 'week']),
-				taper: z.object({ by: z.number().int().min(1).max(100), every: z.enum(['week', 'month']) }).nullable()
+				taper: z
+					.object({
+						by: z.number().int().min(1).max(100),
+						every: z.enum(['week', 'month']),
+						floor: z.number().int().min(0).max(1000).default(0)
+					})
+					.nullable()
 			})
 			.nullable()
 			.default(null),

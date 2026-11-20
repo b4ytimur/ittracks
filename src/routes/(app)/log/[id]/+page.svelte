@@ -73,7 +73,10 @@
 			if (!t) return;
 			const s = log[i];
 			const repeatingIds = t.metrics.filter((m) => m.repeats).map((m) => m.id);
-			for (const set of s.sets.filter((x) => x.done)) {
+			// Finish saves every set with a value typed in, ticked or not; Save for later keeps only ticked ones.
+			const hasValue = (set: { done: boolean; values: Values }) =>
+				set.done || (finish && repeatingIds.some((id) => set.values[id] !== null && set.values[id] !== undefined && set.values[id] !== ''));
+			for (const set of s.sets.filter(hasValue)) {
 				entries.push({
 					taskId: t.id,
 					values: Object.fromEntries(repeatingIds.map((id) => [id, set.values[id] ?? null]))
@@ -193,7 +196,8 @@
 											<input value={num(set.values[m.id])} oninput={(e) => (set.values[m.id] = e.currentTarget.value)} />
 										{:else}
 											<input type="number" inputmode="decimal" step="any" value={num(set.values[m.id])}
-												oninput={(e) => (set.values[m.id] = toNum(e.currentTarget.value))} aria-label="{m.name}, set {j + 1}" />
+												oninput={(e) => (set.values[m.id] = toNum(e.currentTarget.value))}
+												onchange={() => !set.done && setDone(i, j, true)} aria-label="{m.name}, set {j + 1}" />
 										{/if}
 									</td>
 								{/each}

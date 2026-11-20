@@ -9,9 +9,10 @@ import {
 } from '$lib/forms';
 import { DEFAULT_STREAK_RULE } from '$lib/engine/streak';
 import { checkLinks, deleteHabit, getHabitForm, listHabits, saveHabit } from '$lib/server/repo/habits';
-import { addIdentity, listIdentities } from '$lib/server/repo/identities';
+import { identityFor, listIdentities } from '$lib/server/repo/identities';
 import { listTagNames, listTasks } from '$lib/server/repo/tasks';
 import { asc, inArray } from 'drizzle-orm';
+import { todayIn } from '$lib/server/today';
 import { db } from '$lib/server/db';
 import { metric } from '$lib/server/db/schema';
 import type { Actions, PageServerLoad } from './$types';
@@ -32,13 +33,11 @@ function numericMetrics(taskIds: string[]) {
 	return out;
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
-
-const blank = (): HabitForm => ({
+const blank = (today: string): HabitForm => ({
 	name: '',
 	direction: 'build',
 	notes: '',
-	startDate: today(),
+	startDate: today,
 	variants: [],
 	schedule: null,
 	cue: emptyCue(),
@@ -59,10 +58,10 @@ const blank = (): HabitForm => ({
 	progression: null
 });
 
-export const load: PageServerLoad = ({ locals, params }) => {
+export const load: PageServerLoad = ({ locals, params, cookies }) => {
 	const accountId = locals.account!.id;
 	const isNew = params.id === 'new';
-	const form = isNew ? blank() : getHabitForm(accountId, params.id);
+	const form = isNew ? blank(todayIn(cookies.get('tz'))) : getHabitForm(accountId, params.id);
 	if (!form) error(404, 'Habit not found');
 	const tasks = listTasks(accountId).map(({ id, name }) => ({ id, name }));
 	return {
@@ -80,7 +79,7 @@ export const load: PageServerLoad = ({ locals, params }) => {
 };
 
 export const actions: Actions = {
-	save: async ({ request, locals, params }) => {
+	save: async ({ request, locals, params, cookies }) => {
 		let json: unknown;
 		try {
 			json = JSON.parse(String((await request.formData()).get('payload')));
@@ -91,7 +90,12 @@ export const actions: Actions = {
 		if (!parsed.success) return fail(400, { error: firstError(parsed.error) });
 		const linkError = checkLinks(locals.account!.id, params.id === 'new' ? null : params.id, parsed.data);
 		if (linkError) return fail(400, { error: linkError });
-		const id = saveHabit(locals.account!.id, params.id === 'new' ? null : params.id, parsed.data);
+		const id = saveHabit(
+			locals.account!.id,
+			params.id === 'new' ? null : params.id,
+			parsed.data,
+			todayIn(cookies.get('tz'))
+		);
 		if (!id) error(404, 'Habit not found');
 		redirect(303, '/habits');
 	},
@@ -99,7 +103,7 @@ export const actions: Actions = {
 	identity: async ({ request, locals }) => {
 		const statement = String((await request.formData()).get('statement') ?? '').trim().slice(0, 120);
 		if (!statement) return fail(400, { error: 'Write the identity as a sentence.' });
-		return { identityId: addIdentity(locals.account!.id, statement), statement };
+		return { identityId: identityFor(locals.account!.id, statement), statement };
 	},
 	delete: ({ locals, params }) => {
 		deleteHabit(locals.account!.id, params.id);
