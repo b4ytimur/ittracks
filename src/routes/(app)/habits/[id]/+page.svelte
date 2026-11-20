@@ -94,7 +94,10 @@
 
 <header class="bar">
 	<h1>{data.isNew ? 'New habit' : 'Edit habit'}</h1>
-	<a href="/habits">Cancel</a>
+	<div class="row">
+		{#if !data.isNew}<a href="/habits/{data.id}/template.json" download>Export template</a>{/if}
+		<a href="/habits">Cancel</a>
+	</div>
 </header>
 
 <form method="POST" action="?/save" class="stack">

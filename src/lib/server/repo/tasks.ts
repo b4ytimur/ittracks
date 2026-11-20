@@ -88,9 +88,14 @@ export function getTaskForm(accountId: string, id: string): TaskForm | null {
 }
 
 /** Create or update a Task with its Tags, Metrics and sub-tasks. Returns its id. */
-export function saveTask(accountId: string, id: string | null, f: TaskForm): string | null {
+export function saveTask(
+	accountId: string,
+	id: string | null,
+	f: TaskForm,
+	newId: string = randomUUID()
+): string | null {
 	return db.transaction((tx) => {
-		const taskId = id ?? randomUUID();
+		const taskId = id ?? newId;
 		if (id) {
 			const owned = tx
 				.select({ id: task.id })
