@@ -28,10 +28,8 @@ export function longestRun(slipDates: ISODate[], start: ISODate, today: ISODate)
 	const points = [start, ...[...new Set(slipDates)].filter((d) => d <= today).sort(), today];
 	let best = 0;
 	for (let i = 1; i < points.length; i++) {
-		// The counter peaks the day before a slip, or today for the current run.
-		const endsInSlip = i < points.length - 1;
-		const gap = daysBetween(points[i - 1], points[i]) - (endsInSlip ? 1 : 0);
-		best = Math.max(best, gap);
+		// The counter reads its highest on the day of the next slip, before it resets, or today.
+		best = Math.max(best, daysBetween(points[i - 1], points[i]));
 	}
 	return best;
 }
