@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d7ef78fe-cbda-40a3-beec-a7f02f26a73d",
+  "id": "7c00b65a-a65a-4671-9a10-acf1ace0e158",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "account": {
@@ -204,6 +204,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false,
+          "autoincrement": false
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
           "autoincrement": false
         },
         "schedule": {
@@ -564,6 +571,13 @@
         "fill_rule": {
           "name": "fill_rule",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sets": {
+          "name": "sets",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
