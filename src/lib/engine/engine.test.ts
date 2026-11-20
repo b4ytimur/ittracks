@@ -158,3 +158,115 @@ describe('streaks', () => {
 		expect(longestRun([], '2026-11-01', '2026-11-15')).toBe(14);
 	});
 });
+
+// ---------- Atomic Habits additions ----------
+import { streak, type Mark } from './streak';
+import { makesLoop, orderByCue } from './stack';
+import { topTriggers } from './triggers';
+
+const STATUS: Record<string, Mark['status']> = { D: 'done', m: 'done', M: 'missed', S: 'skipped', _: 'due' };
+/** One Mark per day from `start`: D done, m done at Minimum, M missed, S skipped, _ due. */
+const marks = (seq: string, start = MON): Mark[] =>
+	[...seq].map((c, i) => ({
+		date: new Date(Date.parse(`${start}T00:00:00Z`) + i * 86_400_000).toISOString().slice(0, 10),
+		status: STATUS[c],
+		level: c === 'm' ? 'minimum' : null
+	}));
+
+describe('streak rules', () => {
+	it('strict: any miss resets', () => {
+		expect(streak(marks('DDMDD'), { kind: 'strict' }).value).toBe(2);
+	});
+
+	it('never miss twice forgives a single miss', () => {
+		expect(streak(marks('DDMDD'), { kind: 'neverTwice' }).value).toBe(4);
+	});
+
+	it('never miss twice ends at two misses in a row', () => {
+		expect(streak(marks('DDMMD'), { kind: 'neverTwice' }).value).toBe(1);
+		expect(streak(marks('DDMM'), { kind: 'neverTwice' }).value).toBe(0);
+	});
+
+	it('never miss twice flags the day after a miss', () => {
+		const r = streak(marks('DDDM_'), { kind: 'neverTwice' });
+		expect(r).toEqual({ value: 3, unit: 'streak', atRisk: true });
+		expect(streak(marks('DDMD'), { kind: 'neverTwice' }).atRisk).toBe(false);
+	});
+
+	it('grace days allow N misses per week', () => {
+		// MON..SUN: D M D M D: two misses in one week; one allowed.
+		expect(streak(marks('DMDMD'), { kind: 'grace', misses: 1, period: 'week' }).value).toBe(2);
+		expect(streak(marks('DMDMD'), { kind: 'grace', misses: 2, period: 'week' }).value).toBe(3);
+	});
+
+	it('consistency is the share done over the last N days, ignoring skips', () => {
+		const r = streak(marks('DMDSD'), { kind: 'consistency', days: 30 }, { today: '2026-11-27' });
+		expect(r).toEqual({ value: 75, unit: 'percent', atRisk: false });
+	});
+
+	it('a Minimum keeps the streak unless the habit says otherwise', () => {
+		expect(streak(marks('DmD'), { kind: 'strict' }).value).toBe(3);
+		expect(streak(marks('DmD'), { kind: 'strict' }, { minimumCounts: false }).value).toBe(1);
+	});
+});
+
+describe('stacking order', () => {
+	it('orders by cue time and puts stacked habits after their anchor', () => {
+		const out = orderByCue([
+			{ id: 'read', time: null, afterId: 'coffee' },
+			{ id: 'gym', time: '18:00', afterId: null },
+			{ id: 'coffee', time: '07:00', afterId: null },
+			{ id: 'stretch', time: null, afterId: 'gym' },
+			{ id: 'misc', time: null, afterId: null }
+		]).map((x) => x.id);
+		expect(out).toEqual(['coffee', 'read', 'gym', 'stretch', 'misc']);
+	});
+
+	it('still shows habits stuck in a loop', () => {
+		const out = orderByCue([
+			{ id: 'a', time: null, afterId: 'b' },
+			{ id: 'b', time: null, afterId: 'a' }
+		]);
+		expect(out).toHaveLength(2);
+	});
+
+	it('detects loops before saving', () => {
+		const anchors = new Map<string, string | null>([
+			['a', null],
+			['b', 'a'],
+			['c', 'b']
+		]);
+		expect(makesLoop('a', 'c', anchors)).toBe(true);
+		expect(makesLoop('d', 'c', anchors)).toBe(false);
+	});
+});
+
+describe('slip triggers', () => {
+	const slip = (feeling: string | null, place: string | null, time: string | null) => ({
+		count: 1,
+		feeling,
+		place,
+		time,
+		withWhom: null
+	});
+	it('reports the most common context once there are enough slips', () => {
+		const top = topTriggers([
+			slip('Bored', 'home', '22:30'),
+			slip('Bored', 'home', '23:00'),
+			slip('Stressed', 'work', '14:00'),
+			slip('Bored', null, null)
+		]);
+		expect(top[0]).toEqual({ kind: 'feeling', label: 'bored', percent: 75 });
+		expect(top.find((t) => t.kind === 'place')).toEqual({ kind: 'place', label: 'home', percent: 67 });
+		expect(topTriggers([slip('Bored', null, null)])).toEqual([]);
+	});
+});
+
+describe('streak labels', () => {
+	it('shows nothing for consistency before there is any history', async () => {
+		const { describeStreak } = await import('./streak');
+		const rule = { kind: 'consistency', days: 30 } as const;
+		expect(describeStreak(streak([], rule, { today: MON }), rule)).toBe('');
+		expect(describeStreak(streak(marks('DM'), rule, { today: '2026-11-24' }), rule)).toBe('50% over 30 days');
+	});
+});

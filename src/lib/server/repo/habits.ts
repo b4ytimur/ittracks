@@ -1,12 +1,26 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray, notInArray } from 'drizzle-orm';
 import { db } from '../db';
-import { habit, slot, variant } from '../db/schema';
-import type { HabitForm, ScheduleForm } from '$lib/forms';
+import { habit, habitIdentity, identity, slot, variant } from '../db/schema';
+import {
+	DEFAULT_TRIGGERS,
+	defaultLevels,
+	emptyCue,
+	type HabitForm,
+	type ScheduleForm
+} from '$lib/forms';
+import { makesLoop } from '$lib/engine/stack';
+import type { StreakRule } from '$lib/engine/streak';
 
 export function listHabits(accountId: string) {
 	return db
-		.select({ id: habit.id, name: habit.name, direction: habit.direction, schedule: habit.schedule })
+		.select({
+			id: habit.id,
+			name: habit.name,
+			direction: habit.direction,
+			schedule: habit.schedule,
+			cue: habit.cue
+		})
 		.from(habit)
 		.where(and(eq(habit.accountId, accountId), eq(habit.archived, false)))
 		.orderBy(asc(habit.sortOrder), asc(habit.name))
@@ -21,6 +35,14 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 		.where(and(eq(habit.id, id), eq(habit.accountId, accountId)))
 		.get();
 	if (!h) return null;
+	// Links to a habit that was deleted since are dropped, so the form still saves.
+	const exists = (other: string | null | undefined) =>
+		!!other &&
+		!!db.select({ id: habit.id }).from(habit).where(and(eq(habit.id, other), eq(habit.accountId, accountId))).get();
+	const cue = h.cue ?? emptyCue();
+	if (cue.afterHabitId && !exists(cue.afterHabitId)) cue.afterHabitId = null;
+	const ifThen = h.ifThen ?? { when: '', then: '', habitId: null };
+	if (ifThen.habitId && !exists(ifThen.habitId)) ifThen.habitId = null;
 	const variants = db
 		.select()
 		.from(variant)
@@ -46,6 +68,20 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 		notes: h.notes ?? '',
 		startDate: h.startDate,
 		schedule: h.schedule as ScheduleForm | null,
+		cue,
+		streakRule: h.streakRule as StreakRule,
+		minimumCounts: h.minimumCounts,
+		levels: h.levels ?? defaultLevels(),
+		quickDone: h.quickDone,
+		remind: h.remind,
+		identityIds: db
+			.select({ id: habitIdentity.identityId })
+			.from(habitIdentity)
+			.where(eq(habitIdentity.habitId, id))
+			.all()
+			.map((r) => r.id),
+		ifThen,
+		triggers: h.triggers ?? DEFAULT_TRIGGERS,
 		variants: variants.map((v) => ({
 			id: v.id,
 			name: v.name,
@@ -56,10 +92,39 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 					taskId: s.taskId,
 					fillRule: s.fillRule as HabitForm['variants'][number]['slots'][number]['fillRule'],
 					sets: s.sets,
-					targets: s.targets ?? {}
+					targets: s.targets ?? {},
+					minTargets: s.minTargets ?? {},
+					stretchTargets: s.stretchTargets ?? {}
 				}))
 		}))
 	};
+}
+
+/** A Habit's links to other rows must point at this account's rows, and stacking can't loop. */
+export function checkLinks(accountId: string, id: string | null, f: HabitForm): string | null {
+	const others = db
+		.select({ id: habit.id, cue: habit.cue, direction: habit.direction })
+		.from(habit)
+		.where(eq(habit.accountId, accountId))
+		.all();
+	const after = f.cue.afterHabitId;
+	if (after) {
+		if (!others.some((o) => o.id === after && o.direction === 'build') || after === id)
+			return 'Pick another habit to stack after';
+		const anchors = new Map(others.map((o) => [o.id, o.cue?.afterHabitId ?? null]));
+		if (id && makesLoop(id, after, anchors)) return 'Stacking these habits would make a loop';
+	}
+	if (f.ifThen.habitId && !others.some((o) => o.id === f.ifThen.habitId && o.direction === 'build'))
+		return 'Pick a build habit as the replacement';
+	if (f.identityIds.length) {
+		const owned = db
+			.select({ id: identity.id })
+			.from(identity)
+			.where(and(eq(identity.accountId, accountId), inArray(identity.id, f.identityIds)))
+			.all();
+		if (owned.length !== new Set(f.identityIds).size) return 'Unknown identity';
+	}
+	return null;
 }
 
 /** Create or update a Habit with its Variants and Slots. Returns its id, or null if not found. */
@@ -67,12 +132,26 @@ export function saveHabit(accountId: string, id: string | null, f: HabitForm): s
 	return db.transaction((tx) => {
 		const habitId = id ?? randomUUID();
 		const isBreak = f.direction === 'break';
+		const cue = {
+			time: f.cue.time || null,
+			place: f.cue.place || null,
+			afterHabitId: f.cue.afterHabitId,
+			afterText: f.cue.afterHabitId ? null : f.cue.afterText || null
+		};
 		const values = {
 			name: f.name,
 			direction: f.direction,
 			notes: f.notes || null,
 			startDate: f.startDate,
-			schedule: isBreak ? null : f.schedule
+			schedule: isBreak ? null : f.schedule,
+			cue: Object.values(cue).some(Boolean) ? cue : null,
+			streakRule: f.streakRule,
+			minimumCounts: f.minimumCounts,
+			levels: f.levels.enabled ? f.levels : null,
+			quickDone: f.quickDone,
+			remind: f.remind && !!cue.time,
+			ifThen: isBreak && (f.ifThen.when || f.ifThen.then || f.ifThen.habitId) ? f.ifThen : null,
+			triggers: isBreak ? f.triggers : null
 		};
 		if (id) {
 			const owned = tx
@@ -87,6 +166,10 @@ export function saveHabit(accountId: string, id: string | null, f: HabitForm): s
 				.values({ id: habitId, accountId, ...values })
 				.run();
 		}
+
+		tx.delete(habitIdentity).where(eq(habitIdentity.habitId, habitId)).run();
+		for (const identityId of new Set(f.identityIds))
+			tx.insert(habitIdentity).values({ habitId, identityId }).run();
 
 		// Break habits have no Variants. Keep ids stable so past Occurrences still point at them.
 		const variants = isBreak ? [] : f.variants;
@@ -118,6 +201,8 @@ export function saveHabit(accountId: string, id: string | null, f: HabitForm): s
 					fillRule: s.fillRule,
 					sets: s.sets,
 					targets: s.targets,
+					minTargets: Object.keys(s.minTargets).length ? s.minTargets : null,
+					stretchTargets: Object.keys(s.stretchTargets).length ? s.stretchTargets : null,
 					sortOrder: j
 				};
 				tx.insert(slot)
