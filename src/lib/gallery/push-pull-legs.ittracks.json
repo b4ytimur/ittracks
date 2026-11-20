@@ -1,0 +1,519 @@
+{
+	"format": "ittracks-template",
+	"version": 3,
+	"name": "Push/Pull/Legs",
+	"description": "Push, pull and legs in turn, with a rest day after legs. Each muscle gets hit about twice a week.",
+	"meta": {
+		"category": "Gym",
+		"daysPerWeek": 5,
+		"minutesPerDay": 60,
+		"equipment": [
+			"barbell",
+			"bench",
+			"cable",
+			"pull-up bar"
+		],
+		"area": "Fitness"
+	},
+	"questions": [],
+	"habit": {
+		"name": "Push/Pull/Legs",
+		"direction": "build",
+		"notes": "",
+		"schedule": {
+			"kind": "rotation",
+			"step": "variant",
+			"order": [
+				{
+					"variantId": "push",
+					"restDays": 0
+				},
+				{
+					"variantId": "pull",
+					"restDays": 0
+				},
+				{
+					"variantId": "legs",
+					"restDays": 1
+				}
+			],
+			"onMiss": "wait",
+			"weekdays": [],
+			"start": "2026-01-05"
+		},
+		"variants": [
+			{
+				"key": "push",
+				"name": "Push",
+				"slots": [
+					{
+						"task": "bench",
+						"fillRule": null,
+						"sets": 3,
+						"targets": {
+							"benchr": 10
+						}
+					},
+					{
+						"task": "ohp",
+						"fillRule": null,
+						"sets": 3,
+						"targets": {
+							"ohpr": 10
+						}
+					},
+					{
+						"task": "push",
+						"fillRule": null,
+						"sets": 3,
+						"targets": {
+							"pushr": 10
+						}
+					}
+				]
+			},
+			{
+				"key": "pull",
+				"name": "Pull",
+				"slots": [
+					{
+						"task": "pullup",
+						"fillRule": null,
+						"sets": 3,
+						"targets": {
+							"pullupr": 10
+						}
+					},
+					{
+						"task": "row",
+						"fillRule": null,
+						"sets": 3,
+						"targets": {
+							"rowr": 10
+						}
+					},
+					{
+						"task": "curl",
+						"fillRule": null,
+						"sets": 3,
+						"targets": {
+							"curlr": 10
+						}
+					}
+				]
+			},
+			{
+				"key": "legs",
+				"name": "Legs",
+				"slots": [
+					{
+						"task": "squat",
+						"fillRule": null,
+						"sets": 3,
+						"targets": {
+							"squatr": 10
+						}
+					},
+					{
+						"task": "rdl",
+						"fillRule": null,
+						"sets": 3,
+						"targets": {
+							"rdlr": 10
+						}
+					},
+					{
+						"task": "calf",
+						"fillRule": null,
+						"sets": 3,
+						"targets": {
+							"calfr": 10
+						}
+					}
+				]
+			}
+		],
+		"cue": null,
+		"streakRule": {
+			"kind": "neverTwice"
+		},
+		"minimumCounts": true,
+		"levels": null,
+		"quickDone": false,
+		"identities": [],
+		"ifThen": null,
+		"triggers": null
+	},
+	"tasks": [
+		{
+			"key": "bench",
+			"name": "Bench press",
+			"notes": "",
+			"restTimerEnabled": true,
+			"restTimerSeconds": 120,
+			"tags": [
+				{
+					"name": "chest",
+					"level": 3
+				},
+				{
+					"name": "triceps",
+					"level": 2
+				},
+				{
+					"name": "shoulders",
+					"level": 1
+				}
+			],
+			"metrics": [
+				{
+					"key": "benchw",
+					"name": "Weight",
+					"type": "number",
+					"unit": "{weight}",
+					"repeats": true,
+					"choices": [],
+					"step": null,
+					"required": false,
+					"quick": true
+				},
+				{
+					"key": "benchr",
+					"name": "Reps",
+					"type": "count",
+					"unit": "",
+					"repeats": true,
+					"choices": [],
+					"step": 1,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		},
+		{
+			"key": "ohp",
+			"name": "Overhead press",
+			"notes": "",
+			"restTimerEnabled": true,
+			"restTimerSeconds": 120,
+			"tags": [
+				{
+					"name": "shoulders",
+					"level": 3
+				},
+				{
+					"name": "triceps",
+					"level": 2
+				}
+			],
+			"metrics": [
+				{
+					"key": "ohpw",
+					"name": "Weight",
+					"type": "number",
+					"unit": "{weight}",
+					"repeats": true,
+					"choices": [],
+					"step": null,
+					"required": false,
+					"quick": true
+				},
+				{
+					"key": "ohpr",
+					"name": "Reps",
+					"type": "count",
+					"unit": "",
+					"repeats": true,
+					"choices": [],
+					"step": 1,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		},
+		{
+			"key": "push",
+			"name": "Triceps pushdown",
+			"notes": "",
+			"restTimerEnabled": true,
+			"restTimerSeconds": 60,
+			"tags": [
+				{
+					"name": "triceps",
+					"level": 3
+				}
+			],
+			"metrics": [
+				{
+					"key": "pushw",
+					"name": "Weight",
+					"type": "number",
+					"unit": "{weight}",
+					"repeats": true,
+					"choices": [],
+					"step": null,
+					"required": false,
+					"quick": true
+				},
+				{
+					"key": "pushr",
+					"name": "Reps",
+					"type": "count",
+					"unit": "",
+					"repeats": true,
+					"choices": [],
+					"step": 1,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		},
+		{
+			"key": "pullup",
+			"name": "Pull-up",
+			"notes": "",
+			"restTimerEnabled": true,
+			"restTimerSeconds": 120,
+			"tags": [
+				{
+					"name": "back",
+					"level": 3
+				},
+				{
+					"name": "biceps",
+					"level": 2
+				}
+			],
+			"metrics": [
+				{
+					"key": "pullupw",
+					"name": "Weight",
+					"type": "number",
+					"unit": "{weight}",
+					"repeats": true,
+					"choices": [],
+					"step": null,
+					"required": false,
+					"quick": true
+				},
+				{
+					"key": "pullupr",
+					"name": "Reps",
+					"type": "count",
+					"unit": "",
+					"repeats": true,
+					"choices": [],
+					"step": 1,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		},
+		{
+			"key": "row",
+			"name": "Barbell row",
+			"notes": "",
+			"restTimerEnabled": true,
+			"restTimerSeconds": 120,
+			"tags": [
+				{
+					"name": "back",
+					"level": 3
+				},
+				{
+					"name": "biceps",
+					"level": 2
+				}
+			],
+			"metrics": [
+				{
+					"key": "roww",
+					"name": "Weight",
+					"type": "number",
+					"unit": "{weight}",
+					"repeats": true,
+					"choices": [],
+					"step": null,
+					"required": false,
+					"quick": true
+				},
+				{
+					"key": "rowr",
+					"name": "Reps",
+					"type": "count",
+					"unit": "",
+					"repeats": true,
+					"choices": [],
+					"step": 1,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		},
+		{
+			"key": "curl",
+			"name": "Biceps curl",
+			"notes": "",
+			"restTimerEnabled": true,
+			"restTimerSeconds": 60,
+			"tags": [
+				{
+					"name": "biceps",
+					"level": 3
+				}
+			],
+			"metrics": [
+				{
+					"key": "curlw",
+					"name": "Weight",
+					"type": "number",
+					"unit": "{weight}",
+					"repeats": true,
+					"choices": [],
+					"step": null,
+					"required": false,
+					"quick": true
+				},
+				{
+					"key": "curlr",
+					"name": "Reps",
+					"type": "count",
+					"unit": "",
+					"repeats": true,
+					"choices": [],
+					"step": 1,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		},
+		{
+			"key": "squat",
+			"name": "Squat",
+			"notes": "",
+			"restTimerEnabled": true,
+			"restTimerSeconds": 150,
+			"tags": [
+				{
+					"name": "legs",
+					"level": 3
+				},
+				{
+					"name": "core",
+					"level": 1
+				}
+			],
+			"metrics": [
+				{
+					"key": "squatw",
+					"name": "Weight",
+					"type": "number",
+					"unit": "{weight}",
+					"repeats": true,
+					"choices": [],
+					"step": null,
+					"required": false,
+					"quick": true
+				},
+				{
+					"key": "squatr",
+					"name": "Reps",
+					"type": "count",
+					"unit": "",
+					"repeats": true,
+					"choices": [],
+					"step": 1,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		},
+		{
+			"key": "rdl",
+			"name": "Romanian deadlift",
+			"notes": "",
+			"restTimerEnabled": true,
+			"restTimerSeconds": 120,
+			"tags": [
+				{
+					"name": "legs",
+					"level": 3
+				},
+				{
+					"name": "back",
+					"level": 2
+				}
+			],
+			"metrics": [
+				{
+					"key": "rdlw",
+					"name": "Weight",
+					"type": "number",
+					"unit": "{weight}",
+					"repeats": true,
+					"choices": [],
+					"step": null,
+					"required": false,
+					"quick": true
+				},
+				{
+					"key": "rdlr",
+					"name": "Reps",
+					"type": "count",
+					"unit": "",
+					"repeats": true,
+					"choices": [],
+					"step": 1,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		},
+		{
+			"key": "calf",
+			"name": "Calf raise",
+			"notes": "",
+			"restTimerEnabled": true,
+			"restTimerSeconds": 60,
+			"tags": [
+				{
+					"name": "legs",
+					"level": 1
+				}
+			],
+			"metrics": [
+				{
+					"key": "calfw",
+					"name": "Weight",
+					"type": "number",
+					"unit": "{weight}",
+					"repeats": true,
+					"choices": [],
+					"step": null,
+					"required": false,
+					"quick": true
+				},
+				{
+					"key": "calfr",
+					"name": "Reps",
+					"type": "count",
+					"unit": "",
+					"repeats": true,
+					"choices": [],
+					"step": 1,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		}
+	]
+}

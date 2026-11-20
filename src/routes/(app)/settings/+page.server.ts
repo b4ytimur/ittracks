@@ -1,18 +1,49 @@
 import { fail } from '@sveltejs/kit';
-import { eq } from 'drizzle-orm';
 import { hash, verify } from '@node-rs/argon2';
 import { db } from '$lib/server/db';
 import { account } from '$lib/server/db/schema';
 import { getSettings, saveSettings } from '$lib/server/settings';
 import { publicKey, sendToAccount, subscriptionCount } from '$lib/server/push';
+import { AREA_COLORS, listAreas, saveAreas } from '$lib/server/repo/areas';
+import { userToday } from '$lib/server/today';
+import { readRanges } from '$lib/engine/day';
+import { pause } from '$lib/server/db/schema';
+import { and, asc, eq, isNull } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = ({ locals }) => ({
-	settings: getSettings(locals.account!.id),
-	username: locals.account!.username,
-	vapidKey: publicKey(),
-	devices: subscriptionCount(locals.account!.id)
-});
+export const load: PageServerLoad = ({ locals, cookies }) => {
+	const accountId = locals.account!.id;
+	return {
+		settings: getSettings(accountId),
+		username: locals.account!.username,
+		vapidKey: publicKey(),
+		devices: subscriptionCount(accountId),
+		areas: listAreas(accountId),
+		colors: AREA_COLORS,
+		today: userToday(accountId, cookies.get('tz')),
+		vacations: db
+			.select({ id: pause.id, start: pause.start, end: pause.end, note: pause.note })
+			.from(pause)
+			.where(and(eq(pause.accountId, accountId), isNull(pause.habitId)))
+			.orderBy(asc(pause.start))
+			.all()
+	};
+};
+
+const hhmm = /^([01]\d|2[0-3]):[0-5]\d$/;
+const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
+const areaList = z
+	.array(
+		z.object({
+			id: z.string().uuid().nullable(),
+			name: z.string().trim().min(1).max(40),
+			color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+			icon: z.string().max(8)
+		})
+	)
+	.max(30);
 
 export const actions: Actions = {
 	units: async ({ request, locals }) => {
@@ -20,6 +51,50 @@ export const actions: Actions = {
 		if (!weightUnit) return fail(400, { unitsError: 'Enter a unit.' });
 		saveSettings(locals.account!.id, { weightUnit });
 		return { unitsSaved: true };
+	},
+	/** When the day starts, and its named parts. */
+	day: async ({ request, locals }) => {
+		const f = await request.formData();
+		const dayStart = String(f.get('dayStart') ?? '');
+		if (!hhmm.test(dayStart)) return fail(400, { dayError: 'Pick a time like 04:00.' });
+		saveSettings(locals.account!.id, { dayStart, ranges: readRanges(f) });
+		return { daySaved: true };
+	},
+	display: async ({ request, locals }) => {
+		const f = await request.formData();
+		saveSettings(locals.account!.id, {
+			guidedSetup: f.get('guidedSetup') === 'on',
+			showAllSections: f.get('showAllSections') === 'on',
+			groupByArea: f.get('groupByArea') === 'on'
+		});
+		return { displaySaved: true };
+	},
+	areas: async ({ request, locals }) => {
+		let json: unknown;
+		try {
+			json = JSON.parse(String((await request.formData()).get('areas')));
+		} catch {
+			return fail(400, { areasError: 'Could not read the Areas.' });
+		}
+		const parsed = areaList.safeParse(json);
+		if (!parsed.success) return fail(400, { areasError: 'Every Area needs a name.' });
+		saveAreas(locals.account!.id, parsed.data);
+		return { areasSaved: true };
+	},
+	/** A vacation pauses every habit for a date range. */
+	vacation: async ({ request, locals }) => {
+		const f = await request.formData();
+		const start = String(f.get('start') ?? '');
+		const end = String(f.get('end') ?? '');
+		if (!isDate(start) || !isDate(end) || end < start) return fail(400, { vacationError: 'Pick a start and an end date.' });
+		db.insert(pause)
+			.values({ id: randomUUID(), accountId: locals.account!.id, habitId: null, start, end, note: String(f.get('note') ?? '').slice(0, 120) || null })
+			.run();
+		return { vacationSaved: true };
+	},
+	unvacation: async ({ request, locals }) => {
+		const id = String((await request.formData()).get('id') ?? '');
+		db.delete(pause).where(and(eq(pause.id, id), eq(pause.accountId, locals.account!.id))).run();
 	},
 	testReminder: async ({ locals }) => {
 		const sent = await sendToAccount(locals.account!.id, {

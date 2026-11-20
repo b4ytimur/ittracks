@@ -6,6 +6,7 @@ import { db } from '$lib/server/db';
 import { entry, metric, occurrence, slot, task, variant } from '$lib/server/db/schema';
 import { ownedOccurrence } from '$lib/server/owned';
 import { candidates, lastEntries } from '$lib/server/today';
+import { getSettings } from '$lib/server/settings';
 import { pickTask, type FillRule } from '$lib/engine/fill';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -28,11 +29,17 @@ export interface LogTask {
 			unit: string | null;
 			repeats: boolean;
 			choices: string[] | null;
+			prefill: 'last' | 'target' | 'blank';
+			step: number | null;
+			required: boolean;
+			quick: boolean;
 		}[];
 		subtasks: { id: string; name: string }[];
 	} | null;
 	saved: Record<string, unknown>[];
 	previous: Record<string, unknown>[];
+	/** Sub-tasks ticked last time. */
+	previousSubs: string[];
 }
 
 function loadTask(id: string) {
@@ -49,7 +56,18 @@ function loadTask(id: string) {
 			.where(eq(metric.taskId, id))
 			.orderBy(asc(metric.sortOrder))
 			.all()
-			.map(({ id, name, type, unit, repeats, choices }) => ({ id, name, type, unit, repeats, choices })),
+			.map(({ id, name, type, unit, repeats, choices, prefill, step, required, quick }) => ({
+				id,
+				name,
+				type,
+				unit,
+				repeats,
+				choices,
+				prefill,
+				step,
+				required,
+				quick
+			})),
 		subtasks: db
 			.select({ id: task.id, name: task.name })
 			.from(task)
@@ -79,6 +97,7 @@ export const load: PageServerLoad = ({ locals, params }) => {
 
 	const items: LogTask[] = slots.map((s) => {
 		const taskId = picks[s.id] ?? s.taskId;
+		const t = taskId ? loadTask(taskId) : null;
 		return {
 			slotId: s.id,
 			open: !!s.fillRule,
@@ -86,9 +105,10 @@ export const load: PageServerLoad = ({ locals, params }) => {
 			targets: s.targets ?? {},
 			minTargets: s.minTargets ?? {},
 			stretchTargets: s.stretchTargets ?? {},
-			task: taskId ? loadTask(taskId) : null,
+			task: t,
 			saved: entries.filter((e) => e.taskId === taskId).map((e) => e.values),
-			previous: taskId ? lastEntries(taskId, o.occ.id) : []
+			previous: taskId ? lastEntries(taskId, o.occ.id) : [],
+			previousSubs: (t?.subtasks ?? []).filter((sub) => lastEntries(sub.id, o.occ.id).length).map((sub) => sub.id)
 		};
 	});
 
@@ -104,6 +124,8 @@ export const load: PageServerLoad = ({ locals, params }) => {
 			level: o.occ.level ?? 'target'
 		},
 		habitName: o.habit.name,
+		habitId: o.habit.id,
+		weightUnit: getSettings(accountId).weightUnit,
 		levels: o.habit.levels?.enabled ? o.habit.levels : null,
 		variantName: v?.name ?? null,
 		items,
@@ -119,6 +141,8 @@ export const load: PageServerLoad = ({ locals, params }) => {
 
 const savePayload = z.object({
 	finish: z.boolean(),
+	/** Autosave and offline sync: save without leaving the page. */
+	stay: z.boolean().default(false),
 	notes: z.string().max(5000),
 	level: z.enum(['minimum', 'target', 'stretch']).default('target'),
 	entries: z.array(
@@ -166,7 +190,7 @@ export const actions: Actions = {
 				.where(eq(occurrence.id, o.occ.id))
 				.run();
 		});
-		if (p.finish) redirect(303, '/');
+		if (p.finish && !p.stay) redirect(303, `/?did=${o.occ.id}&finished=${o.habit.id}`);
 		return { saved: true };
 	},
 
