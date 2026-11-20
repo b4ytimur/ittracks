@@ -49,7 +49,8 @@ const blank = (): HabitForm => ({
 	remind: false,
 	identityIds: [],
 	ifThen: { when: '', then: '', habitId: null },
-	triggers: DEFAULT_TRIGGERS
+	triggers: DEFAULT_TRIGGERS,
+	areaId: null
 });
 
 export const load: PageServerLoad = ({ locals, params }) => {
