@@ -153,8 +153,8 @@ describe('streaks', () => {
 	});
 
 	it('finds the longest slip-free run', () => {
-		// Counter peaks at 9 on Nov 10, resets on Nov 11, then reaches 4 on Nov 15.
-		expect(longestRun(['2026-11-11'], '2026-11-01', '2026-11-15')).toBe(9);
+		// The counter reads 10 on the morning of Nov 11, resets with that day's slip, then reaches 4.
+		expect(longestRun(['2026-11-11'], '2026-11-01', '2026-11-15')).toBe(10);
 		expect(longestRun([], '2026-11-01', '2026-11-15')).toBe(14);
 	});
 });
