@@ -261,3 +261,12 @@ describe('slip triggers', () => {
 		expect(topTriggers([slip('Bored', null, null)])).toEqual([]);
 	});
 });
+
+describe('streak labels', () => {
+	it('shows nothing for consistency before there is any history', async () => {
+		const { describeStreak } = await import('./streak');
+		const rule = { kind: 'consistency', days: 30 } as const;
+		expect(describeStreak(streak([], rule, { today: MON }), rule)).toBe('');
+		expect(describeStreak(streak(marks('DM'), rule, { today: '2026-11-24' }), rule)).toBe('50% over 30 days');
+	});
+});

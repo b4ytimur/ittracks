@@ -26,6 +26,8 @@ export interface StreakResult {
 	unit: 'streak' | 'percent';
 	/** Never miss twice: the last Occurrence was missed, so the next one decides. */
 	atRisk: boolean;
+	/** Consistency: no Occurrences in the window yet. */
+	empty?: boolean;
 }
 
 /** Strict streak from bare statuses, oldest first. Kept for callers without dates. */
@@ -102,7 +104,8 @@ export function streak(
 			return {
 				value: window.length ? Math.round((done / window.length) * 100) : 0,
 				unit: 'percent',
-				atRisk
+				atRisk,
+				...(window.length ? {} : { empty: true })
 			};
 		}
 	}
@@ -110,6 +113,7 @@ export function streak(
 
 /** A short label for a streak, or '' when there is nothing worth showing. */
 export function describeStreak(r: StreakResult, rule: StreakRule): string {
+	if (r.empty) return '';
 	if (r.unit === 'percent') return `${r.value}% over ${rule.kind === 'consistency' ? rule.days : 30} days`;
 	return r.value > 0 ? `streak ${r.value}` : '';
 }
