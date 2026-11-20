@@ -73,8 +73,8 @@ export const taskTag = sqliteTable(
 	(t) => [primaryKey({ columns: [t.taskId, t.tagId] })]
 );
 
-export const metricTypes = ['number', 'count', 'duration', 'checkbox', 'choice', 'text'] as const;
-export type MetricType = (typeof metricTypes)[number];
+import { metricTypes } from '../../metric-types';
+export { metricTypes, type MetricType } from '../../metric-types';
 
 export const metric = sqliteTable('metric', {
 	id: id(),
@@ -102,6 +102,8 @@ export const habit = sqliteTable('habit', {
 	name: text('name').notNull(),
 	direction: text('direction', { enum: ['build', 'break'] }).notNull(),
 	notes: text('notes'),
+	/** When tracking began: the start of a break habit's first run. */
+	startDate: text('start_date').notNull(),
 	/** The Schedule (see src/lib/engine/schedule.ts); null for break habits. */
 	schedule: text('schedule', { mode: 'json' }),
 	archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
@@ -126,7 +128,9 @@ export const slot = sqliteTable('slot', {
 		.references(() => variant.id, { onDelete: 'cascade' }),
 	taskId: text('task_id').references(() => task.id, { onDelete: 'set null' }),
 	fillRule: text('fill_rule', { mode: 'json' }),
-	/** Targets per Metric id, e.g. { "<weight id>": 60, "<reps id>": 8 }, plus sets. */
+	/** Target number of sets, for Tasks logged per set. */
+	sets: integer('sets'),
+	/** Targets per Metric id, e.g. { "<weight id>": 60, "<reps id>": 8 }. */
 	targets: text('targets', { mode: 'json' }).$type<Record<string, number>>(),
 	sortOrder: integer('sort_order').notNull().default(0)
 });

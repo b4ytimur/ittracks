@@ -4,26 +4,24 @@ import { addDays, daysBetween, toDays, weekday, weekStart, type ISODate } from '
 
 /** Weekdays are 0 = Monday ... 6 = Sunday. */
 export type Schedule =
-	| { kind: 'weekly'; days: Partial<Record<number, string>> }
+	| { kind: 'weekly'; days: Partial<Record<string, string>> }
 	| { kind: 'frequency'; times: number; period: 'week' | 'month'; variantId: string }
-	| {
-			kind: 'rotation';
-			step: 'variant';
-			/** Variants in order, each with the rest days that follow it. */
-			order: { variantId: string; restDays: number }[];
-			/** What a missed day does: wait keeps it due, skip moves on. */
-			onMiss: 'wait' | 'skip';
-			start: ISODate;
-	  }
-	| {
-			kind: 'rotation';
-			step: 'week';
-			/** One Variant per week, cycling. */
-			order: string[];
-			weekdays: number[];
-			start: ISODate;
-	  }
+	| Rotation
 	| { kind: 'interval'; every: number; start: ISODate; variantId: string };
+
+/**
+ * Rotation by Variant: Variants in order, each followed by its rest days.
+ * Rotation by week: one Variant per week, on the chosen weekdays; restDays and onMiss are unused.
+ */
+export interface Rotation {
+	kind: 'rotation';
+	step: 'variant' | 'week';
+	order: { variantId: string; restDays: number }[];
+	/** What a missed day does: wait keeps it due, skip moves on. */
+	onMiss: 'wait' | 'skip';
+	weekdays: number[];
+	start: ISODate;
+}
 
 /** A past Occurrence that was acted on. */
 export interface Done {
@@ -59,17 +57,17 @@ export function dueOn(schedule: Schedule, history: Done[], date: ISODate): strin
 }
 
 function weekRotationDue(
-	s: Extract<Schedule, { step: 'week' }>,
+	s: Rotation,
 	date: ISODate
 ): string | null {
 	if (date < s.start || !s.weekdays.includes(weekday(date)) || s.order.length === 0) return null;
 	const weeks = Math.floor(daysBetween(weekStart(s.start), weekStart(date)) / 7);
-	return s.order[weeks % s.order.length];
+	return s.order[weeks % s.order.length].variantId;
 }
 
 /** The next Variant in a rotation and the first date it is due. */
 export function nextInRotation(
-	s: Extract<Schedule, { step: 'variant' }>,
+	s: Rotation,
 	history: Done[],
 	today: ISODate
 ): { variantId: string; dueFrom: ISODate } | null {
@@ -98,7 +96,7 @@ export function nextInRotation(
 }
 
 function variantRotationDue(
-	s: Extract<Schedule, { step: 'variant' }>,
+	s: Rotation,
 	history: Done[],
 	date: ISODate
 ): string | null {
