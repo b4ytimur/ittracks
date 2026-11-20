@@ -320,6 +320,8 @@ export function loadToday(accountId: string, today: string) {
 
 	// Cue times first, each stacked habit right after its anchor.
 	build = orderByCue(build.map((b) => ({ ...b, id: b.habitId, time: b.cue.time, afterId: b.afterHabitId })));
+	const onToday = new Set(build.map((b) => b.habitId));
+	for (const b of build) if (b.afterHabitId && !onToday.has(b.afterHabitId)) b.afterHabitId = null;
 	const doneToday = new Set(build.filter((b) => b.occurrence?.status === 'done').map((b) => b.habitId));
 	for (const b of build)
 		b.upNext = !!b.afterHabitId && doneToday.has(b.afterHabitId) && b.occurrence?.status === 'due';

@@ -136,8 +136,6 @@ export const habitForm = z
 			ctx.addIssue({ code: 'custom', message: 'A build habit needs at least one Variant' });
 		if (h.direction === 'build' && !h.schedule)
 			ctx.addIssue({ code: 'custom', message: 'A build habit needs a Schedule' });
-		if (h.remind && !h.cue.time)
-			ctx.addIssue({ code: 'custom', message: 'Set a cue time to get a reminder' });
 	});
 export type HabitForm = z.infer<typeof habitForm>;
 

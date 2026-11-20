@@ -35,6 +35,14 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 		.where(and(eq(habit.id, id), eq(habit.accountId, accountId)))
 		.get();
 	if (!h) return null;
+	// Links to a habit that was deleted since are dropped, so the form still saves.
+	const exists = (other: string | null | undefined) =>
+		!!other &&
+		!!db.select({ id: habit.id }).from(habit).where(and(eq(habit.id, other), eq(habit.accountId, accountId))).get();
+	const cue = h.cue ?? emptyCue();
+	if (cue.afterHabitId && !exists(cue.afterHabitId)) cue.afterHabitId = null;
+	const ifThen = h.ifThen ?? { when: '', then: '', habitId: null };
+	if (ifThen.habitId && !exists(ifThen.habitId)) ifThen.habitId = null;
 	const variants = db
 		.select()
 		.from(variant)
@@ -60,7 +68,7 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 		notes: h.notes ?? '',
 		startDate: h.startDate,
 		schedule: h.schedule as ScheduleForm | null,
-		cue: h.cue ?? emptyCue(),
+		cue,
 		streakRule: h.streakRule as StreakRule,
 		minimumCounts: h.minimumCounts,
 		levels: h.levels ?? defaultLevels(),
@@ -72,7 +80,7 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 			.where(eq(habitIdentity.habitId, id))
 			.all()
 			.map((r) => r.id),
-		ifThen: h.ifThen ?? { when: '', then: '', habitId: null },
+		ifThen,
 		triggers: h.triggers ?? DEFAULT_TRIGGERS,
 		variants: variants.map((v) => ({
 			id: v.id,
@@ -99,10 +107,10 @@ export function checkLinks(accountId: string, id: string | null, f: HabitForm): 
 		.from(habit)
 		.where(eq(habit.accountId, accountId))
 		.all();
-	const ids = new Set(others.map((o) => o.id));
 	const after = f.cue.afterHabitId;
 	if (after) {
-		if (!ids.has(after) || after === id) return 'Pick another habit to stack after';
+		if (!others.some((o) => o.id === after && o.direction === 'build') || after === id)
+			return 'Pick another habit to stack after';
 		const anchors = new Map(others.map((o) => [o.id, o.cue?.afterHabitId ?? null]));
 		if (id && makesLoop(id, after, anchors)) return 'Stacking these habits would make a loop';
 	}
