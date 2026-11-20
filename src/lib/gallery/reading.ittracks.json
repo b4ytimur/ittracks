@@ -1,0 +1,128 @@
+{
+	"format": "ittracks-template",
+	"version": 3,
+	"name": "Reading",
+	"description": "Read every day. Track pages, and the book you are on.",
+	"meta": {
+		"category": "Learning",
+		"daysPerWeek": 7,
+		"minutesPerDay": 20,
+		"equipment": [
+			"a book"
+		],
+		"area": "Learning"
+	},
+	"questions": [
+		{
+			"kind": "number",
+			"key": "pages",
+			"label": "Pages a day",
+			"unit": "pages",
+			"default": 10,
+			"metrics": [
+				"readp"
+			]
+		}
+	],
+	"habit": {
+		"name": "Read",
+		"direction": "build",
+		"notes": "",
+		"schedule": {
+			"kind": "interval",
+			"every": 1,
+			"start": "2026-01-05",
+			"variantId": "a"
+		},
+		"variants": [
+			{
+				"key": "a",
+				"name": "Read",
+				"slots": [
+					{
+						"task": "read",
+						"fillRule": null,
+						"sets": null,
+						"targets": {
+							"readp": 10
+						}
+					}
+				]
+			}
+		],
+		"cue": {
+			"time": null,
+			"place": null,
+			"after": null,
+			"range": "Evening"
+		},
+		"streakRule": {
+			"kind": "neverTwice"
+		},
+		"minimumCounts": true,
+		"levels": {
+			"enabled": true,
+			"minimum": "One page",
+			"target": "10 pages",
+			"stretch": "30 pages"
+		},
+		"quickDone": true,
+		"identities": [
+			"I am a reader"
+		],
+		"ifThen": null,
+		"triggers": null
+	},
+	"tasks": [
+		{
+			"key": "read",
+			"name": "Reading",
+			"notes": "",
+			"restTimerEnabled": false,
+			"restTimerSeconds": 90,
+			"tags": [
+				{
+					"name": "reading",
+					"level": 3
+				}
+			],
+			"metrics": [
+				{
+					"key": "readp",
+					"name": "Pages",
+					"type": "count",
+					"unit": "pages",
+					"repeats": false,
+					"choices": [],
+					"step": 5,
+					"required": false,
+					"quick": true
+				},
+				{
+					"key": "readm",
+					"name": "Minutes",
+					"type": "duration",
+					"unit": "min",
+					"repeats": false,
+					"choices": [],
+					"step": 5,
+					"required": false,
+					"quick": false
+				},
+				{
+					"key": "readb",
+					"name": "Book",
+					"type": "text",
+					"unit": "",
+					"repeats": false,
+					"choices": [],
+					"step": null,
+					"required": false,
+					"quick": false,
+					"prefill": "last"
+				}
+			],
+			"subtasks": []
+		}
+	]
+}

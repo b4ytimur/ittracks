@@ -37,6 +37,8 @@ export interface Cue {
 	afterHabitId: string | null;
 	/** Or after something that isn't a Habit: "after I pour my coffee". */
 	afterText: string | null;
+	/** A named part of the day from Settings, such as "Morning". */
+	range?: string | null;
 }
 
 /** What Minimum, Target and Stretch mean for this Habit, in the user's words. */
@@ -99,7 +101,10 @@ export const task = sqliteTable('task', {
 	restTimerEnabled: integer('rest_timer_enabled', { mode: 'boolean' }).notNull().default(false),
 	restTimerSeconds: integer('rest_timer_seconds').notNull().default(90),
 	sortOrder: integer('sort_order').notNull().default(0),
-	createdAt: createdAt()
+	createdAt: createdAt(),
+	areaId: text('area_id').references(() => area.id, { onDelete: 'set null' }),
+	/** Archived Tasks keep their history but are hidden from the Library and pickers. */
+	archived: integer('archived', { mode: 'boolean' }).notNull().default(false)
 });
 
 export const tag = sqliteTable('tag', {
@@ -141,8 +146,61 @@ export const metric = sqliteTable('metric', {
 	choices: text('choices', { mode: 'json' }).$type<string[]>(),
 	/** Repeating metrics are logged once per Entry (e.g. once per gym set). */
 	repeats: integer('repeats', { mode: 'boolean' }).notNull().default(false),
+	sortOrder: integer('sort_order').notNull().default(0),
+	/** Where a new log's value comes from: last time, the target, or blank. */
+	prefill: text('prefill', { enum: ['last', 'target', 'blank'] }).notNull().default('last'),
+	/** Plus and minus step on the log screen; null uses the type's default. */
+	step: real('step'),
+	/** A required field must be filled before Finish. */
+	required: integer('required', { mode: 'boolean' }).notNull().default(false),
+	/** Shown on quick logs (shortcuts, links, reminder buttons). Others keep their prefill. */
+	quick: integer('quick', { mode: 'boolean' }).notNull().default(true)
+});
+
+/** A top-level group with a color and icon, for Habits and Tasks: Fitness, Learning... */
+export const area = sqliteTable('area', {
+	id: id(),
+	accountId: text('account_id')
+		.notNull()
+		.references(() => account.id, { onDelete: 'cascade' }),
+	name: text('name').notNull(),
+	color: text('color').notNull().default('#2563eb'),
+	icon: text('icon').notNull().default(''),
 	sortOrder: integer('sort_order').notNull().default(0)
 });
+
+/** A saved filter for a smart Collection. Every part that is set must match. */
+export interface CollectionFilter {
+	tags: string[];
+	areaId: string | null;
+	text: string;
+}
+
+/** A named group of Tasks: hand-picked, or a saved filter. One level of nesting. */
+export const collection = sqliteTable('collection', {
+	id: id(),
+	accountId: text('account_id')
+		.notNull()
+		.references(() => account.id, { onDelete: 'cascade' }),
+	name: text('name').notNull(),
+	parentId: text('parent_id'),
+	/** Null for a hand-picked Collection. */
+	filter: text('filter', { mode: 'json' }).$type<CollectionFilter>(),
+	sortOrder: integer('sort_order').notNull().default(0)
+});
+
+export const collectionTask = sqliteTable(
+	'collection_task',
+	{
+		collectionId: text('collection_id')
+			.notNull()
+			.references(() => collection.id, { onDelete: 'cascade' }),
+		taskId: text('task_id')
+			.notNull()
+			.references(() => task.id, { onDelete: 'cascade' })
+	},
+	(t) => [primaryKey({ columns: [t.collectionId, t.taskId] })]
+);
 
 // ---------- Habits ----------
 
@@ -188,7 +246,21 @@ export const habit = sqliteTable('habit', {
 	limit: text('limit', { mode: 'json' }).$type<Limit>(),
 	progression: text('progression', { mode: 'json' }).$type<Progression>(),
 	/** Hits toward the next progression count from after this date. */
-	progressionFrom: text('progression_from')
+	progressionFrom: text('progression_from'),
+	areaId: text('area_id').references(() => area.id, { onDelete: 'set null' })
+});
+
+/** A pause for one Habit, or for all of them when habitId is null. Dates are inclusive. */
+export const pause = sqliteTable('pause', {
+	id: id(),
+	accountId: text('account_id')
+		.notNull()
+		.references(() => account.id, { onDelete: 'cascade' }),
+	habitId: text('habit_id').references(() => habit.id, { onDelete: 'cascade' }),
+	start: text('start').notNull(),
+	end: text('end').notNull(),
+	note: text('note'),
+	createdAt: createdAt()
 });
 
 /** Prep items ticked off, per habit and the date of the Occurrence they prepare for. */
@@ -336,7 +408,9 @@ export const reminderSent = sqliteTable(
 		habitId: text('habit_id')
 			.notNull()
 			.references(() => habit.id, { onDelete: 'cascade' }),
-		date: text('date').notNull()
+		date: text('date').notNull(),
+		/** HH:MM to send it again, set by Snooze on the notification. */
+		againAt: text('again_at')
 	},
 	(t) => [primaryKey({ columns: [t.habitId, t.date] })]
 );

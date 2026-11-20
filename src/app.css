@@ -87,3 +87,6 @@ button.small { padding: 0.25rem 0.6rem; font-size: 0.85rem; }
 .actions { display: flex; gap: 0.5rem; justify-content: space-between; margin-top: 1.5rem; }
 a.button { display: inline-block; text-decoration: none; color: inherit; }
 a.button.primary { color: var(--accent-text); }
+/* A named part of the day: name, start, end, remove. Fits a phone in one line. */
+.range { display: grid; grid-template-columns: minmax(0, 1fr) 6.4rem 6.4rem auto; gap: 0.35rem; align-items: center; }
+.range input { min-width: 0; }

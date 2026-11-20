@@ -1,0 +1,44 @@
+{
+	"format": "ittracks-template",
+	"version": 3,
+	"name": "Quit smoking",
+	"description": "Count days without a cigarette. Log a slip when it happens, with what set it off.",
+	"meta": {
+		"category": "Break",
+		"daysPerWeek": null,
+		"minutesPerDay": null,
+		"equipment": [],
+		"area": "Health"
+	},
+	"questions": [],
+	"habit": {
+		"name": "Quit smoking",
+		"direction": "break",
+		"notes": "",
+		"schedule": null,
+		"variants": [],
+		"cue": null,
+		"streakRule": {
+			"kind": "neverTwice"
+		},
+		"minimumCounts": true,
+		"levels": null,
+		"quickDone": false,
+		"identities": [
+			"I am a non-smoker"
+		],
+		"ifThen": {
+			"when": "want a cigarette",
+			"then": "drink a glass of water and take 10 slow breaths"
+		},
+		"triggers": [
+			"Bored",
+			"Stressed",
+			"Coffee",
+			"Alcohol",
+			"After a meal",
+			"Social"
+		]
+	},
+	"tasks": []
+}

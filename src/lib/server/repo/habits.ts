@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray, notInArray } from 'drizzle-orm';
 import { db } from '../db';
-import { habit, habitIdentity, identity, slot, variant } from '../db/schema';
+import { area, habit, habitIdentity, identity, slot, variant } from '../db/schema';
 import {
 	DEFAULT_TRIGGERS,
 	defaultLevels,
@@ -12,17 +12,19 @@ import {
 import { makesLoop } from '$lib/engine/stack';
 import type { StreakRule } from '$lib/engine/streak';
 
-export function listHabits(accountId: string) {
+export function listHabits(accountId: string, opts: { archived?: boolean } = {}) {
 	return db
 		.select({
 			id: habit.id,
 			name: habit.name,
 			direction: habit.direction,
 			schedule: habit.schedule,
-			cue: habit.cue
+			cue: habit.cue,
+			areaId: habit.areaId,
+			archived: habit.archived
 		})
 		.from(habit)
-		.where(and(eq(habit.accountId, accountId), eq(habit.archived, false)))
+		.where(and(eq(habit.accountId, accountId), opts.archived ? undefined : eq(habit.archived, false)))
 		.orderBy(asc(habit.sortOrder), asc(habit.name))
 		.all()
 		.map((h) => ({ ...h, schedule: h.schedule as ScheduleForm | null }));
@@ -39,7 +41,7 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 	const exists = (other: string | null | undefined) =>
 		!!other &&
 		!!db.select({ id: habit.id }).from(habit).where(and(eq(habit.id, other), eq(habit.accountId, accountId))).get();
-	const cue = h.cue ?? emptyCue();
+	const cue = { ...emptyCue(), ...(h.cue ?? {}), range: h.cue?.range ?? null };
 	if (cue.afterHabitId && !exists(cue.afterHabitId)) cue.afterHabitId = null;
 	const ifThen = h.ifThen ?? { when: '', then: '', habitId: null };
 	if (ifThen.habitId && !exists(ifThen.habitId)) ifThen.habitId = null;
@@ -89,6 +91,7 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 		cost: h.cost ?? null,
 		limit: h.limit ? { ...h.limit, taper: h.limit.taper ? { floor: 0, ...h.limit.taper } : null } : null,
 		progression: h.progression ?? null,
+		areaId: h.areaId,
 		variants: variants.map((v) => ({
 			id: v.id,
 			name: v.name,
@@ -123,6 +126,8 @@ export function checkLinks(accountId: string, id: string | null, f: HabitForm): 
 	}
 	if (f.ifThen.habitId && !others.some((o) => o.id === f.ifThen.habitId && o.direction === 'build'))
 		return 'Pick a build habit as the replacement';
+	if (f.areaId && !db.select({ id: area.id }).from(area).where(and(eq(area.id, f.areaId), eq(area.accountId, accountId))).get())
+		return 'Unknown area';
 	if (f.identityIds.length) {
 		const owned = db
 			.select({ id: identity.id })
@@ -160,7 +165,8 @@ export function saveHabit(
 			time: f.cue.time || null,
 			place: f.cue.place || null,
 			afterHabitId: f.cue.afterHabitId,
-			afterText: f.cue.afterHabitId ? null : f.cue.afterText || null
+			afterText: f.cue.afterHabitId ? null : f.cue.afterText || null,
+			range: f.cue.range || null
 		};
 		const values = {
 			name: f.name,
@@ -182,7 +188,8 @@ export function saveHabit(
 			reward: !isBreak && (f.reward.celebrate || f.reward.message || f.reward.jar) ? f.reward : null,
 			cost: isBreak ? f.cost : null,
 			limit: isBreak ? f.limit : null,
-			progression: isBreak ? null : f.progression
+			progression: isBreak ? null : f.progression,
+			areaId: f.areaId
 		};
 		if (id) {
 			const owned = tx
@@ -250,4 +257,44 @@ export function deleteHabit(accountId: string, id: string) {
 	db.delete(habit)
 		.where(and(eq(habit.id, id), eq(habit.accountId, accountId)))
 		.run();
+}
+
+export function setHabitArchived(accountId: string, id: string, archived: boolean) {
+	db.update(habit)
+		.set({ archived })
+		.where(and(eq(habit.id, id), eq(habit.accountId, accountId)))
+		.run();
+}
+
+/**
+ * A Habit form copied with fresh ids, for "copy one of my habits" and Duplicate.
+ * Slots keep their Tasks, so the copy prefills from the same last values.
+ */
+export function copyHabitForm(f: HabitForm, newId: () => string = randomUUID): HabitForm {
+	const variantIds = new Map(f.variants.map((v) => [v.id, newId()]));
+	const map = (id: string) => variantIds.get(id) ?? id;
+	let schedule = f.schedule;
+	if (schedule) {
+		switch (schedule.kind) {
+			case 'weekly':
+				schedule = { ...schedule, days: Object.fromEntries(Object.entries(schedule.days).map(([d, v]) => [d, map(v)])) };
+				break;
+			case 'frequency':
+			case 'interval':
+				schedule = { ...schedule, variantId: map(schedule.variantId) };
+				break;
+			case 'rotation':
+				schedule = { ...schedule, order: schedule.order.map((o) => ({ ...o, variantId: map(o.variantId) })) };
+		}
+	}
+	return {
+		...structuredClone(f),
+		name: `${f.name} (copy)`.slice(0, 120),
+		schedule,
+		variants: f.variants.map((v) => ({
+			...structuredClone(v),
+			id: variantIds.get(v.id)!,
+			slots: v.slots.map((s) => ({ ...structuredClone(s), id: newId() }))
+		}))
+	};
 }

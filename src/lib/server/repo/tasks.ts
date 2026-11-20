@@ -1,21 +1,30 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, inArray, isNull, notInArray } from 'drizzle-orm';
+import { and, asc, countDistinct, eq, inArray, isNull, max, notInArray } from 'drizzle-orm';
 import { db } from '../db';
-import { metric, tag, task, taskTag } from '../db/schema';
+import { collection, collectionTask, entry, habit, metric, occurrence, slot, tag, task, taskTag, variant } from '../db/schema';
 import type { TaskForm } from '$lib/forms';
 
 export interface TaskSummary {
 	id: string;
 	name: string;
+	areaId: string | null;
+	archived: boolean;
+	createdAt: Date;
 	tags: { name: string; level: number }[];
 }
 
-/** Top-level Tasks (not sub-tasks) with their Tags, for the Library and pickers. */
-export function listTasks(accountId: string): TaskSummary[] {
+/** Top-level Tasks (not sub-tasks) with their Tags, for the Library and pickers. Archived ones only on request. */
+export function listTasks(accountId: string, opts: { archived?: boolean } = {}): TaskSummary[] {
 	const tasks = db
-		.select({ id: task.id, name: task.name })
+		.select({ id: task.id, name: task.name, areaId: task.areaId, archived: task.archived, createdAt: task.createdAt })
 		.from(task)
-		.where(and(eq(task.accountId, accountId), isNull(task.parentTaskId)))
+		.where(
+			and(
+				eq(task.accountId, accountId),
+				isNull(task.parentTaskId),
+				opts.archived ? undefined : eq(task.archived, false)
+			)
+		)
 		.orderBy(asc(task.name))
 		.all();
 	const tagRows = tasks.length
@@ -63,7 +72,7 @@ export function getTaskForm(accountId: string, id: string): TaskForm | null {
 		notes: t.notes ?? '',
 		restTimerEnabled: t.restTimerEnabled,
 		restTimerSeconds: t.restTimerSeconds,
-		tags: listTasks(accountId).find((x) => x.id === id)?.tags ?? [],
+		tags: listTasks(accountId, { archived: true }).find((x) => x.id === id)?.tags ?? [],
 		metrics: db
 			.select()
 			.from(metric)
@@ -76,14 +85,25 @@ export function getTaskForm(accountId: string, id: string): TaskForm | null {
 				type: m.type,
 				unit: m.unit ?? '',
 				repeats: m.repeats,
-				choices: m.choices ?? []
+				choices: m.choices ?? [],
+				prefill: m.prefill,
+				step: m.step,
+				required: m.required,
+				quick: m.quick
 			})),
 		subtasks: db
 			.select({ id: task.id, name: task.name })
 			.from(task)
 			.where(eq(task.parentTaskId, id))
 			.orderBy(asc(task.sortOrder))
+			.all(),
+		areaId: t.areaId,
+		collectionIds: db
+			.select({ id: collectionTask.collectionId })
+			.from(collectionTask)
+			.where(eq(collectionTask.taskId, id))
 			.all()
+			.map((r) => r.id)
 	};
 }
 
@@ -108,7 +128,8 @@ export function saveTask(
 					name: f.name,
 					notes: f.notes || null,
 					restTimerEnabled: f.restTimerEnabled,
-					restTimerSeconds: f.restTimerSeconds
+					restTimerSeconds: f.restTimerSeconds,
+					areaId: f.areaId
 				})
 				.where(eq(task.id, id))
 				.run();
@@ -120,10 +141,28 @@ export function saveTask(
 					name: f.name,
 					notes: f.notes || null,
 					restTimerEnabled: f.restTimerEnabled,
-					restTimerSeconds: f.restTimerSeconds
+					restTimerSeconds: f.restTimerSeconds,
+					areaId: f.areaId
 				})
 				.run();
 		}
+
+		// Hand-picked Collections of this account only; smart ones fill themselves.
+		tx.delete(collectionTask).where(eq(collectionTask.taskId, taskId)).run();
+		const picked = f.collectionIds.length
+			? tx
+					.select({ id: collection.id })
+					.from(collection)
+					.where(
+						and(
+							eq(collection.accountId, accountId),
+							inArray(collection.id, f.collectionIds),
+							isNull(collection.filter)
+						)
+					)
+					.all()
+			: [];
+		for (const c of picked) tx.insert(collectionTask).values({ collectionId: c.id, taskId }).run();
 
 		// Tags: create any new names, then replace this Task's links.
 		tx.delete(taskTag).where(eq(taskTag.taskId, taskId)).run();
@@ -160,7 +199,11 @@ export function saveTask(
 				unit: m.unit || null,
 				repeats: m.repeats,
 				choices: m.type === 'choice' ? m.choices : null,
-				sortOrder: i
+				sortOrder: i,
+				prefill: m.prefill,
+				step: m.step,
+				required: m.required,
+				quick: m.quick
 			};
 			tx.insert(metric)
 				.values({ id: m.id, taskId, ...values })
@@ -193,4 +236,61 @@ export function deleteTask(accountId: string, id: string) {
 		tx.delete(task).where(and(eq(task.parentTaskId, id), eq(task.accountId, accountId))).run();
 		tx.delete(task).where(and(eq(task.id, id), eq(task.accountId, accountId))).run();
 	});
+}
+
+export function setTaskArchived(accountId: string, id: string, archived: boolean) {
+	db.update(task)
+		.set({ archived })
+		.where(and(eq(task.id, id), eq(task.accountId, accountId), isNull(task.parentTaskId)))
+		.run();
+}
+
+/** Copy a Task with its Tags, Metrics, sub-tasks and Collections. Returns the new id. */
+export function duplicateTask(accountId: string, id: string): string | null {
+	const f = getTaskForm(accountId, id);
+	if (!f) return null;
+	return saveTask(accountId, null, {
+		...f,
+		name: `${f.name} (copy)`.slice(0, 120),
+		metrics: f.metrics.map((m) => ({ ...m, id: randomUUID() })),
+		subtasks: f.subtasks.map((s) => ({ ...s, id: randomUUID() }))
+	});
+}
+
+export interface TaskUsage {
+	habits: { id: string; name: string }[];
+	lastLogged: string | null;
+	timesLogged: number;
+}
+
+/** Which habits use each Task, when it was last logged and how often. */
+export function taskUsage(accountId: string): Map<string, TaskUsage> {
+	const out = new Map<string, TaskUsage>();
+	const get = (id: string) => out.get(id) ?? out.set(id, { habits: [], lastLogged: null, timesLogged: 0 }).get(id)!;
+	const uses = db
+		.select({ taskId: slot.taskId, habitId: habit.id, name: habit.name })
+		.from(slot)
+		.innerJoin(variant, eq(slot.variantId, variant.id))
+		.innerJoin(habit, eq(variant.habitId, habit.id))
+		.where(eq(habit.accountId, accountId))
+		.all();
+	for (const u of uses) {
+		if (!u.taskId) continue;
+		const g = get(u.taskId);
+		if (!g.habits.some((h) => h.id === u.habitId)) g.habits.push({ id: u.habitId, name: u.name });
+	}
+	const logs = db
+		.select({ taskId: entry.taskId, last: max(occurrence.date), n: countDistinct(occurrence.id) })
+		.from(entry)
+		.innerJoin(occurrence, eq(entry.occurrenceId, occurrence.id))
+		.innerJoin(habit, eq(occurrence.habitId, habit.id))
+		.where(and(eq(habit.accountId, accountId), eq(occurrence.status, 'done')))
+		.groupBy(entry.taskId)
+		.all();
+	for (const l of logs) {
+		const g = get(l.taskId);
+		g.lastLogged = l.last;
+		g.timesLogged = l.n;
+	}
+	return out;
 }

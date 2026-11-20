@@ -1,0 +1,103 @@
+{
+	"format": "ittracks-template",
+	"version": 3,
+	"name": "Stretching",
+	"description": "Ten minutes of stretching, ticking off each area.",
+	"meta": {
+		"category": "Health",
+		"daysPerWeek": 7,
+		"minutesPerDay": 10,
+		"equipment": [
+			"a mat"
+		],
+		"area": "Health"
+	},
+	"questions": [
+		{
+			"kind": "number",
+			"key": "mins",
+			"label": "Minutes a day",
+			"unit": "min",
+			"default": 10,
+			"metrics": [
+				"stretchm"
+			]
+		}
+	],
+	"habit": {
+		"name": "Stretch",
+		"direction": "build",
+		"notes": "",
+		"schedule": {
+			"kind": "interval",
+			"every": 1,
+			"start": "2026-01-05",
+			"variantId": "a"
+		},
+		"variants": [
+			{
+				"key": "a",
+				"name": "Stretch",
+				"slots": [
+					{
+						"task": "stretch",
+						"fillRule": null,
+						"sets": null,
+						"targets": {
+							"stretchm": 10
+						}
+					}
+				]
+			}
+		],
+		"cue": null,
+		"streakRule": {
+			"kind": "neverTwice"
+		},
+		"minimumCounts": true,
+		"levels": {
+			"enabled": true,
+			"minimum": "One stretch",
+			"target": "10 minutes",
+			"stretch": "20 minutes"
+		},
+		"quickDone": false,
+		"identities": [],
+		"ifThen": null,
+		"triggers": null
+	},
+	"tasks": [
+		{
+			"key": "stretch",
+			"name": "Stretching",
+			"notes": "",
+			"restTimerEnabled": false,
+			"restTimerSeconds": 90,
+			"tags": [
+				{
+					"name": "mobility",
+					"level": 3
+				}
+			],
+			"metrics": [
+				{
+					"key": "stretchm",
+					"name": "Minutes",
+					"type": "duration",
+					"unit": "min",
+					"repeats": false,
+					"choices": [],
+					"step": 5,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": [
+				"Hamstrings",
+				"Hips",
+				"Shoulders",
+				"Back"
+			]
+		}
+	]
+}
