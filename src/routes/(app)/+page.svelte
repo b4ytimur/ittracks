@@ -13,7 +13,9 @@
 		const jar = item.reward.jar;
 		celebrating = {
 			name: item.name,
-			message: item.reward.message || 'Done. Another vote for who you want to be.',
+			message:
+							item.reward.message ||
+							(item.identities.length ? 'Done. Another vote for who you want to be.' : 'Done. Nice work.'),
 			jar: jar ? `${fmt(jar.total)} ${jar.unit}${jar.goal ? ` toward ${jar.goal}` : ''}` : null
 		};
 		if (data.finished) history.replaceState(history.state, '', '/');
@@ -30,7 +32,11 @@
 		})
 	);
 	const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
-	const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0$/, ''));
+	const fmt = (n: number) =>
+			n.toLocaleString(undefined, { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
+		const shortDate = (d: string) =>
+			new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+		const limiting = $derived(data.breaking.some((b) => b.limit));
 	const nowTime = () => new Date().toTimeString().slice(0, 5);
 	const levelName = { minimum: 'Minimum', target: 'Target', stretch: 'Stretch' } as const;
 
@@ -43,7 +49,7 @@
 			: t.kind === 'place'
 				? `${t.percent}% at ${t.label}`
 				: t.kind === 'with'
-					? `${t.percent}% with ${t.label}`
+					? `${t.percent}% ${/^alone$/i.test(t.label) ? 'alone' : `with ${t.label}`}`
 					: `${t.percent}% ${t.label}`;
 </script>
 
@@ -101,28 +107,28 @@
 					</div>
 					{#if o.status === 'due'}
 						{#if o.slotCount > 0}
-							<a class="button" class:primary={!item.quickDone} href="/log/{o.id}">Start</a>
+							<a class="button" class:primary={!item.quickDone} href="/log/{o.id}" aria-label="Start {item.name}">Start</a>
 							{#if item.quickDone}
 								<form method="POST" action="?/quick" use:enhance>
 									<input type="hidden" name="occurrence" value={o.id} />
-									<button class="primary" title="Log your targets">Done</button>
+									<button class="primary" title="Log your targets" aria-label="Done: {item.name}">Done</button>
 								</form>
 							{/if}
 						{:else}
 							<form method="POST" action="?/done" use:enhance>
 								<input type="hidden" name="occurrence" value={o.id} />
-								<button class="primary">Done</button>
+								<button class="primary" aria-label="Done: {item.name}">Done</button>
 							</form>
 						{/if}
 						<form method="POST" action="?/skip" use:enhance>
 							<input type="hidden" name="occurrence" value={o.id} />
-							<button>Skip</button>
+							<button aria-label="Skip {item.name}">Skip</button>
 						</form>
 					{:else}
 						{#if o.slotCount > 0}<a class="button" href="/log/{o.id}">View</a>{/if}
 						<form method="POST" action="?/undo" use:enhance>
 							<input type="hidden" name="occurrence" value={o.id} />
-							<button class="link">Undo</button>
+							<button class="link" aria-label="Undo {item.name}">Undo</button>
 						</form>
 					{/if}
 				</div>
@@ -143,7 +149,8 @@
 					<div class="suggest">
 						<span class="small-text"
 							>You've hit your targets {p.hits} times in a row. Raise them by {p.by}{p.unit === 'percent' ? '%' : ''}?</span
-						>
+							>
+							{#each p.changes as line (line)}<div class="muted small-text">{line}</div>{/each}
 						<div class="row">
 							<form method="POST" action="?/raise" use:enhance>
 								<input type="hidden" name="habit" value={item.habitId} />
@@ -166,7 +173,7 @@
 {/if}
 
 {#if data.breaking.length}
-	<h2>Breaking</h2>
+	<h2>{limiting ? 'Breaking and limiting' : 'Breaking'}</h2>
 	<ul class="list">
 		{#each data.breaking as b (b.habitId)}
 			{@const plan = b.ifThen}
@@ -179,7 +186,9 @@
 						</div>
 						{#if b.limit}
 							<div class="small-text" class:warn={b.limit.used > b.limit.max}>
-								{b.limit.used} of {b.limit.max} {b.limit.period === 'week' ? 'this week' : 'today'}
+								{b.limit.used} of {b.limit.max} {b.limit.period === 'week' ? 'this week' : 'today'}{#if b.limit.next}<span class="muted">
+									· {b.limit.next.max} from {shortDate(b.limit.next.date)}</span
+								>{/if}
 							</div>
 						{/if}
 						<div class="muted small-text">
@@ -194,9 +203,14 @@
 					</div>
 					<form method="POST" action="?/craving" use:enhance>
 						<input type="hidden" name="habit" value={b.habitId} />
-						<button class="primary" title="Log a craving you didn't give in to">Resisted</button>
-					</form>
-					<button onclick={() => ((slipOpen = slipOpen === b.habitId ? null : b.habitId), (feeling = ''))}>Slip</button>
+						<button class="primary" title="Log a craving you didn't give in to" aria-label="Resisted: {b.name}">Resisted</button>
+						</form>
+						<button
+							aria-expanded={slipOpen === b.habitId}
+							aria-label="{b.limit ? 'Log one' : 'Slip'}: {b.name}"
+							onclick={() => ((slipOpen = slipOpen === b.habitId ? null : b.habitId), (feeling = ''))}
+							>{b.limit ? 'Log one' : 'Slip'}</button
+						>
 				</div>
 				{#if plan && (plan.then || plan.habit)}
 					<p class="plan small-text">
@@ -211,7 +225,21 @@
 							: ''}
 					</div>
 				{/if}
-				{#if form?.resisted === b.habitId}<p class="muted small-text">Nice. That's a vote for who you want to be.</p>{/if}
+				{#if form?.resisted === b.habitId}
+					<p class="muted small-text">
+						Nice. {b.identities.length ? "That's a vote for who you want to be." : 'Craving resisted.'}
+						<button class="link" form="undo-{b.habitId}" name="kind" value="craving">Undo</button>
+					</p>
+				{:else if form?.slipped === b.habitId}
+					<p class="muted small-text">
+						{b.limit ? 'Logged.' : 'Slip logged. One slip is not a pattern; get back on track.'}
+						<button class="link" form="undo-{b.habitId}" name="kind" value="slip">Undo</button>
+					</p>
+				{/if}
+				{#if form?.habit === b.habitId && form?.error}<p class="error small-text">{form.error}</p>{/if}
+				<form id="undo-{b.habitId}" method="POST" action="?/undoLast" use:enhance hidden>
+					<input type="hidden" name="habit" value={b.habitId} />
+				</form>
 				{#if b.top.length}
 					<div class="muted small-text">Most slips: {b.top.slice(0, 2).map(triggerLine).join(' · ')}</div>
 				{/if}
@@ -224,15 +252,17 @@
 						action="?/slip"
 						class="stack slip"
 						use:enhance={() =>
-							async ({ update }) => {
-								slipOpen = null;
-								await update();
+							async ({ result, update }) => {
+								if (result.type === 'success') slipOpen = null;
+								await update({ reset: false });
 							}}
 					>
 						<input type="hidden" name="habit" value={b.habitId} />
 						<div class="row">
-							<label style="width: 5rem">Count <input name="count" type="number" min="1" step="1" value="1" /></label>
-							<label class="grow">Date <input name="date" type="date" value={data.today} max={data.today} /></label>
+							<label style="width: 5rem">Count <input name="count" type="number" min="1" max="1000" step="1" value="1" required /></label>
+							<label class="grow"
+								>Date <input name="date" type="date" value={data.today} min={b.startDate} max={data.today} required /></label
+							>
 							<label style="width: 7rem">Time <input name="time" type="time" value={nowTime()} /></label>
 						</div>
 						<div>
@@ -251,7 +281,7 @@
 						<datalist id="places-{b.habitId}">
 							{#each b.places as p (p)}<option value={p}></option>{/each}
 						</datalist>
-						<button class="primary">Log slip</button>
+						<button class="primary">{b.limit ? 'Log' : 'Log slip'}</button>
 					</form>
 				{/if}
 			</li>
@@ -301,7 +331,7 @@
 	</ul>
 {/if}
 
-{#if form?.error}<p class="error">{form.error}</p>{/if}
+{#if form?.error && !form?.habit}<p class="error">{form.error}</p>{/if}
 
 {#if celebrating}
 	<button class="celebrate" onclick={() => (celebrating = null)} aria-live="polite">
@@ -357,6 +387,11 @@
 	a.name {
 		color: inherit;
 		text-decoration: none;
+	}
+	.grow,
+	.card strong {
+		min-width: 0;
+		overflow-wrap: anywhere;
 	}
 	.reframe {
 		font-style: italic;

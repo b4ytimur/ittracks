@@ -18,7 +18,24 @@
 					: c.kind;
 	const columns = (n: number) => Array.from({ length: n }, (_, w) => w);
 	const nice = (d: string) =>
-		new Date(d + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+		new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+	const breakLabel = (x: { kind: string; count: number }) =>
+		x.kind === 'clean'
+			? 'clean'
+			: x.kind === 'slip' || x.kind === 'within'
+				? `${x.count} slip${x.count === 1 ? '' : 's'}${x.kind === 'within' ? ', within limit' : ''}`
+				: x.kind === 'before'
+					? 'before you started'
+					: 'still to come';
+	// The first date of each week column, to label where a month starts.
+	const weekDates = $derived(
+		columns(data.weeks).map((w) => (data.direction === 'break' ? data.days[w * 7]?.date : data.cells[w * 7]?.date) ?? '')
+	);
+	const monthLabel = (w: number) => {
+		const d = weekDates[w];
+		if (!d || (w > 0 && weekDates[w - 1].slice(0, 7) === d.slice(0, 7))) return '';
+		return new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'short' });
+	};
 </script>
 
 <svelte:head><title>{data.name} chain · ittracks</title></svelte:head>
@@ -34,16 +51,18 @@
 	</div>
 </header>
 
-<div class="grid" style="--weeks: {data.weeks}" role="img" aria-label="Calendar of the last {data.weeks} weeks">
+<div class="grid" style="--weeks: {data.weeks}" role="group" aria-label="Calendar of the last {data.weeks} weeks">
+	<span aria-hidden="true"></span>
+	{#each columns(data.weeks) as w (w)}<span class="month muted" aria-hidden="true">{monthLabel(w)}</span>{/each}
 	{#each weekdayNames as day, d (day)}
-		<span class="day muted">{d % 2 === 0 ? day : ''}</span>
+		<span class="day muted" aria-hidden="true">{d % 2 === 0 ? day : ''}</span>
 		{#each columns(data.weeks) as w (w)}
 			{#if data.direction === 'break'}
 				{@const x = data.days[w * 7 + d]}
-				<span class="cell {x.kind}" title="{nice(x.date)}: {x.kind === 'clean' ? 'clean' : x.kind === 'slip' || x.kind === 'within' ? `${x.count} slip${x.count === 1 ? '' : 's'}` : ''}"></span>
+				<span class="cell {x.kind}" role="img" aria-label="{nice(x.date)}: {breakLabel(x)}" title="{nice(x.date)}: {breakLabel(x)}"></span>
 			{:else}
 				{@const x = data.cells[w * 7 + d]}
-				<span class="cell {cls(x.cell)}" title="{nice(x.date)}: {label(x.cell)}"></span>
+				<span class="cell {cls(x.cell)}" role="img" aria-label="{nice(x.date)}: {label(x.cell)}" title="{nice(x.date)}: {label(x.cell)}"></span>
 			{/if}
 		{/each}
 	{/each}
@@ -71,8 +90,16 @@
 		gap: 3px;
 		align-items: center;
 	}
-	.day {
+	.day,
+	.month {
 		font-size: 0.7rem;
+	}
+	.month {
+		white-space: nowrap;
+		overflow: visible;
+	}
+	h1 {
+		overflow-wrap: anywhere;
 	}
 	.cell {
 		display: inline-block;

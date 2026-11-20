@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { metricTypes } from './metric-types';
 
 const id = z.string().uuid();
-const name = z.string().trim().min(1, 'A name is required').max(120);
+const name = z.string().trim().min(1, 'A name is required').max(120, 'Keep names to 120 characters or fewer');
 
 export const taskForm = z.object({
 	name,
@@ -113,7 +113,11 @@ export const limitForm = z.object({
 	max: z.number().int().min(0).max(1000),
 	period: z.enum(['day', 'week']),
 	taper: z
-		.object({ by: z.number().int().min(1).max(100), every: z.enum(['week', 'month']) })
+		.object({
+			by: z.number().int().min(1).max(100),
+			every: z.enum(['week', 'month']),
+			floor: z.number().int().min(0).max(1000).default(0)
+		})
 		.nullable()
 		.default(null),
 	start: z.string().date()

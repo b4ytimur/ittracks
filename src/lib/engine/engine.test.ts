@@ -273,7 +273,7 @@ describe('streak labels', () => {
 
 // ---------- P2 additions ----------
 import { chainCells, forgivenMisses } from './chain';
-import { limitOn, usedIn, withinStreak, type Limit } from './limit';
+import { limitOn, nextDrop, usedIn, withinStreak, type Limit } from './limit';
 import { hitsInARow, raise } from './progression';
 
 describe('chain view', () => {
@@ -304,6 +304,14 @@ describe('reduce mode', () => {
 		expect(limitOn(l, '2027-01-04')).toBe(0);
 		expect(limitOn({ ...l, taper: { by: 1, every: 'month' } }, '2026-12-22')).toBe(3);
 		expect(limitOn({ ...l, taper: { by: 1, every: 'month' } }, '2026-12-23')).toBe(2);
+	});
+
+	it('stops tapering at the floor and says when it drops next', () => {
+		const floored: Limit = { ...l, taper: { by: 1, every: 'week', floor: 1 } };
+		expect(limitOn(floored, '2027-01-04')).toBe(1);
+		expect(nextDrop(l, MON)).toEqual({ date: '2026-11-30', max: 2 });
+		expect(nextDrop(floored, '2026-12-07')).toBeNull();
+		expect(nextDrop({ ...l, taper: null }, MON)).toBeNull();
 	});
 
 	it('counts days within the limit, back from today', () => {

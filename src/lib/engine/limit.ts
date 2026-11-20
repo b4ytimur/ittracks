@@ -5,7 +5,7 @@ export interface Limit {
 	max: number;
 	period: 'day' | 'week';
 	/** Lower the limit by `by` every week or month, counted from `start`, never below 0. */
-	taper: { by: number; every: 'week' | 'month' } | null;
+	taper: { by: number; every: 'week' | 'month'; floor?: number } | null;
 	start: ISODate;
 }
 
@@ -19,7 +19,19 @@ export function limitOn(l: Limit, date: ISODate): number {
 				Number(date.slice(5, 7)) -
 				Number(l.start.slice(5, 7)) -
 				(Number(date.slice(8, 10)) < Number(l.start.slice(8, 10)) ? 1 : 0);
-	return Math.max(0, l.max - steps * l.taper.by);
+	return Math.max(Math.min(l.taper.floor ?? 0, l.max), l.max - steps * l.taper.by);
+}
+
+/** The next date the limit drops, and to what, within the next ~2 months. */
+export function nextDrop(l: Limit, today: ISODate): { date: ISODate; max: number } | null {
+	if (!l.taper) return null;
+	const now = limitOn(l, today);
+	for (let i = 1; i <= 62; i++) {
+		const d = addDays(today, i);
+		const m = limitOn(l, d);
+		if (m < now) return { date: d, max: m };
+	}
+	return null;
 }
 
 const periodStart = (l: Limit, d: ISODate) => (l.period === 'week' ? weekStart(d) : d);

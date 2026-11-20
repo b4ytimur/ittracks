@@ -4,6 +4,7 @@
 	import type { HabitForm, ScheduleForm } from '$lib/forms';
 	import { weekdayNames } from '$lib/describe';
 	import FillRuleEditor from './FillRuleEditor.svelte';
+	import { limitOn, nextDrop } from '$lib/engine/limit';
 
 	let { data, form } = $props();
 
@@ -19,7 +20,8 @@
 	// ----- Schedule editor state, seeded from the saved Schedule -----
 	const s0 = untrack(() => data.habit.schedule);
 	const savedStart = untrack(() => data.habit.startDate);
-	let kind = $state<ScheduleForm['kind']>(s0?.kind ?? 'weekly');
+	// New habits start as every day, so they show up on Today right away.
+	let kind = $state<ScheduleForm['kind']>(s0?.kind ?? 'interval');
 	let weeklyDays = $state<Record<string, string>>(s0?.kind === 'weekly' ? { ...s0.days } : {});
 	let times = $state(s0?.kind === 'frequency' ? s0.times : 3);
 	let period = $state<'week' | 'month'>(s0?.kind === 'frequency' ? s0.period : 'week');
@@ -78,11 +80,11 @@
 		const anchor = cue.afterHabitId
 			? data.habits.find((x) => x.id === cue.afterHabitId)?.name
 			: cue.afterText;
-		const what = h.name.trim() || 'do this';
-		let line = `${anchor ? `After ${anchor}, I` : 'I'} will ${what}`;
-		if (cue.time) line += ` at ${cue.time}`;
-		if (cue.place) line += ` ${cue.place}`;
-		return anchor || cue.time || cue.place ? `${line}.` : '';
+		if (!anchor && !cue.time && !cue.place) return '';
+		// Habit names are nouns as often as verbs ("Gym", "Spanish"), so the name leads.
+		const place = cue.place && (/^(in|at|on|by|near|under|inside|outside)\s/i.test(cue.place) ? cue.place : `at ${cue.place}`);
+		const parts = [anchor ? `after ${anchor}` : null, cue.time ? `at ${cue.time}` : null, place].filter(Boolean);
+		return `${h.name.trim() || 'This habit'}: ${parts.join(', ')}.`;
 	});
 
 	function setRule(kind: HabitForm['streakRule']['kind']) {
@@ -141,7 +143,38 @@
 	const hasTargets = $derived(h.variants.some((v) => v.slots.some((s) => Object.keys(s.targets).length)));
 	const numOrNull = (v: string) => (v === '' ? null : Number(v));
 
-	const payload = $derived(JSON.stringify({ ...h, schedule, cue }));
+	/** "Today's limit: 10. Drops to 9 on Fri 27 Nov." A changed limit applies from today. */
+	const limitPreview = $derived.by(() => {
+		if (!h.limit) return '';
+		const today = new Date().toLocaleDateString('en-CA');
+		const saved = data.habit.limit;
+		const unchanged =
+			saved &&
+			saved.max === h.limit.max &&
+			saved.period === h.limit.period &&
+			JSON.stringify(saved.taper) === JSON.stringify(h.limit.taper);
+		const l = { ...h.limit, start: unchanged ? saved.start : today };
+		const per = l.period === 'week' ? 'this week' : 'today';
+		const next = nextDrop(l, today);
+		const when = (d: string) =>
+			new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+		return `Limit ${per}: ${limitOn(l, today)}.${next ? ` Drops to ${next.max} on ${when(next.date)}.` : ''}${unchanged ? '' : ' Changes apply from today.'}`;
+	});
+
+	// Text typed into "add" boxes but not added yet still counts when saving.
+	const pendingPrep = $derived(newPrep.trim() && !h.prep.includes(newPrep.trim()) ? [newPrep.trim()] : []);
+	const pendingTrigger = $derived(
+		newTrigger.trim() && !h.triggers.includes(newTrigger.trim()) ? [newTrigger.trim()] : []
+	);
+	const payload = $derived(
+		JSON.stringify({
+			...h,
+			schedule,
+			cue,
+			prep: [...h.prep, ...pendingPrep],
+			triggers: [...h.triggers, ...pendingTrigger]
+		})
+	);
 
 	function addVariant() {
 		const letter = String.fromCharCode(65 + h.variants.length);
@@ -185,7 +218,7 @@
 <form method="POST" action="?/save" class="stack">
 	<input type="hidden" name="payload" value={payload} />
 
-	<label>Name <input bind:value={h.name} placeholder="Gym" required /></label>
+	<label>Name <input bind:value={h.name} placeholder="Gym, Read, Spanish" maxlength="120" required /></label>
 
 	<fieldset class="card">
 		<legend class="muted">Type</legend>
@@ -201,8 +234,13 @@
 	{#if h.direction === 'break'}
 		<label>Counting from <input type="date" bind:value={h.startDate} required /></label>
 		<p class="muted">
-			The habit shows the days since your last slip. Log a slip whenever it happens and the
-			counter goes back to 0.
+			{#if h.limit}
+				You can turn on a limit below. Log each one as it happens; the counter shows how many days in
+				a row you stayed within the limit.
+			{:else}
+				The habit shows the days since your last slip. Log a slip whenever it happens and the counter
+				goes back to 0. To cut down instead of quitting, set a limit below.
+			{/if}
 		</p>
 
 		<h2>If-then plan</h2>
@@ -286,7 +324,7 @@
 				><input
 					type="checkbox"
 					checked={!!h.limit.taper}
-					onchange={(e) => h.limit && (h.limit.taper = e.currentTarget.checked ? { by: 1, every: 'week' } : null)}
+					onchange={(e) => h.limit && (h.limit.taper = e.currentTarget.checked ? { by: 1, every: 'week', floor: 0 } : null)}
 				/> Lower the limit over time</label
 			>
 			{#if h.limit.taper}
@@ -299,10 +337,31 @@
 							<option value="month">month</option>
 						</select>
 					</label>
+					<label style="width: 7rem">Down to <input type="number" min="0" max="1000" bind:value={h.limit.taper.floor} /></label>
 				</div>
 			{/if}
+			{#if limitPreview}<p class="muted small-text">{limitPreview}</p>{/if}
 		{/if}
 	{:else}
+		<h2>Levels</h2>
+		<label style="color: var(--text)"
+			><input type="checkbox" bind:checked={h.levels.enabled} /> Use levels: a two-minute Minimum, your Target, and a Stretch</label
+		>
+		{#if h.levels.enabled}
+			<label>Minimum <input bind:value={h.levels.minimum} placeholder="Put on running shoes" /></label>
+			<label>Target <input bind:value={h.levels.target} placeholder="Run 5 km" /></label>
+			<label>Stretch <input bind:value={h.levels.stretch} placeholder="Run 10 km" /></label>
+			<label style="color: var(--text)"
+				><input type="checkbox" bind:checked={h.minimumCounts} /> Doing the Minimum keeps the streak alive</label
+			>
+			<p class="muted small-text">If the habit has Tasks with numbers, set Minimum, Target and Stretch numbers for each one below.</p>
+		{/if}
+		{#if h.variants.some((v) => v.slots.length)}
+			<label style="color: var(--text)"
+				><input type="checkbox" bind:checked={h.quickDone} /> One-tap Done on Today (logs your targets)</label
+			>
+		{/if}
+
 		<h2>{h.variants.length > 1 ? 'Variants' : 'What you do'}</h2>
 		{#if h.variants.length > 1}
 			<p class="muted">Each Variant is a version of this habit, like Push day A and Pull day B.</p>
@@ -523,27 +582,9 @@
 		<label style="color: var(--text)"
 			><input type="checkbox" bind:checked={h.remind} disabled={!h.cue.time} /> Remind me at this time</label
 		>
+		{#if !h.cue.time}<p class="muted small-text">Set a time above to turn on a reminder.</p>{/if}
 		{#if h.remind}
 			<p class="muted small-text">Turn on reminders for this device in <a href="/settings">Settings</a>.</p>
-		{/if}
-
-		<h2>Levels</h2>
-		<label style="color: var(--text)"
-			><input type="checkbox" bind:checked={h.levels.enabled} /> Use levels: a two-minute Minimum, your Target, and a Stretch</label
-		>
-		{#if h.levels.enabled}
-			<label>Minimum <input bind:value={h.levels.minimum} placeholder="Put on running shoes" /></label>
-			<label>Target <input bind:value={h.levels.target} placeholder="Run 5 km" /></label>
-			<label>Stretch <input bind:value={h.levels.stretch} placeholder="Run 10 km" /></label>
-			<label style="color: var(--text)"
-				><input type="checkbox" bind:checked={h.minimumCounts} /> Doing the Minimum keeps the streak alive</label
-			>
-			<p class="muted small-text">Set numbers for each level per Task in the Slots above.</p>
-		{/if}
-		{#if h.variants.some((v) => v.slots.length)}
-			<label style="color: var(--text)"
-				><input type="checkbox" bind:checked={h.quickDone} /> One-tap Done on Today (logs your targets)</label
-			>
 		{/if}
 
 		<h2>Streak</h2>
@@ -571,18 +612,20 @@
 			<label style="width: 10rem">Over the last N days <input type="number" min="7" max="365" bind:value={h.streakRule.days} /></label>
 		{/if}
 
-		<h2>Pair it with something you enjoy</h2>
+		<details class="extras" open={!!(h.bundle.reward || h.prep.length || h.reward.celebrate || h.reward.jar || h.progression)}>
+			<summary>More ways to make it stick (optional)</summary>
+		<h3>Pair it with something you enjoy</h3>
 		<label
 			>Pair with
 			<input bind:value={h.bundle.reward} placeholder="my favourite podcast" />
 		</label>
 		{#if h.bundle.reward}
 			<label style="color: var(--text)"
-				><input type="checkbox" bind:checked={h.bundle.strict} /> Only after the habit is done</label
+				><input type="checkbox" bind:checked={h.bundle.strict} /> Save it as a treat for after the habit is done</label
 			>
 		{/if}
 
-		<h2>Prepare the day before</h2>
+		<h3>Prepare the day before</h3>
 		<p class="muted">Steps that make tomorrow easier. They show on Today the day before this habit is due.</p>
 		{#each h.prep as item, pi (item)}
 			<div class="row">
@@ -596,7 +639,7 @@
 			<button type="button" onclick={addPrep}>Add</button>
 		</div>
 
-		<h2>Reward</h2>
+		<h3>Reward</h3>
 		<label style="color: var(--text)"
 			><input type="checkbox" bind:checked={h.reward.celebrate} /> Celebrate when I finish</label
 		>
@@ -612,14 +655,15 @@
 		>
 		{#if h.reward.jar}
 			<div class="row">
-				<label style="width: 6rem">Add <input type="number" min="0" step="any" bind:value={h.reward.jar.amount} /></label>
-				<label style="width: 5rem">Unit <input bind:value={h.reward.jar.unit} /></label>
-				<label class="grow">Toward <input bind:value={h.reward.jar.goal} placeholder="new running shoes" /></label>
+				<label style="width: 7rem">Each time, add <input type="number" min="0" step="any" bind:value={h.reward.jar.amount} /></label>
+				<label style="width: 5rem">Unit <input bind:value={h.reward.jar.unit} placeholder="€, points" /></label>
+				<label class="grow">Saving for <input bind:value={h.reward.jar.goal} placeholder="new running shoes" /></label>
 			</div>
+			<p class="muted small-text">A pretend jar that fills up as you go. Treat yourself when it's full.</p>
 		{/if}
 
 		{#if hasTargets}
-			<h2>Progression</h2>
+			<h3>Progression</h3>
 			<label style="color: var(--text)"
 				><input
 					type="checkbox"
@@ -642,6 +686,7 @@
 				<p class="muted small-text">ittracks only suggests it. Nothing changes until you accept.</p>
 			{/if}
 		{/if}
+		</details>
 	{/if}
 
 	<h2>Reframe</h2>
@@ -700,6 +745,23 @@
 	}
 	.small-text {
 		font-size: 0.85rem;
+	}
+	.extras {
+		margin-top: 1.25rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 0.6rem 0.9rem;
+	}
+	.extras > * + * {
+		margin-top: 0.6rem;
+	}
+	.extras summary {
+		cursor: pointer;
+		font-weight: 600;
+	}
+	.extras h3 {
+		font-size: 1rem;
+		margin: 1rem 0 0.25rem;
 	}
 	.targets {
 		width: 100%;

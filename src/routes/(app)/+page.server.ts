@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { error, fail } from '@sveltejs/kit';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { craving, habit, occurrence, prepTick, slip, slot, variant } from '$lib/server/db/schema';
 import { createOccurrence, loadPrep, loadToday, quickDone, timeIn, todayIn } from '$lib/server/today';
@@ -120,10 +120,14 @@ export const actions: Actions = {
 		const f = await request.formData();
 		const h = ownedHabit(locals.account!.id, field(f, 'habit'));
 		if (!h || h.direction !== 'break') error(404);
-		const date = field(f, 'date') || todayIn(cookies.get('tz'));
+		const today = todayIn(cookies.get('tz'));
+		const date = field(f, 'date') || today;
 		const count = Number(field(f, 'count') || 1);
-		if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !(count > 0))
-			return fail(400, { error: 'Check the date and count.' });
+		const real = /^\d{4}-\d{2}-\d{2}$/.test(date) && new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date;
+		if (!real || date > today || date < h.startDate)
+			return fail(400, { habit: h.id, error: `Pick a date between ${h.startDate} and today.` });
+		if (!Number.isInteger(count) || count < 1 || count > 1000)
+			return fail(400, { habit: h.id, error: 'Count must be a whole number from 1 to 1000.' });
 		const time = field(f, 'time');
 		db.insert(slip)
 			.values({
@@ -138,6 +142,21 @@ export const actions: Actions = {
 				withWhom: clip(field(f, 'withWhom'))
 			})
 			.run();
+		return { slipped: h.id };
+	},
+	/** Undo the newest slip or resisted craving logged today for a break habit. */
+	undoLast: async ({ request, locals, cookies }) => {
+		const f = await request.formData();
+		const h = ownedHabit(locals.account!.id, field(f, 'habit'));
+		if (!h || h.direction !== 'break') error(404);
+		const table = field(f, 'kind') === 'craving' ? craving : slip;
+		const last = db
+			.select({ id: table.id })
+			.from(table)
+			.where(eq(table.habitId, h.id))
+			.orderBy(desc(table.createdAt), desc(sql`rowid`))
+			.get();
+		if (last) db.delete(table).where(eq(table.id, last.id)).run();
 	},
 	/** A craving resisted, usually by doing the if-then replacement. */
 	craving: async ({ request, locals, cookies }) => {
