@@ -1,0 +1,11 @@
+services:
+  ittracks:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/data
+    environment:
+      # Set this to the address you open the app at.
+      ORIGIN: http://localhost:3000
+    restart: unless-stopped
