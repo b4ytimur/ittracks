@@ -62,7 +62,7 @@ docker compose exec ittracks node scripts/seed-demo.mjs --today "$(date +%F)"
 docker compose restart
 ```
 
-It only adds rows, never changes what you made, and refuses to run twice. Restart the app afterwards so it picks up the new rows. Outside Docker, run `node scripts/seed-demo.mjs`.
+It only adds rows, never changes what you made, and refuses to run twice. On a server nobody has set up yet, add `--create-user name:password` to make the account too. Restart the app afterwards so it picks up the new rows. Outside Docker, run `node scripts/seed-demo.mjs`.
 
 ## Templates
 
