@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { metricTypes } from '$lib/metric-types';
 	import { untrack } from 'svelte';
-	import type { TaskForm } from '$lib/forms';
+	import { enhance } from '$app/forms';
+	import type { MetricForm, TaskForm } from '$lib/forms';
+	import { defaultStep, metricsFromType, type TaskType } from '$lib/task-types';
 
 	let { data, form } = $props();
 
@@ -26,7 +28,7 @@
 		newTag = '';
 	}
 
-	function addMetric(preset?: Partial<TaskForm['metrics'][number]>) {
+	function addMetric(preset?: Partial<MetricForm>) {
 		t.metrics.push({
 			id: crypto.randomUUID(),
 			name: '',
@@ -34,15 +36,35 @@
 			unit: '',
 			repeats: false,
 			choices: [],
+			prefill: 'last',
+			step: null,
+			required: false,
+			quick: true,
 			...preset
 		});
 	}
 
-	// Quick start for gym exercises: weight and reps, logged once per set.
-	function addSetMetrics() {
-		addMetric({ name: 'Weight', type: 'number', unit: data.weightUnit, repeats: true });
-		addMetric({ name: 'Reps', type: 'count', repeats: true });
+	/** Start from a Task type: its fields replace the current ones. */
+	let typeKey = $state('');
+	function applyType(type: TaskType) {
+		typeKey = type.key;
+		t.metrics = metricsFromType(type, data.weightUnit);
+		t.restTimerEnabled = type.restTimerEnabled;
 	}
+
+	let typeName = $state('');
+	const typePayload = $derived(
+		JSON.stringify({
+			name: typeName,
+			restTimerEnabled: t.restTimerEnabled,
+			metrics: t.metrics.map((m) => ({ name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, step: m.step }))
+		})
+	);
+
+	const toggleCollection = (id: string) =>
+		(t.collectionIds = t.collectionIds.includes(id) ? t.collectionIds.filter((x) => x !== id) : [...t.collectionIds, id]);
+	const isNumeric = (m: MetricForm) => m.type === 'number' || m.type === 'count' || m.type === 'duration';
+	const ago = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 
 	function move<T>(list: T[], i: number, by: number) {
 		const j = i + by;
@@ -58,10 +80,57 @@
 	<a href="/library">Cancel</a>
 </header>
 
+{#if data.archived}
+	<form method="POST" action="?/unarchive" class="card row archived" use:enhance>
+		<span class="grow">This Task is archived. It keeps its history but is hidden from the Library and pickers.</span>
+		<button class="small">Unarchive</button>
+	</form>
+{/if}
+
+{#if data.usage}
+	<p class="muted small-text">
+		{#if data.usage.habits.length}
+			Used in {#each data.usage.habits as h, i (h.id)}{i ? ', ' : ''}<a href="/habits/{h.id}">{h.name}</a>{/each}.
+		{:else}
+			Not used in any habit.
+		{/if}
+		{#if data.usage.lastLogged}Logged {data.usage.timesLogged} {data.usage.timesLogged === 1 ? 'time' : 'times'}, last on {ago(data.usage.lastLogged)}.{/if}
+	</p>
+{/if}
+
+{#if data.isNew}
+	<div class="card">
+		<span class="muted small-text">Start from a type</span>
+		<div class="chips">
+			{#each data.types as type (type.key)}
+				<button type="button" class="chip" class:on={typeKey === type.key} title={type.description} onclick={() => applyType(type)}>{type.name}</button>
+			{/each}
+		</div>
+		{#if typeKey}<p class="muted small-text" style="margin: 0.4rem 0 0">{data.types.find((x) => x.key === typeKey)?.description}</p>{/if}
+	</div>
+{/if}
+
 <form method="POST" action="?/save" class="stack">
 	<input type="hidden" name="payload" value={JSON.stringify(t)} />
 
 	<label>Name <input bind:value={t.name} placeholder="Bench press" required /></label>
+	<label
+		>Area
+		<select value={t.areaId ?? ''} onchange={(e) => (t.areaId = e.currentTarget.value || null)}>
+			<option value="">None</option>
+			{#each data.areas as a (a.id)}<option value={a.id}>{a.icon} {a.name}</option>{/each}
+		</select>
+	</label>
+	{#if data.collections.length}
+		<div>
+			<span class="muted small-text">Collections</span>
+			<div class="chips">
+				{#each data.collections as c (c.id)}
+					<button type="button" class="chip" class:on={t.collectionIds.includes(c.id)} onclick={() => toggleCollection(c.id)}>{c.name}</button>
+				{/each}
+			</div>
+		</div>
+	{/if}
 	<label>Notes <textarea bind:value={t.notes} rows="2"></textarea></label>
 
 	<h2>Tags</h2>
@@ -125,6 +194,28 @@
 					/>
 				</label>
 			{/if}
+			<details class="log-settings">
+				<summary class="small-text">When logging</summary>
+				<div class="row">
+					<label class="grow"
+						>Start with
+						<select bind:value={m.prefill}>
+							<option value="last">Last time's value</option>
+							<option value="target">The target</option>
+							<option value="blank">Blank</option>
+						</select>
+					</label>
+					{#if isNumeric(m)}
+						<label style="width: 7rem"
+							>+/− step
+							<input type="number" step="any" min="0" value={m.step ?? ''} placeholder={String(defaultStep(m.type, m.unit))}
+								oninput={(e) => (m.step = e.currentTarget.value && Number(e.currentTarget.value) > 0 ? Number(e.currentTarget.value) : null)} />
+						</label>
+					{/if}
+				</div>
+				<label style="color: var(--text)"><input type="checkbox" bind:checked={m.required} /> Required before Finish</label>
+				<label style="color: var(--text)"><input type="checkbox" bind:checked={m.quick} /> Show on quick logs</label>
+			</details>
 			<div class="row">
 				<label class="grow" style="color: var(--text)"
 					><input type="checkbox" bind:checked={m.repeats} /> Log per set</label
@@ -137,7 +228,7 @@
 	{/each}
 	<div class="row">
 		<button type="button" onclick={() => addMetric()}>Add metric</button>
-		<button type="button" onclick={addSetMetrics}>Add weight and reps per set</button>
+		<button type="button" onclick={() => applyType(data.types[0])}>Use weight and reps per set</button>
 	</div>
 
 	<h2>Sub-tasks</h2>
@@ -169,12 +260,45 @@
 	<div class="actions">
 		<button class="primary">Save task</button>
 		{#if !data.isNew}
-			<button
-				class="danger"
-				formaction="?/delete"
-				formnovalidate
-				onclick={(e) => !confirm('Delete this task?') && e.preventDefault()}>Delete</button
-			>
+			<div class="row">
+				<button formaction="?/duplicate" formnovalidate>Duplicate</button>
+				{#if !data.archived}<button formaction="?/archive" formnovalidate>Archive</button>{/if}
+				<button
+					class="danger"
+					formaction="?/delete"
+					formnovalidate
+					onclick={(e) => !confirm('Delete this task and every log of it? Archive keeps the history.') && e.preventDefault()}>Delete</button
+				>
+			</div>
 		{/if}
 	</div>
 </form>
+
+{#if t.metrics.length}
+	<details class="card" style="margin-top: 1.5rem">
+		<summary>Save these fields as a Task type</summary>
+		<form method="POST" action="?/saveType" class="row" style="margin-top: 0.5rem" use:enhance={() => async ({ update }) => update({ reset: false })}>
+			<input type="hidden" name="type" value={typePayload} />
+			<input class="grow" bind:value={typeName} placeholder="Type name, e.g. Swimming" aria-label="Type name" />
+			<button disabled={!typeName.trim()}>Save type</button>
+		</form>
+		{#if form?.typeSaved}<p class="muted small-text">Saved "{form.typeSaved}". It's offered when you make a new Task.</p>{/if}
+	</details>
+{/if}
+
+<style>
+	.log-settings summary {
+		cursor: pointer;
+		color: var(--accent);
+	}
+	.log-settings[open] > * + * {
+		margin-top: 0.5rem;
+	}
+	.small-text {
+		font-size: 0.85rem;
+	}
+	.archived {
+		margin-bottom: 1rem;
+		align-items: center;
+	}
+</style>
