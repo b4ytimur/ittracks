@@ -2,20 +2,23 @@ import { randomUUID } from 'node:crypto';
 import { error, fail } from '@sveltejs/kit';
 import { and, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { craving, occurrence, slip, variant } from '$lib/server/db/schema';
-import { createOccurrence, loadToday, quickDone, timeIn, todayIn } from '$lib/server/today';
+import { craving, habit, occurrence, prepTick, slip, slot, variant } from '$lib/server/db/schema';
+import { createOccurrence, loadPrep, loadToday, quickDone, timeIn, todayIn } from '$lib/server/today';
+import { raise } from '$lib/engine/progression';
+import { addDays } from '$lib/engine/dates';
 import { getSettings, saveSettings } from '$lib/server/settings';
 import type { Level } from '$lib/engine/streak';
 import { ownedHabit, ownedOccurrence } from '$lib/server/owned';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = ({ locals, cookies }) => {
+export const load: PageServerLoad = ({ locals, cookies, url }) => {
 	const accountId = locals.account!.id;
 	const tz = cookies.get('tz');
 	// Reminders run on the server, so it needs to know the user's time zone.
 	if (tz && getSettings(accountId).timeZone !== tz) saveSettings(accountId, { timeZone: tz });
 	const today = todayIn(tz);
-	return { today, ...loadToday(accountId, today) };
+	// The Log screen sends you back here after Finish, so the reward can show.
+	return { today, finished: url.searchParams.get('finished'), prep: loadPrep(accountId, today), ...loadToday(accountId, today) };
 };
 
 const field = (f: FormData, k: string) => String(f.get(k) ?? '');
@@ -36,6 +39,7 @@ export const actions: Actions = {
 			.set({ status: 'done', finishedAt: new Date(), level: level === 'target' ? null : level })
 			.where(eq(occurrence.id, o.occ.id))
 			.run();
+		return { finished: o.habit.id };
 	},
 	/** One tap: done at a level, logging that level's Slot targets. */
 	quick: async ({ request, locals }) => {
@@ -43,6 +47,47 @@ export const actions: Actions = {
 		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
 		if (!o) error(404);
 		quickDone(o.occ.id, levelOf(f));
+		return { finished: o.habit.id };
+	},
+	/** Tick or untick a prep step for tomorrow's Occurrence. */
+	prep: async ({ request, locals, cookies }) => {
+		const f = await request.formData();
+		const h = ownedHabit(locals.account!.id, field(f, 'habit'));
+		const item = field(f, 'item');
+		if (!h || !h.prep?.includes(item)) error(404);
+		const date = addDays(todayIn(cookies.get('tz')), 1);
+		const where = and(eq(prepTick.habitId, h.id), eq(prepTick.date, date), eq(prepTick.item, item));
+		if (field(f, 'done') === 'true') db.insert(prepTick).values({ habitId: h.id, date, item }).onConflictDoNothing().run();
+		else db.delete(prepTick).where(where).run();
+	},
+	/** Accept a progression suggestion: raise Target and Stretch in every Slot. */
+	raise: async ({ request, locals, cookies }) => {
+		const f = await request.formData();
+		const h = ownedHabit(locals.account!.id, field(f, 'habit'));
+		if (!h?.progression) error(404);
+		const p = h.progression;
+		const today = todayIn(cookies.get('tz'));
+		db.transaction((tx) => {
+			const variants = tx.select({ id: variant.id }).from(variant).where(eq(variant.habitId, h.id)).all();
+			for (const v of variants)
+				for (const s of tx.select().from(slot).where(eq(slot.variantId, v.id)).all())
+					tx.update(slot)
+						.set({
+							targets: s.targets ? raise(s.targets, p) : s.targets,
+							stretchTargets: s.stretchTargets ? raise(s.stretchTargets, p) : s.stretchTargets
+						})
+						.where(eq(slot.id, s.id))
+						.run();
+			tx.update(habit).set({ progressionFrom: today }).where(eq(habit.id, h.id)).run();
+		});
+		return { raised: h.id };
+	},
+	/** Not yet: start counting again from today. */
+	notYet: async ({ request, locals, cookies }) => {
+		const f = await request.formData();
+		const h = ownedHabit(locals.account!.id, field(f, 'habit'));
+		if (!h) error(404);
+		db.update(habit).set({ progressionFrom: todayIn(cookies.get('tz')) }).where(eq(habit.id, h.id)).run();
 	},
 	skip: async ({ request, locals }) => {
 		const f = await request.formData();

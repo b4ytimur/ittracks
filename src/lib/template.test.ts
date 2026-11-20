@@ -70,7 +70,12 @@ const gym: HabitForm = habitForm.parse({
 	levels: { enabled: true, minimum: 'One set', target: 'Full plan', stretch: 'Extra set' },
 	streakRule: { kind: 'grace', misses: 1, period: 'week' },
 	remind: true,
-	identityIds: [ID1]
+	identityIds: [ID1],
+	reframe: 'I get to train',
+	bundle: { reward: 'podcast', strict: true },
+	prep: ['Pack the bag'],
+	reward: { celebrate: true, message: 'Nice', jar: { amount: 2, unit: '€', goal: 'shoes' } },
+	progression: { after: 6, by: 5, unit: 'percent' }
 });
 
 describe('templates', () => {
@@ -92,6 +97,11 @@ describe('templates', () => {
 		expect(habit.streakRule).toEqual({ kind: 'grace', misses: 1, period: 'week' });
 		expect(habit.remind).toBe(false);
 		expect(identities).toEqual(['I am an athlete']);
+		expect(habit.reframe).toBe('I get to train');
+		expect(habit.bundle).toEqual({ reward: 'podcast', strict: true });
+		expect(habit.prep).toEqual(['Pack the bag']);
+		expect(habit.reward.jar).toEqual({ amount: 2, unit: '€', goal: 'shoes' });
+		expect(habit.progression).toEqual({ after: 6, by: 5, unit: 'percent' });
 		const reps = tasks[0].form.metrics.find((m) => m.name === 'Reps')!;
 		expect(habit.variants[0].slots[0].minTargets).toEqual({ [reps.id]: 1 });
 		expect(habit.variants[0].slots[0].stretchTargets).toEqual({ [reps.id]: 12 });
@@ -100,7 +110,7 @@ describe('templates', () => {
 	it('still imports version 1 files, keeping their strict streak', () => {
 		const v1 = JSON.parse(JSON.stringify(tpl));
 		v1.version = 1;
-		for (const k of ['cue', 'streakRule', 'levels', 'identities', 'ifThen', 'triggers', 'minimumCounts', 'quickDone'])
+		for (const k of ['reframe', 'bundle', 'prep', 'reward', 'cost', 'limit', 'progression', 'cue', 'streakRule', 'levels', 'identities', 'ifThen', 'triggers', 'minimumCounts', 'quickDone'])
 			delete v1.habit[k];
 		const parsed = templateFile.parse(v1);
 		const { habit } = fromTemplate(parsed, '2026-12-01');

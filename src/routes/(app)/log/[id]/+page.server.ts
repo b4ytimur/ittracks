@@ -166,7 +166,7 @@ export const actions: Actions = {
 				.where(eq(occurrence.id, o.occ.id))
 				.run();
 		});
-		if (p.finish) redirect(303, '/');
+		if (p.finish) redirect(303, `/?finished=${o.habit.id}`);
 		return { saved: true };
 	},
 

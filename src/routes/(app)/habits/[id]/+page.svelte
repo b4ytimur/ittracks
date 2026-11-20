@@ -132,6 +132,15 @@
 		else map[metricId] = Number(value);
 	}
 
+	let newPrep = $state('');
+	function addPrep() {
+		const t = newPrep.trim();
+		if (t && !h.prep.includes(t)) h.prep = [...h.prep, t];
+		newPrep = '';
+	}
+	const hasTargets = $derived(h.variants.some((v) => v.slots.some((s) => Object.keys(s.targets).length)));
+	const numOrNull = (v: string) => (v === '' ? null : Number(v));
+
 	const payload = $derived(JSON.stringify({ ...h, schedule, cue }));
 
 	function addVariant() {
@@ -167,6 +176,7 @@
 <header class="bar">
 	<h1>{data.isNew ? 'New habit' : 'Edit habit'}</h1>
 	<div class="row">
+		{#if !data.isNew}<a href="/habits/{data.id}/chain">Chain</a>{/if}
 		{#if !data.isNew}<a href="/habits/{data.id}/template.json" download>Export template</a>{/if}
 		<a href="/habits">Cancel</a>
 	</div>
@@ -229,6 +239,69 @@
 				onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), addTrigger())} />
 			<button type="button" onclick={addTrigger}>Add</button>
 		</div>
+
+		<h2>Cost</h2>
+		<label style="color: var(--text)"
+			><input
+				type="checkbox"
+				checked={!!h.cost}
+				onchange={(e) => (h.cost = e.currentTarget.checked ? { amount: 1, unit: '€', perDay: null } : null)}
+			/> Show what slips cost and what staying clean saves</label
+		>
+		{#if h.cost}
+			<div class="row">
+				<label style="width: 7rem">Cost per slip <input type="number" min="0" step="any" bind:value={h.cost.amount} /></label>
+				<label style="width: 6rem">Unit <input bind:value={h.cost.unit} placeholder="€, kcal, min" /></label>
+				<label class="grow"
+					>Slips a day before you started
+					<input type="number" min="0" step="any" value={h.cost.perDay ?? ''}
+						oninput={(e) => h.cost && (h.cost.perDay = numOrNull(e.currentTarget.value))} placeholder="optional, e.g. 10" />
+				</label>
+			</div>
+		{/if}
+
+		<h2>Reduce instead of quitting</h2>
+		<label style="color: var(--text)"
+			><input
+				type="checkbox"
+				checked={!!h.limit}
+				onchange={(e) =>
+					(h.limit = e.currentTarget.checked
+						? { max: 3, period: 'day', taper: null, start: h.startDate }
+						: null)}
+			/> Allow up to a limit; the counter tracks days within it</label
+		>
+		{#if h.limit}
+			<div class="row">
+				<label style="width: 6rem">Up to <input type="number" min="0" max="1000" bind:value={h.limit.max} /></label>
+				<label class="grow"
+					>Per
+					<select bind:value={h.limit.period}>
+						<option value="day">day</option>
+						<option value="week">week</option>
+					</select>
+				</label>
+			</div>
+			<label style="color: var(--text)"
+				><input
+					type="checkbox"
+					checked={!!h.limit.taper}
+					onchange={(e) => h.limit && (h.limit.taper = e.currentTarget.checked ? { by: 1, every: 'week' } : null)}
+				/> Lower the limit over time</label
+			>
+			{#if h.limit.taper}
+				<div class="row">
+					<label style="width: 6rem">By <input type="number" min="1" max="100" bind:value={h.limit.taper.by} /></label>
+					<label class="grow"
+						>Every
+						<select bind:value={h.limit.taper.every}>
+							<option value="week">week</option>
+							<option value="month">month</option>
+						</select>
+					</label>
+				</div>
+			{/if}
+		{/if}
 	{:else}
 		<h2>{h.variants.length > 1 ? 'Variants' : 'What you do'}</h2>
 		{#if h.variants.length > 1}
@@ -497,7 +570,85 @@
 		{:else if h.streakRule.kind === 'consistency'}
 			<label style="width: 10rem">Over the last N days <input type="number" min="7" max="365" bind:value={h.streakRule.days} /></label>
 		{/if}
+
+		<h2>Pair it with something you enjoy</h2>
+		<label
+			>Pair with
+			<input bind:value={h.bundle.reward} placeholder="my favourite podcast" />
+		</label>
+		{#if h.bundle.reward}
+			<label style="color: var(--text)"
+				><input type="checkbox" bind:checked={h.bundle.strict} /> Only after the habit is done</label
+			>
+		{/if}
+
+		<h2>Prepare the day before</h2>
+		<p class="muted">Steps that make tomorrow easier. They show on Today the day before this habit is due.</p>
+		{#each h.prep as item, pi (item)}
+			<div class="row">
+				<span class="grow">{item}</span>
+				<button type="button" class="small danger" onclick={() => h.prep.splice(pi, 1)}>Remove</button>
+			</div>
+		{/each}
+		<div class="row">
+			<input class="grow" bind:value={newPrep} placeholder="Lay out gym clothes" aria-label="New prep step"
+				onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), addPrep())} />
+			<button type="button" onclick={addPrep}>Add</button>
+		</div>
+
+		<h2>Reward</h2>
+		<label style="color: var(--text)"
+			><input type="checkbox" bind:checked={h.reward.celebrate} /> Celebrate when I finish</label
+		>
+		{#if h.reward.celebrate}
+			<label>Message <input bind:value={h.reward.message} placeholder="Another vote for the runner you are" /></label>
+		{/if}
+		<label style="color: var(--text)"
+			><input
+				type="checkbox"
+				checked={!!h.reward.jar}
+				onchange={(e) => (h.reward.jar = e.currentTarget.checked ? { amount: 2, unit: '€', goal: '' } : null)}
+			/> Fill a jar toward a reward</label
+		>
+		{#if h.reward.jar}
+			<div class="row">
+				<label style="width: 6rem">Add <input type="number" min="0" step="any" bind:value={h.reward.jar.amount} /></label>
+				<label style="width: 5rem">Unit <input bind:value={h.reward.jar.unit} /></label>
+				<label class="grow">Toward <input bind:value={h.reward.jar.goal} placeholder="new running shoes" /></label>
+			</div>
+		{/if}
+
+		{#if hasTargets}
+			<h2>Progression</h2>
+			<label style="color: var(--text)"
+				><input
+					type="checkbox"
+					checked={!!h.progression}
+					onchange={(e) => (h.progression = e.currentTarget.checked ? { after: 6, by: 5, unit: 'percent' } : null)}
+				/> Suggest raising my targets when I keep hitting them</label
+			>
+			{#if h.progression}
+				<div class="row">
+					<label style="width: 8rem">After hitting them <input type="number" min="2" max="60" bind:value={h.progression.after} /></label>
+					<span style="padding-bottom: 0.6rem">times in a row, raise by</span>
+					<label style="width: 5rem"><input type="number" min="0" step="any" bind:value={h.progression.by} aria-label="Raise by" /></label>
+					<label style="width: 7rem"
+						><select bind:value={h.progression.unit} aria-label="Raise unit">
+							<option value="percent">%</option>
+							<option value="amount">units</option>
+						</select></label
+					>
+				</div>
+				<p class="muted small-text">ittracks only suggests it. Nothing changes until you accept.</p>
+			{/if}
+		{/if}
 	{/if}
+
+	<h2>Reframe</h2>
+	<label
+		>A line to see on the card
+		<input bind:value={h.reframe} placeholder={h.direction === 'break' ? 'I am free of this' : 'I get to do this today'} />
+	</label>
 
 	<h2>Identity</h2>
 	<p class="muted">Who does this habit make you? Each time you do it is a vote for that identity.</p>

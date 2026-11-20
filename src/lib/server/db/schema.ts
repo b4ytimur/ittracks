@@ -3,6 +3,30 @@
 // Schedule -> Occurrence -> Log -> Entry, and Slips for break habits.
 import { sqliteTable, text, integer, real, primaryKey } from 'drizzle-orm/sqlite-core';
 import type { Level, StreakRule } from '../../engine/streak';
+import type { Limit } from '../../engine/limit';
+import type { Progression } from '../../engine/progression';
+
+/** Temptation bundling: something you want, paired with the habit. */
+export interface Bundle {
+	reward: string;
+	/** Only enjoy it once the habit is done. */
+	strict: boolean;
+}
+
+/** What happens when an Occurrence is finished. */
+export interface Reward {
+	celebrate: boolean;
+	message: string;
+	/** Each done Occurrence adds `amount` toward `goal`. */
+	jar: { amount: number; unit: string; goal: string } | null;
+}
+
+/** What each Slip of a break habit costs, and the old daily rate, to show savings. */
+export interface Cost {
+	amount: number;
+	unit: string;
+	perDay: number | null;
+}
 
 /** When and where a Habit happens, and what it is stacked after. All optional. */
 export interface Cue {
@@ -152,8 +176,33 @@ export const habit = sqliteTable('habit', {
 	remind: integer('remind', { mode: 'boolean' }).notNull().default(false),
 	ifThen: text('if_then', { mode: 'json' }).$type<IfThen>(),
 	/** Feelings offered when logging a Slip; user-editable. */
-	triggers: text('triggers', { mode: 'json' }).$type<string[]>()
+	triggers: text('triggers', { mode: 'json' }).$type<string[]>(),
+	/** "I get to train today": shown on the card. */
+	reframe: text('reframe'),
+	bundle: text('bundle', { mode: 'json' }).$type<Bundle>(),
+	/** Checklist for the day before a due Occurrence (environment design). */
+	prep: text('prep', { mode: 'json' }).$type<string[]>(),
+	reward: text('reward', { mode: 'json' }).$type<Reward>(),
+	cost: text('cost', { mode: 'json' }).$type<Cost>(),
+	/** Reduce mode for break habits; null means quit entirely. */
+	limit: text('limit', { mode: 'json' }).$type<Limit>(),
+	progression: text('progression', { mode: 'json' }).$type<Progression>(),
+	/** Hits toward the next progression count from after this date. */
+	progressionFrom: text('progression_from')
 });
+
+/** Prep items ticked off, per habit and the date of the Occurrence they prepare for. */
+export const prepTick = sqliteTable(
+	'prep_tick',
+	{
+		habitId: text('habit_id')
+			.notNull()
+			.references(() => habit.id, { onDelete: 'cascade' }),
+		date: text('date').notNull(),
+		item: text('item').notNull()
+	},
+	(t) => [primaryKey({ columns: [t.habitId, t.date, t.item] })]
+);
 
 /** "I am a runner." Habits vote for an Identity each time they are done. */
 export const identity = sqliteTable('identity', {
