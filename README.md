@@ -42,6 +42,18 @@ The app listens on port 3000 and keeps its database in `./data`. Set `ORIGIN` in
 
 To install it on your phone, open it in the browser and choose "Add to Home Screen". Phones only offer this over HTTPS, so put the app behind a reverse proxy with a certificate (for example Caddy or Traefik).
 
+Run it from a normal folder (not one reached through a symlink), so that Docker Desktop creates `./data` on your computer. Creating the folder first with `mkdir data` also works.
+
+### Example data
+
+To try the app without setting everything up, create your account and then add example habits (a gym rotation, a Spanish checklist with a timer, a deep-work target and two break habits), with a few weeks of history:
+
+```sh
+docker compose exec ittracks node scripts/seed-demo.mjs --today "$(date +%F)"
+```
+
+It only adds rows, never changes what you made, and refuses to run twice. Outside Docker, run `node scripts/seed-demo.mjs`.
+
 ## Templates
 
 Any habit can be exported from its editor as a `.ittracks.json` file and imported on any ittracks server from the Habits tab. A template holds the habit, its Variants, schedule and Fill rules, and the Tasks it uses. It never contains your logs. The format is defined in `src/lib/template.ts` (version 1).
