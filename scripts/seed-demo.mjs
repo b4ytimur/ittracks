@@ -96,6 +96,7 @@ const HABITS = [
   "Deep work",
   "No smoking",
   "No doomscrolling",
+  "Less coffee",
 ];
 const clash = db
   .prepare(
@@ -810,6 +811,234 @@ const seedAll = db.transaction(() => {
   [-7, -5, -2].forEach((d) =>
     crave.run(randomUUID(), scroll, addDays(today, d), "23:15", now),
   );
+
+  // ================= Areas, Collections, rewards, prep, reduce mode... =================
+  // Only when the database has these columns (migrations 0002 and 0003).
+  const cols = (t) =>
+    db
+      .prepare(`PRAGMA table_info(${t})`)
+      .all()
+      .map((c) => c.name);
+  if (!cols("habit").includes("area_id") || !cols("habit").includes("reward"))
+    return;
+
+  // Areas group Habits and Tasks.
+  const addArea = db.prepare(
+    "INSERT INTO area (id, account_id, name, color, icon, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
+  );
+  const areas = {};
+  [
+    ["fitness", "Fitness", "#dc2626", "💪"],
+    ["learning", "Learning", "#2563eb", "📚"],
+    ["focus", "Focus", "#7c3aed", "🎯"],
+    ["health", "Health", "#16a34a", "🌱"],
+  ].forEach(([k, name, color, icon], i) => {
+    areas[k] = randomUUID();
+    addArea.run(areas[k], A, name, color, icon, i);
+  });
+  const habitArea = db.prepare("UPDATE habit SET area_id = ? WHERE id = ?");
+  const taskArea = db.prepare(
+    "UPDATE task SET area_id = ? WHERE id = ? OR parent_task_id = ?",
+  );
+  habitArea.run(areas.fitness, gym);
+  habitArea.run(areas.learning, sp);
+  habitArea.run(areas.focus, dw);
+  habitArea.run(areas.health, smoke);
+  habitArea.run(areas.focus, scroll);
+  for (const t of Object.values(T)) taskArea.run(areas.fitness, t.id, t.id);
+  taskArea.run(areas.learning, spanish.id, spanish.id);
+  taskArea.run(areas.focus, focus.id, focus.id);
+
+  // Collections: one hand-picked, two saved filters, one nested.
+  const addCollection = db.prepare(
+    "INSERT INTO collection (id, account_id, name, parent_id, filter, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
+  );
+  const addToCollection = db.prepare(
+    "INSERT INTO collection_task (collection_id, task_id) VALUES (?, ?)",
+  );
+  const gymCol = randomUUID();
+  addCollection.run(gymCol, A, "Gym", null, null, 0);
+  const pushCol = randomUUID();
+  addCollection.run(pushCol, A, "Push day favourites", gymCol, null, 0);
+  for (const t of [T.bench, T.incline, T.ohp, T.dips, T.pushdown])
+    addToCollection.run(pushCol, t.id);
+  const filter = (tags) => JSON.stringify({ tags, areaId: null, text: "" });
+  addCollection.run(
+    randomUUID(),
+    A,
+    "Leg exercises",
+    gymCol,
+    filter(["legs"]),
+    1,
+  );
+  addCollection.run(randomUUID(), A, "Arms", null, filter(["biceps"]), 1);
+
+  // Steppers: weight moves in plates, reps one at a time.
+  const setStep = db.prepare("UPDATE metric SET step = ? WHERE id = ?");
+  for (const t of Object.values(T)) {
+    if (t.m.Weight) setStep.run(weightUnit === "lb" ? 5 : 2.5, t.m.Weight);
+    if (t.m.Reps) setStep.run(1, t.m.Reps);
+    if (t.m.Hold) setStep.run(5, t.m.Hold);
+  }
+  setStep.run(5, spanish.m["Study time"]);
+  setStep.run(25, focus.m["Focused time"]);
+
+  // Reframes, temptation bundles, prep lists, rewards, progression.
+  const setP2 = db.prepare(
+    `UPDATE habit SET reframe = ?, bundle = ?, prep = ?, reward = ?, cost = ?, "limit" = ?, progression = ?, progression_from = ?
+     WHERE id = ?`,
+  );
+  const j = (x) => (x ? JSON.stringify(x) : null);
+  setP2.run(
+    "I get to train. My body gets stronger every session.",
+    j({ reward: "Listen to my favourite podcast", strict: true }),
+    j([
+      "Pack the gym bag the night before",
+      "Fill the water bottle",
+      "Shoes by the door",
+    ]),
+    j({
+      celebrate: true,
+      message: "Session done. Protein shake time.",
+      jar: { amount: 5, unit: "€", goal: "New lifting shoes" },
+    }),
+    null,
+    null,
+    j({ after: 4, by: 5, unit: "percent" }),
+    null,
+    gym,
+  );
+  setP2.run(
+    "I get to talk with my grandmother in her own language.",
+    j({ reward: "A really good coffee", strict: false }),
+    j(["Phone on Do Not Disturb"]),
+    j({ celebrate: true, message: "¡Muy bien!", jar: null }),
+    null,
+    null,
+    j({ after: 5, by: 5, unit: "amount" }),
+    null,
+    sp,
+  );
+  setP2.run(
+    null,
+    null,
+    j(["Close chat apps", "Phone in the drawer", "Water on the desk"]),
+    j({
+      celebrate: true,
+      message: "Deep work block done.",
+      jar: { amount: 1, unit: "block", goal: "a free afternoon on Friday" },
+    }),
+    null,
+    null,
+    null,
+    null,
+    dw,
+  );
+  setP2.run(
+    "I'm free from cigarettes, not giving something up.",
+    null,
+    null,
+    null,
+    j({ amount: 0.4, unit: "€", perDay: 15 }),
+    null,
+    null,
+    null,
+    smoke,
+  );
+
+  // Prep already ticked this morning for today's Gym session.
+  db.prepare(
+    "INSERT INTO prep_tick (habit_id, date, item) VALUES (?, ?, ?)",
+  ).run(gym, today, "Pack the gym bag the night before");
+
+  // Reduce mode: a break habit with a daily limit that tapers down each week.
+  const coffee = randomUUID();
+  const coffeeStart = addDays(today, -21);
+  q.habit.run(
+    coffee,
+    A,
+    "Less coffee",
+    "break",
+    "Cutting down slowly, not quitting.",
+    coffeeStart,
+    null,
+    5,
+    now,
+  );
+  setHabit.run(
+    cue(null, null),
+    JSON.stringify({ kind: "strict" }),
+    null,
+    0,
+    JSON.stringify({
+      when: "want a third coffee",
+      then: "have a glass of sparkling water",
+      habitId: null,
+    }),
+    JSON.stringify(["Tired", "Afternoon slump", "Meeting", "Habit"]),
+    coffee,
+  );
+  setP2.run(
+    null,
+    null,
+    null,
+    null,
+    j({ amount: 3.2, unit: "€", perDay: 4 }),
+    j({
+      max: 4,
+      period: "day",
+      taper: { by: 1, every: "week", floor: 1 },
+      start: coffeeStart,
+    }),
+    null,
+    null,
+    coffee,
+  );
+  habitArea.run(areas.health, coffee);
+  for (let d = coffeeStart, i = 0; d < today; d = addDays(d, 1), i++) {
+    const allowed = Math.max(1, 4 - Math.floor(i / 7));
+    const cups = Math.max(
+      1,
+      allowed - (rand() < 0.4 ? 1 : 0) + (rand() < 0.12 ? 1 : 0),
+    );
+    q.slip.run(randomUUID(), coffee, d, cups, null, now);
+    slipCtx.run(
+      "15:00",
+      "Office",
+      rand() < 0.5 ? "Tired" : "Afternoon slump",
+      "Coworkers",
+      coffee,
+      d,
+    );
+  }
+  q.slip.run(randomUUID(), coffee, today, 1, "Morning cup", now);
+
+  // Settings the app would otherwise ask about on first visit. Only fills keys that are unset.
+  const row = db
+    .prepare("SELECT data FROM settings WHERE account_id = ?")
+    .get(A);
+  const data = row ? JSON.parse(row.data) : { weightUnit };
+  const fill = {
+    dayStart: "04:00",
+    ranges: [
+      { name: "Morning", start: "06:00", end: "12:00" },
+      { name: "Afternoon", start: "12:00", end: "18:00" },
+      { name: "Evening", start: "18:00", end: "23:00" },
+    ],
+    areasSeeded: true,
+    groupByArea: true,
+    pinned: [gym, sp],
+  };
+  for (const [k, v] of Object.entries(fill)) {
+    if (
+      data[k] === undefined ||
+      (Array.isArray(data[k]) && data[k].length === 0)
+    )
+      data[k] = v;
+  }
+  db.prepare(
+    "INSERT INTO settings (account_id, data) VALUES (?, ?) ON CONFLICT(account_id) DO UPDATE SET data = excluded.data",
+  ).run(A, JSON.stringify(data));
 });
 
 seedAll();
