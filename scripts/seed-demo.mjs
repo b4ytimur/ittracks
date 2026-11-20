@@ -2,8 +2,11 @@
 // so a new install has something to click through.
 //
 //   node scripts/seed-demo.mjs [--db path] [--user name] [--today YYYY-MM-DD]
+//                              [--create-user name:password]
 //
 // In Docker:  docker compose exec ittracks node scripts/seed-demo.mjs
+// The app must have started once (to create the tables). Restart it afterwards.
+// --create-user makes a new account first, for a demo server nobody has set up yet.
 //
 // It only adds rows. It never changes or deletes anything that is already there,
 // and it stops if the example Habits already exist. Tags with the same name are reused.
@@ -41,6 +44,32 @@ let seed = 42;
 const rand = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
 
 // ---------- account ----------
+if (args["create-user"]) {
+  const [name, ...rest] = args["create-user"].split(":");
+  const password = rest.join(":");
+  if (!name || password.length < 8) {
+    console.error(
+      "--create-user needs name:password, with a password of at least 8 characters.",
+    );
+    process.exit(1);
+  }
+  if (db.prepare("SELECT 1 FROM account WHERE username = ?").get(name)) {
+    console.error(
+      `An account named "${name}" already exists. Nothing was added.`,
+    );
+    process.exit(1);
+  }
+  const { hash } = await import("@node-rs/argon2");
+  const accountId = randomUUID();
+  db.prepare(
+    "INSERT INTO account (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)",
+  ).run(accountId, name, await hash(password), Math.floor(Date.now() / 1000));
+  db.prepare("INSERT INTO settings (account_id, data) VALUES (?, ?)").run(
+    accountId,
+    JSON.stringify({ weightUnit: "kg" }),
+  );
+  args.user = name;
+}
 const accounts = db.prepare("SELECT id, username FROM account").all();
 const account = args.user
   ? accounts.find((a) => a.username === args.user)
@@ -596,6 +625,191 @@ const seedAll = db.transaction(() => {
     now,
   );
   q.slip.run(randomUUID(), scroll, addDays(today, -4), 1, null, now);
+
+  // ================= Cues, stacking, levels, identities, slip context =================
+  // Only when the database has these columns (added in migration 0001).
+  const habitCols = db
+    .prepare("PRAGMA table_info(habit)")
+    .all()
+    .map((c) => c.name);
+  if (!habitCols.includes("cue")) return;
+
+  const setHabit = db.prepare(
+    `UPDATE habit SET cue = ?, streak_rule = ?, minimum_counts = 1, levels = ?, quick_done = ?, if_then = ?, triggers = ?
+     WHERE id = ?`,
+  );
+  const cue = (time, place, afterHabitId = null, afterText = null) =>
+    JSON.stringify({ time, place, afterHabitId, afterText });
+  const levels = (minimum, target, stretch) =>
+    JSON.stringify({ enabled: true, minimum, target, stretch });
+  const triggers = JSON.stringify([
+    "Bored",
+    "Stressed",
+    "Tired",
+    "Social",
+    "After a meal",
+    "Coffee",
+  ]);
+
+  setHabit.run(
+    cue("18:30", "the gym on my way home", null, "I leave work"),
+    JSON.stringify({ kind: "grace", misses: 1, period: "week" }),
+    levels(
+      "Just the first two lifts",
+      "Full session",
+      "Full session plus an extra set each",
+    ),
+    0,
+    null,
+    null,
+    gym,
+  );
+  setHabit.run(
+    cue("07:30", "the kitchen table", null, "I pour my morning coffee"),
+    JSON.stringify({ kind: "neverTwice" }),
+    levels(
+      "One Duolingo lesson",
+      "20 minutes and the checklist",
+      "40 minutes and a podcast",
+    ),
+    1,
+    null,
+    null,
+    sp,
+  );
+  setHabit.run(
+    cue("09:00", "my desk, phone in the drawer", sp, null),
+    JSON.stringify({ kind: "consistency", days: 30 }),
+    null,
+    0,
+    null,
+    null,
+    dw,
+  );
+  setHabit.run(
+    cue(null, null),
+    JSON.stringify({ kind: "strict" }),
+    null,
+    0,
+    JSON.stringify({
+      when: "want a cigarette",
+      then: "do 10 push-ups and drink a glass of water",
+      habitId: null,
+    }),
+    triggers,
+    smoke,
+  );
+  setHabit.run(
+    cue(null, null),
+    JSON.stringify({ kind: "strict" }),
+    null,
+    0,
+    JSON.stringify({
+      when: "reach for my phone in bed",
+      then: "read two pages of my book",
+      habitId: null,
+    }),
+    triggers,
+    scroll,
+  );
+
+  // Slot levels: Spanish study time 5 / 20 / 40 minutes, Gym rep targets 5 / 8 / 10.
+  db.prepare(
+    "UPDATE slot SET min_targets = ?, stretch_targets = ? WHERE variant_id = ?",
+  ).run(
+    JSON.stringify({ [spanish.m["Study time"]]: 5 }),
+    JSON.stringify({ [spanish.m["Study time"]]: 40 }),
+    spV,
+  );
+  for (const [t, min, max] of [
+    [T.bench, 5, 10],
+    [T.ohp, 5, 10],
+    [T.squat, 3, 8],
+    [T.pullup, 5, 10],
+  ]) {
+    db.prepare(
+      "UPDATE slot SET min_targets = ?, stretch_targets = ? WHERE task_id = ?",
+    ).run(
+      JSON.stringify({ [t.m.Reps]: min }),
+      JSON.stringify({ [t.m.Reps]: max }),
+      t.id,
+    );
+  }
+
+  // Some Spanish days were the minimum, some went past the target.
+  const spDone = db
+    .prepare(
+      "SELECT id FROM occurrence WHERE habit_id = ? AND status = 'done' ORDER BY date",
+    )
+    .all(sp);
+  const setLevel = db.prepare("UPDATE occurrence SET level = ? WHERE id = ?");
+  spDone.forEach((o, i) => {
+    if (i % 5 === 3) setLevel.run("minimum", o.id);
+    else if (i % 7 === 2) setLevel.run("stretch", o.id);
+    else setLevel.run("target", o.id);
+  });
+  db.prepare(
+    "UPDATE occurrence SET level = 'target' WHERE habit_id IN (?, ?) AND status = 'done'",
+  ).run(gym, dw);
+
+  // Identities: each done Habit is a vote for who you want to be.
+  const addIdentity = db.prepare(
+    "INSERT INTO identity (id, account_id, statement, sort_order, created_at) VALUES (?, ?, ?, ?, ?)",
+  );
+  const link = db.prepare(
+    "INSERT INTO habit_identity (habit_id, identity_id) VALUES (?, ?)",
+  );
+  [
+    ["I am someone who trains.", [gym]],
+    ["I am a Spanish speaker.", [sp]],
+    ["I am a non-smoker.", [smoke]],
+    ["I protect my focus.", [dw, scroll]],
+  ].forEach(([statement, habits], i) => {
+    const iid = randomUUID();
+    addIdentity.run(iid, A, statement, i, now);
+    for (const h of habits) link.run(h, iid);
+  });
+
+  // Slip context, so the top triggers have something to show.
+  const slipCtx = db.prepare(
+    "UPDATE slip SET time = ?, place = ?, feeling = ?, with_whom = ? WHERE habit_id = ? AND date = ?",
+  );
+  slipCtx.run(
+    "23:30",
+    "A friend's party",
+    "Social",
+    "Friends",
+    smoke,
+    addDays(today, -41),
+  );
+  slipCtx.run(
+    "16:00",
+    "Office balcony",
+    "Stressed",
+    "Coworkers",
+    smoke,
+    addDays(today, -19),
+  );
+  slipCtx.run("00:15", "Bed", "Tired", "Alone", scroll, addDays(today, -4));
+  q.slip.run(randomUUID(), scroll, addDays(today, -9), 1, null, now);
+  slipCtx.run("23:50", "Bed", "Bored", "Alone", scroll, addDays(today, -9));
+
+  // Cravings resisted with the if-then plan.
+  const crave = db.prepare(
+    "INSERT INTO craving (id, habit_id, date, time, created_at) VALUES (?, ?, ?, ?, ?)",
+  );
+  [-15, -11, -8, -6, -3, -2, -1].forEach((d, i) =>
+    crave.run(
+      randomUUID(),
+      smoke,
+      addDays(today, d),
+      ["13:10", "17:45", "21:00", "13:30"][i % 4],
+      now,
+    ),
+  );
+  [-7, -5, -2].forEach((d) =>
+    crave.run(randomUUID(), scroll, addDays(today, d), "23:15", now),
+  );
 });
 
 seedAll();
