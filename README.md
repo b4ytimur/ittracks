@@ -70,7 +70,7 @@ Run it from a normal folder (not one reached through a symlink), so that Docker 
 To try the app without setting everything up, create your account and then add example habits (a gym rotation, a Spanish checklist with a timer, a deep-work target and two break habits), with a few weeks of history:
 
 ```sh
-docker compose exec ittracks node scripts/seed-demo.mjs --today "$(date +%F)"
+docker compose exec ittracks node scripts/seed-demo.mjs --today "$(date +%F)"  # if your day starts at 4 AM and it is past midnight, pass yesterday's date
 docker compose restart
 ```
 
