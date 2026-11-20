@@ -23,13 +23,30 @@ const bench: TaskForm = {
 	subtasks: [{ id: '00000000-0000-4000-8000-000000000008', name: 'Warm-up set' }]
 };
 
-const gym: HabitForm = {
+const ID1 = '00000000-0000-4000-8000-000000000009';
+const COFFEE = '00000000-0000-4000-8000-000000000010';
+
+const gym: HabitForm = habitForm.parse({
 	name: 'Gym',
 	direction: 'build',
 	notes: '',
 	startDate: '2026-11-01',
 	variants: [
-		{ id: VA, name: 'A', slots: [{ id: S1, taskId: T1, fillRule: null, sets: 3, targets: { [M2]: 8 } }] },
+		{
+			id: VA,
+			name: 'A',
+			slots: [
+				{
+					id: S1,
+					taskId: T1,
+					fillRule: null,
+					sets: 3,
+					targets: { [M2]: 8 },
+					minTargets: { [M2]: 1 },
+					stretchTargets: { [M2]: 12 }
+				}
+			]
+		},
 		{
 			id: VB,
 			name: 'B',
@@ -48,16 +65,48 @@ const gym: HabitForm = {
 			{ variantId: VA, restDays: 2 },
 			{ variantId: VB, restDays: 1 }
 		]
-	}
-};
+	},
+	cue: { time: '07:00', place: 'at the gym', afterHabitId: COFFEE, afterText: null },
+	levels: { enabled: true, minimum: 'One set', target: 'Full plan', stretch: 'Extra set' },
+	streakRule: { kind: 'grace', misses: 1, period: 'week' },
+	remind: true,
+	identityIds: [ID1]
+});
 
 describe('templates', () => {
-	const tpl = toTemplate(gym, new Map([[T1, bench]]));
+	const tpl = toTemplate(gym, new Map([[T1, bench]]), {
+		habits: new Map([[COFFEE, 'Morning coffee']]),
+		identities: new Map([[ID1, 'I am an athlete']])
+	});
 
 	it('exports a valid file with no ids from the database', () => {
 		expect(templateFile.safeParse(JSON.parse(JSON.stringify(tpl))).success).toBe(true);
 		const text = JSON.stringify(tpl);
-		for (const id of [T1, M1, M2, VA, VB, S1]) expect(text).not.toContain(id);
+		for (const id of [T1, M1, M2, VA, VB, S1, ID1, COFFEE]) expect(text).not.toContain(id);
+	});
+
+	it('carries cues, levels, streak rule and identities as portable values', () => {
+		const { habit, identities, tasks } = fromTemplate(tpl, '2026-12-01');
+		expect(habit.cue).toEqual({ time: '07:00', place: 'at the gym', afterHabitId: null, afterText: 'Morning coffee' });
+		expect(habit.levels.minimum).toBe('One set');
+		expect(habit.streakRule).toEqual({ kind: 'grace', misses: 1, period: 'week' });
+		expect(habit.remind).toBe(false);
+		expect(identities).toEqual(['I am an athlete']);
+		const reps = tasks[0].form.metrics.find((m) => m.name === 'Reps')!;
+		expect(habit.variants[0].slots[0].minTargets).toEqual({ [reps.id]: 1 });
+		expect(habit.variants[0].slots[0].stretchTargets).toEqual({ [reps.id]: 12 });
+	});
+
+	it('still imports version 1 files, keeping their strict streak', () => {
+		const v1 = JSON.parse(JSON.stringify(tpl));
+		v1.version = 1;
+		for (const k of ['cue', 'streakRule', 'levels', 'identities', 'ifThen', 'triggers', 'minimumCounts', 'quickDone'])
+			delete v1.habit[k];
+		const parsed = templateFile.parse(v1);
+		const { habit } = fromTemplate(parsed, '2026-12-01');
+		expect(habitForm.safeParse(habit).success).toBe(true);
+		expect(habit.streakRule).toEqual({ kind: 'strict' });
+		expect(habit.levels.enabled).toBe(false);
 	});
 
 	it('round-trips into a valid Habit with fresh ids', () => {

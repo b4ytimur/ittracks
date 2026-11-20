@@ -14,6 +14,8 @@ export interface LogTask {
 	open: boolean;
 	sets: number | null;
 	targets: Record<string, number>;
+	minTargets: Record<string, number>;
+	stretchTargets: Record<string, number>;
 	task: {
 		id: string;
 		name: string;
@@ -82,6 +84,8 @@ export const load: PageServerLoad = ({ locals, params }) => {
 			open: !!s.fillRule,
 			sets: s.sets,
 			targets: s.targets ?? {},
+			minTargets: s.minTargets ?? {},
+			stretchTargets: s.stretchTargets ?? {},
 			task: taskId ? loadTask(taskId) : null,
 			saved: entries.filter((e) => e.taskId === taskId).map((e) => e.values),
 			previous: taskId ? lastEntries(taskId, o.occ.id) : []
@@ -96,9 +100,11 @@ export const load: PageServerLoad = ({ locals, params }) => {
 			id: o.occ.id,
 			date: o.occ.date,
 			status: o.occ.status,
-			notes: o.occ.notes ?? ''
+			notes: o.occ.notes ?? '',
+			level: o.occ.level ?? 'target'
 		},
 		habitName: o.habit.name,
+		levels: o.habit.levels?.enabled ? o.habit.levels : null,
 		variantName: v?.name ?? null,
 		items,
 		subDone,
@@ -114,6 +120,7 @@ export const load: PageServerLoad = ({ locals, params }) => {
 const savePayload = z.object({
 	finish: z.boolean(),
 	notes: z.string().max(5000),
+	level: z.enum(['minimum', 'target', 'stretch']).default('target'),
 	entries: z.array(
 		z.object({ taskId: z.string().uuid(), values: z.record(z.string(), z.unknown()) })
 	)
@@ -153,6 +160,7 @@ export const actions: Actions = {
 			tx.update(occurrence)
 				.set({
 					notes: p.notes || null,
+					level: p.level === 'target' ? null : p.level,
 					...(p.finish ? { status: 'done' as const, finishedAt: new Date() } : {})
 				})
 				.where(eq(occurrence.id, o.occ.id))

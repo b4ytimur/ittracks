@@ -56,6 +56,47 @@ const schedule = z.discriminatedUnion('kind', [
 ]);
 export type ScheduleForm = z.infer<typeof schedule>;
 
+const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use a time like 07:30');
+const shortText = z.string().trim().max(120);
+
+export const cueForm = z.object({
+	time: time.nullable().default(null),
+	place: shortText.nullable().default(null),
+	afterHabitId: id.nullable().default(null),
+	afterText: shortText.nullable().default(null)
+});
+export type CueForm = z.infer<typeof cueForm>;
+export const emptyCue = (): CueForm => ({ time: null, place: null, afterHabitId: null, afterText: null });
+
+export const streakRuleForm = z.discriminatedUnion('kind', [
+	z.object({ kind: z.literal('strict') }),
+	z.object({ kind: z.literal('neverTwice') }),
+	z.object({
+		kind: z.literal('grace'),
+		misses: z.number().int().min(1).max(15),
+		period: z.enum(['week', 'month'])
+	}),
+	z.object({ kind: z.literal('consistency'), days: z.number().int().min(7).max(365) })
+]);
+
+export const levelsForm = z.object({
+	enabled: z.boolean(),
+	minimum: shortText.default(''),
+	target: shortText.default(''),
+	stretch: shortText.default('')
+});
+export type LevelsForm = z.infer<typeof levelsForm>;
+export const defaultLevels = (): LevelsForm => ({ enabled: false, minimum: '', target: '', stretch: '' });
+
+export const ifThenForm = z.object({
+	when: shortText.default(''),
+	then: shortText.default(''),
+	habitId: id.nullable().default(null)
+});
+export type IfThenForm = z.infer<typeof ifThenForm>;
+
+export const DEFAULT_TRIGGERS = ['Bored', 'Stressed', 'Tired', 'Social', 'After a meal'];
+
 export const habitForm = z
 	.object({
 		name,
@@ -72,12 +113,23 @@ export const habitForm = z
 						taskId: id.nullable(),
 						fillRule: fillRule.nullable(),
 						sets: z.number().int().min(0).max(50).nullable(),
-						targets: z.record(z.string(), z.number()).default({})
+						targets: z.record(z.string(), z.number()).default({}),
+						minTargets: z.record(z.string(), z.number()).default({}),
+						stretchTargets: z.record(z.string(), z.number()).default({})
 					})
 				)
 			})
 		),
-		schedule: schedule.nullable()
+		schedule: schedule.nullable(),
+		cue: cueForm.default(emptyCue),
+		streakRule: streakRuleForm.default({ kind: 'neverTwice' }),
+		minimumCounts: z.boolean().default(true),
+		levels: levelsForm.default(defaultLevels),
+		quickDone: z.boolean().default(false),
+		remind: z.boolean().default(false),
+		identityIds: z.array(id).default([]),
+		ifThen: ifThenForm.default({ when: '', then: '', habitId: null }),
+		triggers: z.array(z.string().trim().min(1).max(40)).max(20).default(DEFAULT_TRIGGERS)
 	})
 	.superRefine((h, ctx) => {
 		if (h.direction === 'build' && h.variants.length === 0)

@@ -30,3 +30,34 @@ sw.addEventListener('fetch', (event) => {
 		event.respondWith(caches.match(url.pathname).then((hit) => hit ?? fetch(event.request)));
 	}
 });
+
+// Reminders pushed by the server at a Habit's cue time.
+sw.addEventListener('push', (event) => {
+	let msg = { title: 'ittracks', body: '', url: '/', tag: undefined as string | undefined };
+	try {
+		msg = { ...msg, ...(event.data?.json() ?? {}) };
+	} catch {
+		msg.body = event.data?.text() ?? '';
+	}
+	event.waitUntil(
+		sw.registration.showNotification(msg.title, {
+			body: msg.body,
+			tag: msg.tag,
+			icon: '/icon-192.png',
+			badge: '/icon-192.png',
+			data: { url: msg.url }
+		})
+	);
+});
+
+sw.addEventListener('notificationclick', (event) => {
+	event.notification.close();
+	const url = (event.notification.data?.url as string | undefined) ?? '/';
+	event.waitUntil(
+		sw.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+			const open = windows.find((w) => new URL(w.url).origin === sw.location.origin);
+			if (open) return open.focus().then((w) => w.navigate(url));
+			return sw.clients.openWindow(url);
+		})
+	);
+});
