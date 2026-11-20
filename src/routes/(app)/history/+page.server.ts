@@ -1,7 +1,7 @@
 import { and, desc, eq, gte, inArray, ne } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { entry, habit, occurrence, slip, variant } from '$lib/server/db/schema';
-import { todayIn } from '$lib/server/today';
+import { userToday } from '$lib/server/today';
 import { addDays } from '$lib/engine/dates';
 import type { PageServerLoad } from './$types';
 
@@ -10,7 +10,7 @@ const DAYS = 90;
 export const load: PageServerLoad = ({ locals, cookies, url }) => {
 	const accountId = locals.account!.id;
 	const days = Math.min(Number(url.searchParams.get('days')) || DAYS, 3650);
-	const from = addDays(todayIn(cookies.get('tz')), -days);
+	const from = addDays(userToday(accountId, cookies.get('tz')), -days);
 
 	const occ = db
 		.select({
