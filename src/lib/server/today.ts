@@ -5,6 +5,7 @@ import { db } from './db';
 import {
 	craving,
 	entry,
+	prepTick,
 	habit,
 	metric,
 	occurrence,
@@ -27,7 +28,9 @@ import {
 } from '$lib/engine/streak';
 import { orderByCue } from '$lib/engine/stack';
 import { topTriggers, type Trigger } from '$lib/engine/triggers';
-import { weekStart } from '$lib/engine/dates';
+import { addDays, weekStart } from '$lib/engine/dates';
+import { limitOn, usedIn, withinStreak } from '$lib/engine/limit';
+import { hitsInARow, type Progression } from '$lib/engine/progression';
 import { DEFAULT_TRIGGERS, type ScheduleForm } from '$lib/forms';
 import { identitiesByHabit } from './repo/identities';
 
@@ -191,6 +194,19 @@ export interface TodayItem {
 	levels: { minimum: string; target: string; stretch: string } | null;
 	quickDone: boolean;
 	identities: string[];
+	reframe: string | null;
+	bundle: { reward: string; strict: boolean } | null;
+	reward: { celebrate: boolean; message: string; jar: { total: number; unit: string; goal: string } | null } | null;
+	/** Targets have been hit this many times in a row; suggest raising them. */
+	progression: { hits: number; by: number; unit: 'percent' | 'amount' } | null;
+}
+
+export interface PrepItem {
+	habitId: string;
+	name: string;
+	/** The date of the Occurrence this prepares for. */
+	date: string;
+	items: { item: string; done: boolean }[];
 }
 
 export interface BreakItem {
@@ -205,6 +221,10 @@ export interface BreakItem {
 	top: Trigger[];
 	resistedThisWeek: number;
 	identities: string[];
+	reframe: string | null;
+	cost: { unit: string; month: number; saved: number | null } | null;
+	/** Reduce mode: used and allowed in the current day or week. */
+	limit: { used: number; max: number; period: 'day' | 'week' } | null;
 }
 
 export function loadToday(accountId: string, today: string) {
@@ -239,7 +259,9 @@ export function loadToday(accountId: string, today: string) {
 			breaking.push({
 				habitId: h.id,
 				name: h.name,
-				days: daysSinceSlip(dates, h.startDate, today),
+				days: h.limit
+					? withinStreak(h.limit, slips, h.startDate, today)
+					: daysSinceSlip(dates, h.startDate, today),
 				longest: longestRun(dates, h.startDate, today),
 				slippedToday: slips.filter((s) => s.date === today).reduce((n, s) => n + s.count, 0),
 				ifThen: h.ifThen
@@ -258,7 +280,29 @@ export function loadToday(accountId: string, today: string) {
 					.where(eq(craving.habitId, h.id))
 					.all()
 					.filter((c) => c.date >= monday && c.date <= today).length,
-				identities: idents.get(h.id) ?? []
+				identities: idents.get(h.id) ?? [],
+				reframe: h.reframe,
+				cost: h.cost
+					? {
+							unit: h.cost.unit,
+							month:
+								slips
+									.filter((s) => s.date.slice(0, 7) === today.slice(0, 7))
+									.reduce((n, s) => n + s.count, 0) * h.cost.amount,
+							// Saved = what the old daily rate would have cost since the start, minus what slips cost.
+							saved: h.cost.perDay
+								? Math.max(
+										0,
+										(daysBetweenInclusive(h.startDate, today) * h.cost.perDay -
+											slips.filter((s) => s.date >= h.startDate).reduce((n, s) => n + s.count, 0)) *
+											h.cost.amount
+									)
+								: null
+						}
+					: null,
+				limit: h.limit
+					? { used: usedIn(h.limit, slips, today), max: limitOn(h.limit, today), period: h.limit.period }
+					: null
 			});
 			continue;
 		}
@@ -307,7 +351,26 @@ export function loadToday(accountId: string, today: string) {
 				? { minimum: h.levels.minimum, target: h.levels.target, stretch: h.levels.stretch }
 				: null,
 			quickDone: h.quickDone,
-			identities: idents.get(h.id) ?? []
+			identities: idents.get(h.id) ?? [],
+			reframe: h.reframe,
+			bundle: h.bundle?.reward ? h.bundle : null,
+			reward:
+				h.reward && (h.reward.celebrate || h.reward.jar)
+					? {
+							celebrate: h.reward.celebrate,
+							message: h.reward.message,
+							jar: h.reward.jar
+								? {
+										total:
+											Math.round(marks.filter((m) => m.status === 'done').length * h.reward.jar.amount * 100) /
+											100,
+										unit: h.reward.jar.unit,
+										goal: h.reward.jar.goal
+									}
+								: null
+						}
+					: null,
+			progression: progressionFor(h.progression, marks, h.progressionFrom)
 		};
 		if (occ) build.push(item);
 		else {
@@ -326,6 +389,54 @@ export function loadToday(accountId: string, today: string) {
 	for (const b of build)
 		b.upNext = !!b.afterHabitId && doneToday.has(b.afterHabitId) && b.occurrence?.status === 'due';
 	return { build, resting, breaking };
+}
+
+const daysBetweenInclusive = (a: string, b: string) =>
+	Math.max(0, Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000) + 1);
+
+function progressionFor(p: Progression | null, marks: Parameters<typeof hitsInARow>[0], since: string | null) {
+	if (!p) return null;
+	const hits = hitsInARow(marks, since);
+	return hits >= p.after ? { hits, by: p.by, unit: p.unit } : null;
+}
+
+/** Prep checklists for build habits due tomorrow. */
+export function loadPrep(accountId: string, today: string): PrepItem[] {
+	const tomorrow = addDays(today, 1);
+	const habits = db
+		.select()
+		.from(habit)
+		.where(and(eq(habit.accountId, accountId), eq(habit.archived, false), eq(habit.direction, 'build')))
+		.orderBy(asc(habit.sortOrder), asc(habit.name))
+		.all()
+		.filter((h) => h.prep?.length && h.schedule);
+	const out: PrepItem[] = [];
+	for (const h of habits) {
+		// Assume today's due Occurrence gets done, so a rotation looks one step ahead.
+		const past = history(h.id, tomorrow);
+		const todayOcc = db
+			.select()
+			.from(occurrence)
+			.where(and(eq(occurrence.habitId, h.id), eq(occurrence.date, today)))
+			.get();
+		if (todayOcc?.status === 'due') past.push({ date: today, variantId: todayOcc.variantId, status: 'done' });
+		if (!dueOn(h.schedule as Schedule, past, tomorrow)) continue;
+		const ticks = new Set(
+			db
+				.select({ item: prepTick.item })
+				.from(prepTick)
+				.where(and(eq(prepTick.habitId, h.id), eq(prepTick.date, tomorrow)))
+				.all()
+				.map((t) => t.item)
+		);
+		out.push({
+			habitId: h.id,
+			name: h.name,
+			date: tomorrow,
+			items: h.prep!.map((item) => ({ item, done: ticks.has(item) }))
+		});
+	}
+	return out;
 }
 
 /**

@@ -82,6 +82,13 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 			.map((r) => r.id),
 		ifThen,
 		triggers: h.triggers ?? DEFAULT_TRIGGERS,
+		reframe: h.reframe ?? '',
+		bundle: h.bundle ?? { reward: '', strict: false },
+		prep: h.prep ?? [],
+		reward: h.reward ?? { celebrate: false, message: '', jar: null },
+		cost: h.cost ?? null,
+		limit: h.limit ?? null,
+		progression: h.progression ?? null,
 		variants: variants.map((v) => ({
 			id: v.id,
 			name: v.name,
@@ -151,7 +158,14 @@ export function saveHabit(accountId: string, id: string | null, f: HabitForm): s
 			quickDone: f.quickDone,
 			remind: f.remind && !!cue.time,
 			ifThen: isBreak && (f.ifThen.when || f.ifThen.then || f.ifThen.habitId) ? f.ifThen : null,
-			triggers: isBreak ? f.triggers : null
+			triggers: isBreak ? f.triggers : null,
+			reframe: f.reframe || null,
+			bundle: f.bundle.reward ? f.bundle : null,
+			prep: !isBreak && f.prep.length ? f.prep : null,
+			reward: !isBreak && (f.reward.celebrate || f.reward.message || f.reward.jar) ? f.reward : null,
+			cost: isBreak ? f.cost : null,
+			limit: isBreak ? f.limit : null,
+			progression: isBreak ? null : f.progression
 		};
 		if (id) {
 			const owned = tx
