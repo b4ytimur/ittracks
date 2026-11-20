@@ -1,0 +1,118 @@
+{
+	"format": "ittracks-template",
+	"version": 3,
+	"name": "Instrument practice",
+	"description": "Five practice sessions a week, with a focus for each.",
+	"meta": {
+		"category": "Learning",
+		"daysPerWeek": 5,
+		"minutesPerDay": 25,
+		"equipment": [
+			"your instrument"
+		],
+		"area": "Learning"
+	},
+	"questions": [
+		{
+			"kind": "number",
+			"key": "mins",
+			"label": "Minutes a session",
+			"unit": "min",
+			"default": 25,
+			"metrics": [
+				"practicem"
+			]
+		}
+	],
+	"habit": {
+		"name": "Practice",
+		"direction": "build",
+		"notes": "",
+		"schedule": {
+			"kind": "frequency",
+			"times": 5,
+			"period": "week",
+			"variantId": "a"
+		},
+		"variants": [
+			{
+				"key": "a",
+				"name": "Practice",
+				"slots": [
+					{
+						"task": "practice",
+						"fillRule": null,
+						"sets": null,
+						"targets": {
+							"practicem": 25
+						}
+					}
+				]
+			}
+		],
+		"cue": null,
+		"streakRule": {
+			"kind": "neverTwice"
+		},
+		"minimumCounts": true,
+		"levels": {
+			"enabled": true,
+			"minimum": "Play one piece",
+			"target": "25 minutes",
+			"stretch": "An hour"
+		},
+		"quickDone": false,
+		"identities": [],
+		"ifThen": null,
+		"triggers": null
+	},
+	"tasks": [
+		{
+			"key": "practice",
+			"name": "Instrument practice",
+			"notes": "",
+			"restTimerEnabled": false,
+			"restTimerSeconds": 90,
+			"tags": [
+				{
+					"name": "music",
+					"level": 3
+				}
+			],
+			"metrics": [
+				{
+					"key": "practicem",
+					"name": "Minutes",
+					"type": "duration",
+					"unit": "min",
+					"repeats": false,
+					"choices": [],
+					"step": 5,
+					"required": false,
+					"quick": true
+				},
+				{
+					"key": "practicef",
+					"name": "Focus",
+					"type": "choice",
+					"unit": "",
+					"repeats": false,
+					"choices": [
+						"Scales",
+						"Technique",
+						"Pieces",
+						"Sight reading",
+						"Improvising"
+					],
+					"step": null,
+					"required": false,
+					"quick": true,
+					"prefill": "last"
+				}
+			],
+			"subtasks": [
+				"Warm-up"
+			]
+		}
+	]
+}

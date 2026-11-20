@@ -1,0 +1,107 @@
+{
+	"format": "ittracks-template",
+	"version": 3,
+	"name": "Meditation",
+	"description": "Sit for a few minutes each day. The built-in timer counts for you.",
+	"meta": {
+		"category": "Mind",
+		"daysPerWeek": 7,
+		"minutesPerDay": 10,
+		"equipment": [],
+		"area": "Mind"
+	},
+	"questions": [
+		{
+			"kind": "number",
+			"key": "mins",
+			"label": "Minutes a day",
+			"unit": "min",
+			"default": 10,
+			"metrics": [
+				"medm"
+			]
+		},
+		{
+			"kind": "time",
+			"key": "time",
+			"label": "When do you want to meditate?",
+			"default": "07:00"
+		}
+	],
+	"habit": {
+		"name": "Meditate",
+		"direction": "build",
+		"notes": "",
+		"schedule": {
+			"kind": "interval",
+			"every": 1,
+			"start": "2026-01-05",
+			"variantId": "a"
+		},
+		"variants": [
+			{
+				"key": "a",
+				"name": "Meditate",
+				"slots": [
+					{
+						"task": "med",
+						"fillRule": null,
+						"sets": null,
+						"targets": {
+							"medm": 10
+						}
+					}
+				]
+			}
+		],
+		"cue": {
+			"time": "07:00",
+			"place": null,
+			"after": null,
+			"range": null
+		},
+		"streakRule": {
+			"kind": "neverTwice"
+		},
+		"minimumCounts": true,
+		"levels": {
+			"enabled": true,
+			"minimum": "One breath",
+			"target": "10 minutes",
+			"stretch": "20 minutes"
+		},
+		"quickDone": true,
+		"identities": [],
+		"ifThen": null,
+		"triggers": null
+	},
+	"tasks": [
+		{
+			"key": "med",
+			"name": "Meditation",
+			"notes": "",
+			"restTimerEnabled": false,
+			"restTimerSeconds": 90,
+			"tags": [
+				{
+					"name": "mind",
+					"level": 3
+				}
+			],
+			"metrics": [
+				{
+					"key": "medm",
+					"name": "Minutes",
+					"type": "duration",
+					"unit": "min",
+					"repeats": false,
+					"choices": [],
+					"step": 5,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		}
+	]
+}

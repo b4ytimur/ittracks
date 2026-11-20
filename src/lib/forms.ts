@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { metricTypes } from './metric-types';
 
 const id = z.string().uuid();
-const name = z.string().trim().min(1, 'A name is required').max(120);
+const name = z.string().trim().min(1, 'A name is required').max(120, 'Keep names to 120 characters or fewer');
 
 export const taskForm = z.object({
 	name,
@@ -18,11 +18,19 @@ export const taskForm = z.object({
 			type: z.enum(metricTypes),
 			unit: z.string().trim().max(20).default(''),
 			repeats: z.boolean(),
-			choices: z.array(z.string().trim().min(1).max(40)).default([])
+			choices: z.array(z.string().trim().min(1).max(40)).default([]),
+			prefill: z.enum(['last', 'target', 'blank']).default('last'),
+			step: z.number().positive().max(10000).nullable().default(null),
+			required: z.boolean().default(false),
+			quick: z.boolean().default(true)
 		})
 	),
-	subtasks: z.array(z.object({ id, name }))
+	subtasks: z.array(z.object({ id, name })),
+	areaId: id.nullable().default(null),
+	/** Hand-picked Collections this Task is in. */
+	collectionIds: z.array(id).default([])
 });
+export type MetricForm = TaskForm['metrics'][number];
 export type TaskForm = z.infer<typeof taskForm>;
 
 export const fillRule = z.object({
@@ -63,10 +71,11 @@ export const cueForm = z.object({
 	time: time.nullable().default(null),
 	place: shortText.nullable().default(null),
 	afterHabitId: id.nullable().default(null),
-	afterText: shortText.nullable().default(null)
+	afterText: shortText.nullable().default(null),
+	range: z.string().trim().max(40).nullable().default(null)
 });
 export type CueForm = z.infer<typeof cueForm>;
-export const emptyCue = (): CueForm => ({ time: null, place: null, afterHabitId: null, afterText: null });
+export const emptyCue = (): CueForm => ({ time: null, place: null, afterHabitId: null, afterText: null, range: null });
 
 export const streakRuleForm = z.discriminatedUnion('kind', [
 	z.object({ kind: z.literal('strict') }),
@@ -94,6 +103,40 @@ export const ifThenForm = z.object({
 	habitId: id.nullable().default(null)
 });
 export type IfThenForm = z.infer<typeof ifThenForm>;
+
+export const bundleForm = z.object({ reward: shortText.default(''), strict: z.boolean().default(false) });
+export const rewardForm = z.object({
+	celebrate: z.boolean().default(false),
+	message: shortText.default(''),
+	jar: z
+		.object({ amount: z.number().positive().max(1_000_000), unit: z.string().trim().max(20), goal: shortText })
+		.nullable()
+		.default(null)
+});
+export const costForm = z.object({
+	amount: z.number().positive().max(1_000_000),
+	unit: z.string().trim().max(20),
+	perDay: z.number().positive().max(10_000).nullable().default(null)
+});
+export const limitForm = z.object({
+	max: z.number().int().min(0).max(1000),
+	period: z.enum(['day', 'week']),
+	taper: z
+		.object({
+			by: z.number().int().min(1).max(100),
+			every: z.enum(['week', 'month']),
+			floor: z.number().int().min(0).max(1000).default(0)
+		})
+		.nullable()
+		.default(null),
+	start: z.string().date()
+});
+export const progressionForm = z.object({
+	after: z.number().int().min(2).max(60),
+	by: z.number().positive().max(1000),
+	unit: z.enum(['percent', 'amount'])
+});
+export type RewardForm = z.infer<typeof rewardForm>;
 
 export const DEFAULT_TRIGGERS = ['Bored', 'Stressed', 'Tired', 'Social', 'After a meal'];
 
@@ -129,7 +172,15 @@ export const habitForm = z
 		remind: z.boolean().default(false),
 		identityIds: z.array(id).default([]),
 		ifThen: ifThenForm.default({ when: '', then: '', habitId: null }),
-		triggers: z.array(z.string().trim().min(1).max(40)).max(20).default(DEFAULT_TRIGGERS)
+		triggers: z.array(z.string().trim().min(1).max(40)).max(20).default(DEFAULT_TRIGGERS),
+		reframe: shortText.default(''),
+		bundle: bundleForm.default({ reward: '', strict: false }),
+		prep: z.array(z.string().trim().min(1).max(120)).max(20).default([]),
+		reward: rewardForm.default({ celebrate: false, message: '', jar: null }),
+		cost: costForm.nullable().default(null),
+		limit: limitForm.nullable().default(null),
+		progression: progressionForm.nullable().default(null),
+		areaId: id.nullable().default(null)
 	})
 	.superRefine((h, ctx) => {
 		if (h.direction === 'build' && h.variants.length === 0)

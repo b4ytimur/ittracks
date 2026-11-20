@@ -270,3 +270,77 @@ describe('streak labels', () => {
 		expect(describeStreak(streak(marks('DM'), rule, { today: '2026-11-24' }), rule)).toBe('50% over 30 days');
 	});
 });
+
+// ---------- P2 additions ----------
+import { chainCells, forgivenMisses } from './chain';
+import { limitOn, nextDrop, usedIn, withinStreak, type Limit } from './limit';
+import { hitsInARow, raise } from './progression';
+
+describe('chain view', () => {
+	it('marks single misses forgiven under never miss twice, double misses not', () => {
+		const m = marks('DMDMMD');
+		const f = forgivenMisses(m, { kind: 'neverTwice' });
+		expect([...f]).toEqual(['2026-11-24']);
+		expect(forgivenMisses(m, { kind: 'strict' }).size).toBe(0);
+	});
+
+	it('marks misses within the grace allowance', () => {
+		const f = forgivenMisses(marks('MDMD'), { kind: 'grace', misses: 1, period: 'week' });
+		expect([...f]).toEqual([MON]);
+	});
+
+	it('lays out one cell per day with rest days and the future', () => {
+		const cells = chainCells(marks('Dm'), { kind: 'strict' }, MON, '2026-11-26', '2026-11-25');
+		expect(cells.map((c) => c.cell.kind)).toEqual(['done', 'done', 'rest', 'future']);
+		expect(cells[1].cell).toEqual({ kind: 'done', level: 'minimum' });
+	});
+});
+
+describe('reduce mode', () => {
+	const l: Limit = { max: 3, period: 'day', taper: { by: 1, every: 'week' }, start: MON };
+	it('tapers the limit and never goes below zero', () => {
+		expect(limitOn(l, MON)).toBe(3);
+		expect(limitOn(l, '2026-11-30')).toBe(2);
+		expect(limitOn(l, '2027-01-04')).toBe(0);
+		expect(limitOn({ ...l, taper: { by: 1, every: 'month' } }, '2026-12-22')).toBe(3);
+		expect(limitOn({ ...l, taper: { by: 1, every: 'month' } }, '2026-12-23')).toBe(2);
+	});
+
+	it('stops tapering at the floor and says when it drops next', () => {
+		const floored: Limit = { ...l, taper: { by: 1, every: 'week', floor: 1 } };
+		expect(limitOn(floored, '2027-01-04')).toBe(1);
+		expect(nextDrop(l, MON)).toEqual({ date: '2026-11-30', max: 2 });
+		expect(nextDrop(floored, '2026-12-07')).toBeNull();
+		expect(nextDrop({ ...l, taper: null }, MON)).toBeNull();
+	});
+
+	it('counts days within the limit, back from today', () => {
+		const slips = [
+			{ date: MON, count: 5 },
+			{ date: '2026-11-24', count: 2 },
+			{ date: '2026-11-25', count: 3 }
+		];
+		const flat: Limit = { max: 3, period: 'day', taper: null, start: MON };
+		expect(usedIn(flat, slips, '2026-11-25')).toBe(3);
+		expect(withinStreak(flat, slips, MON, '2026-11-26')).toBe(3);
+	});
+
+	it('works per week too', () => {
+		const week: Limit = { max: 10, period: 'week', taper: null, start: MON };
+		const slips = [{ date: '2026-11-25', count: 11 }];
+		expect(withinStreak(week, slips, MON, '2026-12-02')).toBe(1);
+	});
+});
+
+describe('progression', () => {
+	it('counts hits at Target or better since the last raise', () => {
+		expect(hitsInARow(marks('DDmDD'), null)).toBe(2);
+		expect(hitsInARow(marks('DDSDD'), null)).toBe(4);
+		expect(hitsInARow(marks('DDDD'), '2026-11-24')).toBe(2);
+	});
+
+	it('raises targets and always moves them up', () => {
+		expect(raise({ a: 60, b: 8 }, { after: 3, by: 5, unit: 'percent' })).toEqual({ a: 63, b: 9 });
+		expect(raise({ a: 60 }, { after: 3, by: 2.5, unit: 'amount' })).toEqual({ a: 62.5 });
+	});
+});

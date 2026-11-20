@@ -54,6 +54,9 @@ export interface PushMessage {
 	body: string;
 	url: string;
 	tag?: string;
+	/** Lets the notification act on this Occurrence: Done, Minimum, Snooze. */
+	occurrenceId?: string;
+	actions?: { action: string; title: string }[];
 }
 
 /** Send to every browser of an account. Browsers that unsubscribed are forgotten. */
@@ -82,6 +85,18 @@ export async function sendToAccount(accountId: string, msg: PushMessage): Promis
 }
 
 const minutes = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+const clock = (n: number) => `${String(Math.floor(n / 60) % 24).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+
+export const SNOOZE_MIN = 30;
+
+/** Ask for the reminder again in 30 minutes. */
+export function snooze(habitId: string, date: string, now: string) {
+	const againAt = clock(Math.min(minutes(now) + SNOOZE_MIN, 23 * 60 + 59));
+	db.insert(reminderSent)
+		.values({ habitId, date, againAt })
+		.onConflictDoUpdate({ target: [reminderSent.habitId, reminderSent.date], set: { againAt } })
+		.run();
+}
 
 /** Send every reminder that is due now. Runs once a minute. */
 export async function runReminders(at = new Date()) {
@@ -89,34 +104,50 @@ export async function runReminders(at = new Date()) {
 		...new Set(db.select({ accountId: pushSubscription.accountId }).from(pushSubscription).all().map((r) => r.accountId))
 	];
 	for (const accountId of accounts) {
-		const tz = getSettings(accountId).timeZone;
-		const today = todayIn(tz);
-		const now = minutes(timeIn(tz, at));
+		const settings = getSettings(accountId);
+		const tz = settings.timeZone;
+		const today = todayIn(tz, settings.dayStart ?? '00:00', at);
+		const nowClock = timeIn(tz, at);
+		const now = minutes(nowClock);
 		const habits = db
 			.select()
 			.from(habit)
 			.where(and(eq(habit.accountId, accountId), eq(habit.remind, true), eq(habit.archived, false)))
 			.all();
 		for (const h of habits) {
-			const time = h.cue?.time;
+			// A cue that names only a part of the day reminds at that part's start.
+			const time = h.cue?.time ?? settings.ranges.find((r) => r.name === h.cue?.range)?.start;
 			if (!time || h.direction !== 'build' || !h.schedule) continue;
-			const late = now - minutes(time);
-			if (late < 0 || late > LATE_LIMIT_MIN) continue;
-			const already = db
+			const sent = db
 				.select()
 				.from(reminderSent)
 				.where(and(eq(reminderSent.habitId, h.id), eq(reminderSent.date, today)))
 				.get();
-			if (already) continue;
-			db.insert(reminderSent).values({ habitId: h.id, date: today }).onConflictDoNothing().run();
+			if (sent) {
+				// Snoozed: send again once its time comes, then clear it.
+				if (!sent.againAt || minutes(sent.againAt) > now) continue;
+				db.update(reminderSent)
+					.set({ againAt: null })
+					.where(and(eq(reminderSent.habitId, h.id), eq(reminderSent.date, today)))
+					.run();
+			} else {
+				const late = (now - minutes(time) + 1440) % 1440;
+				if (late > LATE_LIMIT_MIN) continue;
+				db.insert(reminderSent).values({ habitId: h.id, date: today }).onConflictDoNothing().run();
+			}
 			const occ = ensureToday(accountId, h.id, h.schedule as ScheduleForm, today);
 			if (!occ || occ.status !== 'due') continue;
 			const minimum = h.levels?.enabled && h.levels.minimum ? `Even ${h.levels.minimum} counts.` : '';
+			const actions = [{ action: 'done', title: 'Done' }];
+			if (h.levels?.enabled) actions.push({ action: 'minimum', title: 'Minimum' });
+			actions.push({ action: 'snooze', title: `Snooze ${SNOOZE_MIN} min` });
 			await sendToAccount(accountId, {
 				title: h.name,
-				body: [[time, h.cue?.place].filter(Boolean).join(' '), minimum].filter(Boolean).join(' · '),
+				body: [[h.cue?.time ?? h.cue?.range, h.cue?.place].filter(Boolean).join(' '), minimum].filter(Boolean).join(' · '),
 				url: '/',
-				tag: `habit-${h.id}`
+				tag: `habit-${h.id}`,
+				occurrenceId: occ.id,
+				actions
 			});
 		}
 	}

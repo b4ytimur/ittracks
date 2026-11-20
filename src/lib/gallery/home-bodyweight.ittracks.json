@@ -1,0 +1,207 @@
+{
+	"format": "ittracks-template",
+	"version": 3,
+	"name": "Home bodyweight",
+	"description": "No equipment: push-ups, squats, lunges and a plank, three days a week.",
+	"meta": {
+		"category": "Gym",
+		"daysPerWeek": 3,
+		"minutesPerDay": 25,
+		"equipment": [],
+		"area": "Fitness"
+	},
+	"questions": [
+		{
+			"kind": "days",
+			"key": "days",
+			"label": "Which days do you want to train?",
+			"default": [
+				0,
+				2,
+				4
+			]
+		}
+	],
+	"habit": {
+		"name": "Home workout",
+		"direction": "build",
+		"notes": "",
+		"schedule": {
+			"kind": "weekly",
+			"days": {
+				"0": "a",
+				"2": "a",
+				"4": "a"
+			}
+		},
+		"variants": [
+			{
+				"key": "a",
+				"name": "Workout",
+				"slots": [
+					{
+						"task": "pushups",
+						"fillRule": null,
+						"sets": 3,
+						"targets": {
+							"pushupsr": 10
+						}
+					},
+					{
+						"task": "bwsquat",
+						"fillRule": null,
+						"sets": 3,
+						"targets": {
+							"bwsquatr": 15
+						}
+					},
+					{
+						"task": "lunge",
+						"fillRule": null,
+						"sets": 3,
+						"targets": {
+							"lunger": 10
+						}
+					},
+					{
+						"task": "plank",
+						"fillRule": null,
+						"sets": 3,
+						"targets": {
+							"plankr": 30
+						}
+					}
+				]
+			}
+		],
+		"cue": null,
+		"streakRule": {
+			"kind": "neverTwice"
+		},
+		"minimumCounts": true,
+		"levels": {
+			"enabled": true,
+			"minimum": "One round",
+			"target": "Three rounds",
+			"stretch": "Four rounds"
+		},
+		"quickDone": false,
+		"identities": [],
+		"ifThen": null,
+		"triggers": null
+	},
+	"tasks": [
+		{
+			"key": "pushups",
+			"name": "Push-ups",
+			"notes": "",
+			"restTimerEnabled": true,
+			"restTimerSeconds": 60,
+			"tags": [
+				{
+					"name": "chest",
+					"level": 3
+				},
+				{
+					"name": "triceps",
+					"level": 2
+				}
+			],
+			"metrics": [
+				{
+					"key": "pushupsr",
+					"name": "Reps",
+					"type": "count",
+					"unit": "",
+					"repeats": true,
+					"choices": [],
+					"step": 1,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		},
+		{
+			"key": "bwsquat",
+			"name": "Bodyweight squat",
+			"notes": "",
+			"restTimerEnabled": true,
+			"restTimerSeconds": 60,
+			"tags": [
+				{
+					"name": "legs",
+					"level": 3
+				}
+			],
+			"metrics": [
+				{
+					"key": "bwsquatr",
+					"name": "Reps",
+					"type": "count",
+					"unit": "",
+					"repeats": true,
+					"choices": [],
+					"step": 1,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		},
+		{
+			"key": "lunge",
+			"name": "Lunges",
+			"notes": "",
+			"restTimerEnabled": true,
+			"restTimerSeconds": 60,
+			"tags": [
+				{
+					"name": "legs",
+					"level": 3
+				}
+			],
+			"metrics": [
+				{
+					"key": "lunger",
+					"name": "Reps",
+					"type": "count",
+					"unit": "",
+					"repeats": true,
+					"choices": [],
+					"step": 1,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		},
+		{
+			"key": "plank",
+			"name": "Plank",
+			"notes": "",
+			"restTimerEnabled": true,
+			"restTimerSeconds": 60,
+			"tags": [
+				{
+					"name": "core",
+					"level": 3
+				}
+			],
+			"metrics": [
+				{
+					"key": "plankr",
+					"name": "Seconds",
+					"type": "count",
+					"unit": "s",
+					"repeats": true,
+					"choices": [],
+					"step": 5,
+					"required": false,
+					"quick": true
+				}
+			],
+			"subtasks": []
+		}
+	]
+}
