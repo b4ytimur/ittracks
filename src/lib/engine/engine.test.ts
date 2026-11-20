@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dueOn, nextInRotation, type Done, type Schedule } from './schedule';
+import { dueOn, nextInRotation, type Done, type Rotation, type Schedule } from './schedule';
 import { pickTask, type Candidate } from './fill';
 import { buildStreak, daysSinceSlip, longestRun } from './streak';
 
@@ -43,8 +43,15 @@ describe('rotation by Variant', () => {
 		{ variantId: 'B', restDays: 1 },
 		{ variantId: 'C', restDays: 1 }
 	];
-	const wait: Schedule = { kind: 'rotation', step: 'variant', order, onMiss: 'wait', start: MON };
-	const skip: Schedule = { ...wait, onMiss: 'skip' } as Schedule;
+	const wait: Rotation = {
+		kind: 'rotation',
+		step: 'variant',
+		order,
+		onMiss: 'wait',
+		weekdays: [],
+		start: MON
+	};
+	const skip: Rotation = { ...wait, onMiss: 'skip' };
 
 	it('starts with the first Variant on the start date', () => {
 		expect(dueOn(wait, [], MON)).toBe('A');
@@ -71,8 +78,7 @@ describe('rotation by Variant', () => {
 
 	it('wraps around after the last Variant', () => {
 		const h: Done[] = [{ date: MON, variantId: 'C', status: 'done' }];
-		const rotation = wait as Extract<Schedule, { step: 'variant' }>;
-		expect(nextInRotation(rotation, h, '2026-11-24')).toEqual({
+		expect(nextInRotation(wait, h, '2026-11-24')).toEqual({
 			variantId: 'A',
 			dueFrom: '2026-11-25'
 		});
@@ -88,7 +94,11 @@ describe('rotation by week', () => {
 	const s: Schedule = {
 		kind: 'rotation',
 		step: 'week',
-		order: ['A', 'B'],
+		order: [
+			{ variantId: 'A', restDays: 0 },
+			{ variantId: 'B', restDays: 0 }
+		],
+		onMiss: 'wait',
 		weekdays: [0, 3],
 		start: MON
 	};
