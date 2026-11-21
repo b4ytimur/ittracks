@@ -313,6 +313,48 @@ export function readExport(raw: unknown): { file: z.infer<typeof exportFile>; pr
 /** Tables whose rows have their own id, which an import may need to renumber. */
 const WITH_ID: TableName[] = ['area', 'tag', 'task', 'metric', 'collection', 'identity', 'habit', 'variant', 'slot', 'pause', 'occurrence', 'entry', 'slip', 'craving'];
 
+/**
+ * Columns that point at another row, and the table that row is in. An import may only point
+ * at rows the file brings itself, so a crafted file can't attach logs to, or read through,
+ * another account's habits and Tasks. `loose` columns have no foreign key and can dangle in a
+ * real export (an event of a deleted habit): they are cleared instead of refused.
+ */
+const REFS: Partial<Record<TableName, Record<string, { to: TableName; loose?: boolean }>>> = {
+	task: { areaId: { to: 'area' }, parentTaskId: { to: 'task', loose: true } },
+	taskTag: { taskId: { to: 'task' }, tagId: { to: 'tag' } },
+	metric: { taskId: { to: 'task' } },
+	collection: { parentId: { to: 'collection', loose: true } },
+	collectionTask: { collectionId: { to: 'collection' }, taskId: { to: 'task' } },
+	habit: { areaId: { to: 'area' } },
+	habitIdentity: { habitId: { to: 'habit' }, identityId: { to: 'identity' } },
+	variant: { habitId: { to: 'habit' } },
+	slot: { variantId: { to: 'variant' }, taskId: { to: 'task' } },
+	pause: { habitId: { to: 'habit' } },
+	prepTick: { habitId: { to: 'habit' } },
+	occurrence: { habitId: { to: 'habit' }, variantId: { to: 'variant' } },
+	entry: { occurrenceId: { to: 'occurrence' }, taskId: { to: 'task' } },
+	slip: { habitId: { to: 'habit' } },
+	craving: { habitId: { to: 'habit' } },
+	event: { habitId: { to: 'habit', loose: true } }
+};
+
+/** Check (and where loose, clear) a row's pointers against the ids the file brings. */
+function checkRefs(name: TableName, row: Record<string, unknown>, i: number, known: Map<TableName, Set<string>>) {
+	for (const [col, ref] of Object.entries(REFS[name] ?? {})) {
+		const v = row[col];
+		if (v === null || v === undefined || known.get(ref.to)?.has(String(v))) continue;
+		if (ref.loose) row[col] = null;
+		else throw new ActionError('invalid', `Row ${i + 1} of ${name} points at a ${ref.to} that isn't in the file. Nothing was changed.`);
+	}
+	// A Slot's pick for the day must be one of the file's own Slots and Tasks.
+	if (name === 'occurrence' && row.picks && typeof row.picks === 'object')
+		row.picks = Object.fromEntries(
+			Object.entries(row.picks as Record<string, unknown>).filter(([slotId, taskId]) => known.get('slot')?.has(slotId) && known.get('task')?.has(String(taskId)))
+		);
+	// Keys belong to one server and are never exported.
+	if (name === 'event') row.tokenId = null;
+}
+
 /** Replace every string (and object key) that is an old id with its new one, all the way down. */
 function remap(v: unknown, ids: Map<string, string>): unknown {
 	if (typeof v === 'string') return ids.get(v) ?? v;
@@ -375,11 +417,15 @@ export function importReplace(actor: Actor, raw: unknown): { counts: Record<stri
 		}
 		if (renumbered) for (const id of all) if (id && !ids.has(id)) ids.set(id, randomUUID());
 
+		const known = new Map<TableName, Set<string>>(
+			WITH_ID.map((name) => [name, new Set((tables[name] ?? []).map((x) => String(x.id ?? '')).filter(Boolean).map((id) => (renumbered ? (ids.get(id) ?? id) : id)))])
+		);
 		for (const [name, table] of Object.entries(TABLES) as [TableName, SQLiteTable][]) {
 			const rows = tables[name] ?? [];
 			counts[name] = rows.length;
 			for (let i = 0; i < rows.length; i++) {
 				const row = rowFor(table, (renumbered ? remap(rows[i], ids) : rows[i]) as Record<string, unknown>, accountId);
+				checkRefs(name, row, i, known);
 				try {
 					tx.insert(table).values(row as never).run();
 				} catch (e) {

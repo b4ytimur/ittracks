@@ -382,4 +382,15 @@ describe('export and import', () => {
 		expect(text).toContain('ittracks-export/values.csv');
 		expect(text).toContain('ref,date,weekday,habit,status,variant,level,task,set,field,type,unit,value,score');
 	});
+
+	it("refuses a file that points at another account's rows", async () => {
+		const { exportJson, importReplace } = await import('./export');
+		const intruder = appActor(await createAccount('intruder', 'yet another long password'));
+		const empty = JSON.parse(JSON.stringify(exportJson(intruder)));
+		const before = (run(app, 'logs', { from: '2000-01-01', limit: 5000 }) as { total: number }).total;
+		// A log on the first account's water habit, by its id.
+		const crafted = { ...empty, tables: { ...empty.tables, occurrence: [{ id: crypto.randomUUID(), habitId: ids.water, date: addDays(today, -40), status: 'done' }] } };
+		expect(() => importReplace(intruder, crafted)).toThrow(/points at a habit that isn't in the file/);
+		expect((run(app, 'logs', { from: '2000-01-01', limit: 5000 }) as { total: number }).total).toBe(before);
+	});
 });

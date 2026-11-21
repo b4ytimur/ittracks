@@ -4,7 +4,7 @@
 import { and, asc, eq, gt, inArray } from 'drizzle-orm';
 import { db } from '../db';
 import { event } from '../db/schema';
-import { canSeeHabit, type Actor } from './actor';
+import type { Actor } from './actor';
 
 /** Every event type, with what its data holds. Bump the version when a type's data changes shape. */
 export const EVENT_TYPES = {
@@ -66,14 +66,14 @@ export function listEvents(actor: Actor, opts: { after?: number; limit?: number;
 			and(
 				eq(event.accountId, actor.accountId),
 				gt(event.seq, opts.after ?? 0),
-				opts.types?.length ? inArray(event.type, opts.types) : undefined
+				opts.types?.length ? inArray(event.type, opts.types) : undefined,
+				// Filtered in the query, so paging by seq never skips a limited key's events.
+				actor.habitIds ? inArray(event.habitId, actor.habitIds.size ? [...actor.habitIds] : ['']) : undefined
 			)
 		)
 		.orderBy(asc(event.seq))
-		.limit(actor.habitIds ? limit * 5 : limit)
+		.limit(limit)
 		.all();
 	return rows
-		.filter((r) => !actor.habitIds || (r.habitId && canSeeHabit(actor, r.habitId)))
-		.slice(0, limit)
 		.map((r) => ({ seq: r.seq, at: r.at.toISOString(), type: r.type, v: r.v, habitId: r.habitId, date: r.date, source: r.source, data: r.data }));
 }
