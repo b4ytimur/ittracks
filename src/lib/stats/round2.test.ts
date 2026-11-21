@@ -127,6 +127,14 @@ describe('stats cards found wrong in the second swarm test', () => {
 		expect(r.total).toBe(50);
 	});
 
+	it('counts each Slot of a Task used twice that left its box unticked', () => {
+		const ds = dataset();
+		ds.slots.push({ id: 's7', variantId: 'vr', taskId: 'journal', sets: null, targets: null, minTargets: null, stretchTargets: null });
+		const card = makeCard({ what: { source: 'field', metrics: ['stretch'] }, perLog: 'ticked', overTime: 'avg' });
+		// Ticked once on the 19th, out of two planned boxes that day and two on the 20th.
+		expect(computeCard(card, prepare(ds), ctx).total).toBe(25);
+	});
+
 	it('takes the smallest number as the record on a Lowest card', () => {
 		const r = run({ what: { source: 'field', metrics: ['time'] }, perLog: 'value', overTime: 'min', range: 'all', look: { chart: 'records' } });
 		expect(r.records![0]).toMatchObject({ label: 'Best log', value: 25, date: '2026-11-20' });

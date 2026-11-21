@@ -599,14 +599,16 @@
 		bind:this={finishForm}
 		use:enhance={({ cancel }) => {
 			problem = '';
+			// An answer to the unticked-sets question covers this one press of Finish only.
+			const answered = untickedAnswered;
+			untickedAnswered = false;
 			const gaps = missing();
 			if (gaps.length) {
 				problem = `Fill in: ${gaps.join(', ')}`;
 				cancel();
 				return;
 			}
-			const unticked = untickedAnswered ? 0 : untickedSets();
-			untickedAnswered = false;
+			const unticked = answered ? 0 : untickedSets();
 			if (unticked) {
 				askUnticked = unticked;
 				cancel();

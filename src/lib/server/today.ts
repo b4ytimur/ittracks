@@ -194,16 +194,16 @@ function settlePast(h: Settling, schedule: ScheduleForm, today: string, pauses: 
 	} else {
 		// A day the schedule never planned (a past day opened to log by hand, a rotation
 		// started early) that was left without a log goes away instead of counting as a miss.
-		// With unlogged days ignored, so does any due day left untouched.
+		// With unlogged days ignored, so does any due day left untouched (a note is kept).
 		const gone = db
-			.select({ id: occurrence.id, date: occurrence.date })
+			.select({ id: occurrence.id, date: occurrence.date, notes: occurrence.notes })
 			.from(occurrence)
 			.where(stale)
 			.all()
 			.filter(
 				(o) =>
 					!hasEntries(o.id) &&
-					(h.unlogged === 'ignore' || !dueOn(schedule as Schedule, history(habitId, o.date), o.date))
+					(h.unlogged === 'ignore' ? !o.notes : !dueOn(schedule as Schedule, history(habitId, o.date), o.date))
 			);
 		if (gone.length) db.delete(occurrence).where(inArray(occurrence.id, gone.map((o) => o.id))).run();
 		db.update(occurrence).set({ status: 'missed' }).where(stale).run();
@@ -252,8 +252,8 @@ export function settle(accountId: string, habitId: string, schedule: ScheduleFor
 
 /**
  * A past day changed: count the misses of a schedule that carries over again from where they
- * could have changed (see recountFrom), and settle. Misses with nothing logged in them are
- * the counted ones; anything else stays.
+ * could have changed (see recountFrom), and settle. Misses with nothing logged and no note
+ * in them are the counted ones; anything else stays.
  */
 export function recount(accountId: string, habitId: string, schedule: ScheduleForm, date: string, today: string) {
 	const h = settlingOf(habitId);
@@ -263,7 +263,7 @@ export function recount(accountId: string, habitId: string, schedule: ScheduleFo
 		const ids = db
 			.select({ id: occurrence.id })
 			.from(occurrence)
-			.where(and(eq(occurrence.habitId, habitId), eq(occurrence.status, 'missed'), gte(occurrence.date, from), lt(occurrence.date, today)))
+			.where(and(eq(occurrence.habitId, habitId), eq(occurrence.status, 'missed'), isNull(occurrence.notes), gte(occurrence.date, from), lt(occurrence.date, today)))
 			.all()
 			.map((o) => o.id)
 			.filter((id) => !db.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, id)).get());
@@ -275,6 +275,45 @@ export function recount(accountId: string, habitId: string, schedule: ScheduleFo
 		h.settledThrough = back;
 	}
 	settlePast(h, schedule, today, pausesForHabit(accountId, habitId));
+}
+
+/**
+ * A habit comes back from the archive: the days it spent there were not due, so counting
+ * starts again from today. (It was settled when it was archived.)
+ */
+export function unarchived(habitId: string, today: string) {
+	const yesterday = addDays(today, -1);
+	const h = settlingOf(habitId);
+	if (h && (!h.settledThrough || h.settledThrough < yesterday))
+		db.update(habit).set({ settledThrough: yesterday }).where(eq(habit.id, habitId)).run();
+}
+
+/**
+ * A pause (or a vacation, for every habit) was added or taken away: misses written for its
+ * days go, and the days are counted again with the pauses as they are now. Misses with
+ * something logged or a note in them stay.
+ */
+export function repaused(accountId: string, habitId: string | null, start: string, end: string, today: string) {
+	const rows = db
+		.select({ id: habit.id, schedule: habit.schedule })
+		.from(habit)
+		.where(and(eq(habit.accountId, accountId), eq(habit.direction, 'build'), habitId ? eq(habit.id, habitId) : undefined))
+		.all();
+	const last = end < today ? end : addDays(today, -1);
+	for (const r of rows) {
+		if (!r.schedule) continue;
+		if (start <= last) {
+			const ids = db
+				.select({ id: occurrence.id })
+				.from(occurrence)
+				.where(and(eq(occurrence.habitId, r.id), eq(occurrence.status, 'missed'), isNull(occurrence.notes), gte(occurrence.date, start), lte(occurrence.date, last)))
+				.all()
+				.map((o) => o.id)
+				.filter((id) => !db.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, id)).get());
+			if (ids.length) db.delete(occurrence).where(inArray(occurrence.id, ids)).run();
+		}
+		recount(accountId, r.id, r.schedule as ScheduleForm, start, today);
+	}
 }
 
 /** Settle every build habit of an account, so pages that read the past (Stats, the chain) see every miss. */
@@ -888,8 +927,14 @@ export function sameAsLast(occurrenceId: string): 'done' | 'needsInput' | 'gone'
 
 	let empty = false;
 	db.transaction((tx) => {
-		const have = tx.select({ taskId: entry.taskId, sortOrder: entry.sortOrder }).from(entry).where(eq(entry.occurrenceId, occ!.id)).all();
-		const logged = new Set(have.map((e) => e.taskId));
+		const have = tx
+			.select({ taskId: entry.taskId, values: entry.values, sortOrder: entry.sortOrder })
+			.from(entry)
+			.where(eq(entry.occurrenceId, occ!.id))
+			.orderBy(asc(entry.sortOrder))
+			.all();
+		// Slots already logged, per Task: with the same Task twice, only the first may be done.
+		const logged = (taskId: string) => slotGroups(have, taskId).length;
 		let order = have.reduce((n, e) => Math.max(n, e.sortOrder + 1), 0);
 		const add = (taskId: string, values: Values) =>
 			tx.insert(entry).values({ id: randomUUID(), occurrenceId: occ!.id, taskId, values, sortOrder: order++ }).run();
@@ -898,7 +943,7 @@ export function sameAsLast(occurrenceId: string): 'done' | 'needsInput' | 'gone'
 			if (!taskId) continue;
 			const n = nth.get(taskId) ?? 0;
 			nth.set(taskId, n + 1);
-			if (logged.has(taskId)) continue;
+			if (n < logged(taskId)) continue;
 			const subs = tx.select({ id: task.id }).from(task).where(eq(task.parentTaskId, taskId)).all();
 			const inSource = from.some((e) => e.taskId === taskId);
 			// From the one log above; a Task it didn't have falls back to its own last log.

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, inArray, lt, notInArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lt, notInArray } from 'drizzle-orm';
 import { db } from '../db';
 import { area, entry, habit, habitIdentity, identity, metric, occurrence, slot, variant } from '../db/schema';
 import {
@@ -175,7 +175,7 @@ function settledAfter(
 	before: { startDate: string; unlogged: 'missed' | 'ignore' },
 	after: { startDate: string; unlogged: 'missed' | 'ignore' }
 ): { settledThrough?: null } {
-	// A miss with nothing logged in it is one the app wrote for an unlogged day.
+	// A miss with nothing logged and no note in it is one the app wrote for an unlogged day.
 	const unloggedMisses = (where: ReturnType<typeof and>) =>
 		tx
 			.select({ id: occurrence.id })
@@ -188,9 +188,9 @@ function settledAfter(
 		if (ids.length) tx.delete(occurrence).where(inArray(occurrence.id, ids)).run();
 	};
 	if (after.unlogged === 'ignore' && before.unlogged !== 'ignore')
-		drop(unloggedMisses(and(eq(occurrence.habitId, id), eq(occurrence.status, 'missed'))));
+		drop(unloggedMisses(and(eq(occurrence.habitId, id), eq(occurrence.status, 'missed'), isNull(occurrence.notes))));
 	else if (after.startDate > before.startDate)
-		drop(unloggedMisses(and(eq(occurrence.habitId, id), eq(occurrence.status, 'missed'), lt(occurrence.date, after.startDate))));
+		drop(unloggedMisses(and(eq(occurrence.habitId, id), eq(occurrence.status, 'missed'), isNull(occurrence.notes), lt(occurrence.date, after.startDate))));
 	return after.unlogged === 'missed' && (before.unlogged !== 'missed' || after.startDate < before.startDate)
 		? { settledThrough: null }
 		: {};

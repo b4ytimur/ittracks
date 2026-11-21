@@ -760,21 +760,22 @@ export function pointsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range): 
 	if (src === 'field') {
 		const { metrics, unit } = fieldsFor(card, P, ctx);
 		for (const m of metrics) {
-			// A box left unticked is never saved, so a finished log that planned this Task and
-			// saved nothing for it counts as unticked.
+			// A box left unticked is never saved, so each Slot of a finished log that planned this
+			// Task and saved nothing for it counts as unticked.
 			if (card.perLog === 'ticked' && m.type === 'checkbox' && !m.repeats) {
 				const task = P.tasks.get(m.taskId);
-				const logged = new Set((P.logsByTask.get(m.taskId) ?? []).map((l) => l.occ.id));
+				const logged = new Map<string, number>();
+				for (const l of P.logsByTask.get(m.taskId) ?? []) logged.set(l.occ.id, (logged.get(l.occ.id) ?? 0) + 1);
 				for (const o of P.ds.occurrences) {
 					const habit = P.habits.get(o.habitId);
-					if (!task || !habit || o.status !== 'done' || logged.has(o.id) || !inRange(o.date) || !sc.logOk({ habit, task })) continue;
+					if (!task || !habit || o.status !== 'done' || !inRange(o.date) || !sc.logOk({ habit, task })) continue;
 					const slots = o.variantId ? (P.slotsByVariant.get(o.variantId) ?? []) : [];
-					if (!slots.some((x) => (o.picks?.[x.id] ?? x.taskId) === m.taskId)) continue;
+					const left = slots.filter((x) => (o.picks?.[x.id] ?? x.taskId) === m.taskId).length - (logged.get(o.id) ?? 0);
 					const series =
 						card.split === 'field'
 							? [{ key: `f:${m.name.toLowerCase()}`, label: m.name, w: 1, order: card.what.metrics.indexOf(m.id) }]
 							: tagsFor({ habit, task, occ: o, date: o.date, time: o.time });
-					out.push({ date: o.date, value: 0, series, occId: o.id, habitId: habit.id, taskId: task.id, time: o.time });
+					for (let i = 0; i < left; i++) out.push({ date: o.date, value: 0, series, occId: o.id, habitId: habit.id, taskId: task.id, time: o.time });
 				}
 			}
 			for (const l of P.logsByTask.get(m.taskId) ?? []) {
