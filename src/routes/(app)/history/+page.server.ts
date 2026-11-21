@@ -1,7 +1,7 @@
 import { and, desc, eq, gte, inArray, ne } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { entry, habit, metric, occurrence, slip, task, variant } from '$lib/server/db/schema';
-import { getViews } from '$lib/server/settings';
+import { getSettings, getViews } from '$lib/server/settings';
 import { listAreas } from '$lib/server/repo/areas';
 import { initialState } from '$lib/views';
 import { userToday } from '$lib/server/today';
@@ -13,7 +13,8 @@ const DAYS = 90;
 export const load: PageServerLoad = ({ locals, cookies, url }) => {
 	const accountId = locals.account!.id;
 	const days = Math.min(Number(url.searchParams.get('days')) || DAYS, 3650);
-	const from = addDays(userToday(accountId, cookies.get('tz')), -days);
+	const today = userToday(accountId, cookies.get('tz'));
+	const from = addDays(today, -days);
 
 	const occ = db
 		.select({
@@ -78,6 +79,9 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 	const views = getViews(accountId);
 	return {
 		days,
+		today,
+		/** Past days can be logged (a Settings option); history only lists days with something logged. */
+		canBackfill: getSettings(accountId).pastDays !== 0,
 		entryCounts: Object.fromEntries(occ.map((o) => [o.id, entries.filter((c) => c.occurrenceId === o.id).length])),
 		// What was logged, one line per Task, for "Show values" in History.
 		values: Object.fromEntries(occ.map((o) => [o.id, summarize(entries.filter((e) => e.occurrenceId === o.id), metrics)])),

@@ -1327,7 +1327,7 @@ export function describeLog(l: Log, P: Prepared): string {
 	}
 	const singles = single.map((m) => fmt(m, l.single[m.id])).filter(Boolean);
 	if (singles.length) parts.push(singles.join(' · '));
-	if (l.subsTotal) parts.push(`${l.subsDone} of ${l.subsTotal} steps`);
+	if (l.subsTotal) parts.push(`${l.subsDone} of ${l.subsTotal} ${l.subsTotal === 1 ? 'step' : 'steps'}`);
 	return parts.join(' · ') || 'Done';
 }
 

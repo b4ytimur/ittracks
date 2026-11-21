@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { PAST_DAYS_CHOICES } from '$lib/engine/backfill';
+
 	let { data } = $props();
 
 	const shortDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
@@ -10,6 +12,14 @@
 			data.dayStart && data.dayStart !== '00:00' ? `Starts at ${data.dayStart}` : 'Starts at midnight',
 			data.ranges.length ? list(data.ranges) : 'no parts of the day yet'
 		].join(' · ')
+	);
+	const pastDays = $derived(
+		[
+			PAST_DAYS_CHOICES.find((c) => c.value === data.pastDays)?.label ?? `Up to ${plural(data.pastDays ?? 0, 'day')} back`,
+			data.pastDays !== 0 ? (data.nudgeYesterday ? 'reminds you about yesterday' : 'no reminder') : null
+		]
+			.filter(Boolean)
+			.join(' · ')
 	);
 	const vacation = $derived.by(() => {
 		const v = data.vacation;
@@ -57,6 +67,7 @@
 <ul class="list">
 	{@render row('/settings/day', 'Day and parts of the day', day)}
 	{@render row('/settings/vacation', 'Vacation', vacation)}
+	{@render row('/settings/past-days', 'Logging past days', pastDays)}
 </ul>
 
 <h2>Habits and Tasks</h2>
