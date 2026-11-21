@@ -11,6 +11,7 @@
 		{ href: '/habits', label: 'Habits' },
 		{ href: '/library', label: 'Library' },
 		{ href: '/history', label: 'History' },
+		{ href: '/stats', label: 'Stats' },
 		{ href: '/settings', label: 'Settings' }
 	];
 	const active = (href: string) =>

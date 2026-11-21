@@ -7,6 +7,22 @@ import type { DsHabit, DsMetric, DsTask, Prepared } from './engine';
 type In = Omit<StatCardInput, 'id'>;
 const card = (c: In): StatCard => makeCard(c);
 
+/** A short hash, so auto cards get the same id every time they are built. */
+function hash(s: string): string {
+	let h = 5381;
+	for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+	return (h >>> 0).toString(36);
+}
+const stable = (scope: string, cards: StatCard[]) => {
+	const seen = new Map<string, number>();
+	return cards.map((c) => {
+		const base = `auto-${hash(`${scope}|${c.title}|${c.look.chart}|${c.what.source}|${c.perLog}`)}`;
+		const n = seen.get(base) ?? 0;
+		seen.set(base, n + 1);
+		return { ...c, id: n ? `${base}-${n}` : base };
+	});
+};
+
 /** Fixed Tasks a habit's Variants use, in order, without repeats. */
 export function habitTasks(P: Prepared, habitId: string): DsTask[] {
 	const seen = new Set<string>();
@@ -44,6 +60,10 @@ const isCardio = (P: Prepared, t: DsTask) => {
 
 /** Cards for one Task's fields, scoped by `filter`. */
 export function taskCards(P: Prepared, t: DsTask, opts: { habitId?: string } = {}): StatCard[] {
+	return stable(`${opts.habitId ?? ''}|${t.id}`, taskCardsOf(P, t, opts));
+}
+
+function taskCardsOf(P: Prepared, t: DsTask, opts: { habitId?: string }): StatCard[] {
 	const filter = opts.habitId ? { habits: [opts.habitId] } : {};
 	const ms = P.metricsByTask.get(t.id) ?? [];
 	const out: StatCard[] = [];
@@ -106,6 +126,10 @@ function fieldCards(t: DsTask, m: DsMetric, filter: { habits?: string[] }): Stat
 
 /** The habit Stats tab, built from the habit's own fields (A1). */
 export function habitCards(P: Prepared, h: DsHabit): StatCard[] {
+	return stable(h.id, habitCardsOf(P, h));
+}
+
+function habitCardsOf(P: Prepared, h: DsHabit): StatCard[] {
 	const filter = { habits: [h.id] };
 	if (h.direction === 'break') {
 		const out = [

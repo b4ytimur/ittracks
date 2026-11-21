@@ -11,10 +11,10 @@ export interface Catalog {
 	metrics: { id: string; taskId: string; name: string; type: string; unit: string | null; repeats: boolean; targets: boolean }[];
 	tags: string[];
 	areas: { id: string; name: string; icon: string; color: string }[];
-	identities: string[];
+	identities: { id: string; name: string }[];
 }
 
-export function catalogOf(P: Prepared, extra: { areas: Catalog['areas']; identities: string[] }): Catalog {
+export function catalogOf(P: Prepared, extra: { areas: Catalog['areas']; identities: Catalog['identities'] }): Catalog {
 	const targeted = new Set(P.ds.slots.flatMap((s) => Object.keys(s.targets ?? {})));
 	const taskTargets = new Set(P.ds.slots.filter((s) => s.taskId && s.targets && Object.keys(s.targets).length).map((s) => s.taskId!));
 	return {
@@ -157,3 +157,41 @@ export function perLogChoices(card: StatCard, c: Catalog, measures: CustomMeasur
 }
 
 export { ADDS_UP };
+
+const OVER_WORD: Record<string, string> = { sum: '', avg: 'average', median: 'median', min: 'lowest', max: 'best', last: 'latest', count: 'logs', days: 'days' };
+const BUCKET_WORD: Record<string, string> = { day: 'per day', week: 'per week', month: 'per month', quarter: 'per quarter', year: 'per year', session: 'per session', all: '', auto: '' };
+
+/** A title made from what the card reads, for cards nobody named. */
+export function autoTitle(card: StatCard, c: Catalog, measures: CustomMeasure[]): string {
+	const src = card.what.source;
+	let subject: string;
+	if (src === 'field') {
+		const fs = cardFields(card, c);
+		const task = (id: string) => c.tasks.find((t) => t.id === id)?.name;
+		subject = card.what.name
+			? card.what.name
+			: fs.length === 1
+				? `${task(fs[0].taskId) ?? ''}: ${fs[0].name.toLowerCase()}`
+				: fs.map((f) => f.name).join(', ') || 'Fields';
+	} else if (src === 'task') {
+		const t = card.what.taskId ? c.tasks.find((x) => x.id === card.what.taskId)?.name : null;
+		const m = isCustom(card.perLog) ? (measures.find((x) => x.id === customId(card.perLog))?.name ?? 'Measure') : ({ volume: 'Volume', e1rm: 'Estimated 1RM', hardSets: 'Hard sets', sets: 'Sets', pace: 'Pace', pctTarget: '% of target', targetMet: 'Target met' } as Record<string, string>)[card.perLog] ?? 'Tasks';
+		subject = t ? `${t}: ${m.toLowerCase()}` : m;
+	} else {
+		subject = (
+			{
+				outcomes: card.perLog === 'rate' ? 'Consistency' : card.perLog === 'targetMet' ? 'Target met' : 'Done',
+				slips: 'Slips',
+				cravings: 'Cravings resisted',
+				money: 'Money saved'
+			} as Record<string, string>
+		)[src];
+	}
+	const over = ADDS_UP.includes(card.overTime) || src === 'outcomes' ? '' : OVER_WORD[card.overTime];
+	const parts = [over ? `${subject}, ${over}` : subject];
+	const bucket = ['bars', 'line'].includes(card.look.chart) ? BUCKET_WORD[card.bucket] : '';
+	if (bucket) parts.push(bucket);
+	if (card.split !== 'none') parts.push(`by ${({ tag: 'muscle group', part: 'part of the day', set: 'set number', option: 'option' } as Record<string, string>)[card.split] ?? card.split}`);
+	const t = parts.join(' ');
+	return t.length > 60 ? `${t.slice(0, 57)}…` : t;
+}
