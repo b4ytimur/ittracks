@@ -1028,6 +1028,58 @@ const seedAll = db.transaction(() => {
     areasSeeded: true,
     groupByArea: true,
     pinned: [gym, sp],
+    // A few saved views to switch between (customizable views, PR #10).
+    views: (() => {
+      const vs = (x) => ({
+        areas: [],
+        direction: "all",
+        status: "all",
+        identity: null,
+        habit: null,
+        query: "",
+        tags: [],
+        collection: null,
+        archived: false,
+        sort: "",
+        group: "none",
+        ...x,
+      });
+      return {
+        template: "standard",
+        saved: [
+          {
+            id: randomUUID(),
+            name: "Fitness",
+            page: "today",
+            state: vs({ areas: [areas.fitness] }),
+          },
+          {
+            id: randomUUID(),
+            name: "By part of day",
+            page: "today",
+            state: vs({ group: "part", sort: "cue" }),
+          },
+          {
+            id: randomUUID(),
+            name: "Break habits",
+            page: "habits",
+            state: vs({ direction: "break" }),
+          },
+          {
+            id: randomUUID(),
+            name: "Push day favourites",
+            page: "library",
+            state: vs({ collection: pushCol }),
+          },
+          {
+            id: randomUUID(),
+            name: "Slips only",
+            page: "history",
+            state: vs({ status: "slip" }),
+          },
+        ],
+      };
+    })(),
   };
   for (const [k, v] of Object.entries(fill)) {
     if (
