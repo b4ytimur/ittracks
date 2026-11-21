@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2191e513-d33c-405a-bf13-8d9bd1d691ab",
-  "prevId": "143e37bc-dc9c-4763-aef6-70d9ae2eec46",
+  "id": "b50a04e4-7747-4b97-a0ab-31c42d72058a",
+  "prevId": "ff4b355c-2375-479b-b535-43896a0e2852",
   "tables": {
     "account": {
       "name": "account",
@@ -703,6 +703,21 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "unlogged": {
+          "name": "unlogged",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'missed'"
+        },
+        "settled_through": {
+          "name": "settled_through",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},
@@ -1072,6 +1087,14 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "extra": {
+          "name": "extra",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         }
       },
       "indexes": {},

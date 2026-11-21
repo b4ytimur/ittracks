@@ -38,6 +38,7 @@ import { getSettings } from './settings';
 import { dayOrder, logicalDate } from '$lib/engine/day';
 import { pauseOn, type Pause } from '$lib/engine/pause';
 import { carriesOver, lastTimeFor } from '$lib/engine/backfill';
+import { missedDays, recountFrom, type Unlogged } from '$lib/engine/unlogged';
 import { habitStats, type HabitStats } from '$lib/engine/stats';
 
 /**
@@ -141,19 +142,37 @@ export function pickForVariant(accountId: string, variantId: string): Record<str
 /** What was done or skipped before a date, for the schedule. */
 export function history(habitId: string, before: string): Done[] {
 	return db
-		.select({ date: occurrence.date, variantId: occurrence.variantId, status: occurrence.status })
+		.select({ date: occurrence.date, variantId: occurrence.variantId, status: occurrence.status, extra: occurrence.extra })
 		.from(occurrence)
 		.where(and(eq(occurrence.habitId, habitId), lt(occurrence.date, before)))
 		.all()
-		.filter((o): o is Done => o.status === 'done' || o.status === 'skipped');
+		.filter((o): o is Done & { extra: boolean } => o.status === 'done' || o.status === 'skipped');
 }
 
+/** What settling needs to know about a habit. */
+interface Settling {
+	id: string;
+	startDate: string;
+	unlogged: Unlogged;
+	settledThrough: string | null;
+}
+
+const settlingOf = (habitId: string): Settling | undefined =>
+	db
+		.select({ id: habit.id, startDate: habit.startDate, unlogged: habit.unlogged, settledThrough: habit.settledThrough })
+		.from(habit)
+		.where(eq(habit.id, habitId))
+		.get();
+
 /**
- * Settle past Occurrences that were never acted on. A waiting rotation carries its
- * Variant over to today and a frequency target has no daily misses, so those are
- * dropped; anything else becomes missed.
+ * Settle past days. A due Occurrence that was never acted on becomes missed, and so does a
+ * due day the app was never opened on (see engine/unlogged.ts), unless the habit is set to
+ * ignore days you don't log: then an untouched day simply goes away. A waiting rotation and
+ * a frequency target carry over to the next day, so their leftover due rows go away, and
+ * their misses are counted per missed session instead.
  */
-function settlePast(habitId: string, schedule: ScheduleForm, today: string, pauses: Pause[]) {
+function settlePast(h: Settling, schedule: ScheduleForm, today: string, pauses: Pause[]) {
+	const habitId = h.id;
 	// Due days that fell in a pause simply go away: they were never due.
 	if (pauses.length) {
 		const old = db
@@ -169,35 +188,152 @@ function settlePast(habitId: string, schedule: ScheduleForm, today: string, paus
 		eq(occurrence.status, 'due'),
 		lt(occurrence.date, today)
 	);
+	const hasEntries = (id: string) => !!db.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, id)).get();
 	if (carriesOver(schedule as Schedule)) {
 		db.delete(occurrence).where(stale).run();
-		return;
+	} else {
+		// A day the schedule never planned (a past day opened to log by hand, a rotation
+		// started early) that was left without a log goes away instead of counting as a miss.
+		// With unlogged days ignored, so does any due day left untouched (a note is kept).
+		const gone = db
+			.select({ id: occurrence.id, date: occurrence.date, notes: occurrence.notes })
+			.from(occurrence)
+			.where(stale)
+			.all()
+			.filter(
+				(o) =>
+					!hasEntries(o.id) &&
+					(h.unlogged === 'ignore' ? !o.notes : !dueOn(schedule as Schedule, history(habitId, o.date), o.date))
+			);
+		if (gone.length) db.delete(occurrence).where(inArray(occurrence.id, gone.map((o) => o.id))).run();
+		db.update(occurrence).set({ status: 'missed' }).where(stale).run();
 	}
-	// A day the schedule never planned (a past day opened to log by hand, a rotation
-	// started early) that was left without a log goes away instead of counting as a miss.
-	const extra = db
-		.select({ id: occurrence.id, date: occurrence.date })
+	const yesterday = addDays(today, -1);
+	if (h.unlogged === 'missed') fillMisses(h, schedule, yesterday, pauses);
+	if (!h.settledThrough || h.settledThrough < yesterday)
+		db.update(habit).set({ settledThrough: yesterday }).where(eq(habit.id, habitId)).run();
+}
+
+/** Write a miss for every due day nobody logged since the habit was last settled. */
+function fillMisses(h: Settling, schedule: ScheduleForm, yesterday: string, pauses: Pause[]) {
+	const from = h.settledThrough ? addDays(h.settledThrough, 1) : h.startDate;
+	if (from > yesterday) return;
+	const rows = db
+		.select({ date: occurrence.date, status: occurrence.status, variantId: occurrence.variantId, extra: occurrence.extra })
 		.from(occurrence)
-		.where(stale)
-		.all()
-		.filter(
-			(o) =>
-				!db.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, o.id)).get() &&
-				!dueOn(schedule as Schedule, history(habitId, o.date), o.date)
-		);
-	if (extra.length) db.delete(occurrence).where(inArray(occurrence.id, extra.map((o) => o.id))).run();
-	db.update(occurrence).set({ status: 'missed' }).where(stale).run();
+		.where(eq(occurrence.habitId, h.id))
+		.all();
+	const misses = missedDays(schedule as Schedule, rows, h.startDate, from, yesterday, (d) => !!pauseOn(pauses, h.id, d));
+	if (!misses.length) return;
+	const variants = new Set(db.select({ id: variant.id }).from(variant).where(eq(variant.habitId, h.id)).all().map((v) => v.id));
+	db.transaction((tx) => {
+		for (const m of misses)
+			tx.insert(occurrence)
+				.values({
+					id: randomUUID(),
+					habitId: h.id,
+					variantId: m.variantId && variants.has(m.variantId) ? m.variantId : null,
+					date: m.date,
+					status: 'missed',
+					picks: null,
+					notes: null,
+					finishedAt: null,
+					level: null
+				})
+				.run();
+	});
 }
 
 /** Settle a habit's past days without creating today's Occurrence. */
 export function settle(accountId: string, habitId: string, schedule: ScheduleForm, today: string) {
-	settlePast(habitId, schedule, today, pausesForHabit(accountId, habitId));
+	const h = settlingOf(habitId);
+	if (h) settlePast(h, schedule, today, pausesForHabit(accountId, habitId));
+}
+
+/**
+ * A past day changed: count the misses of a schedule that carries over again from where they
+ * could have changed (see recountFrom), and settle. Misses with nothing logged and no note
+ * in them are the counted ones; anything else stays.
+ */
+export function recount(accountId: string, habitId: string, schedule: ScheduleForm, date: string, today: string) {
+	const h = settlingOf(habitId);
+	if (!h) return;
+	const from = recountFrom(schedule as Schedule, date);
+	if (from && h.unlogged === 'missed') {
+		const ids = db
+			.select({ id: occurrence.id })
+			.from(occurrence)
+			.where(and(eq(occurrence.habitId, habitId), eq(occurrence.status, 'missed'), isNull(occurrence.notes), gte(occurrence.date, from), lt(occurrence.date, today)))
+			.all()
+			.map((o) => o.id)
+			.filter((id) => !db.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, id)).get());
+		if (ids.length) db.delete(occurrence).where(inArray(occurrence.id, ids)).run();
+	}
+	const back = addDays(from ?? date, -1);
+	if (h.settledThrough && h.settledThrough > back) {
+		db.update(habit).set({ settledThrough: back }).where(eq(habit.id, habitId)).run();
+		h.settledThrough = back;
+	}
+	settlePast(h, schedule, today, pausesForHabit(accountId, habitId));
+}
+
+/**
+ * A habit comes back from the archive: the days it spent there were not due, so counting
+ * starts again from today. (It was settled when it was archived.)
+ */
+export function unarchived(habitId: string, today: string) {
+	const yesterday = addDays(today, -1);
+	const h = settlingOf(habitId);
+	if (h && (!h.settledThrough || h.settledThrough < yesterday))
+		db.update(habit).set({ settledThrough: yesterday }).where(eq(habit.id, habitId)).run();
+}
+
+/**
+ * A pause (or a vacation, for every habit) was added or taken away: misses written for its
+ * days go, and the days are counted again with the pauses as they are now. Misses with
+ * something logged or a note in them stay.
+ */
+export function repaused(accountId: string, habitId: string | null, start: string, end: string, today: string) {
+	const rows = db
+		.select({ id: habit.id, schedule: habit.schedule })
+		.from(habit)
+		.where(and(eq(habit.accountId, accountId), eq(habit.direction, 'build'), habitId ? eq(habit.id, habitId) : undefined))
+		.all();
+	const last = end < today ? end : addDays(today, -1);
+	for (const r of rows) {
+		if (!r.schedule) continue;
+		if (start <= last) {
+			const ids = db
+				.select({ id: occurrence.id })
+				.from(occurrence)
+				.where(and(eq(occurrence.habitId, r.id), eq(occurrence.status, 'missed'), isNull(occurrence.notes), gte(occurrence.date, start), lte(occurrence.date, last)))
+				.all()
+				.map((o) => o.id)
+				.filter((id) => !db.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, id)).get());
+			if (ids.length) db.delete(occurrence).where(inArray(occurrence.id, ids)).run();
+		}
+		recount(accountId, r.id, r.schedule as ScheduleForm, start, today);
+	}
+}
+
+/** Settle every build habit of an account, so pages that read the past (Stats, the chain) see every miss. */
+export function settleAll(accountId: string, today: string) {
+	const rows = db
+		.select({ id: habit.id, schedule: habit.schedule })
+		.from(habit)
+		.where(and(eq(habit.accountId, accountId), eq(habit.archived, false), eq(habit.direction, 'build')))
+		.all();
+	for (const r of rows) if (r.schedule) settle(accountId, r.id, r.schedule as ScheduleForm, today);
 }
 
 /** Create today's Occurrence for a build habit if one is due and none exists yet. */
 export function ensureToday(accountId: string, habitId: string, schedule: ScheduleForm, today: string) {
 	const pauses = pausesForHabit(accountId, habitId);
-	settlePast(habitId, schedule, today, pauses);
+	const h = settlingOf(habitId);
+	if (!h) return null;
+	settlePast(h, schedule, today, pauses);
+	// A habit set to start later has nothing due yet.
+	if (today < h.startDate) return null;
 	const existing = db
 		.select()
 		.from(occurrence)
@@ -215,7 +351,9 @@ export function createOccurrence(
 	accountId: string,
 	habitId: string,
 	variantId: string,
-	date: string
+	date: string,
+	/** Logged on a day nothing was due. */
+	extra = false
 ) {
 	const row = {
 		id: randomUUID(),
@@ -226,7 +364,8 @@ export function createOccurrence(
 		picks: pickForVariant(accountId, variantId),
 		notes: null,
 		finishedAt: null,
-		level: null
+		level: null,
+		extra
 	};
 	db.insert(occurrence).values(row).run();
 	return row;
@@ -701,60 +840,145 @@ export function quickDone(occurrenceId: string, level: Level | null): 'done' | '
 	return needsInput(occ.id) ? 'needsInput' : 'done';
 }
 
-/** Metrics that never take an old value: fields set to start blank, and tick boxes. */
-function freshMetricIds(tx: Tx, taskId: string): Set<string> {
+/** Fields set to start blank: a reading such as today's weight is never copied from an old day. */
+function blankMetricIds(tx: Tx, taskId: string): Set<string> {
 	return new Set(
 		tx
-			.select({ id: metric.id, type: metric.type, prefill: metric.prefill })
+			.select({ id: metric.id, prefill: metric.prefill })
 			.from(metric)
 			.where(eq(metric.taskId, taskId))
 			.all()
-			.filter((m) => m.prefill === 'blank' || m.type === 'checkbox')
+			.filter((m) => m.prefill === 'blank')
 			.map((m) => m.id)
 	);
 }
 
+type Values = Record<string, unknown>;
+
 /**
- * "Same as last time": copy each Task's values from its last finished log (sets, single
- * values and sub-task ticks), use the targets for a Task never logged before, and finish.
- * Fields set to start blank and tick boxes are left empty, as on the log screen, so an old
- * reading is never logged as today's. Replaces anything saved so far. Returns 'needsInput'
- * when a required field is still empty, so the quick log asks for it.
+ * A log's Entries of one Task, one group per Slot: a Variant can use the same Task twice.
+ * Each Slot saves its sets first and its once-per-log values last, which closes the group.
+ */
+function slotGroups(entries: { taskId: string; values: Values }[], taskId: string): Values[][] {
+	const groups: Values[][] = [];
+	let cur: Values[] = [];
+	for (const e of entries) {
+		if (e.taskId !== taskId) continue;
+		cur.push(e.values);
+		if (e.values._summary) {
+			groups.push(cur);
+			cur = [];
+		}
+	}
+	if (cur.length) groups.push(cur);
+	return groups;
+}
+
+/**
+ * "Same as last time": copy the last finished log (of the same Variant when there is one, and
+ * from before this day) and finish. Everything comes from that one log, so values from
+ * different days never mix: sets, single values, tick boxes, sub-task ticks, and the Task an
+ * auto-filled Slot used. A Task that log didn't have takes its own last log, then the targets.
+ * Fields set to start blank are never copied. Tasks already logged here are kept as they are,
+ * so a half-done workout only gets the rest filled in.
+ * Returns 'needsInput', with the Occurrence back to due, when a required field is still empty
+ * or a Task got nothing to log, so the quick log can ask for it.
  */
 export function sameAsLast(occurrenceId: string): 'done' | 'needsInput' | 'gone' {
-	const occ = db.select().from(occurrence).where(eq(occurrence.id, occurrenceId)).get();
+	let occ = db.select().from(occurrence).where(eq(occurrence.id, occurrenceId)).get();
 	if (!occ) return 'gone';
-	const lastLevel =
+	const finished = db
+		.select({ id: occurrence.id, date: occurrence.date, level: occurrence.level, variantId: occurrence.variantId, picks: occurrence.picks })
+		.from(occurrence)
+		.where(and(eq(occurrence.habitId, occ.habitId), eq(occurrence.status, 'done')))
+		.orderBy(desc(occurrence.date), desc(occurrence.finishedAt))
+		.all();
+	const source =
 		lastTimeFor(
-			db
-				.select({ id: occurrence.id, date: occurrence.date, level: occurrence.level })
-				.from(occurrence)
-				.where(and(eq(occurrence.habitId, occ.habitId), eq(occurrence.status, 'done')))
-				.orderBy(desc(occurrence.date), desc(occurrence.finishedAt))
-				.all(),
+			finished.filter((o) => o.variantId === occ!.variantId),
 			occ
-		)?.level ?? null;
-	db.transaction((tx) => {
-		tx.delete(entry).where(eq(entry.occurrenceId, occ.id)).run();
-		let order = 0;
-		const add = (taskId: string, values: Record<string, unknown>) =>
-			tx.insert(entry).values({ id: randomUUID(), occurrenceId: occ.id, taskId, values, sortOrder: order++ }).run();
-		for (const { slot: s, taskId } of slotsOf(occ)) {
-			if (!taskId) continue;
-			const prev = lastEntries(taskId, occ.id);
-			const fresh = freshMetricIds(tx, taskId);
-			for (const values of prev.length ? prev : targetEntries(tx, s, taskId, lastLevel)) {
-				const kept = Object.fromEntries(Object.entries(values).filter(([k]) => !fresh.has(k)));
-				if (Object.keys(kept).some((k) => k !== '_summary')) add(taskId, kept);
+		) ?? lastTimeFor(finished, occ);
+	const lastLevel = source?.level ?? null;
+	const from = source
+		? db
+				.select({ taskId: entry.taskId, values: entry.values })
+				.from(entry)
+				.where(eq(entry.occurrenceId, source.id))
+				.orderBy(asc(entry.sortOrder))
+				.all()
+		: [];
+
+	// An auto-filled Slot uses the Task it used last time, so there is something to copy.
+	if (source?.picks && occ.variantId === source.variantId) {
+		const picks = { ...(occ.picks ?? {}) };
+		let changed = false;
+		for (const { slot: s } of slotsOf(occ)) {
+			const was = source.picks[s.id];
+			if (s.fillRule && was && picks[s.id] !== was && from.some((e) => e.taskId === was)) {
+				picks[s.id] = was;
+				changed = true;
 			}
+		}
+		if (changed) {
+			db.update(occurrence).set({ picks }).where(eq(occurrence.id, occ.id)).run();
+			occ = { ...occ, picks };
+		}
+	}
+
+	let empty = false;
+	db.transaction((tx) => {
+		const have = tx
+			.select({ taskId: entry.taskId, values: entry.values, sortOrder: entry.sortOrder })
+			.from(entry)
+			.where(eq(entry.occurrenceId, occ!.id))
+			.orderBy(asc(entry.sortOrder))
+			.all();
+		// Slots already logged, per Task: with the same Task twice, only the first may be done.
+		const logged = (taskId: string) => slotGroups(have, taskId).length;
+		let order = have.reduce((n, e) => Math.max(n, e.sortOrder + 1), 0);
+		const add = (taskId: string, values: Values) =>
+			tx.insert(entry).values({ id: randomUUID(), occurrenceId: occ!.id, taskId, values, sortOrder: order++ }).run();
+		const nth = new Map<string, number>();
+		for (const { slot: s, taskId } of slotsOf(occ!)) {
+			if (!taskId) continue;
+			const n = nth.get(taskId) ?? 0;
+			nth.set(taskId, n + 1);
+			if (n < logged(taskId)) continue;
 			const subs = tx.select({ id: task.id }).from(task).where(eq(task.parentTaskId, taskId)).all();
-			for (const sub of subs) for (const values of lastEntries(sub.id, occ.id)) add(sub.id, values);
+			const inSource = from.some((e) => e.taskId === taskId);
+			// From the one log above; a Task it didn't have falls back to its own last log.
+			const prevAll = inSource ? from : lastEntries(taskId, occ!.id).map((values) => ({ taskId, values }));
+			const prev = slotGroups(prevAll, taskId)[n] ?? [];
+			const blank = blankMetricIds(tx, taskId);
+			let wrote = 0;
+			for (const values of prev.length ? prev : targetEntries(tx, s, taskId, lastLevel)) {
+				const kept = Object.fromEntries(Object.entries(values).filter(([k]) => !blank.has(k)));
+				if (Object.keys(kept).some((k) => k !== '_summary')) {
+					add(taskId, kept);
+					wrote++;
+				}
+			}
+			if (n === 0)
+				for (const sub of subs) {
+					const ticks = inSource ? from.filter((e) => e.taskId === sub.id).map((e) => e.values) : lastEntries(sub.id, occ!.id);
+					for (const values of ticks.slice(0, 1)) {
+						add(sub.id, values);
+						wrote++;
+					}
+				}
+			// Nothing to copy: ask on the quick log, if it has a field to ask with.
+			if (!wrote && tx.select({ id: metric.id }).from(metric).where(and(eq(metric.taskId, taskId), or(eq(metric.quick, true), eq(metric.required, true)))).get())
+				empty = true;
 		}
 		tx.update(occurrence)
 			.set({ status: 'done', finishedAt: new Date(), level: lastLevel })
-			.where(eq(occurrence.id, occ.id))
+			.where(eq(occurrence.id, occ!.id))
 			.run();
 	});
+	if (empty) {
+		db.update(occurrence).set({ status: 'due', finishedAt: null }).where(eq(occurrence.id, occ.id)).run();
+		return 'needsInput';
+	}
 	return needsInput(occ.id) ? 'needsInput' : 'done';
 }
 

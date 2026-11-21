@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { db } from '$lib/server/db';
 import { entry, metric, occurrence, slot, task, variant } from '$lib/server/db/schema';
 import { ownedOccurrence } from '$lib/server/owned';
-import { candidates, lastEntries, userToday } from '$lib/server/today';
+import { candidates, lastEntries, recount, userToday } from '$lib/server/today';
 import { getSettings } from '$lib/server/settings';
 import { recapFor } from '$lib/server/stats';
 import { planOfToday, replanToday, windowFor } from '$lib/server/backfill';
@@ -234,7 +234,10 @@ export const actions: Actions = {
 				.run();
 		});
 		// A past log can change what is due today (a weekly target met, a rotation moved on).
-		if (past && schedule) replanToday(locals.account!.id, o.habit.id, schedule, today, plan);
+		if (past && schedule) {
+			replanToday(locals.account!.id, o.habit.id, schedule, today, plan);
+			if (p.finish) recount(locals.account!.id, o.habit.id, schedule, o.occ.date, today);
+		}
 		if (p.finish && !p.stay) {
 			if (past) {
 				const back = safeBack(p.back) ?? `/day/${o.occ.date}`;

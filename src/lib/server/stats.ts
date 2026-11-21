@@ -4,7 +4,7 @@ import { and, asc, eq, inArray, lte, ne } from 'drizzle-orm';
 import { db } from './db';
 import { area, craving, entry, habit, habitIdentity, identity, metric, occurrence, slip, slot, tag, task, taskTag, variant } from './db/schema';
 import { getSettings, getViews, saveSettings } from './settings';
-import { timeIn, userToday } from './today';
+import { settleAll, timeIn, userToday } from './today';
 import { listAreas } from './repo/areas';
 import { listIdentities } from './repo/identities';
 import { computeCard, describeLog, prepare, type CardResult, type Ctx, type Dataset, type Prepared } from '$lib/stats/engine';
@@ -156,6 +156,8 @@ export function catalogFor(accountId: string, P: Prepared): Catalog {
 
 /** Everything for one request: the logs, prepared once. */
 export function statsContext(accountId: string, tz?: string) {
+	// Due days nobody logged count as misses in Stats too, even before Today is opened.
+	settleAll(accountId, userToday(accountId, tz));
 	const ds = loadDataset(accountId, tz);
 	const P = prepare(ds);
 	return { ds, P, today: ds.today };

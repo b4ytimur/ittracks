@@ -256,7 +256,11 @@ export const habit = sqliteTable('habit', {
 	progression: text('progression', { mode: 'json' }).$type<Progression>(),
 	/** Hits toward the next progression count from after this date. */
 	progressionFrom: text('progression_from'),
-	areaId: text('area_id').references(() => area.id, { onDelete: 'set null' })
+	areaId: text('area_id').references(() => area.id, { onDelete: 'set null' }),
+	/** A due day that ends with no log: counted as missed, or ignored (a gentler habit). */
+	unlogged: text('unlogged', { enum: ['missed', 'ignore'] }).notNull().default('missed'),
+	/** Every day up to this one has been checked for due days nobody logged. Null: never yet. */
+	settledThrough: text('settled_through')
 });
 
 /** A pause for one Habit, or for all of them when habitId is null. Dates are inclusive. */
@@ -352,7 +356,9 @@ export const occurrence = sqliteTable('occurrence', {
 	notes: text('notes'),
 	finishedAt: integer('finished_at', { mode: 'timestamp' }),
 	/** Which level was reached; null means Target. */
-	level: text('level', { enum: ['minimum', 'target', 'stretch'] }).$type<Level>()
+	level: text('level', { enum: ['minimum', 'target', 'stretch'] }).$type<Level>(),
+	/** Logged on a day the schedule had nothing due. A rotation that skips ahead keeps its plan. */
+	extra: integer('extra', { mode: 'boolean' }).notNull().default(false)
 });
 
 /** One row of Metric values for one Task, e.g. one gym set. */

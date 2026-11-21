@@ -7,6 +7,7 @@
 	import FillRuleEditor from './FillRuleEditor.svelte';
 	import NoteBox from '$lib/NoteBox.svelte';
 	import { limitOn, nextDrop } from '$lib/engine/limit';
+	import { scheduleStartBy } from '$lib/engine/unlogged';
 	import { blocked } from '$lib/rules/core';
 	import { checkHabit, habitRules } from '$lib/rules/habit';
 
@@ -46,6 +47,20 @@
 	);
 
 	const firstVariant = $derived(h.variants[0]?.id ?? '');
+
+	/**
+	 * A new start date for the habit. The schedule's own start follows: back far enough to
+	 * cover it (by whole cycles, so planned days keep their Variant), or along with it when
+	 * the two were the same day.
+	 */
+	function setStart(v: string) {
+		if (!v) return;
+		const old = h.startDate;
+		h.startDate = v;
+		if (kind !== 'interval' && kind !== 'rotation') return;
+		if (v < start && schedule) start = (scheduleStartBy(schedule, v) as { start: string }).start;
+		else if (start === old) start = v;
+	}
 
 	/** The Schedule as it will be saved. Rotations follow the Variant order. */
 	const schedule = $derived.by((): ScheduleForm | null => {
@@ -237,7 +252,7 @@
 	const has = untrack(() => ({
 		when: !!(data.habit.cue.time || data.habit.cue.place || data.habit.cue.afterHabitId || data.habit.cue.afterText || data.habit.cue.range),
 		levels: data.habit.levels.enabled,
-		streak: !data.isNew && data.habit.streakRule.kind !== 'neverTwice',
+		streak: (!data.isNew && data.habit.streakRule.kind !== 'neverTwice') || data.habit.unlogged === 'ignore',
 		identity: data.habit.identityIds.length > 0,
 		notes: !!data.habit.notes
 	}));
@@ -654,6 +669,20 @@
 	{/if}
 {/snippet}
 
+{#snippet startPart()}
+	<label
+		>Started on
+		<input type="date" value={h.startDate} onchange={(e) => setStart(e.currentTarget.value)} required />
+	</label>
+	<p class="muted small-text" style="margin-top: -0.25rem">
+		Days from here on can be logged. {h.startDate > data.today
+			? 'Nothing is due before then.'
+			: h.startDate < data.today && h.startDate !== savedStart
+				? 'Due days you leave unlogged count as missed, unless you change that under Streak.'
+				: ''}
+	</p>
+{/snippet}
+
 {#snippet breakPart()}
 	<label>Counting from <input type="date" bind:value={h.startDate} required /></label>
 	<p class="muted">
@@ -894,6 +923,7 @@
 
 		<h2>Schedule</h2>
 		{@render schedulePart()}
+		{@render startPart()}
 
 		{#if open.when}
 			<h2>When and where</h2>
@@ -947,6 +977,20 @@
 			{:else if h.streakRule.kind === 'consistency'}
 				<label style="width: 10rem">Over the last N days <input type="number" min="7" max="365" bind:value={h.streakRule.days} /></label>
 			{/if}
+			<fieldset class="card">
+				<legend class="muted">Days you don't log</legend>
+				<label style="color: var(--text)"
+					><input type="radio" bind:group={h.unlogged} value="missed" /> Count as missed once the day is over</label
+				>
+				<label style="color: var(--text)"
+					><input type="radio" bind:group={h.unlogged} value="ignore" /> Don't count them: only what you log counts</label
+				>
+				<p class="muted small-text" style="margin: 0.25rem 0 0">
+					{h.unlogged === 'ignore'
+						? 'A day you forget leaves your streak and consistency as they were. Logging it later still counts.'
+						: 'Streaks, consistency, the chain and Stats treat a forgotten day as a miss. Log or skip it later to change that.'}
+				</p>
+			</fieldset>
 		{/if}
 
 		<details class="extras" open={!!(h.bundle.reward || h.prep.length || h.reward.celebrate || h.reward.jar || h.progression)}>
@@ -1052,7 +1096,7 @@
 		<div class="chips add-more">
 			{#if h.direction === 'build' && !open.when}<button type="button" class="chip" onclick={() => (open.when = true)}>+ When and where</button>{/if}
 			{#if h.direction === 'build' && !open.levels && !off('levels')}<button type="button" class="chip" onclick={() => (open.levels = true)}>+ Levels</button>{/if}
-			{#if h.direction === 'build' && !open.streak}<button type="button" class="chip" onclick={() => (open.streak = true)}>+ Streak rule (now: never miss twice)</button>{/if}
+			{#if h.direction === 'build' && !open.streak}<button type="button" class="chip" onclick={() => (open.streak = true)}>+ Streak and days you don't log</button>{/if}
 			{#if !open.identity && !off('identities')}<button type="button" class="chip" onclick={() => (open.identity = true)}>+ Identity</button>{/if}
 			{#if !open.notes}<button type="button" class="chip" onclick={() => (open.notes = true)}>+ Notes</button>{/if}
 		</div>
