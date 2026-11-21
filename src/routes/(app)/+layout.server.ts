@@ -4,5 +4,6 @@ import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = ({ locals }) => {
 	if (!locals.account) redirect(303, accountCount() === 0 ? '/setup' : '/login');
-	return { account: locals.account };
+	// A quick-log link opened with a key shows its answer without the app around it.
+	return { account: locals.account, linkOnly: locals.actor?.source === 'link' };
 };

@@ -5,8 +5,9 @@ import { dirname } from 'node:path';
 import { env } from '$env/dynamic/private';
 import * as schema from './schema';
 
-const path = env.DATABASE_PATH ?? './data/ittracks.db';
-mkdirSync(dirname(path), { recursive: true });
+// Tests get a fresh database in memory, never the real one in ./data.
+const path = env.DATABASE_PATH ?? (process.env.VITEST ? ':memory:' : './data/ittracks.db');
+if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
 
 const sqlite = new Database(path);
 sqlite.pragma('journal_mode = WAL');
