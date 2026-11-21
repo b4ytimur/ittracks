@@ -2,6 +2,7 @@ import { fail } from '@sveltejs/kit';
 import { hash, verify } from '@node-rs/argon2';
 import { db } from '$lib/server/db';
 import { account } from '$lib/server/db/schema';
+import { checkSettings } from '$lib/rules/settings';
 import { getSettings, saveSettings } from '$lib/server/settings';
 import { publicKey, sendToAccount, subscriptionCount } from '$lib/server/push';
 import { AREA_COLORS, listAreas, saveAreas } from '$lib/server/repo/areas';
@@ -57,7 +58,10 @@ export const actions: Actions = {
 		const f = await request.formData();
 		const dayStart = String(f.get('dayStart') ?? '');
 		if (!hhmm.test(dayStart)) return fail(400, { dayError: 'Pick a time like 04:00.' });
-		saveSettings(locals.account!.id, { dayStart, ranges: readRanges(f) });
+		const ranges = readRanges(f);
+		const conflict = checkSettings({ ...getSettings(locals.account!.id), dayStart, ranges })[0];
+		if (conflict) return fail(400, { dayError: conflict.reason });
+		saveSettings(locals.account!.id, { dayStart, ranges });
 		return { daySaved: true };
 	},
 	display: async ({ request, locals }) => {

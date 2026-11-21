@@ -4,12 +4,19 @@
 	import { enhance } from '$app/forms';
 	import type { MetricForm, TaskForm } from '$lib/forms';
 	import { defaultStep, metricsFromType, type TaskType } from '$lib/task-types';
+	import { blocked } from '$lib/rules/core';
+	import { checkTask, metricRules, taskRules } from '$lib/rules/task';
 
 	let { data, form } = $props();
 
 	// The editor works on a local copy; the whole thing is sent as JSON on save.
 	let t = $state<TaskForm>(untrack(() => structuredClone(data.task)));
 	let newTag = $state('');
+
+	// Conflict rules (src/lib/rules): what is blocked right now, and why.
+	const ruleCheck = $derived(checkTask(t));
+	const restBlock = $derived(blocked(taskRules, t, 'restTimerEnabled', undefined));
+	const quickBlock = (m: MetricForm) => blocked(metricRules, m, 'quick', undefined);
 	let newLevel = $state(2);
 
 	const typeLabels: Record<string, string> = {
@@ -201,7 +208,7 @@
 						>Start with
 						<select bind:value={m.prefill}>
 							<option value="last">Last time's value</option>
-							<option value="target">The target</option>
+							<option value="target" disabled={!isNumeric(m)}>The target{isNumeric(m) ? '' : ' (numbers only)'}</option>
 							<option value="blank">Blank</option>
 						</select>
 					</label>
@@ -213,8 +220,13 @@
 						</label>
 					{/if}
 				</div>
-				<label style="color: var(--text)"><input type="checkbox" bind:checked={m.required} /> Required before Finish</label>
-				<label style="color: var(--text)"><input type="checkbox" bind:checked={m.quick} /> Show on quick logs</label>
+				<label style="color: var(--text)"
+					><input type="checkbox" bind:checked={m.required} onchange={() => m.required && (m.quick = true)} /> Required before Finish</label
+				>
+				<label style="color: var(--text)"
+					><input type="checkbox" bind:checked={m.quick} disabled={m.required} /> Show on quick logs</label
+				>
+				{#if m.required}<p class="muted small-text" style="margin: 0">{quickBlock({ ...m, quick: false })?.reason}.</p>{/if}
 			</details>
 			<div class="row">
 				<label class="grow" style="color: var(--text)"
@@ -246,8 +258,9 @@
 	<h2>Rest timer</h2>
 	<div class="row">
 		<label class="grow" style="color: var(--text)"
-			><input type="checkbox" bind:checked={t.restTimerEnabled} /> Start a rest countdown after each set</label
+			><input type="checkbox" bind:checked={t.restTimerEnabled} disabled={!!restBlock && !t.restTimerEnabled} /> Start a rest countdown after each set</label
 		>
+		{#if restBlock}<p class="muted small-text" style="margin: 0">{restBlock.reason}. Mark a metric "Log per set" first.</p>{/if}
 		{#if t.restTimerEnabled}
 			<label style="width: 8rem"
 				>Seconds <input type="number" min="5" max="3600" bind:value={t.restTimerSeconds} /></label
@@ -255,6 +268,7 @@
 		{/if}
 	</div>
 
+	{#each [...new Set(ruleCheck.errors.map((i) => i.reason))] as reason (reason)}<p class="error">{reason}</p>{/each}
 	{#if form?.error}<p class="error">{form.error}</p>{/if}
 
 	<div class="actions">
