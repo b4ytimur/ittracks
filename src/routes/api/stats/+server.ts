@@ -59,6 +59,10 @@ function cleanCard(card: StatCard, catalog: Catalog, s: StatsSettings, hidden: s
 /** A card as Today shows it: always a single number. */
 const asTile = (card: StatCard): StatCard => ({ ...card, look: { ...card.look, chart: 'tile' } });
 
+/** A card made on a habit's Stats tab reads that habit, unless it picked habits itself. */
+const forHabit = (card: StatCard, habitId: string): StatCard =>
+	card.filter.habits.length ? card : { ...card, filter: { ...card.filter, habits: [habitId] } };
+
 const move = <T,>(xs: T[], i: number, dir: number) => {
 	const j = i + dir;
 	if (i < 0 || j < 0 || j >= xs.length) return xs;
@@ -153,7 +157,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 		}
 		case 'card.save': {
 			const catalog = catalogFor(accountId, P!);
-			const card = cleanCard(b.card, catalog, s, hidden);
+			const card = cleanCard('habit' in b.where ? forHabit(b.card, b.where.habit) : b.card, catalog, s, hidden);
 			const [cards, put] = cardsAt(b.where);
 			const i = cards.findIndex((c) => c.id === card.id);
 			if (i >= 0) put(cards.map((c) => (c.id === card.id ? card : c)));
@@ -204,7 +208,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 			const { [b.habit]: _, ...rest } = s.headlines;
 			// Only habits that are still there keep a Today number.
 			const kept = Object.fromEntries(Object.entries(rest).filter(([k]) => P!.habits.has(k)));
-			s = { ...s, headlines: b.card ? { ...kept, [b.habit]: cleanCard(asTile(b.card), catalogFor(accountId, P!), s, hidden) } : kept };
+			s = { ...s, headlines: b.card ? { ...kept, [b.habit]: cleanCard(asTile(forHabit(b.card, b.habit)), catalogFor(accountId, P!), s, hidden) } : kept };
 			break;
 		}
 		case 'settings':

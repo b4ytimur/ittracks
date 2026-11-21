@@ -22,13 +22,14 @@ import { identityFor, listIdentities } from '$lib/server/repo/identities';
 import { listTagNames, listTasks, saveTask } from '$lib/server/repo/tasks';
 import { listAreas } from '$lib/server/repo/areas';
 import { getViews, getSettings, saveSettings } from '$lib/server/settings';
-import { userToday } from '$lib/server/today';
+import { repaused, settle, unarchived, userToday } from '$lib/server/today';
 import { ownedHabit } from '$lib/server/owned';
 import { BUILTIN_TASK_TYPES, metricsFromType } from '$lib/task-types';
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { metric, pause } from '$lib/server/db/schema';
+import type { ScheduleForm } from '$lib/forms';
 import type { Actions, PageServerLoad } from './$types';
 
 /** Numeric Metrics per Task, so Slots can set targets for each level. */
@@ -85,7 +86,8 @@ const blank = (today: string): HabitForm => ({
 	cost: null,
 	limit: null,
 	progression: null,
-	areaId: null
+	areaId: null,
+	unlogged: 'missed'
 });
 
 export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
@@ -209,7 +211,7 @@ export const actions: Actions = {
 		if (!statement) return fail(400, { error: 'Write the identity as a sentence.' });
 		return { identityId: identityFor(locals.account!.id, statement), statement };
 	},
-	pause: async ({ request, locals, params }) => {
+	pause: async ({ request, locals, params, cookies }) => {
 		const f = await request.formData();
 		const h = ownedHabit(locals.account!.id, params.id);
 		if (!h) error(404);
@@ -219,18 +221,29 @@ export const actions: Actions = {
 		db.insert(pause)
 			.values({ id: randomUUID(), accountId: locals.account!.id, habitId: h.id, start, end, note: String(f.get('note') ?? '').slice(0, 120) || null })
 			.run();
+		// A pause over past days takes back the misses counted for them.
+		repaused(locals.account!.id, h.id, start, end, userToday(locals.account!.id, cookies.get('tz')));
 		return { paused: true };
 	},
-	unpause: async ({ request, locals }) => {
+	unpause: async ({ request, locals, cookies }) => {
 		const id = String((await request.formData()).get('id') ?? '');
-		db.delete(pause).where(and(eq(pause.id, id), eq(pause.accountId, locals.account!.id))).run();
+		const where = and(eq(pause.id, id), eq(pause.accountId, locals.account!.id));
+		const p = db.select().from(pause).where(where).get();
+		if (!p) return;
+		db.delete(pause).where(where).run();
+		repaused(locals.account!.id, p.habitId, p.start, p.end, userToday(locals.account!.id, cookies.get('tz')));
 	},
-	archive: ({ locals, params }) => {
+	archive: ({ locals, params, cookies }) => {
+		// Count its misses up to now first: days in the archive are not counted.
+		const h = ownedHabit(locals.account!.id, params.id);
+		if (h?.direction === 'build' && h.schedule)
+			settle(locals.account!.id, h.id, h.schedule as ScheduleForm, userToday(locals.account!.id, cookies.get('tz')));
 		setHabitArchived(locals.account!.id, params.id, true);
 		redirect(303, '/habits');
 	},
-	unarchive: ({ locals, params }) => {
+	unarchive: ({ locals, params, cookies }) => {
 		setHabitArchived(locals.account!.id, params.id, false);
+		if (ownedHabit(locals.account!.id, params.id)) unarchived(params.id, userToday(locals.account!.id, cookies.get('tz')));
 		return { unarchived: true };
 	},
 	delete: ({ locals, params }) => {

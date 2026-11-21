@@ -180,7 +180,9 @@ export const habitForm = z
 		cost: costForm.nullable().default(null),
 		limit: limitForm.nullable().default(null),
 		progression: progressionForm.nullable().default(null),
-		areaId: id.nullable().default(null)
+		areaId: id.nullable().default(null),
+		/** A due day that ends with no log: counted as missed (the default), or ignored. */
+		unlogged: z.enum(['missed', 'ignore']).optional()
 	})
 	.superRefine((h, ctx) => {
 		if (h.direction === 'build' && h.variants.length === 0)

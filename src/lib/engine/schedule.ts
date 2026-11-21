@@ -28,6 +28,8 @@ export interface Done {
 	date: ISODate;
 	variantId: string | null;
 	status: 'done' | 'skipped';
+	/** Logged on a day nothing was due. A rotation that skips ahead follows its calendar past it. */
+	extra?: boolean;
 }
 
 /** The Variant due on `date`, or null when nothing is due. */
@@ -74,9 +76,10 @@ export function nextInRotation(
 	const n = s.order.length;
 	if (n === 0) return null;
 
-	// Start from the last Variant acted on before today, or from the beginning.
+	// Start from the last Variant acted on before today, or from the beginning. A rotation that
+	// skips ahead runs like a roster, so a log on a day off is an extra and doesn't move it.
 	const last = history
-		.filter((h) => h.date < today && h.variantId !== null)
+		.filter((h) => h.date < today && h.variantId !== null && !(s.onMiss === 'skip' && h.extra))
 		.sort((a, b) => toDays(a.date) - toDays(b.date))
 		.at(-1);
 	const lastIndex = last ? s.order.findIndex((o) => o.variantId === last.variantId) : -1;

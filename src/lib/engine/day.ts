@@ -51,6 +51,21 @@ export const DEFAULT_RANGES: DayRange[] = [
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+/**
+ * A part of the day named twice in a form (case doesn't count), or null. Saving would keep
+ * only the first and move the other's habits to it, so the form is refused instead.
+ */
+export function duplicateRange(f: FormData): string | null {
+	const seen = new Set<string>();
+	for (const raw of f.getAll('rangeName').map(String)) {
+		const n = raw.trim().slice(0, 40).toLowerCase();
+		if (!n) continue;
+		if (seen.has(n)) return raw.trim();
+		seen.add(n);
+	}
+	return null;
+}
+
 /** Ranges posted as rangeName/rangeStart/rangeEnd fields; incomplete rows and repeated names are dropped. */
 export function readRanges(f: FormData): DayRange[] {
 	const names = f.getAll('rangeName').map(String);

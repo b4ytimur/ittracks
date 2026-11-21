@@ -63,6 +63,11 @@
 			);
 			return;
 		}
+		const started = result.data?.started as { habit: string } | undefined;
+		if (started) {
+			showToast(`${started.habit} now starts on ${short(data.date)}.`);
+			return;
+		}
 		const removed = result.data?.unslipped as Record<string, unknown> | undefined;
 		if (removed) showToast('Slip removed.', () => postAction('?/reslip', { slip: JSON.stringify(removed) }).then(() => {}));
 	}
@@ -138,6 +143,32 @@
 			{#each data.other as item (item.habitId)}{@render row(item)}{/each}
 		</ul>
 	</details>
+{/if}
+
+{#if data.later.length}
+	<h2>Started later</h2>
+	<p class="muted small-text">
+		These habits start after {short(data.date)}. If you really began on this day, start them from here and log it.
+	</p>
+	<ul class="list">
+		{#each data.later as l (l.habitId)}
+			<li class="card" id="h-{l.habitId}">
+				<div class="row">
+					<div class="grow">
+						<strong>{l.name}</strong>
+						<div class="muted small-text">Starts {short(l.startDate)}</div>
+					</div>
+					{#if l.direction === 'break' || canLog}
+						<form method="POST" action="?/start" use:enhance={after}>
+							<input type="hidden" name="habit" value={l.habitId} />
+							<button aria-label="Start {l.name} from {short(data.date)}">Start from this day</button>
+						</form>
+					{/if}
+				</div>
+				{#if form?.habit === l.habitId && form?.error}<p class="error small-text">{form.error}</p>{/if}
+			</li>
+		{/each}
+	</ul>
 {/if}
 
 {#if data.breaking.length}
