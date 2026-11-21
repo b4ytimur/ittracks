@@ -5,6 +5,8 @@
 	import { describeSchedule, weekdayNames } from '$lib/describe';
 	import FillRuleEditor from './FillRuleEditor.svelte';
 	import { limitOn, nextDrop } from '$lib/engine/limit';
+	import { blocked } from '$lib/rules/core';
+	import { checkHabit, habitRules } from '$lib/rules/habit';
 
 	let { data, form } = $props();
 
@@ -172,6 +174,14 @@
 	const pendingTrigger = $derived(
 		newTrigger.trim() && !h.triggers.includes(newTrigger.trim()) ? [newTrigger.trim()] : []
 	);
+	// ----- Conflict rules (src/lib/rules): what is blocked right now, and why -----
+	const ruleForm = $derived({ ...h, schedule, cue } as HabitForm);
+	const ruleCheck = $derived(checkHabit(ruleForm));
+	const timeBlock = $derived(blocked(habitRules, ruleForm, 'cue.time', {}));
+	const rangeBlock = $derived(blocked(habitRules, ruleForm, 'cue.range', {}));
+	const remindBlock = $derived(blocked(habitRules, ruleForm, 'remind', {}));
+	const uniq = (xs: string[]) => [...new Set(xs)];
+
 	const payload = $derived(
 		JSON.stringify({
 			...h,
@@ -531,18 +541,24 @@
 	<div class="row">
 		<label style="width: 8rem"
 			>Time
-			<input type="time" value={h.cue.time ?? ''} oninput={(e) => (h.cue.time = e.currentTarget.value || null)} />
+			<input type="time" value={h.cue.time ?? ''} disabled={!!timeBlock}
+				oninput={(e) => (h.cue.time = e.currentTarget.value || null)} />
 		</label>
 		{#if data.ranges.length}
 			<label class="grow"
 				>Or part of the day
-				<select value={h.cue.range ?? ''} onchange={(e) => (h.cue.range = e.currentTarget.value || null)}>
+				<select value={h.cue.range ?? ''} disabled={!!rangeBlock} onchange={(e) => (h.cue.range = e.currentTarget.value || null)}>
 					<option value="">Any</option>
 					{#each data.ranges as r (r.name)}<option value={r.name}>{r.name} ({r.start}–{r.end})</option>{/each}
 				</select>
 			</label>
 		{/if}
 	</div>
+	{#if timeBlock}
+		<p class="blocked">{timeBlock.reason}. <button type="button" class="link" onclick={() => (h.cue.range = null)}>Use a time instead</button></p>
+	{:else if rangeBlock && data.ranges.length}
+		<p class="blocked">{rangeBlock.reason}. <button type="button" class="link" onclick={() => (h.cue.time = null)}>Use a part of the day instead</button></p>
+	{/if}
 	<label
 		>Where <input value={h.cue.place ?? ''} oninput={(e) => (h.cue.place = e.currentTarget.value)} placeholder="in the park" />
 	</label>
@@ -569,7 +585,7 @@
 	{/if}
 	{#if intention}<p class="intention">{intention}</p>{/if}
 	<label style="color: var(--text)"
-		><input type="checkbox" bind:checked={h.remind} disabled={!h.cue.time && !h.cue.range} /> Remind me {h.cue.time ? 'at this time' : h.cue.range ? `when the ${h.cue.range.toLowerCase()} starts` : '(set a time first)'}</label
+		><input type="checkbox" bind:checked={h.remind} disabled={!!remindBlock && !h.remind} title={remindBlock?.reason} /> Remind me {h.cue.time ? 'at this time' : h.cue.range ? `when the ${h.cue.range.toLowerCase()} starts` : `(${remindBlock?.reason.toLowerCase() ?? 'set a time first'})`}</label
 	>
 	{#if h.remind}
 		<p class="muted small-text">Turn on reminders for this device in <a href="/settings">Settings</a>.</p>
@@ -773,6 +789,12 @@
 		<span class="grow">This habit is archived: hidden from Today, with its history kept.</span>
 		<button class="small">Unarchive</button>
 	</form>
+{/if}
+
+{#if data.fixed.length}
+	<p class="card blocked" style="margin-bottom: 1rem">
+		Some options on this habit blocked each other, so we fixed them: {data.fixed.join('; ')}. Save to keep this.
+	</p>
 {/if}
 
 <form method="POST" action="?/save" class="stack" id="habit-form">
@@ -1014,6 +1036,8 @@
 		{/if}
 	{/if}
 
+	{#each uniq(ruleCheck.errors.map((i) => i.reason)) as reason (reason)}<p class="error">{reason}</p>{/each}
+	{#each uniq(ruleCheck.warnings.map((i) => i.reason)) as reason (reason)}<p class="blocked">Heads up: {reason}</p>{/each}
 	{#if form?.error}<p class="error">{form.error}</p>{/if}
 
 	<div class="actions">
@@ -1080,6 +1104,11 @@
 	}
 	fieldset {
 		border: 1px solid var(--border);
+	}
+	.blocked {
+		color: var(--muted);
+		font-size: 0.85rem;
+		margin: 0;
 	}
 	.intention {
 		font-style: italic;
