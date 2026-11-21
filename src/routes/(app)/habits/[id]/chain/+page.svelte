@@ -49,6 +49,7 @@
 		<div class="muted">Last {data.weeks} weeks{data.summary ? ` · ${data.summary}` : ''}</div>
 	</div>
 	<div class="row" style="align-items: center">
+		<a href="/habits/{data.id}/stats">Stats</a>
 		<a href="/habits/{data.id}">Edit</a>
 		<a href="/">Back</a>
 	</div>

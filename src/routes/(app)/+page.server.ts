@@ -13,6 +13,7 @@ import { listAreas } from '$lib/server/repo/areas';
 import { DEFAULT_RANGES, readRanges } from '$lib/engine/day';
 import type { Level } from '$lib/engine/streak';
 import { ownedHabit, ownedOccurrence } from '$lib/server/owned';
+import { headlineTexts } from '$lib/server/stats';
 import { unloggedOn } from '$lib/server/backfill';
 import { logWindow } from '$lib/engine/backfill';
 import type { Actions, PageServerLoad } from './$types';
@@ -35,6 +36,8 @@ export const load: PageServerLoad = ({ locals, cookies, url, request }) => {
 	return {
 		today,
 		...loaded,
+		/** Number tiles picked on habit Stats tabs to show on Today. */
+		headlines: headlineTexts(accountId, tz),
 		/** Past days can be logged (Settings). */
 		canBackfill,
 		// Build habits due yesterday that were never logged, for the nudge. Checked after

@@ -121,7 +121,7 @@
 	const hidden = (f: FeatureKey) => views.hidden.includes(f);
 	const line = (k: LineKey) => views.today.lines.includes(k) && !(featureOf[k] && hidden(featureOf[k]!));
 	const headlineOf = (item: Item) =>
-		line('headline') ? headlineText(views.today.headlineFor[item.habitId] ?? views.today.headline, item.stats, item.streak) : '';
+		line('headline') ? (data.headlines[item.habitId] ?? headlineText(views.today.headlineFor[item.habitId] ?? views.today.headline, item.stats, item.streak)) : '';
 
 	/** Change a Today layout setting here at once, and save it. */
 	function setToday(patch: Partial<typeof views.today>) {
@@ -455,7 +455,7 @@
 			{#if data.build.length || data.resting.length}
 				<details>
 					<summary class="small-text">Per habit: headline number and order</summary>
-					<p class="muted small-text">The order is used when Sort is "My order".</p>
+					<p class="muted small-text">The order is used when Sort is "My order". A number from a habit's Stats tab can take the place of its headline: open the number's menu there and pick Show on Today.</p>
 					{#each manualOrder([...data.build, ...data.resting], views.today.order, (b) => b.habitId) as b, i (b.habitId)}
 						{@const all = manualOrder([...data.build, ...data.resting], views.today.order, (x) => x.habitId).map((x) => x.habitId)}
 						<div class="row option">

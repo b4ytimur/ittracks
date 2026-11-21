@@ -9,6 +9,8 @@ import { habitRules, slotRules } from './habit';
 import { metricRules, taskRules } from './task';
 import { viewRules } from './views';
 import { viewSettings } from '../views';
+import { cardRules, statsSettingsRules } from './stats';
+import { statCard, statsSettings } from '../stats/model';
 
 type Def = { type: string; innerType?: z.ZodType; shape?: Record<string, z.ZodType>; element?: z.ZodType; options?: z.ZodType[] };
 const def = (s: z.ZodType) => (s as unknown as { def: Def }).def;
@@ -53,7 +55,9 @@ const REGISTRIES: [string, z.ZodType, object][] = [
 	['slot', slotSchema, slotRules],
 	['task', taskForm, taskRules],
 	['metric', metricSchema, metricRules],
-	['views', viewSettings, viewRules]
+	['views', viewSettings, viewRules],
+	['stat card', statCard, cardRules],
+	['stats settings', statsSettings, statsSettingsRules]
 ];
 
 describe('rule registry coverage', () => {
