@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db } from './db';
 import { settings } from './db/schema';
 import type { DayRange } from '$lib/engine/day';
+import type { PastDays } from '$lib/engine/backfill';
 import type { TaskType } from '$lib/task-types';
 import { readViews, type ViewSettings } from '$lib/views';
 
@@ -29,6 +30,10 @@ export interface Settings {
 	areasSeeded?: boolean;
 	/** Stats boards, cards and custom measures (src/lib/stats/model.ts). Unset until Stats is first opened. */
 	stats?: unknown;
+	/** How far back past days can be logged: null any time, 0 off, N days back. */
+	pastDays: PastDays;
+	/** Today says when yesterday has habits left unlogged, with a link to log them. */
+	nudgeYesterday: boolean;
 }
 
 const defaults: Settings = {
@@ -38,7 +43,9 @@ const defaults: Settings = {
 	showAllSections: false,
 	groupByArea: false,
 	pinned: [],
-	taskTypes: []
+	taskTypes: [],
+	pastDays: null,
+	nudgeYesterday: true
 };
 
 export function getSettings(accountId: string): Settings {

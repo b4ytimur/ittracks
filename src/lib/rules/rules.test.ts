@@ -3,7 +3,8 @@ import { habitForm, taskForm, type HabitForm, type TaskForm } from '../forms';
 import { blocked, get, set } from './core';
 import { checkHabit, habitRules, slotRules } from './habit';
 import { checkTask, metricRules } from './task';
-import { checkSettings, overlappingRanges } from './settings';
+import { checkSettings, cleanSettings, overlappingRanges, settingsRules } from './settings';
+import type { Settings } from '../server/settings';
 
 const V = '00000000-0000-4000-8000-000000000001';
 const S = '00000000-0000-4000-8000-000000000002';
@@ -228,12 +229,41 @@ describe('settings rules', () => {
 		expect(overlappingRanges([r('Night', '22:00', '04:00'), r('Early', '03:00', '06:00')])).not.toBeNull();
 	});
 
+	const settings = (patch: Partial<Settings>): Settings => ({
+		weightUnit: 'kg',
+		ranges: [],
+		guidedSetup: true,
+		showAllSections: false,
+		groupByArea: false,
+		pinned: [],
+		taskTypes: [],
+		pastDays: null,
+		nudgeYesterday: true,
+		...patch
+	});
+
 	it('removing a part of the day a habit uses warns, but never blocks the save', () => {
-		const base = { weightUnit: 'kg', ranges: [{ name: 'Morning', start: '05:00', end: '11:00' }], guidedSetup: true, showAllSections: false, groupByArea: false, pinned: [], taskTypes: [] };
+		const base = settings({ ranges: [{ name: 'Morning', start: '05:00', end: '11:00' }] });
 		expect(checkSettings(base, { usedRanges: ['Morning'] })).toEqual([]);
 		const issues = checkSettings({ ...base, ranges: [] }, { usedRanges: ['Morning'] });
 		expect(issues.map((i) => i.severity)).toEqual(['warn']);
 		// Without knowing what habits use (the first-run day question), there is nothing to warn about.
 		expect(checkSettings({ ...base, ranges: [] })).toEqual([]);
+	});
+
+	it('the yesterday nudge needs past-day logging on, and is cleared when it is off', () => {
+		expect(blocked(settingsRules, settings({ pastDays: 0 }), 'nudgeYesterday', { usedRanges: [] })?.reason).toBe(
+			'Turn on logging past days first'
+		);
+		expect(blocked(settingsRules, settings({ pastDays: 7 }), 'nudgeYesterday', { usedRanges: [] })).toBeNull();
+		expect(cleanSettings(settings({ pastDays: 0 })).nudgeYesterday).toBe(false);
+		expect(cleanSettings(settings({ pastDays: 1 })).nudgeYesterday).toBe(true);
+	});
+
+	it('how far back must be a whole number of days, or any time', () => {
+		expect(checkSettings(settings({ pastDays: null }))).toEqual([]);
+		expect(checkSettings(settings({ pastDays: 30 }))).toEqual([]);
+		expect(checkSettings(settings({ pastDays: -1 }))[0]?.path).toBe('pastDays');
+		expect(checkSettings(settings({ pastDays: 2.5 }))[0]?.path).toBe('pastDays');
 	});
 });

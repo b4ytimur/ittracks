@@ -5,9 +5,11 @@ import { z } from 'zod';
 import { db } from '$lib/server/db';
 import { entry, metric, occurrence, slot, task, variant } from '$lib/server/db/schema';
 import { ownedOccurrence } from '$lib/server/owned';
-import { candidates, lastEntries } from '$lib/server/today';
+import { candidates, lastEntries, userToday } from '$lib/server/today';
 import { getSettings } from '$lib/server/settings';
 import { recapFor } from '$lib/server/stats';
+import { planOfToday, replanToday, windowFor } from '$lib/server/backfill';
+import type { ScheduleForm } from '$lib/forms';
 import { pickTask, type FillRule } from '$lib/engine/fill';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -78,10 +80,16 @@ function loadTask(id: string) {
 	};
 }
 
-export const load: PageServerLoad = ({ locals, params }) => {
+/** Where to go back to: a page of this app, or null. */
+const safeBack = (v: string | null | undefined) => (v && /^\/(?!\/)[\w\-/.?=&%]*$/.test(v) && v.length <= 200 ? v : null);
+
+export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 	const accountId = locals.account!.id;
 	const o = ownedOccurrence(accountId, params.id);
 	if (!o) error(404, 'Not found');
+	const today = userToday(accountId, cookies.get('tz'));
+	const past = o.occ.date < today;
+	const win = windowFor(accountId, o.occ.date, today);
 	const v = o.occ.variantId
 		? db.select().from(variant).where(eq(variant.id, o.occ.variantId)).get()
 		: null;
@@ -126,6 +134,11 @@ export const load: PageServerLoad = ({ locals, params }) => {
 		},
 		habitName: o.habit.name,
 		habitId: o.habit.id,
+		/** A past day: no autosave or timer, and Back goes to that day. */
+		past,
+		/** False for a past day outside the window in Settings: only a finished log can be changed. */
+		canLog: win === 'ok' || win === 'today',
+		back: safeBack(url.searchParams.get('back')) ?? (past ? `/day/${o.occ.date}` : '/'),
 		weightUnit: getSettings(accountId).weightUnit,
 		levels: o.habit.levels?.enabled ? o.habit.levels : null,
 		variantName: v?.name ?? null,
@@ -154,15 +167,19 @@ const savePayload = z.object({
 	stay: z.boolean().default(false),
 	notes: z.string().max(5000),
 	level: z.enum(['minimum', 'target', 'stretch']).default('target'),
+	/** Where to go after Finish on a past day. */
+	back: z.string().max(200).nullish(),
 	entries: z.array(
 		z.object({ taskId: z.string().uuid(), values: z.record(z.string(), z.unknown()) })
 	)
 });
 
 export const actions: Actions = {
-	save: async ({ request, locals, params }) => {
+	save: async ({ request, locals, params, cookies }) => {
 		const o = ownedOccurrence(locals.account!.id, params.id);
 		if (!o) error(404);
+		const today = userToday(locals.account!.id, cookies.get('tz'));
+		const past = o.occ.date < today;
 		let parsed;
 		try {
 			parsed = savePayload.safeParse(JSON.parse(String((await request.formData()).get('payload'))));
@@ -181,6 +198,12 @@ export const actions: Actions = {
 					.all().length === ids.length
 			: true;
 		if (!ok) return fail(400, { error: 'Unknown task.' });
+		// Settings can limit how far back a day can still be marked done; a finished log can always be corrected.
+		const win = windowFor(locals.account!.id, o.occ.date, today);
+		if (past && o.occ.status !== 'done' && win !== 'ok')
+			return fail(400, { error: win === 'off' ? 'Logging past days is off in Settings.' : 'This day is too far back to log. You can change how far back in Settings.' });
+		const schedule = o.habit.schedule as ScheduleForm | null;
+		const plan = past && schedule ? planOfToday(o.habit.id, schedule, today) : null;
 
 		db.transaction((tx) => {
 			tx.delete(entry).where(eq(entry.occurrenceId, o.occ.id)).run();
@@ -199,7 +222,15 @@ export const actions: Actions = {
 				.where(eq(occurrence.id, o.occ.id))
 				.run();
 		});
-		if (p.finish && !p.stay) redirect(303, `/?did=${o.occ.id}&finished=${o.habit.id}`);
+		// A past log can change what is due today (a weekly target met, a rotation moved on).
+		if (past && schedule) replanToday(locals.account!.id, o.habit.id, schedule, today, plan);
+		if (p.finish && !p.stay) {
+			if (past) {
+				const back = safeBack(p.back) ?? `/day/${o.occ.date}`;
+				redirect(303, `${back}${back.includes('?') ? '&' : '?'}did=${o.occ.id}`);
+			}
+			redirect(303, `/?did=${o.occ.id}&finished=${o.habit.id}`);
+		}
 		return { saved: true };
 	},
 

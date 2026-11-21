@@ -1,6 +1,6 @@
 // Everything an account logged, in the shape the stats engine reads, plus the stored boards.
 // One read per table: the engine does the rest in memory, so a card never needs its own query.
-import { and, asc, eq, inArray, ne } from 'drizzle-orm';
+import { and, asc, eq, inArray, lte, ne } from 'drizzle-orm';
 import { db } from './db';
 import { area, craving, entry, habit, habitIdentity, identity, metric, occurrence, slip, slot, tag, task, taskTag, variant } from './db/schema';
 import { getSettings, getViews, saveSettings } from './settings';
@@ -216,7 +216,8 @@ export interface Recap {
 
 /**
  * "Last time" and "best" for the Tasks on the log screen (R3): reads only those Tasks' logs,
- * so opening a log stays quick on a big account.
+ * so opening a log stays quick on a big account. Only logs up to `today` count, so a past
+ * day's log shows what came before it.
  */
 export function recapFor(accountId: string, taskIds: string[], excludeOcc: string, weightUnit: string, today: string): Record<string, Recap> {
 	if (!taskIds.length) return {};
@@ -233,7 +234,7 @@ export function recapFor(accountId: string, taskIds: string[], excludeOcc: strin
 		.select({ e: entry, o: occurrence })
 		.from(entry)
 		.innerJoin(occurrence, eq(entry.occurrenceId, occurrence.id))
-		.where(and(inArray(entry.taskId, ids), eq(occurrence.status, 'done'), ne(occurrence.id, excludeOcc)))
+		.where(and(inArray(entry.taskId, ids), eq(occurrence.status, 'done'), ne(occurrence.id, excludeOcc), lte(occurrence.date, today)))
 		.all();
 	const occs = [...new Map(rows.map((r) => [r.o.id, r.o])).values()];
 	const habitIds = [...new Set(occs.map((o) => o.habitId))];

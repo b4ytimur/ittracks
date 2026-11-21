@@ -14,6 +14,8 @@ import { DEFAULT_RANGES, readRanges } from '$lib/engine/day';
 import type { Level } from '$lib/engine/streak';
 import { ownedHabit, ownedOccurrence } from '$lib/server/owned';
 import { headlineTexts } from '$lib/server/stats';
+import { unloggedOn } from '$lib/server/backfill';
+import { logWindow } from '$lib/engine/backfill';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ locals, cookies, url, request }) => {
@@ -28,11 +30,19 @@ export const load: PageServerLoad = ({ locals, cookies, url, request }) => {
 		redirect(303, PAGE_PATH[views.startPage]);
 	if (tz && settings.timeZone !== tz) saveSettings(accountId, { timeZone: tz });
 	const today = userToday(accountId, tz);
+	const yesterday = addDays(today, -1);
+	const loaded = loadToday(accountId, today);
+	const canBackfill = logWindow(yesterday, today, settings.pastDays) === 'ok';
 	return {
 		today,
-		...loadToday(accountId, today),
+		...loaded,
 		/** Number tiles picked on habit Stats tabs to show on Today. */
 		headlines: headlineTexts(accountId, tz),
+		/** Past days can be logged (Settings). */
+		canBackfill,
+		// Build habits due yesterday that were never logged, for the nudge. Checked after
+		// loadToday, which settles yesterday first.
+		unlogged: canBackfill && settings.nudgeYesterday ? unloggedOn(accountId, yesterday) : [],
 		// The Log screen sends you back here after Finish, so the reward can show.
 		finished: url.searchParams.get('finished'),
 		prep: loadPrep(accountId, today),
