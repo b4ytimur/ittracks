@@ -29,6 +29,7 @@ export const PER_LOG = {
 	sets: 'Number of sets',
 	ticked: 'Ticked or not',
 	option: 'Which option',
+	score: "The option's number (mood 5 to 1)",
 	present: 'Filled in',
 	// tasks
 	volume: 'Volume (weight × reps)',
@@ -45,7 +46,7 @@ export type BuiltinPerLog = keyof typeof PER_LOG;
 /** Which per-log measures each source offers. */
 export const PER_LOG_FOR: Record<Source, BuiltinPerLog[]> = {
 	outcomes: ['done', 'rate', 'targetMet'],
-	field: ['value', 'sum', 'best', 'avg', 'sets', 'ticked', 'option', 'present'],
+	field: ['value', 'sum', 'best', 'avg', 'sets', 'ticked', 'option', 'score', 'present'],
 	task: ['volume', 'e1rm', 'hardSets', 'pace', 'pctTarget', 'targetMet', 'sets'],
 	slips: ['count'],
 	cravings: ['count'],

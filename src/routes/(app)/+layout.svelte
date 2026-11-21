@@ -15,7 +15,9 @@
 		{ href: '/settings', label: 'Settings' }
 	];
 	const active = (href: string) =>
-		href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(href);
+		href === '/'
+			? page.url.pathname === '/'
+			: page.url.pathname.startsWith(href) || (href === '/history' && page.url.pathname.startsWith('/journal'));
 
 	let online = $state(true);
 	$effect(() => {

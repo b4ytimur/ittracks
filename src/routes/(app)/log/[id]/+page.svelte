@@ -8,6 +8,9 @@
 	import { defaultStep } from '$lib/task-types';
 	import { enqueue, isOffline } from '$lib/outbox.svelte';
 	import { postAction, showToast } from '$lib/toast.svelte';
+	import NoteBox from '$lib/NoteBox.svelte';
+	import Markdown from '$lib/Markdown.svelte';
+	import { starterFor, untouched } from '$lib/journal';
 
 	let { data, form } = $props();
 
@@ -41,6 +44,19 @@
 		return last ?? target;
 	}
 
+	const isLong = (m: Metric) => m.type === 'text' && m.long;
+	/** Long text fields that are still empty start with their prompt and starter text (never last time's text). */
+	function withStarters(summary: Values, t: NonNullable<Item['task']>): Values {
+		for (const m of t.metrics) {
+			if (!isLong(m) || m.repeats) continue;
+			const v = summary[m.id];
+			if (typeof v === 'string' && v.trim()) continue;
+			const start = starterFor(m, data.occurrence.date);
+			if (start) summary[m.id] = start;
+		}
+		return summary;
+	}
+
 	/** The planned sets and values for a Slot, before anything is logged: a prefill from last time. */
 	function planned(it: Item): ItemState {
 		const t = it.task;
@@ -64,7 +80,7 @@
 		// Sub-tasks start unticked too: you tick the ones you did.
 		const subs = Object.fromEntries(t.subtasks.map((s) => [s.id, false]));
 		// A Yes or no Task starts unticked like any tick box.
-		return { sets, summary, subs, tick: false };
+		return { sets, summary: withStarters(summary, t), subs, tick: false };
 	}
 
 	/**
@@ -85,7 +101,7 @@
 			if (due) sets.push(...planned(it).sets.slice(sets.length));
 			return {
 				sets,
-				summary: { ...savedSummary },
+				summary: due ? withStarters({ ...savedSummary }, t) : { ...savedSummary },
 				subs: Object.fromEntries(t.subtasks.map((s) => [s.id, !!data.subDone[s.id]])),
 				tick: isYesNo(t) && it.saved.some((v) => v.done === true)
 			};
@@ -239,7 +255,11 @@
 					values: Object.fromEntries(repeatingIds.map((id) => [id, set.values[id] ?? null]))
 				});
 			}
-			const filled = Object.entries(s.summary).filter(([, v]) => v !== '' && v !== null && v !== undefined);
+			// A long text field that still holds only its starter text counts as not written.
+			const longs = new Map(t.metrics.filter(isLong).map((m) => [m.id, m]));
+			const filled = Object.entries(s.summary).filter(
+				([k, v]) => v !== '' && v !== null && v !== undefined && !(longs.has(k) && untouched(longs.get(k)!, v, data.occurrence.date))
+			);
 			if (filled.length) entries.push({ taskId: t.id, values: { ...Object.fromEntries(filled), _summary: true } });
 			for (const [subId, done] of Object.entries(s.subs)) {
 				if (done) entries.push({ taskId: subId, values: { done: true } });
@@ -285,7 +305,9 @@
 			for (const m of t.metrics.filter((x) => x.required)) {
 				const bad = m.repeats
 					? log[i].sets.some((s) => (s.done || quickMode) && empty(s.values[m.id])) || !log[i].sets.length
-					: empty(log[i].summary[m.id]);
+					: isLong(m)
+						? untouched(m, log[i].summary[m.id], data.occurrence.date)
+						: empty(log[i].summary[m.id]);
 				if (bad) out.push(`${t.name}: ${m.name}`);
 			}
 		});
@@ -471,6 +493,12 @@
 				Last time ({new Date(rc.date + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}): {rc.text}{rc.best ? ` · best ${rc.best}` : ''}{' · '}<a href="/library/{t.id}">History</a>
 			</p>
 		{/if}
+		{#if t?.notes.trim() && !quickMode}
+			<details class="howto">
+				<summary class="small-text">How to</summary>
+				<div class="howto-body"><Markdown text={t.notes} small /></div>
+			</details>
+		{/if}
 
 		{#if t}
 			{@const repeating = shownMetrics(t.metrics.filter((m) => m.repeats))}
@@ -540,6 +568,13 @@
 								{#each m.choices ?? [] as c (c)}<option>{c}</option>{/each}
 							</select>
 						</label>
+					{:else if m.type === 'text' && isLong(m)}
+						<NoteBox
+							label="{m.name}{m.required ? ' *' : ''}"
+							placeholder="Write here. Markdown works."
+							rows={6}
+							bind:value={() => num(log[i].summary[m.id]), (v) => (log[i].summary[m.id] = v)}
+						/>
 					{:else if m.type === 'text'}
 						<label>{m.name}{m.required ? ' *' : ''} <input value={num(log[i].summary[m.id])} oninput={(e) => (log[i].summary[m.id] = e.currentTarget.value)} /></label>
 					{:else if isNumeric(m)}
@@ -584,7 +619,7 @@
 {#if quickMode}
 	<p class="muted small-text"><a href="/log/{data.occurrence.id}">Open the full log</a> to change anything else.</p>
 {:else}
-	<label style="margin-top: 1rem">Notes <textarea bind:value={notes} rows="2"></textarea></label>
+	<div style="margin-top: 1rem"><NoteBox bind:value={notes} label="Notes" rows={2} /></div>
 {/if}
 
 {#if problem}<p class="error">{problem}</p>{/if}
@@ -719,6 +754,18 @@
 	}
 	.small-text {
 		font-size: 0.85rem;
+	}
+	.howto {
+		margin: 0 0 0.6rem;
+	}
+	.howto summary {
+		cursor: pointer;
+		color: var(--accent);
+	}
+	.howto-body {
+		margin-top: 0.4rem;
+		padding: 0.5rem 0.6rem;
+		border-left: 3px solid var(--border);
 	}
 	.swap summary {
 		cursor: pointer;

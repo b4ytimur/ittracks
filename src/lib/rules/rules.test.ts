@@ -5,6 +5,7 @@ import { checkHabit, habitRules, slotRules } from './habit';
 import { checkTask, metricRules } from './task';
 import { checkSettings, cleanSettings, overlappingRanges, settingsRules } from './settings';
 import type { Settings } from '../server/settings';
+import { fromTemplate } from '../views';
 
 const V = '00000000-0000-4000-8000-000000000001';
 const S = '00000000-0000-4000-8000-000000000002';
@@ -216,9 +217,77 @@ describe('task rules', () => {
 		expect(checkTask(t).errors[0].path).toBe('metrics.0.choices');
 	});
 
-	it('metric rules list every exclusive field', () => {
-		expect(ruled(metricRules, ['exclusive'])).toEqual([]);
+	it('N1: several lines only for Text fields, with starter text and prompts', () => {
+		const t = task();
+		t.metrics[0] = { ...t.metrics[0], type: 'count', repeats: false, long: true, starter: '## Wins', prompts: ['Why?'], promptOrder: 'random' };
+		const m = checkTask(t).form.metrics[0];
+		expect([m.long, m.starter, m.prompts, m.promptOrder]).toEqual([false, '', [], 'order']);
+		t.metrics[0].type = 'text';
+		const kept = checkTask(t).form.metrics[0];
+		expect([kept.long, kept.starter, kept.prompts, kept.promptOrder]).toEqual([true, '## Wins', ['Why?'], 'random']);
 	});
+
+	it('N3: a long text field never starts with last time\'s text', () => {
+		const t = task();
+		t.metrics[0] = { ...t.metrics[0], type: 'text', repeats: false, long: true, prefill: 'last' };
+		expect(checkTask(t).form.metrics[0].prefill).toBe('blank');
+		t.metrics[0].long = false;
+		expect(checkTask(t).form.metrics[0].prefill).toBe('last');
+	});
+
+	it('N4: a long text field on quick logs warns but saves', () => {
+		const t = task();
+		t.metrics[0] = { ...t.metrics[0], type: 'text', repeats: false, long: true, quick: true };
+		const r = checkTask(t);
+		expect(r.errors).toEqual([]);
+		expect(r.warnings.map((w) => w.path)).toEqual(['metrics.0.quick']);
+		t.metrics[0].quick = false;
+		expect(checkTask(t).warnings).toEqual([]);
+	});
+
+	it('J4: the prompt order needs prompts', () => {
+		const t = task();
+		t.metrics[0] = { ...t.metrics[0], type: 'text', repeats: false, long: true, prompts: [], promptOrder: 'random' };
+		expect(blocked(metricRules, t.metrics[0], 'promptOrder', undefined)?.reason).toBe('Add prompts first');
+		expect(checkTask(t).form.metrics[0].promptOrder).toBe('order');
+	});
+
+	it('J5: scored choices have a number on every option or none, and drop numbers of removed options', () => {
+		const t = task();
+		t.metrics[0] = { ...t.metrics[0], type: 'choice', repeats: false, choices: ['Good', 'Bad'], scores: { Good: 5 } };
+		expect(checkTask(t).errors.map((e) => e.path)).toEqual(['metrics.0.scores']);
+		t.metrics[0].scores = { Good: 5, Bad: 1, Gone: 3 };
+		const r = checkTask(t);
+		expect(r.errors).toEqual([]);
+		expect(r.form.metrics[0].scores).toEqual({ Good: 5, Bad: 1 });
+		t.metrics[0].scores = {};
+		expect(checkTask(t).errors).toEqual([]);
+		t.metrics[0] = { ...t.metrics[0], type: 'count', scores: { Good: 5 } };
+		expect(checkTask(t).form.metrics[0].scores).toEqual({});
+	});
+
+	// Generated: one test per exclusive pair of Metric options.
+	const METRIC_SAMPLES: Record<string, Partial<TaskForm['metrics'][number]>> = {
+		repeats: { repeats: true },
+		long: { type: 'text', long: true }
+	};
+	it('every exclusive Metric pair has samples', () => {
+		for (const { path, c } of ruled(metricRules, ['exclusive'])) {
+			expect(METRIC_SAMPLES, path).toHaveProperty([path]);
+			expect(METRIC_SAMPLES, c.other!).toHaveProperty([c.other!]);
+		}
+	});
+	for (const { path, c } of ruled(metricRules, ['exclusive'])) {
+		it(`metric: ${path} vs ${c.other} is refused on save and blocked in the editor`, () => {
+			const plain = { ...task().metrics[0], type: 'text' as const, repeats: false };
+			const one = { ...plain, ...METRIC_SAMPLES[c.other!] };
+			expect(blocked(metricRules, one, path as never, undefined)?.other).toBe(c.other);
+			const both = { ...one, ...METRIC_SAMPLES[path] };
+			const t = task();
+			t.metrics[0] = both;
+			expect(checkTask(t).errors.length).toBeGreaterThan(0);
+		});
+	}
 });
 
 describe('settings rules', () => {
@@ -239,7 +308,16 @@ describe('settings rules', () => {
 		taskTypes: [],
 		pastDays: null,
 		nudgeYesterday: true,
+		dayNote: false,
 		...patch
+	});
+
+	it('J3: the day note warns, never clears, while the Journal feature is off', () => {
+		const views = { ...fromTemplate('standard'), hidden: ['journal' as const] };
+		const off = settings({ dayNote: true, views });
+		expect(checkSettings(off).map((i) => [i.path, i.severity])).toEqual([['dayNote', 'warn']]);
+		expect(cleanSettings(off).dayNote).toBe(true);
+		expect(checkSettings(settings({ dayNote: true }))).toEqual([]);
 	});
 
 	it('removing a part of the day a habit uses warns, but never blocks the save', () => {

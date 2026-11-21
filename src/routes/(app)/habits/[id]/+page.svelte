@@ -5,6 +5,7 @@
 	import type { HabitForm, ScheduleForm } from '$lib/forms';
 	import { describeSchedule, weekdayNames } from '$lib/describe';
 	import FillRuleEditor from './FillRuleEditor.svelte';
+	import NoteBox from '$lib/NoteBox.svelte';
 	import { limitOn, nextDrop } from '$lib/engine/limit';
 	import { scheduleStartBy } from '$lib/engine/unlogged';
 	import { blocked } from '$lib/rules/core';
@@ -822,6 +823,9 @@
 			</li>
 		{/if}
 		<li><a class="card" href="?mode=full"><strong>Start blank in the full editor</strong><div class="muted small-text">Every option on one page.</div></a></li>
+		{#if !data.hidden.includes('journal')}
+			<li><a class="card" href="/journal?setup"><strong>Start a daily journal</strong><div class="muted small-text">A few lines each evening with a prompt, a mood to chart, and an optional day note on Today.</div></a></li>
+		{/if}
 	</ul>
 	<p class="muted small-text">You can skip this choice in <a href="/settings/editor">Settings</a>.</p>
 {:else}
@@ -1090,7 +1094,7 @@
 	{/if}
 
 	{#if open.notes}
-		<label>Notes <textarea bind:value={h.notes} rows="2"></textarea></label>
+		<NoteBox bind:value={h.notes} label="Notes" hint="Markdown: why this habit matters, the plan, links." />
 	{/if}
 
 	{#if Object.values(open).some((x) => !x)}

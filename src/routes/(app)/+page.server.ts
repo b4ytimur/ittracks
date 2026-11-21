@@ -8,7 +8,8 @@ import { createOccurrence, loadPrep, loadToday, quickDone, reopen, sameAsLast, t
 import { raise } from '$lib/engine/progression';
 import { addDays } from '$lib/engine/dates';
 import { getSettings, getViews, saveSettings } from '$lib/server/settings';
-import { DEFAULT_TEMPLATE_NEW, PAGE_PATH, TEMPLATES, fromTemplate, templateById } from '$lib/views';
+import { DEFAULT_TEMPLATE_NEW, PAGE_PATH, TEMPLATES, fromTemplate, isHidden, templateById } from '$lib/views';
+import { getDayNote } from '$lib/server/journal';
 import { listAreas } from '$lib/server/repo/areas';
 import { DEFAULT_RANGES, duplicateRange, readRanges } from '$lib/engine/day';
 import type { Level } from '$lib/engine/streak';
@@ -54,7 +55,9 @@ export const load: PageServerLoad = ({ locals, cookies, url, request }) => {
 		suggestedTemplate: DEFAULT_TEMPLATE_NEW,
 		views,
 		ranges: settings.ranges,
-		areas: listAreas(accountId)
+		areas: listAreas(accountId),
+		/** J3: the day note, when it is on (Settings) and the Journal feature is too. */
+		dayNote: settings.dayNote && !isHidden(views, 'journal') ? getDayNote(accountId, today) : null
 	};
 };
 

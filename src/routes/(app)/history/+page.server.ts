@@ -8,6 +8,8 @@ import { settleAll, userToday } from '$lib/server/today';
 import { addDays } from '$lib/engine/dates';
 import { progressForIds } from '$lib/server/progress';
 import { isPartial, progressText } from '$lib/engine/progress';
+import { excerpt } from '$lib/markdown';
+import { isHidden } from '$lib/views';
 import type { PageServerLoad } from './$types';
 
 const DAYS = 90;
@@ -25,6 +27,7 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 			id: occurrence.id,
 			date: occurrence.date,
 			status: occurrence.status,
+			notes: occurrence.notes,
 			habitId: habit.id,
 			habit: habit.name,
 			areaId: habit.areaId,
@@ -86,6 +89,8 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		today,
 		/** Past days can be logged (a Settings option); history only lists days with something logged. */
 		canBackfill: getSettings(accountId).pastDays !== 0,
+		/** The Journal page sits next to History, unless the Journal feature is off. */
+		journal: !isHidden(views, 'journal'),
 		entryCounts: Object.fromEntries(occ.map((o) => [o.id, entries.filter((c) => c.occurrenceId === o.id).length])),
 		/** "3 of 6 glasses" or "2 of 4 steps" for logs that fell short, by Occurrence id. */
 		partial: Object.fromEntries(
@@ -120,6 +125,8 @@ function summarize(entries: { taskId: string; task: string; values: Record<strin
 				const v = e.values[m.id];
 				if (v === undefined || v === null || v === '' || v === false) return null;
 				if (v === true) return m.name;
+				// Text can be a whole journal entry: the start of it is enough here.
+				if (m.type === 'text' && typeof v === 'string') return `${m.name}: ${excerpt(v, 60)}`;
 				return `${v}${m.unit ? ` ${m.unit}` : ''}`;
 			})
 			.filter(Boolean);

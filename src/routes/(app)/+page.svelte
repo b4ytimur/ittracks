@@ -13,6 +13,7 @@
 	import { isPartial, progressText } from '$lib/engine/progress';
 	import { invalidateAll } from '$app/navigation';
 	import { addDays } from '$lib/engine/dates';
+	import DayNote from '$lib/DayNote.svelte';
 	import {
 		DONE_MODES,
 		LINES,
@@ -845,6 +846,8 @@
 		</ul>
 	{/if}
 {/snippet}
+
+{#if data.dayNote !== null}<DayNote date={data.today} text={data.dayNote} />{/if}
 
 {#if form?.error && !form?.habit}<p class="error">{form.error}</p>{/if}
 

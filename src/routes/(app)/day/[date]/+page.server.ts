@@ -2,7 +2,7 @@
 // and add or remove slips. Every change can be undone from the toast.
 import { randomUUID } from 'node:crypto';
 import { error, fail, redirect } from '@sveltejs/kit';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { habit, occurrence, slip } from '$lib/server/db/schema';
 import { ownedHabit } from '$lib/server/owned';
@@ -19,8 +19,10 @@ import {
 	unloggedOn,
 	windowFor
 } from '$lib/server/backfill';
-import { getSettings } from '$lib/server/settings';
+import { getSettings, getViews } from '$lib/server/settings';
 import { progressForIds } from '$lib/server/progress';
+import { getDayNote } from '$lib/server/journal';
+import { isHidden } from '$lib/views';
 import { addDays } from '$lib/engine/dates';
 import { earliestLoggable, isRealDate } from '$lib/engine/backfill';
 import type { Level } from '$lib/engine/streak';
@@ -35,6 +37,7 @@ export const load: PageServerLoad = ({ locals, params, cookies }) => {
 	if (date >= today) redirect(303, '/');
 	const settings = getSettings(accountId);
 	const day = loadDay(accountId, date, today);
+	const occIds = [...day.due, ...day.other].flatMap((x) => (x.occurrence ? [x.occurrence.id] : []));
 	return {
 		date,
 		today,
@@ -43,7 +46,16 @@ export const load: PageServerLoad = ({ locals, params, cookies }) => {
 		earliest: earliestLoggable(today, settings.pastDays),
 		...day,
 		/** "3 of 6 glasses", "2 of 4 steps", by Occurrence id. */
-		progress: Object.fromEntries(progressForIds([...day.due, ...day.other].flatMap((i) => (i.occurrence ? [i.occurrence.id] : [])))),
+		progress: Object.fromEntries(progressForIds(occIds)),
+		/** Log notes (Markdown) by Occurrence id. */
+		notes: Object.fromEntries(
+			(occIds.length
+				? db.select({ id: occurrence.id, notes: occurrence.notes }).from(occurrence).where(inArray(occurrence.id, occIds)).all()
+				: []
+			).flatMap((o) => (o.notes?.trim() ? [[o.id, o.notes]] : []))
+		) as Record<string, string>,
+		/** J3: the day note, when it is on and the Journal feature is too. */
+		dayNote: settings.dayNote && !isHidden(getViews(accountId), 'journal') ? getDayNote(accountId, date) : null,
 		// The day before, for the "previous day" link: still worth a look if it has gaps.
 		prevUnlogged: unloggedOn(accountId, addDays(date, -1)).length
 	};

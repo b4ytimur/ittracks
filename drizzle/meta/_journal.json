@@ -36,6 +36,13 @@
       "when": 1795291230792,
       "tag": "0004_round2_trust",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1795300000000,
+      "tag": "0005_notes_journal",
+      "breakpoints": true
     }
   ]
 }

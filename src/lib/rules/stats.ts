@@ -46,7 +46,9 @@ export const cardRules = defineRules<StatCard, StatCtx>({
 		check((f) => isCustom(f.perLog) && src(f) !== 'task', 'Your own measures work on Task cards'),
 		// R1
 		check((f, c) => src(f) === 'field' && fieldTypes(c).includes('checkbox') && f.perLog !== 'ticked', 'Checkbox fields can be counted, not added up'),
-		check((f, c) => src(f) === 'field' && fieldTypes(c).includes('choice') && f.perLog !== 'option', 'Choice fields can be counted per option, not added up'),
+		check((f, c) => src(f) === 'field' && fieldTypes(c).includes('choice') && f.perLog !== 'option' && !(f.perLog === 'score' && c.scored), 'Choice fields can be counted per option, not added up'),
+		// J5: scored choices (mood 5 to 1) can be averaged by their numbers.
+		check((f, c) => src(f) === 'field' && f.perLog === 'score' && !c.scored, "The option's number needs a Choice field with a number on every option"),
 		check((f, c) => src(f) === 'field' && fieldTypes(c).includes('text') && f.perLog !== 'present', 'Text fields can be counted, not added up'),
 		check((f, c) => src(f) === 'field' && ['sum', 'best', 'avg', 'sets'].includes(f.perLog) && !c.repeats && fieldTypes(c).every((t) => NUMERIC.includes(t)) && fieldTypes(c).length > 0, 'This field is logged once per log, not per set: use "The value"'),
 		// R7
