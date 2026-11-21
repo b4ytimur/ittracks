@@ -1,6 +1,7 @@
 {
 	"format": "ittracks-template",
-	"version": 3,
+	"version": 4,
+	"view": "quitter",
 	"name": "No added sugar",
 	"description": "Count days without added sugar. Note when cravings hit.",
 	"meta": {

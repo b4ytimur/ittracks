@@ -1,9 +1,36 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
+	import ViewBar from '$lib/ViewBar.svelte';
+	import { STATUSES } from '$lib/views';
+	import { viewOp } from '$lib/viewclient';
+
 	let { data } = $props();
+
+	let views = $state(untrack(() => data.views));
+	let view = $state(untrack(() => data.initial));
 
 	const label = (d: string) =>
 		new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 	const statusWord: Record<string, string> = { done: 'Done', skipped: 'Skipped', missed: 'Missed' };
+
+	const fits = (x: { habitId: string; areaId: string | null }) =>
+		(!view.habit || x.habitId === view.habit) && (!view.areas.length || view.areas.includes(x.areaId ?? ''));
+	/** Days with only what passes the filters; empty days drop out. */
+	const days = $derived.by(() => {
+		const out = data.history
+			.map(([date, day]) => {
+				const occurrences = view.status === 'slip' ? [] : day.occurrences.filter((o) => fits(o) && (view.status === 'all' || o.status === view.status));
+				const slips = view.status === 'all' || view.status === 'slip' ? day.slips.filter(fits) : [];
+				return { date, occurrences, slips };
+			})
+			.filter((d) => d.occurrences.length || d.slips.length);
+		return view.sort === 'oldest' ? out.reverse() : out;
+	});
+
+	function toggleValues() {
+		views.history = { ...views.history, values: !views.history.values };
+		viewOp({ op: 'patch', history: { values: views.history.values } });
+	}
 </script>
 
 <svelte:head><title>History · ittracks</title></svelte:head>
@@ -13,22 +40,34 @@
 	<a href="/settings">Settings</a>
 </header>
 
-{#if data.history.length === 0}
-	<p class="muted">Nothing logged in the last {data.days} days yet.</p>
+{#if data.history.length}
+	<ViewBar page="history" bind:views bind:current={view} areas={data.areas} habits={data.habits} statuses={STATUSES} />
+	<label class="values"><input type="checkbox" checked={views.history.values} onchange={toggleValues} /> Show logged values (like "80 kg × 8")</label>
 {/if}
 
-{#each data.history as [date, day] (date)}
-	<h2>{label(date)}</h2>
+{#if data.history.length === 0}
+	<p class="muted">Nothing logged in the last {data.days} days yet.</p>
+{:else if days.length === 0}
+	<p class="muted">Nothing in the last {data.days} days matches these filters.</p>
+{/if}
+
+{#each days as day (day.date)}
+	<h2>{label(day.date)}</h2>
 	<ul class="list">
 		{#each day.occurrences as o (o.id)}
 			<li>
-				<a class="card row" href="/log/{o.id}">
-					<span class="grow"
-						><strong>{o.habit}</strong>{#if o.variant}<span class="chip" style="margin-left: 0.35rem">{o.variant}</span>{/if}</span
-					>
-					<span class="muted" class:missed={o.status === 'missed'}>
-						{statusWord[o.status]}{data.entryCounts[o.id] ? ` · ${data.entryCounts[o.id]} entries` : ''}
-					</span>
+				<a class="card" href="/log/{o.id}">
+					<div class="row">
+						<span class="grow"
+							><strong>{o.habit}</strong>{#if o.variant}<span class="chip" style="margin-left: 0.35rem">{o.variant}</span>{/if}</span
+						>
+						<span class="muted" class:missed={o.status === 'missed'}>
+							{statusWord[o.status]}{!views.history.values && data.entryCounts[o.id] ? ` · ${data.entryCounts[o.id]} entries` : ''}
+						</span>
+					</div>
+					{#if views.history.values}
+						{#each data.values[o.id] ?? [] as line (line)}<div class="muted small-text">{line}</div>{/each}
+					{/if}
 				</a>
 			</li>
 		{/each}
@@ -48,5 +87,12 @@
 <style>
 	.missed {
 		color: var(--danger);
+	}
+	.small-text {
+		font-size: 0.85rem;
+	}
+	.values {
+		color: var(--text);
+		font-size: 0.85rem;
 	}
 </style>

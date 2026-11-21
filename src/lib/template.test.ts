@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyAnswers, fromTemplate, templateFile, toTemplate, type TemplateFile } from './template';
+import { TEMPLATE_VERSION, applyAnswers, fromTemplate, templateFile, toTemplate, type TemplateFile } from './template';
 import { habitForm, type HabitForm, type TaskForm } from './forms';
 
 const T1 = '00000000-0000-4000-8000-000000000001';
@@ -149,7 +149,7 @@ describe('templates', () => {
 	it('carries per-Metric log settings (version 3)', () => {
 		const { tasks } = fromTemplate(tpl, '2026-12-01');
 		const [w, r] = tasks[0].form.metrics;
-		expect(tpl.version).toBe(3);
+		expect(tpl.version).toBe(TEMPLATE_VERSION);
 		expect([w.prefill, w.step, w.required, w.quick]).toEqual(['last', 2.5, true, true]);
 		expect([r.prefill, r.step, r.required, r.quick]).toEqual(['target', null, false, false]);
 	});

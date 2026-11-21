@@ -17,8 +17,11 @@ export const POST: RequestHandler = async ({ request, locals, params }) => {
 		return json({ ok: true });
 	}
 	if (o.occ.status !== 'due') return json({ ok: true, already: o.occ.status });
-	if (action === 'done') sameAsLast(o.occ.id);
-	else if (action === 'minimum') quickDone(o.occ.id, 'minimum');
+	let r: ReturnType<typeof sameAsLast>;
+	if (action === 'done') r = sameAsLast(o.occ.id);
+	else if (action === 'minimum') r = quickDone(o.occ.id, 'minimum');
 	else error(400, 'Unknown action');
+	// A required field is still empty: the service worker opens the quick log instead.
+	if (r === 'needsInput') return json({ ok: false, open: `/log/${o.occ.id}?quick` }, { status: 409 });
 	return json({ ok: true });
 };

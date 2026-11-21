@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray, notInArray } from 'drizzle-orm';
 import { db } from '../db';
-import { area, habit, habitIdentity, identity, slot, variant } from '../db/schema';
+import { area, habit, habitIdentity, identity, metric, slot, variant } from '../db/schema';
 import {
 	DEFAULT_TRIGGERS,
 	defaultLevels,
@@ -11,6 +11,27 @@ import {
 } from '$lib/forms';
 import { makesLoop } from '$lib/engine/stack';
 import type { StreakRule } from '$lib/engine/streak';
+import { checkHabit, type HabitCheck, type HabitCtx } from '$lib/rules/habit';
+
+/** What the habit rules need to know from the database. */
+export function habitCtx(f: HabitForm): HabitCtx {
+	const ids = [...new Set(f.variants.flatMap((v) => v.slots.map((s) => s.taskId)).filter((x): x is string => !!x))];
+	const repeating = new Set(
+		ids.length
+			? db
+					.select({ taskId: metric.taskId })
+					.from(metric)
+					.where(and(inArray(metric.taskId, ids), eq(metric.repeats, true)))
+					.all()
+					.map((r) => r.taskId)
+			: []
+	);
+	return { taskRepeats: (id) => (ids.includes(id) ? repeating.has(id) : undefined) };
+}
+
+/** Clean and check a habit against the conflict rules (src/lib/rules). */
+export const checkHabitForm = (f: HabitForm, opts: { resolve?: boolean } = {}): HabitCheck =>
+	checkHabit(f, habitCtx(f), opts);
 
 export function listHabits(accountId: string, opts: { archived?: boolean } = {}) {
 	return db
@@ -21,7 +42,8 @@ export function listHabits(accountId: string, opts: { archived?: boolean } = {})
 			schedule: habit.schedule,
 			cue: habit.cue,
 			areaId: habit.areaId,
-			archived: habit.archived
+			archived: habit.archived,
+			createdAt: habit.createdAt
 		})
 		.from(habit)
 		.where(and(eq(habit.accountId, accountId), opts.archived ? undefined : eq(habit.archived, false)))
@@ -146,6 +168,8 @@ export function saveHabit(
 	f: HabitForm,
 	today: string = new Date().toISOString().slice(0, 10)
 ): string | null {
+	// Values that can't apply (Levels on a break habit, a reminder with no time) are cleared.
+	f = checkHabitForm(f).form;
 	return db.transaction((tx) => {
 		// A changed limit or taper applies from today, so past days keep the limit they had.
 		if (f.limit) {
@@ -179,7 +203,7 @@ export function saveHabit(
 			minimumCounts: f.minimumCounts,
 			levels: f.levels.enabled ? f.levels : null,
 			quickDone: f.quickDone,
-			remind: f.remind && !!cue.time,
+			remind: f.remind,
 			ifThen: isBreak && (f.ifThen.when || f.ifThen.then || f.ifThen.habitId) ? f.ifThen : null,
 			triggers: isBreak ? f.triggers : null,
 			reframe: f.reframe || null,

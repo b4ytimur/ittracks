@@ -1,7 +1,8 @@
 import { listTagNames, listTasks, taskUsage } from '$lib/server/repo/tasks';
 import { listAreas } from '$lib/server/repo/areas';
 import { collectionTasks, listCollections } from '$lib/server/repo/collections';
-import { getSettings } from '$lib/server/settings';
+import { getViews } from '$lib/server/settings';
+import { initialState } from '$lib/views';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ locals, url }) => {
@@ -27,7 +28,8 @@ export const load: PageServerLoad = ({ locals, url }) => {
 			smart: !!c.filter,
 			taskIds: [...collectionTasks(c, collections, tasks)]
 		})),
-		groupByArea: getSettings(accountId).groupByArea,
+		views: getViews(accountId),
+		initial: initialState(getViews(accountId), 'library'),
 		showArchived
 	};
 };

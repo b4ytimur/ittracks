@@ -1,6 +1,6 @@
 // Turns Schedules into today's Occurrences, and gathers what the Today screen shows.
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, inArray, isNull, lt, max, or } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, max, or } from 'drizzle-orm';
 import { db } from './db';
 import {
 	craving,
@@ -37,6 +37,7 @@ import { identitiesByHabit } from './repo/identities';
 import { getSettings } from './settings';
 import { dayOrder, logicalDate } from '$lib/engine/day';
 import { pauseOn, type Pause } from '$lib/engine/pause';
+import { habitStats, type HabitStats } from '$lib/engine/stats';
 
 /**
  * Today's date in the user's time zone, as YYYY-MM-DD. Before `dayStart` (HH:MM)
@@ -251,6 +252,7 @@ export interface TodayItem {
 	areaId: string | null;
 	/** Paused until this date (inclusive), for habits in a pause. */
 	pausedUntil: string | null;
+	stats: HabitStats;
 }
 
 export interface PrepItem {
@@ -459,7 +461,8 @@ export function loadToday(accountId: string, today: string) {
 				.where(and(eq(occurrence.habitId, h.id), eq(occurrence.status, 'done')))
 				.get(),
 			areaId: h.areaId,
-			pausedUntil: pauseOn(allPauses, h.id, today)?.end ?? null
+			pausedUntil: pauseOn(allPauses, h.id, today)?.end ?? null,
+			stats: habitStats(marks, today)
 		};
 		if (occ) build.push(item);
 		else if (item.pausedUntil) paused.push(item);
@@ -483,7 +486,23 @@ export function loadToday(accountId: string, today: string) {
 	const doneToday = new Set(build.filter((b) => b.occurrence?.status === 'done').map((b) => b.habitId));
 	for (const b of build)
 		b.upNext = !!b.afterHabitId && doneToday.has(b.afterHabitId) && b.occurrence?.status === 'due';
-	return { build, resting, paused, breaking };
+	return { build, resting, paused, breaking, week: weekStrip(accountId, today) };
+}
+
+/** Done and scheduled per day since Monday, for the week strip on Today. */
+export function weekStrip(accountId: string, today: string) {
+	const monday = weekStart(today);
+	const rows = db
+		.select({ date: occurrence.date, status: occurrence.status })
+		.from(occurrence)
+		.innerJoin(habit, eq(occurrence.habitId, habit.id))
+		.where(and(eq(habit.accountId, accountId), gte(occurrence.date, monday), lte(occurrence.date, addDays(monday, 6))))
+		.all();
+	return Array.from({ length: 7 }, (_, i) => {
+		const date = addDays(monday, i);
+		const day = rows.filter((r) => r.date === date && r.status !== 'skipped');
+		return { date, done: day.filter((r) => r.status === 'done').length, of: day.length };
+	});
 }
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -600,9 +619,49 @@ export function loadPrep(accountId: string, today: string): PrepItem[] {
  * Mark an Occurrence done at a level without opening the Log screen: every fixed Slot
  * gets Entries from that level's targets (falling back to Target), so History shows them.
  */
-export function quickDone(occurrenceId: string, level: Level | null) {
+/**
+ * Required fields a one-tap log left empty, by "Task: field". A one-tap log that leaves one
+ * empty is put back to due (its values kept) so the quick log screen can ask for it.
+ */
+export function missingRequired(occurrenceId: string): string[] {
 	const occ = db.select().from(occurrence).where(eq(occurrence.id, occurrenceId)).get();
-	if (!occ) return;
+	if (!occ) return [];
+	const entries = db.select().from(entry).where(eq(entry.occurrenceId, occ.id)).all();
+	const empty = (v: unknown) => v === undefined || v === null || v === '' || v === false;
+	const out: string[] = [];
+	for (const { taskId } of slotsOf(occ)) {
+		if (!taskId) continue;
+		const required = db
+			.select()
+			.from(metric)
+			.where(and(eq(metric.taskId, taskId), eq(metric.required, true)))
+			.all();
+		if (!required.length) continue;
+		const name = db.select({ name: task.name }).from(task).where(eq(task.id, taskId)).get()?.name ?? '';
+		const mine = entries.filter((e) => e.taskId === taskId);
+		const sets = mine.filter((e) => !(e.values as Record<string, unknown>)._summary);
+		const summary = (mine.find((e) => (e.values as Record<string, unknown>)._summary)?.values ?? {}) as Record<string, unknown>;
+		for (const m of required) {
+			const bad = m.repeats
+				? !sets.length || sets.some((e) => empty((e.values as Record<string, unknown>)[m.id]))
+				: empty(summary[m.id]) && !sets.some((e) => !empty((e.values as Record<string, unknown>)[m.id]));
+			if (bad) out.push(`${name}: ${m.name}`);
+		}
+	}
+	return out;
+}
+
+/** After a one-tap log: if a required field is empty, back to due. True when input is needed. */
+function needsInput(occurrenceId: string): boolean {
+	if (!missingRequired(occurrenceId).length) return false;
+	db.update(occurrence).set({ status: 'due', finishedAt: null }).where(eq(occurrence.id, occurrenceId)).run();
+	return true;
+}
+
+/** One tap: done at a level with its targets. Returns 'needsInput' when a required field is still empty. */
+export function quickDone(occurrenceId: string, level: Level | null): 'done' | 'needsInput' | 'gone' {
+	const occ = db.select().from(occurrence).where(eq(occurrence.id, occurrenceId)).get();
+	if (!occ) return 'gone';
 	db.transaction((tx) => {
 		// One tap logs that level's targets, replacing anything an earlier tap or log left behind.
 		tx.delete(entry).where(eq(entry.occurrenceId, occ.id)).run();
@@ -619,16 +678,17 @@ export function quickDone(occurrenceId: string, level: Level | null) {
 			.where(eq(occurrence.id, occ.id))
 			.run();
 	});
+	return needsInput(occ.id) ? 'needsInput' : 'done';
 }
 
 /**
  * "Same as last time": copy each Task's values from its last finished log (sets, single
  * values and sub-task ticks), use the targets for a Task never logged before, and finish.
- * Replaces anything saved so far. Returns false if the Occurrence is gone.
+ * Replaces anything saved so far. Returns 'needsInput' when a required field is still empty.
  */
-export function sameAsLast(occurrenceId: string): boolean {
+export function sameAsLast(occurrenceId: string): 'done' | 'needsInput' | 'gone' {
 	const occ = db.select().from(occurrence).where(eq(occurrence.id, occurrenceId)).get();
-	if (!occ) return false;
+	if (!occ) return 'gone';
 	const lastLevel =
 		db
 			.select({ level: occurrence.level })
@@ -653,7 +713,7 @@ export function sameAsLast(occurrenceId: string): boolean {
 			.where(eq(occurrence.id, occ.id))
 			.run();
 	});
-	return true;
+	return needsInput(occ.id) ? 'needsInput' : 'done';
 }
 
 /** Put a finished or skipped Occurrence back to due. `clear` also removes its Entries (undoing a one-tap log). */
