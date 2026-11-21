@@ -45,7 +45,7 @@
 {:else if r.chart === 'records'}
 	<Records {r} />
 {:else if r.chart === 'table'}
-	<Rows {r} onpick={pickSeries} />
+	<Rows {r} overTime={card.overTime} onpick={pickSeries} />
 {:else if r.chart === 'streak'}
 	<Streaks {r} />
 {:else if r.chart === 'breakdown'}

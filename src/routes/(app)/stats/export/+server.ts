@@ -2,7 +2,7 @@
 import { error } from '@sveltejs/kit';
 import { boardsOf, ctxFor, statsContext } from '$lib/server/stats';
 import { cardCsv, computeCard, toCsv, type Prepared } from '$lib/stats/engine';
-import { habitCards } from '$lib/stats/auto';
+import { habitCards, taskCards } from '$lib/stats/auto';
 import type { RequestHandler } from './$types';
 
 const file = (name: string, body: string) =>
@@ -56,9 +56,11 @@ export const GET: RequestHandler = ({ locals, url, cookies }) => {
 	const cardId = url.searchParams.get('card');
 	const boardId = url.searchParams.get('board');
 	const habitId = url.searchParams.get('habit');
+	const taskId = url.searchParams.get('task');
 	const board = boardId ? s.boards.find((b) => b.id === boardId) : undefined;
 	const h = habitId ? P.habits.get(habitId) : undefined;
-	const cards = board ? board.cards : h ? (s.habitCards[h.id] ?? habitCards(P, h)) : [];
+	const t = taskId ? P.tasks.get(taskId) : undefined;
+	const cards = board ? board.cards : h ? (s.habitCards[h.id] ?? habitCards(P, h)) : t ? taskCards(P, t) : [];
 	const card = cards.find((c) => c.id === cardId);
 	if (!card) error(404, 'No such card');
 	const r = computeCard(card, P, ctxFor(today, s, board));

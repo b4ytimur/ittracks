@@ -13,6 +13,7 @@ import { listAreas } from '$lib/server/repo/areas';
 import { DEFAULT_RANGES, readRanges } from '$lib/engine/day';
 import type { Level } from '$lib/engine/streak';
 import { ownedHabit, ownedOccurrence } from '$lib/server/owned';
+import { headlineTexts } from '$lib/server/stats';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ locals, cookies, url, request }) => {
@@ -30,6 +31,8 @@ export const load: PageServerLoad = ({ locals, cookies, url, request }) => {
 	return {
 		today,
 		...loadToday(accountId, today),
+		/** Number tiles picked on habit Stats tabs to show on Today. */
+		headlines: headlineTexts(accountId, tz),
 		// The Log screen sends you back here after Finish, so the reward can show.
 		finished: url.searchParams.get('finished'),
 		prep: loadPrep(accountId, today),

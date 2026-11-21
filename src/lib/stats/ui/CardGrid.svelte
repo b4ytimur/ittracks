@@ -29,6 +29,7 @@
 		suggested,
 		gallery,
 		customizing = false,
+		readonly = false,
 		adding = $bindable(false),
 		csv,
 		headlines = [],
@@ -43,6 +44,8 @@
 		suggested: { group: string; cards: StatCard[] }[];
 		gallery: { group: string; cards: StatCard[] }[];
 		customizing?: boolean;
+		/** Charts only: no editing (a Task's history). */
+		readonly?: boolean;
 		adding?: boolean;
 		/** Link to a card's CSV, by card id. */
 		csv?: (cardId: string) => string;
@@ -128,8 +131,8 @@
 						first={i === 0}
 						last={i === items.length - 1}
 						csvHref={csv?.(item.card.id)}
-						onedit={() => (editing = structuredClone($state.snapshot(item.card)) as StatCard)}
-						onremove={() => remove(item, title)}
+						onedit={readonly ? undefined : () => (editing = structuredClone($state.snapshot(item.card)) as StatCard)}
+						onremove={readonly ? undefined : () => remove(item, title)}
 						onmove={(d) => move(item, d)}
 						onresize={(s) => resize(item, s)}
 						ondrill={(from, to, series) => openDrill(item, title, from, to, series)}

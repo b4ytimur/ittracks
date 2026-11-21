@@ -358,6 +358,12 @@
 		{#if it.open && !t}
 			<p class="muted">No Task in your Library matches this slot's rules. <a href="/library">Open the Library</a>.</p>
 		{/if}
+		{#if t && data.recap[t.id]}
+			{@const rc = data.recap[t.id]}
+			<p class="muted small-text recap">
+				Last time ({new Date(rc.date + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}): {rc.text}{rc.best ? ` · best ${rc.best}` : ''}{' · '}<a href="/library/{t.id}">History</a>
+			</p>
+		{/if}
 
 		{#if t}
 			{@const repeating = shownMetrics(t.metrics.filter((m) => m.repeats))}
@@ -573,6 +579,9 @@
 	}
 	.sets tr.done :global(input[type='number']) {
 		border-color: var(--accent);
+	}
+	.recap {
+		margin: 0.15rem 0 0.6rem;
 	}
 	.small-text {
 		font-size: 0.85rem;

@@ -1,18 +1,19 @@
 // Everything an account logged, in the shape the stats engine reads, plus the stored boards.
 // One read per table: the engine does the rest in memory, so a card never needs its own query.
-import { asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne } from 'drizzle-orm';
 import { db } from './db';
 import { area, craving, entry, habit, habitIdentity, identity, metric, occurrence, slip, slot, tag, task, taskTag, variant } from './db/schema';
 import { getSettings, getViews, saveSettings } from './settings';
 import { timeIn, userToday } from './today';
 import { listAreas } from './repo/areas';
 import { listIdentities } from './repo/identities';
-import { computeCard, prepare, type CardResult, type Ctx, type Dataset, type Prepared } from '$lib/stats/engine';
+import { computeCard, describeLog, prepare, type CardResult, type Ctx, type Dataset, type Prepared } from '$lib/stats/engine';
 import { readStats, statsSettings, type Board, type StatCard, type StatsSettings } from '$lib/stats/model';
 import { startingBoards } from '$lib/stats/auto';
 import { catalogOf, statCtx, type Catalog } from '$lib/stats/catalog';
 import { checkCard } from '$lib/rules/stats';
 import { DEFAULT_STREAK_RULE } from '$lib/engine/streak';
+import { value as formatValue } from '$lib/stats/format';
 
 export function loadDataset(accountId: string, tz?: string): Dataset {
 	const s = getSettings(accountId);
@@ -185,4 +186,103 @@ export function itemsFor(
 		}
 		return { card, result, warnings: issues.map((i) => i.reason), rangeKey: card.range === 'page' ? ctx.boardRange : card.range };
 	});
+}
+
+/** Today's headline numbers from habit Stats tabs ("Show on Today"), as text per habit. */
+export function headlineTexts(accountId: string, tz?: string): Record<string, string> {
+	const s = getStats(accountId);
+	const entries = Object.entries(s.headlines);
+	if (!entries.length) return {};
+	const { P, today } = statsContext(accountId, tz);
+	const ctx = ctxFor(today, s);
+	const out: Record<string, string> = {};
+	for (const [habitId, card] of entries) {
+		if (!P.habits.has(habitId)) continue;
+		try {
+			const r = computeCard(card, P, ctx);
+			out[habitId] = `${card.title}: ${formatValue(r.total, r.unit, r.kind)}`;
+		} catch (e) {
+			console.error('headline card failed', habitId, e);
+		}
+	}
+	return out;
+}
+
+export interface Recap {
+	date: string;
+	text: string;
+	best: string | null;
+}
+
+/**
+ * "Last time" and "best" for the Tasks on the log screen (R3): reads only those Tasks' logs,
+ * so opening a log stays quick on a big account.
+ */
+export function recapFor(accountId: string, taskIds: string[], excludeOcc: string, weightUnit: string, today: string): Record<string, Recap> {
+	if (!taskIds.length) return {};
+	const tasks = db
+		.select()
+		.from(task)
+		.where(eq(task.accountId, accountId))
+		.all()
+		.filter((t) => taskIds.includes(t.id) || (t.parentTaskId && taskIds.includes(t.parentTaskId)));
+	const ids = tasks.map((t) => t.id);
+	if (!ids.length) return {};
+	const metrics = db.select().from(metric).where(inArray(metric.taskId, ids)).all();
+	const rows = db
+		.select({ e: entry, o: occurrence })
+		.from(entry)
+		.innerJoin(occurrence, eq(entry.occurrenceId, occurrence.id))
+		.where(and(inArray(entry.taskId, ids), eq(occurrence.status, 'done'), ne(occurrence.id, excludeOcc)))
+		.all();
+	const occs = [...new Map(rows.map((r) => [r.o.id, r.o])).values()];
+	const habitIds = [...new Set(occs.map((o) => o.habitId))];
+	const habits = habitIds.length ? db.select().from(habit).where(and(eq(habit.accountId, accountId), inArray(habit.id, habitIds))).all() : [];
+	const ds: Dataset = {
+		today,
+		weightUnit,
+		ranges: [],
+		areas: [],
+		habits: habits.map((h) => ({ id: h.id, name: h.name, direction: h.direction, areaId: h.areaId, startDate: h.startDate, archived: h.archived, identities: [], cost: null, streakRule: DEFAULT_STREAK_RULE, minimumCounts: true, limit: null })),
+		tasks: tasks.map((t) => ({ id: t.id, name: t.name, areaId: t.areaId, parentTaskId: t.parentTaskId, archived: t.archived, tags: [] })),
+		metrics: metrics.map((m) => ({ id: m.id, taskId: m.taskId, name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, choices: m.choices ?? null })),
+		variants: [],
+		slots: [],
+		occurrences: occs.map((o) => ({ id: o.id, habitId: o.habitId, variantId: null, date: o.date, status: o.status, level: o.level ?? null, picks: null, time: null })),
+		entries: rows.map((r) => ({ occurrenceId: r.e.occurrenceId, taskId: r.e.taskId, values: r.e.values ?? {}, sortOrder: r.e.sortOrder })),
+		slips: [],
+		cravings: []
+	};
+	const P = prepare(ds);
+	const out: Record<string, Recap> = {};
+	for (const id of taskIds) {
+		const logs = P.logsByTask.get(id) ?? [];
+		const last = logs.at(-1);
+		if (!last) continue;
+		out[id] = { date: last.occ.date, text: describeLog(last, P), best: bestOf(P, id) };
+	}
+	return out;
+}
+
+/** The best a Task has done: the heaviest set for weight and reps, else the top value of its first number field. */
+function bestOf(P: Prepared, taskId: string): string | null {
+	const logs = P.logsByTask.get(taskId) ?? [];
+	const r = P.roles.get(taskId);
+	if (r?.weight && r.reps) {
+		let top: { w: number; reps: number } | null = null;
+		for (const l of logs)
+			for (const s of l.sets) {
+				const w = Number(s[r.weight.id]);
+				const n = Number(s[r.reps.id]);
+				if (!Number.isFinite(w) || !Number.isFinite(n) || !n) continue;
+				if (!top || w > top.w || (w === top.w && n > top.reps)) top = { w, reps: n };
+			}
+		return top ? `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(top.w)}${r.weight.unit ? ` ${r.weight.unit}` : ''} × ${top.reps}` : null;
+	}
+	const m = (P.metricsByTask.get(taskId) ?? []).find((x) => !x.repeats && ['number', 'duration', 'count'].includes(x.type));
+	if (!m) return null;
+	const vs = logs.map((l) => Number(l.single[m.id])).filter((v) => Number.isFinite(v) && v > 0);
+	if (!vs.length) return null;
+	const best = Math.max(...vs);
+	return `${formatValue(best, m.type === 'duration' ? (m.unit || 'min') : (m.unit ?? ''), m.type === 'duration' && (!m.unit || m.unit === 'min') ? 'duration' : 'number')} ${m.name.toLowerCase()}`;
 }

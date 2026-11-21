@@ -5,6 +5,8 @@ import { listAreas } from '$lib/server/repo/areas';
 import { listVacations } from '$lib/server/repo/vacations';
 import { userToday } from '$lib/server/today';
 import { FEATURES, PAGE_LABEL, TEMPLATES } from '$lib/views';
+import { getStats } from '$lib/server/stats';
+import { E1RM_PRESETS } from '$lib/stats/model';
 import type { PageServerLoad } from './$types';
 
 /** The Settings home: one row per section, each with a line on how it's set now. */
@@ -31,6 +33,11 @@ export const load: PageServerLoad = ({ locals, cookies }) => {
 		guidedSetup: settings.guidedSetup,
 		showAllSections: settings.showAllSections,
 		weightUnit: settings.weightUnit,
-		devices: subscriptionCount(accountId)
+		devices: subscriptionCount(accountId),
+		stats: (() => {
+			const s = getStats(accountId);
+			const preset = Object.values(E1RM_PRESETS).find((p) => p.formula === s.e1rm);
+			return { measures: s.measures.length, e1rm: preset?.name ?? 'your own formula', boards: s.boards.length };
+		})()
 	};
 };
