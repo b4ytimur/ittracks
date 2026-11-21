@@ -18,6 +18,8 @@ export const load: PageServerLoad = ({ locals, cookies }) => {
 	return {
 		username: locals.account!.username,
 		dayStart: settings.dayStart ?? null,
+		pastDays: settings.pastDays,
+		nudgeYesterday: settings.nudgeYesterday,
 		ranges: settings.ranges.map((r) => r.name),
 		vacation: vacations[0] ?? null,
 		moreVacations: Math.max(0, vacations.length - 1),
