@@ -1013,6 +1013,25 @@ const seedAll = db.transaction(() => {
   }
   q.slip.run(randomUUID(), coffee, today, 1, "Morning cup", now);
 
+  // A few journal notes for the day (PR #15), when the table exists.
+  const hasDayNote = db
+    .prepare(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'day_note'",
+    )
+    .get();
+  if (hasDayNote) {
+    const note = db.prepare(
+      "INSERT OR IGNORE INTO day_note (account_id, date, text, updated_at) VALUES (?, ?, ?, ?)",
+    );
+    for (const [d, text] of [
+      [-12, "Travelling. Skipped the gym, still did Spanish on the train."],
+      [-6, "Slept badly. Only managed the two-minute Spanish version."],
+      [-3, "New bench PR. Coffee down to 3 cups."],
+      [-1, "Good focus day, 2 h deep work before lunch."],
+    ])
+      note.run(A, addDays(today, d), text, now);
+  }
+
   // Settings the app would otherwise ask about on first visit. Only fills keys that are unset.
   const row = db
     .prepare("SELECT data FROM settings WHERE account_id = ?")
