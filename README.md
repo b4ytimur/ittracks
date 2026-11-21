@@ -64,6 +64,19 @@ The app listens on port 3000 and keeps its database in `./data`. Set `ORIGIN` in
 
 To install it on your phone, open it in the browser and choose "Add to Home Screen". Phones only offer this over HTTPS, so put the app behind a reverse proxy with a certificate (for example Caddy or Traefik).
 
+Run it from a normal folder (not one reached through a symlink), so that Docker Desktop creates `./data` on your computer. Creating the folder first with `mkdir data` also works.
+
+### Example data
+
+To try the app without setting everything up, create your account and then add example habits (a gym rotation, a Spanish checklist with a timer, a deep-work target and two break habits), with a few weeks of history:
+
+```sh
+docker compose exec ittracks node scripts/seed-demo.mjs --today "$(date +%F)"  # if your day starts at 4 AM and it is past midnight, pass yesterday's date
+docker compose restart
+```
+
+It only adds rows, never changes what you made, and refuses to run twice. On a server nobody has set up yet, add `--create-user name:password` to make the account too. Restart the app afterwards so it picks up the new rows. Outside Docker, run `node scripts/seed-demo.mjs`.
+
 ## Templates
 
 Any habit can be exported from its editor as a `.ittracks.json` file and imported on any ittracks server from the Habits tab. A template holds the habit, its Variants, schedule and Fill rules, and the Tasks it uses. It never contains your logs. The format is defined in `src/lib/template.ts` (version 3; versions 1 and 2 still import). A template can ask questions when it is added (which days, a starting weight, a time) and carries gallery details (category, days per week, minutes, equipment, Area). When a template's Task has the same name as one in your Library, your Task is used unless you choose "separate".
