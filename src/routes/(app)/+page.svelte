@@ -260,6 +260,16 @@
 			{/each}
 			<button type="button" class="small" onclick={() => ranges.push({ name: '', start: '12:00', end: '13:00' })}>+ part</button>
 		</div>
+		<fieldset class="stack">
+			<legend><strong>How much do you want to see?</strong></legend>
+			<span class="muted small-text">Pick a starting layout. Every part of it can be changed later.</span>
+			{#each data.templates as t (t.id)}
+				<label class="tpl" style="color: var(--text)"
+					><input type="radio" name="template" value={t.id} checked={t.id === data.suggestedTemplate} />
+					<span><strong>{t.name}</strong>{t.id === data.suggestedTemplate ? ' (suggested)' : ''}<br /><span class="muted small-text">{t.blurb}</span></span></label
+				>
+			{/each}
+		</fieldset>
 		<div class="row">
 			<button class="primary">Save</button>
 			<span class="muted small-text grow">You can change this any time in Settings.</span>
@@ -795,6 +805,11 @@
 	}
 	.option {
 		align-items: center;
+	}
+	.tpl {
+		display: flex;
+		gap: 0.5rem;
+		align-items: flex-start;
 	}
 	fieldset {
 		border: 1px solid var(--border);

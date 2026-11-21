@@ -2,7 +2,8 @@ import { fail } from '@sveltejs/kit';
 import { hash, verify } from '@node-rs/argon2';
 import { db } from '$lib/server/db';
 import { account } from '$lib/server/db/schema';
-import { getSettings, saveSettings } from '$lib/server/settings';
+import { getSettings, getViews, saveSettings } from '$lib/server/settings';
+import { TEMPLATES } from '$lib/views';
 import { publicKey, sendToAccount, subscriptionCount } from '$lib/server/push';
 import { AREA_COLORS, listAreas, saveAreas } from '$lib/server/repo/areas';
 import { userToday } from '$lib/server/today';
@@ -17,6 +18,8 @@ export const load: PageServerLoad = ({ locals, cookies }) => {
 	const accountId = locals.account!.id;
 	return {
 		settings: getSettings(accountId),
+		views: getViews(accountId),
+		templates: TEMPLATES.map(({ id, name, blurb, summary }) => ({ id, name, blurb, summary })),
 		username: locals.account!.username,
 		vapidKey: publicKey(),
 		devices: subscriptionCount(accountId),
@@ -64,8 +67,7 @@ export const actions: Actions = {
 		const f = await request.formData();
 		saveSettings(locals.account!.id, {
 			guidedSetup: f.get('guidedSetup') === 'on',
-			showAllSections: f.get('showAllSections') === 'on',
-			groupByArea: f.get('groupByArea') === 'on'
+			showAllSections: f.get('showAllSections') === 'on'
 		});
 		return { displaySaved: true };
 	},
