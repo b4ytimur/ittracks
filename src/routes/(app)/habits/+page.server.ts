@@ -10,7 +10,7 @@ import { habit, occurrence } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 import { userToday } from '$lib/server/today';
 import { templateFile } from '$lib/template';
-import { initialState } from '$lib/views';
+import { initialState, templateById } from '$lib/views';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ locals, url, cookies }) => {
@@ -44,7 +44,11 @@ export const load: PageServerLoad = ({ locals, url, cookies }) => {
 		areas: listAreas(accountId),
 		views,
 		initial,
-		added: url.searchParams.get('added')
+		added: url.searchParams.get('added'),
+		suggestView: (() => {
+			const t = templateById(url.searchParams.get('view') ?? '');
+			return t && t.id !== views.template ? { id: t.id, name: t.name, summary: t.summary } : null;
+		})()
 	};
 };
 
@@ -68,6 +72,8 @@ export const actions: Actions = {
 			reuse: f.get('separate') !== 'on'
 		});
 		if ('error' in r) return fail(400, { error: r.error });
-		return { imported: r.name, taskCount: r.created, reused: r.reused };
+		const t = templateById(parsed.data.view ?? '');
+		const suggest = t && t.id !== getViews(accountId).template ? { id: t.id, name: t.name, summary: t.summary } : null;
+		return { imported: r.name, taskCount: r.created, reused: r.reused, suggestView: suggest };
 	}
 };

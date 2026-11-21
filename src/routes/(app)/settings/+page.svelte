@@ -3,8 +3,32 @@
 
 	import { onMount, untrack } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
+	import { FEATURES, PAGES, PAGE_LABEL, type FeatureKey, type Page } from '$lib/views';
+	import { viewOp } from '$lib/viewclient';
+	import { showToast } from '$lib/toast.svelte';
 
 	let { data, form } = $props();
+
+	// ----- Views: template, start page, hidden features -----
+	let views = $state(untrack(() => data.views));
+	const current = $derived(data.templates.find((t) => t.id === views.template));
+	async function useTemplate(id: string, reset = false) {
+		const t = data.templates.find((x) => x.id === id);
+		const r = await viewOp({ op: 'template', id });
+		if (!r) return showToast("Couldn't switch. Are you online?");
+		const before = r.previous;
+		views = r.views;
+		showToast(reset ? `Reset to ${t?.name}.` : `Switched to ${t?.name}.`, async () => {
+			const back = await viewOp({ op: 'restore', views: before });
+			if (back) views = back.views;
+		});
+	}
+	async function patch(body: Record<string, unknown>) {
+		const r = await viewOp({ op: 'patch', ...body });
+		if (r) views = r.views;
+	}
+	const toggleFeature = (f: FeatureKey) =>
+		patch({ hidden: views.hidden.includes(f) ? views.hidden.filter((x) => x !== f) : [...views.hidden, f] });
 
 	let dayStart = $state(untrack(() => data.settings.dayStart ?? '00:00'));
 	let ranges = $state(untrack(() => data.settings.ranges.map((r) => ({ ...r }))));
@@ -150,12 +174,50 @@
 	{#if form?.areasSaved}<p class="muted">Saved.</p>{/if}
 </section>
 
+<section class="card stack" id="views">
+	<h2 style="margin-top: 0">Views</h2>
+	<p class="muted" style="margin: 0">
+		A view template sets what each page shows. You can still change anything afterwards with Customize on each page.
+		Your saved views and own order are kept when you switch.
+	</p>
+	<p style="margin: 0">Now: <strong>{current?.name ?? 'Custom'}</strong></p>
+	<ul class="list">
+		{#each data.templates as t (t.id)}
+			<li class="card row tpl">
+				<div class="grow">
+					<strong>{t.name}</strong>
+					<div class="muted small-text">{t.blurb}</div>
+					<div class="muted small-text">{t.summary}</div>
+				</div>
+				{#if t.id === views.template}
+					<button class="small" onclick={() => useTemplate(t.id, true)} title="Undo your own changes to this template">Reset</button>
+				{:else}
+					<button class="small" onclick={() => useTemplate(t.id)}>Use</button>
+				{/if}
+			</li>
+		{/each}
+	</ul>
+	<label
+		>Open the app on
+		<select value={views.startPage} onchange={(e) => patch({ startPage: e.currentTarget.value as Page })}>
+			{#each PAGES as p (p)}<option value={p}>{PAGE_LABEL[p]}</option>{/each}
+		</select>
+	</label>
+	<fieldset>
+		<legend class="small-text">Features in use (switching one off hides its buttons and sections; nothing is deleted)</legend>
+		{#each Object.entries(FEATURES) as [k, label] (k)}
+			<label style="color: var(--text)"
+				><input type="checkbox" checked={!views.hidden.includes(k as FeatureKey)} onchange={() => toggleFeature(k as FeatureKey)} /> {label}</label
+			>
+		{/each}
+	</fieldset>
+</section>
+
 <section class="card stack">
 	<h2 style="margin-top: 0">Display</h2>
 	<form method="POST" action="?/display" class="stack" use:enhance={() => async ({ update }) => update({ reset: false })}>
 		<label style="color: var(--text)"><input type="checkbox" name="guidedSetup" checked={data.settings.guidedSetup} /> New habits ask how to start (gallery, step by step, copy, or blank)</label>
 		<label style="color: var(--text)"><input type="checkbox" name="showAllSections" checked={data.settings.showAllSections} /> Show every section in the habit editor</label>
-		<label style="color: var(--text)"><input type="checkbox" name="groupByArea" checked={data.settings.groupByArea} /> Group Today, Habits and the Library by Area</label>
 		<button>Save</button>
 	</form>
 	{#if form?.displaySaved}<p class="muted">Saved.</p>{/if}
@@ -241,6 +303,13 @@
 </section>
 
 <style>
+	.tpl {
+		align-items: center;
+	}
+	fieldset {
+		border: 1px solid var(--border);
+		border-radius: 6px;
+	}
 	.small-text {
 		font-size: 0.85rem;
 	}

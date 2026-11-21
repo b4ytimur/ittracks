@@ -1,6 +1,7 @@
 {
 	"format": "ittracks-template",
-	"version": 3,
+	"version": 4,
+	"view": "routine",
 	"name": "Morning routine",
 	"description": "A short checklist to start the day: water, bed, stretch, plan.",
 	"meta": {

@@ -4,11 +4,24 @@
 	import { untrack } from 'svelte';
 	import ViewBar from '$lib/ViewBar.svelte';
 	import { viewOp } from '$lib/viewclient';
+	import { showToast } from '$lib/toast.svelte';
 	import { HABIT_LINES, groupBy, passes, type HabitLineKey } from '$lib/views';
 
 	let { data, form } = $props();
 
 	let views = $state(untrack(() => data.views));
+	let viewDismissed = $state(false);
+	async function switchView(id: string, name: string) {
+		const r = await viewOp({ op: 'template', id });
+		if (!r) return showToast("Couldn't switch. Are you online?");
+		const before = r.previous;
+		views = r.views;
+		viewDismissed = true;
+		showToast(`Switched to ${name}.`, async () => {
+			const back = await viewOp({ op: 'restore', views: before });
+			if (back) views = back.views;
+		});
+	}
 	let view = $state(untrack(() => data.initial));
 	const show = (k: HabitLineKey) => views.habits.lines.includes(k);
 	function toggleLine(k: HabitLineKey) {
@@ -55,6 +68,16 @@
 </header>
 
 {#if data.added}<p class="card added">Added "{data.added}". It's on Today when it's due.</p>{/if}
+{#if (form?.suggestView ?? data.suggestView) && !viewDismissed}
+	{@const sv = (form?.suggestView ?? data.suggestView)!}
+	<div class="card added stack">
+		<span>This habit works well with the <strong>{sv.name}</strong> view. {sv.summary}</span>
+		<div class="row">
+			<button class="small primary" onclick={() => switchView(sv.id, sv.name)}>Switch to {sv.name}</button>
+			<button class="small" onclick={() => (viewDismissed = true)}>No thanks</button>
+		</div>
+	</div>
+{/if}
 
 {#if data.habits.length === 0}
 	<p class="muted">

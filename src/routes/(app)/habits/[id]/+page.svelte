@@ -218,6 +218,9 @@
 		return days === '0123456' ? 'daily' : days === '01234' ? 'weekdays' : days === '024' ? 'mwf' : null;
 	});
 
+	// Features switched off in Settings stay out of the editor unless this habit already uses them.
+	const off = (f: string) => data.hidden.includes(f as never);
+
 	// ----- Sections that are off stay folded away until asked for -----
 	const has = untrack(() => ({
 		when: !!(data.habit.cue.time || data.habit.cue.place || data.habit.cue.afterHabitId || data.habit.cue.afterText || data.habit.cue.range),
@@ -634,6 +637,7 @@
 		{/if}
 	</p>
 
+	{#if !off('ifThen') || h.ifThen.when || h.ifThen.then}
 	<h2>If-then plan</h2>
 	<p class="muted">Decide now what you'll do when the urge comes, so you have something to do instead.</p>
 	<div class="row">
@@ -652,6 +656,7 @@
 			</select>
 		</label>
 	{/if}
+	{/if}
 
 	<h2>Slip triggers</h2>
 	<p class="muted">Feelings you can pick when you log a slip. Over time Today shows which ones come up most.</p>
@@ -669,6 +674,7 @@
 		<button type="button" onclick={addTrigger}>Add</button>
 	</div>
 
+	{#if !off('cost')}
 	<h2>Cost</h2>
 	<label style="color: var(--text)"
 		><input
@@ -687,6 +693,7 @@
 					oninput={(e) => h.cost && (h.cost.perDay = numOrNull(e.currentTarget.value))} placeholder="optional, e.g. 10" />
 			</label>
 		</div>
+	{/if}
 	{/if}
 
 	<h2>Reduce instead of quitting</h2>
@@ -855,7 +862,7 @@
 			{@render cuePart()}
 		{/if}
 
-		{#if open.levels}
+		{#if open.levels && (!off('levels') || h.levels.enabled)}
 			<h2>Levels</h2>
 			<label style="color: var(--text)"
 				><input type="checkbox" bind:checked={h.levels.enabled} /> Use levels: a two-minute Minimum, your Target, and a Stretch</label
@@ -905,7 +912,8 @@
 
 		<details class="extras" open={!!(h.bundle.reward || h.prep.length || h.reward.celebrate || h.reward.jar || h.progression)}>
 			<summary>More ways to make it stick (optional)</summary>
-		<h3>Pair it with something you enjoy</h3>
+		{#if !off('rewards') || h.bundle.reward}
+	<h3>Pair it with something you enjoy</h3>
 		<label
 			>Pair with
 			<input bind:value={h.bundle.reward} placeholder="my favourite podcast" />
@@ -915,8 +923,10 @@
 				><input type="checkbox" bind:checked={h.bundle.strict} /> Save it as a treat for after the habit is done</label
 			>
 		{/if}
+	{/if}
 
-		<h3>Prepare the day before</h3>
+	{#if !off('prep') || h.prep.length}
+	<h3>Prepare the day before</h3>
 		<p class="muted">Steps that make tomorrow easier. They show on Today the day before this habit is due.</p>
 		{#each h.prep as item, pi (item)}
 			<div class="row">
@@ -929,7 +939,9 @@
 				onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), addPrep())} />
 			<button type="button" onclick={addPrep}>Add</button>
 		</div>
+	{/if}
 
+	{#if !off('rewards') || h.reward.celebrate || h.reward.jar}
 		<h3>Reward</h3>
 		<label style="color: var(--text)"
 			><input type="checkbox" bind:checked={h.reward.celebrate} /> Celebrate when I finish</label
@@ -952,8 +964,8 @@
 			</div>
 			<p class="muted small-text">A pretend jar that fills up as you go. Treat yourself when it's full.</p>
 		{/if}
-
-		{#if hasTargets}
+		{/if}
+		{#if hasTargets && (!off('progression') || h.progression)}
 			<h3>Progression</h3>
 			<label style="color: var(--text)"
 				><input
@@ -980,13 +992,15 @@
 		</details>
 	{/if}
 
+	{#if !off('reframe') || h.reframe}
 	<h2>Reframe</h2>
 	<label
 		>A line to see on the card
 		<input bind:value={h.reframe} placeholder={h.direction === 'break' ? 'I am free of this' : 'I get to do this today'} />
 	</label>
+	{/if}
 
-	{#if open.identity}
+	{#if open.identity && (!off('identities') || h.identityIds.length)}
 		<h2>Identity</h2>
 		{@render identityPart()}
 	{/if}
@@ -998,9 +1012,9 @@
 	{#if Object.values(open).some((x) => !x)}
 		<div class="chips add-more">
 			{#if h.direction === 'build' && !open.when}<button type="button" class="chip" onclick={() => (open.when = true)}>+ When and where</button>{/if}
-			{#if h.direction === 'build' && !open.levels}<button type="button" class="chip" onclick={() => (open.levels = true)}>+ Levels</button>{/if}
+			{#if h.direction === 'build' && !open.levels && !off('levels')}<button type="button" class="chip" onclick={() => (open.levels = true)}>+ Levels</button>{/if}
 			{#if h.direction === 'build' && !open.streak}<button type="button" class="chip" onclick={() => (open.streak = true)}>+ Streak rule (now: never miss twice)</button>{/if}
-			{#if !open.identity}<button type="button" class="chip" onclick={() => (open.identity = true)}>+ Identity</button>{/if}
+			{#if !open.identity && !off('identities')}<button type="button" class="chip" onclick={() => (open.identity = true)}>+ Identity</button>{/if}
 			{#if !open.notes}<button type="button" class="chip" onclick={() => (open.notes = true)}>+ Notes</button>{/if}
 		</div>
 	{/if}

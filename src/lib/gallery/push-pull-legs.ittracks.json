@@ -1,6 +1,7 @@
 {
 	"format": "ittracks-template",
-	"version": 3,
+	"version": 4,
+	"view": "gym",
 	"name": "Push/Pull/Legs",
 	"description": "Push, pull and legs in turn, with a rest day after legs. Each muscle gets hit about twice a week.",
 	"meta": {

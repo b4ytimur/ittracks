@@ -1,6 +1,7 @@
 {
 	"format": "ittracks-template",
-	"version": 3,
+	"version": 4,
+	"view": "gym",
 	"name": "Full body, 3 days",
 	"description": "Three big lifts each session, three days a week. A simple, proven start for strength.",
 	"meta": {
