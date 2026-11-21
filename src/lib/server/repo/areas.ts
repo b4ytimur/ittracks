@@ -44,6 +44,18 @@ export function areaByName(accountId: string, name: string | null | undefined): 
 	return listAreas(accountId).find((a) => a.name.toLowerCase() === name.toLowerCase())?.id ?? null;
 }
 
+/** Find an Area by name, or add it at the end when `create` is set (a template's Area you don't have yet). */
+export function areaFor(accountId: string, name: string | null | undefined, create: boolean): string | null {
+	const found = areaByName(accountId, name);
+	if (found || !create || !name?.trim()) return found;
+	const all = listAreas(accountId);
+	const id = randomUUID();
+	db.insert(area)
+		.values({ id, accountId, name: name.trim().slice(0, 40), color: AREA_COLORS[all.length % AREA_COLORS.length], icon: '', sortOrder: all.length })
+		.run();
+	return id;
+}
+
 /** Replace the account's Areas with this ordered list. Rows not listed are deleted; their items lose the Area. */
 export function saveAreas(accountId: string, rows: (Omit<AreaRow, 'id'> & { id: string | null })[]) {
 	db.transaction((tx) => {

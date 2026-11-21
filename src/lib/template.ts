@@ -21,9 +21,12 @@ export const TEMPLATE_FORMAT = 'ittracks-template';
 /**
  * Version 2 adds cues, levels, streak rules, identities and break-habit plans.
  * Version 3 adds per-Metric log settings, gallery details (meta) and setup questions.
+ * Version 4 adds a suggested view template.
+ * Version 5 adds an Area per Task, a suggested reminder, what unlogged days count as,
+ * and number questions that keep other numbers in proportion.
  * Older files still import; the new fields take their defaults.
  */
-export const TEMPLATE_VERSION = 4;
+export const TEMPLATE_VERSION = 5;
 
 const key = z.string().min(1).max(64);
 
@@ -34,6 +37,8 @@ const templateTask = z.object({
 	restTimerEnabled: z.boolean().default(false),
 	restTimerSeconds: z.number().int().min(5).max(3600).default(90),
 	tags: z.array(z.object({ name: z.string().min(1).max(40), level: z.number().int().min(1).max(3) })).default([]),
+	/** Version 5: the Task's Area, matched by name on import (falls back to the habit's). */
+	area: z.string().max(40).nullable().default(null),
 	metrics: z
 		.array(
 			z.object({
@@ -66,7 +71,13 @@ export const templateQuestion = z.discriminatedUnion('kind', [
 		label: z.string().min(1).max(200),
 		unit: z.string().max(20).default(''),
 		default: z.number(),
-		metrics: z.array(key).min(1)
+		metrics: z.array(key).min(1),
+		/**
+		 * Version 5. Off: the answer becomes the target in every Slot with these Metrics.
+		 * On: every target moves in proportion to the answer (the default is the reference),
+		 * so a lighter day stays lighter. Either way, Minimum and Stretch move with the target.
+		 */
+		scale: z.boolean().default(false)
 	}),
 	/** The cue time. */
 	z.object({
@@ -92,7 +103,7 @@ export type TemplateMeta = z.infer<typeof templateMeta>;
 
 export const templateFile = z.object({
 	format: z.literal(TEMPLATE_FORMAT),
-	version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+	version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
 	name: z.string().min(1).max(120),
 	/** Version 4: a view template this habit works well with (e.g. "gym"). Only ever offered, never applied by itself. */
 	view: z.string().max(32).nullable().default(null),
@@ -136,6 +147,10 @@ export const templateFile = z.object({
 		minimumCounts: z.boolean().default(true),
 		levels: levelsForm.nullable().default(null),
 		quickDone: z.boolean().default(false),
+		/** Version 5: the author had a reminder on. Imports offer to turn it on; it starts off otherwise. */
+		remind: z.boolean().default(false),
+		/** Version 5: whether a due day left unlogged counts as missed, or is ignored. */
+		unlogged: z.enum(['missed', 'ignore']).default('missed'),
 		/** Identity statements, matched to the importer's identities by text. */
 		identities: z.array(z.string().min(1).max(120)).default([]),
 		ifThen: z.object({ when: z.string().max(120), then: z.string().max(120) }).nullable().default(null),
@@ -185,13 +200,28 @@ function mapSchedule(s: ScheduleForm | null, map: (id: string) => string): Sched
 export interface TemplateNames {
 	habits?: Map<string, string>;
 	identities?: Map<string, string>;
+	/** Area names by id, so the habit's and each Task's Area travel by name. */
+	areas?: Map<string, string>;
+}
+
+/** What the person sharing adds: a description, gallery details and setup questions. */
+export interface ShareDetails {
+	name?: string;
+	description?: string;
+	meta?: Partial<TemplateMeta> | null;
+	questions?: TemplateQuestion[];
+	/** Leave the Areas out (default: carried by name). */
+	noArea?: boolean;
+	/** Leave out the suggestion to turn the reminder on. */
+	noRemind?: boolean;
 }
 
 /** Build a template from a Habit and the Tasks its Slots use (keyed by Task id). */
 export function toTemplate(
 	habit: HabitForm,
 	tasks: Map<string, TaskForm>,
-	names: TemplateNames = {}
+	names: TemplateNames = {},
+	share: ShareDetails = {}
 ): TemplateFile {
 	const variantKey = new Map(habit.variants.map((v, i) => [v.id, `v${i + 1}`]));
 	const taskKey = new Map([...tasks.keys()].map((id, i) => [id, `t${i + 1}`]));
@@ -199,14 +229,21 @@ export function toTemplate(
 	for (const [id, t] of tasks) {
 		t.metrics.forEach((m, j) => metricKey.set(m.id, `${taskKey.get(id)}m${j + 1}`));
 	}
+	const areaName = (id: string | null) => (id && !share.noArea ? (names.areas?.get(id) ?? null) : null);
+	const habitArea = areaName(habit.areaId);
+	const meta = share.meta || habitArea ? templateMeta.parse({ ...(share.meta ?? {}), area: habitArea }) : null;
+	// Questions name Metrics by id while the form is filled in; the file uses its own keys.
+	const questions = (share.questions ?? []).map((q) =>
+		q.kind === 'number' ? { ...q, metrics: q.metrics.map((m) => metricKey.get(m) ?? m).filter((m) => [...metricKey.values()].includes(m)) } : q
+	);
 	return {
 		format: TEMPLATE_FORMAT,
 		version: TEMPLATE_VERSION,
-		name: habit.name,
-		description: '',
+		name: share.name?.trim() || habit.name,
+		description: share.description ?? '',
 		view: null,
-		meta: null,
-		questions: [],
+		meta,
+		questions,
 		habit: {
 			name: habit.name,
 			direction: habit.direction,
@@ -225,7 +262,7 @@ export function toTemplate(
 				}))
 			})),
 			cue:
-				habit.cue.time || habit.cue.place || habit.cue.afterHabitId || habit.cue.afterText
+				habit.cue.time || habit.cue.range || habit.cue.place || habit.cue.afterHabitId || habit.cue.afterText
 					? {
 							time: habit.cue.time,
 							place: habit.cue.place,
@@ -240,6 +277,8 @@ export function toTemplate(
 			minimumCounts: habit.minimumCounts,
 			levels: habit.levels.enabled ? habit.levels : null,
 			quickDone: habit.quickDone,
+			remind: habit.remind && !share.noRemind,
+			unlogged: habit.unlogged ?? 'missed',
 			identities: habit.identityIds
 				.map((id) => names.identities?.get(id))
 				.filter((x): x is string => !!x),
@@ -268,6 +307,7 @@ export function toTemplate(
 			restTimerEnabled: t.restTimerEnabled,
 			restTimerSeconds: t.restTimerSeconds,
 			tags: t.tags,
+			area: areaName(t.areaId),
 			metrics: t.metrics.map((m) => ({
 				key: metricKey.get(m.id)!,
 				name: m.name,
@@ -370,8 +410,10 @@ export function fromTemplate(
 		minimumCounts: tpl.habit.minimumCounts,
 		levels: tpl.habit.levels ?? defaultLevels(),
 		quickDone: tpl.habit.quickDone,
-		// Reminders are a choice for each device, so imports start with them off.
+		// Reminders are a choice for each device, so imports start with them off. The import
+		// page offers to turn on one the template suggests (`tpl.habit.remind`).
 		remind: false,
+		unlogged: tpl.habit.unlogged,
 		identityIds: [],
 		ifThen: { when: tpl.habit.ifThen?.when ?? '', then: tpl.habit.ifThen?.then ?? '', habitId: null },
 		triggers: tpl.habit.triggers ?? DEFAULT_TRIGGERS,
@@ -387,6 +429,12 @@ export function fromTemplate(
 	// Rotations and intervals start from the day of import.
 	if (habit.schedule && 'start' in habit.schedule) habit.schedule = { ...habit.schedule, start: startDate };
 	return { tasks, habit, identities: tpl.habit.identities };
+}
+
+/** Round to a step (2.5 kg, 1 rep), without float noise. */
+function roundTo(x: number, step: number): number {
+	const r = Math.round(x / step) * step;
+	return Math.round(r * 1000) / 1000;
 }
 
 /** Fill a template from the answers to its questions. Unanswered questions take their default. */
@@ -417,16 +465,31 @@ export function applyAnswers(tpl: TemplateFile, answers: TemplateAnswers): Templ
 			}
 		} else if (q.kind === 'number') {
 			const n = typeof a === 'number' && Number.isFinite(a) ? a : q.default;
-			const tasksWith = new Map(out.tasks.map((t) => [t.key, new Set(t.metrics.map((m) => m.key))]));
+			const ratio = q.scale && q.default > 0 ? n / q.default : null;
+			const metricsOf = new Map(out.tasks.map((t) => [t.key, new Map(t.metrics.map((m) => [m.key, m]))]));
 			for (const v of out.habit.variants)
 				for (const slot of v.slots) {
-					const has = slot.task ? tasksWith.get(slot.task) : undefined;
+					const has = slot.task ? metricsOf.get(slot.task) : undefined;
 					if (!has) continue;
-					for (const m of q.metrics) if (has.has(m)) slot.targets[m] = n;
+					for (const k of q.metrics) {
+						const m = has.get(k);
+						if (!m) continue;
+						const round = (x: number) => roundTo(x, m.step ?? (m.type === 'count' ? 1 : 0.01));
+						const old = slot.targets[k];
+						const next = ratio !== null && old !== undefined ? round(old * ratio) : n;
+						slot.targets[k] = next;
+						// Minimum and Stretch keep their distance from the target.
+						const by = old ? next / old : ratio;
+						if (by !== null) {
+							if (slot.minTargets[k] !== undefined) slot.minTargets[k] = round(slot.minTargets[k] * by);
+							if (slot.stretchTargets[k] !== undefined) slot.stretchTargets[k] = round(slot.stretchTargets[k] * by);
+						}
+					}
 				}
 		} else if (q.kind === 'time') {
 			const t = typeof a === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(a) ? a : q.default;
-			out.habit.cue = { time: t, place: out.habit.cue?.place ?? null, after: out.habit.cue?.after ?? null, range: out.habit.cue?.range ?? null };
+			// A time and a part of the day can't both be set; the answer is the time.
+			out.habit.cue = { time: t, place: out.habit.cue?.place ?? null, after: out.habit.cue?.after ?? null, range: null };
 		}
 	}
 	return out;

@@ -17,6 +17,15 @@ export interface Candidate {
 	lastDone: string | null;
 }
 
+/** Does a Task with these Tags pass a rule's must and must-not lists? */
+export function matches(rule: FillRule, tags: Record<string, number>): boolean {
+	const level = (tag: string) => tags[tag] ?? 0;
+	return (
+		Object.entries(rule.must ?? {}).every(([t, min]) => level(t) >= min) &&
+		Object.entries(rule.mustNot ?? {}).every(([t, max]) => level(t) <= max)
+	);
+}
+
 /**
  * Pick a Task for an open Slot.
  * 1. Keep Tasks that pass the must and must-not rules.
@@ -32,12 +41,7 @@ export function pickTask(
 ): string | null {
 	const level = (c: Candidate, tag: string) => c.tags[tag] ?? 0;
 
-	const pool = library.filter(
-		(c) =>
-			!alreadyPicked.has(c.id) &&
-			Object.entries(rule.must ?? {}).every(([t, min]) => level(c, t) >= min) &&
-			Object.entries(rule.mustNot ?? {}).every(([t, max]) => level(c, t) <= max)
-	);
+	const pool = library.filter((c) => !alreadyPicked.has(c.id) && matches(rule, c.tags));
 	if (pool.length === 0) return null;
 
 	const score = (c: Candidate) => (rule.prefer ?? []).reduce((s, t) => s + level(c, t), 0);

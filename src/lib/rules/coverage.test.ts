@@ -10,6 +10,8 @@ import { metricRules, taskRules } from './task';
 import { viewRules } from './views';
 import { viewSettings } from '../views';
 import { cardRules, statsSettingsRules } from './stats';
+import { shareRules } from './share';
+import { shareForm } from '../share';
 import { statCard, statsSettings } from '../stats/model';
 
 type Def = { type: string; innerType?: z.ZodType; shape?: Record<string, z.ZodType>; element?: z.ZodType; options?: z.ZodType[] };
@@ -57,7 +59,8 @@ const REGISTRIES: [string, z.ZodType, object][] = [
 	['metric', metricSchema, metricRules],
 	['views', viewSettings, viewRules],
 	['stat card', statCard, cardRules],
-	['stats settings', statsSettings, statsSettingsRules]
+	['stats settings', statsSettings, statsSettingsRules],
+	['share', shareForm, shareRules]
 ];
 
 describe('rule registry coverage', () => {
