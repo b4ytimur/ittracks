@@ -1,13 +1,21 @@
 <script lang="ts">
-	// A timer for a duration Metric. Stopping it adds the timed minutes to the value.
+	// A timer for a duration Metric. Stopping it adds the timed minutes to what you logged
+	// so far, or replaces a value that was only prefilled (last time's value or the target).
 	// The start time is kept in this browser, so the timer survives a reload or screen change.
 	import { onMount } from 'svelte';
 
 	let {
 		value = $bindable(),
+		replace = false,
 		target = null,
 		storageKey
-	}: { value: number | null | undefined; target?: number | null; storageKey: string } = $props();
+	}: {
+		value: number | null | undefined;
+		/** The value is a prefill, not time logged now: the timed minutes take its place. */
+		replace?: boolean;
+		target?: number | null;
+		storageKey: string;
+	} = $props();
 
 	type Mode = 'stopwatch' | 'countdown' | 'focus';
 	interface Running {
@@ -85,7 +93,7 @@
 	function stop() {
 		if (!running) return;
 		const minutes = running.mode === 'focus' ? (focus?.workDone ?? 0) : elapsedMin;
-		value = Math.round(((value ?? 0) + minutes) * 10) / 10;
+		value = Math.round(((replace ? 0 : (value ?? 0)) + minutes) * 10) / 10;
 		running = null;
 		write(null);
 	}
@@ -117,7 +125,7 @@
 			{/if}
 		</div>
 		<div class="row">
-			<button type="button" class="primary small" onclick={stop}>Stop and add time</button>
+			<button type="button" class="primary small" onclick={stop}>{replace ? 'Stop and use this time' : 'Stop and add time'}</button>
 			<button type="button" class="small" onclick={cancel}>Cancel</button>
 		</div>
 	{:else}

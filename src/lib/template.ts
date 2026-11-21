@@ -317,7 +317,7 @@ export function fromTemplate(
 				unit: m.unit,
 				repeats: m.repeats,
 				choices: m.choices,
-				prefill: m.prefill ?? (m.type === 'text' ? ('blank' as const) : ('last' as const)),
+				prefill: m.prefill ?? (m.type === 'text' || m.type === 'checkbox' ? ('blank' as const) : ('last' as const)),
 				step: m.step,
 				required: m.required,
 				quick: m.quick

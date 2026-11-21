@@ -17,6 +17,7 @@
 	const ruleCheck = $derived(checkTask(t));
 	const restBlock = $derived(blocked(taskRules, t, 'restTimerEnabled', undefined));
 	const quickBlock = (m: MetricForm) => blocked(metricRules, m, 'quick', undefined);
+	const prefillBlock = (m: MetricForm) => blocked(metricRules, m, 'prefill', undefined);
 	let newLevel = $state(2);
 
 	const typeLabels: Record<string, string> = {
@@ -204,14 +205,18 @@
 			<details class="log-settings">
 				<summary class="small-text">When logging</summary>
 				<div class="row">
-					<label class="grow"
-						>Start with
-						<select bind:value={m.prefill}>
-							<option value="last">Last time's value</option>
-							<option value="target" disabled={!isNumeric(m)}>The target{isNumeric(m) ? '' : ' (numbers only)'}</option>
-							<option value="blank">Blank</option>
-						</select>
-					</label>
+					{#if m.type === 'checkbox'}
+						<p class="muted small-text grow" style="margin: 0">{prefillBlock({ ...m, prefill: 'last' })?.reason}.</p>
+					{:else}
+						<label class="grow"
+							>Start with
+							<select bind:value={m.prefill}>
+								<option value="last">Last time's value</option>
+								<option value="target" disabled={!isNumeric(m)}>The target{isNumeric(m) ? '' : ' (numbers only)'}</option>
+								<option value="blank">Blank</option>
+							</select>
+						</label>
+					{/if}
 					{#if isNumeric(m)}
 						<label style="width: 7rem"
 							>+/− step
