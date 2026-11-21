@@ -195,6 +195,13 @@ describe('ranges and buckets', () => {
 		expect(b.at(-1)).toMatchObject({ from: '2026-11-16', to: TODAY });
 		expect(bucketList({ from: '2025-12-15', to: '2026-02-01' }, 'month').map((x) => x.label)).toEqual(['Dec 25', 'Jan 26', 'Feb 26']);
 	});
+
+	it('keeps the newest buckets on a long range', () => {
+		const days = bucketList({ from: '2020-01-01', to: TODAY }, 'day');
+		expect(days.at(-1)?.from).toBe(TODAY);
+		expect(days.length).toBeGreaterThan(2000);
+		expect(bucketList({ from: '2000-01-01', to: TODAY }, 'week').at(-1)?.to).toBe(TODAY);
+	});
 });
 
 describe('habit outcomes', () => {

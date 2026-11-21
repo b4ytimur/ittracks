@@ -33,7 +33,7 @@
 		<button type="button" class="primary small" onclick={() => onbuild(makeCard({ look: { chart: 'bars', size: 'wide' }, overTime: 'sum' }))}>Build your own</button>
 	</div>
 	<div class="groups">
-		{#each groups as g (g.group)}
+		{#each groups as g, gi (`${tab}-${gi}`)}
 			<h3>{g.group}</h3>
 			<ul class="list">
 				{#each g.cards as c (c.id)}

@@ -27,7 +27,7 @@ export const load: PageServerLoad = ({ locals, params, cookies }) => {
 		hidden,
 		// Cards for this habit first, then the gallery narrowed to it.
 		suggested: [
-			...suggestedCards(P).filter((g) => g.group === h.name),
+			...suggestedCards(P).filter((g) => g.habitId === h.id),
 			...habitTasks(P, h.id).map((t) => ({ group: t.name, cards: taskCards(P, t, { habitId: h.id }) }))
 		],
 		gallery: galleryCards().map((g) => ({ ...g, cards: g.cards.map((c) => ({ ...c, filter: { ...c.filter, ...only } })) }))

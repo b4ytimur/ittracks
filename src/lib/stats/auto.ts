@@ -1,7 +1,7 @@
 // Cards nobody has to build (A1) and whole boards in one tap (A2).
 // Auto cards come from the type of each field a habit or Task logs; board templates pick
 // the habits and Tasks that fit them from what the account already has.
-import { makeCard, newId, type Board, type StatCard, type StatCardInput } from './model';
+import { makeCard, MAX_CARDS, newId, type Board, type StatCard, type StatCardInput } from './model';
 import type { DsHabit, DsMetric, DsTask, Prepared } from './engine';
 
 type In = Omit<StatCardInput, 'id'>;
@@ -126,7 +126,8 @@ function fieldCards(t: DsTask, m: DsMetric, filter: { habits?: string[] }): Stat
 
 /** The habit Stats tab, built from the habit's own fields (A1). */
 export function habitCards(P: Prepared, h: DsHabit): StatCard[] {
-	return stable(h.id, habitCardsOf(P, h));
+	// Capped like a board, so customizing the tab (which saves this list) never goes over.
+	return stable(h.id, habitCardsOf(P, h)).slice(0, MAX_CARDS);
 }
 
 function habitCardsOf(P: Prepared, h: DsHabit): StatCard[] {
@@ -318,11 +319,11 @@ export function startingBoards(P: Prepared, viewTemplate: string): Board[] {
 }
 
 /** Cards offered under "Suggested" when adding a card to a board: every habit's auto cards, without duplicates. */
-export function suggestedCards(P: Prepared): { group: string; cards: StatCard[] }[] {
-	const out: { group: string; cards: StatCard[] }[] = [];
+export function suggestedCards(P: Prepared): { group: string; habitId: string; cards: StatCard[] }[] {
+	const out: { group: string; habitId: string; cards: StatCard[] }[] = [];
 	for (const h of P.ds.habits.filter((x) => !x.archived)) {
 		const cards = habitCards(P, h).filter((c) => c.look.chart !== 'calendar' || h.direction === 'build');
-		if (cards.length) out.push({ group: h.name, cards: cards.map((c) => ({ ...c, title: c.title.includes(h.name) ? c.title : `${h.name}: ${c.title.charAt(0).toLowerCase()}${c.title.slice(1)}` })) });
+		if (cards.length) out.push({ group: h.name, habitId: h.id, cards: cards.map((c) => ({ ...c, title: c.title.includes(h.name) ? c.title : `${h.name}: ${c.title.charAt(0).toLowerCase()}${c.title.slice(1)}` })) });
 	}
 	return out;
 }

@@ -89,7 +89,7 @@
 		const r = await op({ op: 'card.delete', where, id: item.card.id });
 		if (r)
 			showToast(`Removed “${title}”`, async () => {
-				await statsOp({ op: 'card.save', where, card: item.card, index });
+				await op({ op: 'card.save', where, card: item.card, index });
 			});
 	}
 	const move = (item: Item, dir: -1 | 1) => op({ op: 'card.move', where, id: item.card.id, dir });

@@ -402,8 +402,10 @@ export function bucketList(range: Range, b: Exclude<Bucket, 'auto' | 'session'>)
 	const out: BucketInfo[] = [];
 	const sameYear = range.from.slice(0, 4) === range.to.slice(0, 4);
 	let d = range.from;
+	// Every bucket in the range: cutting the list would drop the newest data. The guard only
+	// stops a bad range from looping (100,000 days is over 270 years).
 	let guard = 0;
-	while (d <= range.to && guard++ < 1000) {
+	while (d <= range.to && guard++ < 100_000) {
 		const k = bucketOf(d, b);
 		out.push({ key: k.key, label: bucketLabel(k, b, sameYear), from: k.from < range.from ? range.from : k.from, to: k.to > range.to ? range.to : k.to });
 		d = addDays(k.to, 1);
