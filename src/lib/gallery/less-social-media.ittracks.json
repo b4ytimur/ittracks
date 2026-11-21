@@ -1,6 +1,7 @@
 {
 	"format": "ittracks-template",
-	"version": 3,
+	"version": 4,
+	"view": "quitter",
 	"name": "Less social media",
 	"description": "Count days without mindless scrolling, and learn what pulls you in.",
 	"meta": {

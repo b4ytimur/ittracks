@@ -7,6 +7,8 @@ import type { z } from 'zod';
 import { habitForm, taskForm } from '../forms';
 import { habitRules, slotRules } from './habit';
 import { metricRules, taskRules } from './task';
+import { viewRules } from './views';
+import { viewSettings } from '../views';
 
 type Def = { type: string; innerType?: z.ZodType; shape?: Record<string, z.ZodType>; element?: z.ZodType; options?: z.ZodType[] };
 const def = (s: z.ZodType) => (s as unknown as { def: Def }).def;
@@ -50,7 +52,8 @@ const REGISTRIES: [string, z.ZodType, object][] = [
 	['habit', habitForm, habitRules],
 	['slot', slotSchema, slotRules],
 	['task', taskForm, taskRules],
-	['metric', metricSchema, metricRules]
+	['metric', metricSchema, metricRules],
+	['views', viewSettings, viewRules]
 ];
 
 describe('rule registry coverage', () => {

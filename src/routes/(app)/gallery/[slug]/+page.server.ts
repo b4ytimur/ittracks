@@ -53,6 +53,6 @@ export const actions: Actions = {
 			reuse: f.get('separate') !== 'on'
 		});
 		if ('error' in r) return fail(400, { error: r.error });
-		redirect(303, `/habits?added=${encodeURIComponent(r.name)}`);
+		redirect(303, `/habits?added=${encodeURIComponent(r.name)}${tpl.view ? `&view=${encodeURIComponent(tpl.view)}` : ''}`);
 	}
 };

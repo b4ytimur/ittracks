@@ -1,6 +1,7 @@
 {
 	"format": "ittracks-template",
-	"version": 3,
+	"version": 4,
+	"view": "gym",
 	"name": "Home bodyweight",
 	"description": "No equipment: push-ups, squats, lunges and a plank, three days a week.",
 	"meta": {

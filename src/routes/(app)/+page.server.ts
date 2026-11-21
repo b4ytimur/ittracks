@@ -7,18 +7,24 @@ import { craving, habit, occurrence, prepTick, slip, slot, variant } from '$lib/
 import { createOccurrence, loadPrep, loadToday, quickDone, reopen, sameAsLast, timeIn, userToday } from '$lib/server/today';
 import { raise } from '$lib/engine/progression';
 import { addDays } from '$lib/engine/dates';
-import { getSettings, saveSettings } from '$lib/server/settings';
+import { getSettings, getViews, saveSettings } from '$lib/server/settings';
+import { DEFAULT_TEMPLATE_NEW, PAGE_PATH, TEMPLATES, fromTemplate, templateById } from '$lib/views';
 import { listAreas } from '$lib/server/repo/areas';
 import { DEFAULT_RANGES, readRanges } from '$lib/engine/day';
 import type { Level } from '$lib/engine/streak';
 import { ownedHabit, ownedOccurrence } from '$lib/server/owned';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = ({ locals, cookies, url }) => {
+export const load: PageServerLoad = ({ locals, cookies, url, request }) => {
 	const accountId = locals.account!.id;
 	const tz = cookies.get('tz');
 	// Reminders run on the server, so it needs to know the user's time zone.
 	const settings = getSettings(accountId);
+	const views = getViews(accountId);
+	// Opening the app (home screen icon, bookmark, typed address) goes to the chosen start page.
+	// Links inside the app, like the Today tab, are same-origin and stay here.
+	if (views.startPage !== 'today' && request.headers.get('sec-fetch-site') === 'none' && !url.search)
+		redirect(303, PAGE_PATH[views.startPage]);
 	if (tz && settings.timeZone !== tz) saveSettings(accountId, { timeZone: tz });
 	const today = userToday(accountId, tz);
 	return {
@@ -30,8 +36,11 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		// Asked once: when the day starts, and its named parts.
 		askDay: settings.dayStart === undefined,
 		suggestedRanges: DEFAULT_RANGES,
-		groupByArea: settings.groupByArea,
-		areas: settings.groupByArea ? listAreas(accountId) : []
+		templates: TEMPLATES.map((t) => ({ id: t.id, name: t.name, blurb: t.blurb })),
+		suggestedTemplate: DEFAULT_TEMPLATE_NEW,
+		views,
+		ranges: settings.ranges,
+		areas: listAreas(accountId)
 	};
 };
 
@@ -133,9 +142,12 @@ export const actions: Actions = {
 		const dayStart = field(f, 'dayStart');
 		if (!time.test(dayStart)) return fail(400, { error: 'Pick a time like 04:00.' });
 		const ranges = readRanges(f);
-		const conflict = checkSettings({ ...getSettings(locals.account!.id), dayStart, ranges })[0];
+		const s = getSettings(locals.account!.id);
+		const conflict = checkSettings({ ...s, dayStart, ranges })[0];
 		if (conflict) return fail(400, { error: conflict.reason });
-		saveSettings(locals.account!.id, { dayStart, ranges });
+		// First run: the user also picked how much to see. Existing views are never replaced here.
+		const tpl = templateById(field(f, 'template'));
+		saveSettings(locals.account!.id, { dayStart, ranges, ...(tpl && !s.views ? { views: fromTemplate(tpl.id) } : {}) });
 	},
 	/** Start a rotation's next Variant today, ahead of its rest days. */
 	early: async ({ request, locals, cookies }) => {

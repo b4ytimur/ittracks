@@ -1,6 +1,7 @@
 {
 	"format": "ittracks-template",
-	"version": 3,
+	"version": 4,
+	"view": "quitter",
 	"name": "Quit smoking",
 	"description": "Count days without a cigarette. Log a slip when it happens, with what set it off.",
 	"meta": {

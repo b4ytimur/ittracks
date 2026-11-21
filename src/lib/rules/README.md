@@ -9,6 +9,7 @@ these files. Proposal: https://claude.ai/artifact/V1qPudz9pSe1aXRe5sC7RS
 | `habit.ts` | habit editor (`habitRules`) and each Slot (`slotRules`) |
 | `task.ts` | Task editor (`taskRules`) and each Metric (`metricRules`) |
 | `settings.ts` | Settings |
+| `views.ts` | View settings (filters, layout, templates) |
 
 ## Adding an option
 

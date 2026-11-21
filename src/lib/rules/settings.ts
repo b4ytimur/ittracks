@@ -30,6 +30,8 @@ export const settingsRules = defineRules<Settings>({
 	guidedSetup: independent,
 	showAllSections: independent,
 	groupByArea: independent,
+	/** View settings have their own registry: rules/views.ts. */
+	views: independent,
 	pinned: independent,
 	taskTypes: independent,
 	areasSeeded: independent
