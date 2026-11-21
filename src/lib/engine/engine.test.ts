@@ -141,8 +141,8 @@ describe('fill rules', () => {
 });
 
 describe('streaks', () => {
-	it('counts done and skipped back to the last miss', () => {
-		expect(buildStreak(['done', 'missed', 'done', 'skipped', 'done', 'due'])).toBe(3);
+	it('counts done back to the last miss; a skip adds nothing', () => {
+		expect(buildStreak(['done', 'missed', 'done', 'skipped', 'done', 'due'])).toBe(2);
 		expect(buildStreak([])).toBe(0);
 	});
 
@@ -202,6 +202,22 @@ describe('streak rules', () => {
 	it('consistency is the share done over the last N days, ignoring skips', () => {
 		const r = streak(marks('DMDSD'), { kind: 'consistency', days: 30 }, { today: '2026-11-27' });
 		expect(r).toEqual({ value: 75, unit: 'percent', atRisk: false });
+	});
+
+	it('a skip neither adds to the streak nor breaks it, under every rule', () => {
+		// Done, then a skip: still 1, never 2.
+		expect(streak(marks('DS'), { kind: 'strict' }).value).toBe(1);
+		expect(streak(marks('DS'), { kind: 'neverTwice' }).value).toBe(1);
+		expect(streak(marks('DS'), { kind: 'grace', misses: 1, period: 'week' }).value).toBe(1);
+		// Skips can't build a streak from nothing.
+		expect(streak(marks('SSS'), { kind: 'strict' }).value).toBe(0);
+		// A skip between two done days doesn't break the run.
+		expect(streak(marks('DSD'), { kind: 'strict' }).value).toBe(2);
+	});
+
+	it('never miss twice: a skip between two misses still makes two misses in a row', () => {
+		expect(streak(marks('DDMSM'), { kind: 'neverTwice' }).value).toBe(0);
+		expect(streak(marks('DDMS'), { kind: 'neverTwice' }).atRisk).toBe(true);
 	});
 
 	it('a Minimum keeps the streak unless the habit says otherwise', () => {
@@ -273,7 +289,7 @@ describe('streak labels', () => {
 
 // ---------- P2 additions ----------
 import { chainCells, forgivenMisses } from './chain';
-import { limitOn, nextDrop, usedIn, withinStreak, type Limit } from './limit';
+import { limitOn, nextDrop, usedIn, withinOn, withinStreak, type Limit } from './limit';
 import { hitsInARow, raise } from './progression';
 
 describe('chain view', () => {
@@ -282,6 +298,12 @@ describe('chain view', () => {
 		const f = forgivenMisses(m, { kind: 'neverTwice' });
 		expect([...f]).toEqual(['2026-11-24']);
 		expect(forgivenMisses(m, { kind: 'strict' }).size).toBe(0);
+	});
+
+	it('looks past skips when deciding whether a miss was forgiven', () => {
+		// Miss, skip, miss: two misses in a row, so neither is forgiven.
+		expect(forgivenMisses(marks('DMSMD'), { kind: 'neverTwice' }).size).toBe(0);
+		expect([...forgivenMisses(marks('DMSD'), { kind: 'neverTwice' })]).toEqual(['2026-11-24']);
 	});
 
 	it('marks misses within the grace allowance', () => {
@@ -329,6 +351,32 @@ describe('reduce mode', () => {
 		const week: Limit = { max: 10, period: 'week', taper: null, start: MON };
 		const slips = [{ date: '2026-11-25', count: 11 }];
 		expect(withinStreak(week, slips, MON, '2026-12-02')).toBe(1);
+	});
+
+	it('marks a day within a weekly limit until the week goes over', () => {
+		// Up to 3 a week: 2 on Friday is fine, 1 on Saturday reaches 3, 1 on Sunday goes over.
+		const week: Limit = { max: 3, period: 'week', taper: null, start: MON };
+		const slips = [
+			{ date: '2026-11-27', count: 2 },
+			{ date: '2026-11-28', count: 1 },
+			{ date: '2026-11-29', count: 1 },
+			{ date: '2026-11-30', count: 1 }
+		];
+		expect(withinOn(week, slips, '2026-11-27')).toBe(true);
+		expect(withinOn(week, slips, '2026-11-28')).toBe(true);
+		expect(withinOn(week, slips, '2026-11-29')).toBe(false);
+		// A new week starts from zero.
+		expect(withinOn(week, slips, '2026-11-30')).toBe(true);
+	});
+
+	it('marks a day within a daily limit, following the taper', () => {
+		const day: Limit = { max: 2, period: 'day', taper: { by: 1, every: 'week' }, start: MON };
+		const slips = [
+			{ date: MON, count: 2 },
+			{ date: '2026-11-30', count: 2 }
+		];
+		expect(withinOn(day, slips, MON)).toBe(true);
+		expect(withinOn(day, slips, '2026-11-30')).toBe(false);
 	});
 });
 

@@ -681,10 +681,25 @@ export function quickDone(occurrenceId: string, level: Level | null): 'done' | '
 	return needsInput(occ.id) ? 'needsInput' : 'done';
 }
 
+/** Metrics that never take an old value: fields set to start blank, and tick boxes. */
+function freshMetricIds(tx: Tx, taskId: string): Set<string> {
+	return new Set(
+		tx
+			.select({ id: metric.id, type: metric.type, prefill: metric.prefill })
+			.from(metric)
+			.where(eq(metric.taskId, taskId))
+			.all()
+			.filter((m) => m.prefill === 'blank' || m.type === 'checkbox')
+			.map((m) => m.id)
+	);
+}
+
 /**
  * "Same as last time": copy each Task's values from its last finished log (sets, single
  * values and sub-task ticks), use the targets for a Task never logged before, and finish.
- * Replaces anything saved so far. Returns 'needsInput' when a required field is still empty.
+ * Fields set to start blank and tick boxes are left empty, as on the log screen, so an old
+ * reading is never logged as today's. Replaces anything saved so far. Returns 'needsInput'
+ * when a required field is still empty, so the quick log asks for it.
  */
 export function sameAsLast(occurrenceId: string): 'done' | 'needsInput' | 'gone' {
 	const occ = db.select().from(occurrence).where(eq(occurrence.id, occurrenceId)).get();
@@ -704,7 +719,11 @@ export function sameAsLast(occurrenceId: string): 'done' | 'needsInput' | 'gone'
 		for (const { slot: s, taskId } of slotsOf(occ)) {
 			if (!taskId) continue;
 			const prev = lastEntries(taskId, occ.id);
-			for (const values of prev.length ? prev : targetEntries(tx, s, taskId, lastLevel)) add(taskId, values);
+			const fresh = freshMetricIds(tx, taskId);
+			for (const values of prev.length ? prev : targetEntries(tx, s, taskId, lastLevel)) {
+				const kept = Object.fromEntries(Object.entries(values).filter(([k]) => !fresh.has(k)));
+				if (Object.keys(kept).some((k) => k !== '_summary')) add(taskId, kept);
+			}
 			const subs = tx.select({ id: task.id }).from(task).where(eq(task.parentTaskId, taskId)).all();
 			for (const sub of subs) for (const values of lastEntries(sub.id, occ.id)) add(sub.id, values);
 		}

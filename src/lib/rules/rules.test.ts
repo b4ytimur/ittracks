@@ -185,6 +185,16 @@ describe('task rules', () => {
 		expect([m.unit, m.step, m.choices, m.prefill]).toEqual(['', null, [], 'last']);
 	});
 
+	it('M5: a tick box always starts unticked', () => {
+		const t = task();
+		t.metrics[0] = { ...t.metrics[0], type: 'checkbox', prefill: 'last' };
+		expect(checkTask(t).form.metrics[0].prefill).toBe('blank');
+		t.metrics[0].prefill = 'target';
+		expect(checkTask(t).form.metrics[0].prefill).toBe('blank');
+		t.metrics[0] = { ...t.metrics[0], type: 'count', prefill: 'last' };
+		expect(checkTask(t).form.metrics[0].prefill).toBe('last');
+	});
+
 	it('M3: a required field always shows on quick logs', () => {
 		const t = task();
 		t.metrics[0] = { ...t.metrics[0], required: true, quick: false };

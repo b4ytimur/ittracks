@@ -19,7 +19,11 @@ export const metricRules = defineRules<MetricForm>({
 		check((m) => m.type === 'choice' && m.choices.length < 2, 'A Choice needs at least two options')
 	],
 	// M2: only numbers have targets to prefill from.
-	prefill: [onlyWhen((m) => m.prefill !== 'target' || isNumericType(m.type), 'Only numbers have a target', 'last')],
+	// M5: a tick box always starts unticked, so last time's tick is never copied into a new log.
+	prefill: [
+		onlyWhen((m) => m.prefill !== 'target' || isNumericType(m.type), 'Only numbers have a target', 'last'),
+		onlyWhen((m) => m.prefill === 'blank' || m.type !== 'checkbox', 'A tick box always starts unticked', 'blank')
+	],
 	required: independent
 });
 
