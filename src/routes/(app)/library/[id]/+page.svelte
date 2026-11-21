@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { metricTypes } from '$lib/metric-types';
+	import CardGrid from '$lib/stats/ui/CardGrid.svelte';
 	import { untrack } from 'svelte';
 	import { enhance } from '$app/forms';
 	import type { MetricForm, TaskForm } from '$lib/forms';
@@ -104,6 +105,24 @@
 		{/if}
 		{#if data.usage.lastLogged}Logged {data.usage.timesLogged} {data.usage.timesLogged === 1 ? 'time' : 'times'}, last on {ago(data.usage.lastLogged)}.{/if}
 	</p>
+{/if}
+
+{#if data.history?.items.length}
+	<details class="history" open>
+		<summary>History</summary>
+		<CardGrid
+			items={data.history.items}
+			where={{ board: '' }}
+			board={{ range: '90d', filter: { areas: [], tags: [], habit: null, identity: null, direction: 'all' } }}
+			catalog={data.history.catalog}
+			measures={data.history.measures}
+			hidden={[]}
+			suggested={[]}
+			gallery={[]}
+			readonly
+			csv={(id) => `/stats/export?task=${data.taskId}&card=${id}`}
+		/>
+	</details>
 {/if}
 
 {#if data.isNew}
@@ -319,5 +338,13 @@
 	.archived {
 		margin-bottom: 1rem;
 		align-items: center;
+	}
+	.history {
+		margin-bottom: 1.25rem;
+	}
+	.history summary {
+		cursor: pointer;
+		font-weight: 600;
+		margin-bottom: 0.6rem;
 	}
 </style>

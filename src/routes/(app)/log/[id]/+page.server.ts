@@ -7,6 +7,7 @@ import { entry, metric, occurrence, slot, task, variant } from '$lib/server/db/s
 import { ownedOccurrence } from '$lib/server/owned';
 import { candidates, lastEntries, userToday } from '$lib/server/today';
 import { getSettings } from '$lib/server/settings';
+import { recapFor } from '$lib/server/stats';
 import { planOfToday, replanToday, windowFor } from '$lib/server/backfill';
 import type { ScheduleForm } from '$lib/forms';
 import { pickTask, type FillRule } from '$lib/engine/fill';
@@ -143,6 +144,14 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		variantName: v?.name ?? null,
 		items,
 		subDone,
+		/** "Last time … · best …" per Task. */
+		recap: recapFor(
+			accountId,
+			items.flatMap((it) => (it.task ? [it.task.id] : [])),
+			o.occ.id,
+			getSettings(accountId).weightUnit,
+			o.occ.date
+		),
 		library: db
 			.select({ id: task.id, name: task.name })
 			.from(task)
