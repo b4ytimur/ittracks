@@ -35,7 +35,9 @@ function write(items: Queued[]) {
 
 /** Queue an action. A later save of the same log replaces an earlier one. */
 export function enqueue(url: string, fields: [string, string][], label: string) {
-	const key = (q: Queued) => q.url + '|' + (q.fields.find(([k]) => k === 'occurrence')?.[1] ?? '');
+	// The same action on the same log, or on the same habit for actions that name a habit (a past day).
+	const key = (q: Queued) =>
+		q.url + '|' + (q.fields.find(([k]) => k === 'occurrence')?.[1] ?? q.fields.find(([k]) => k === 'habit')?.[1] ?? '');
 	const item: Queued = { id: crypto.randomUUID(), url, fields, label, at: Date.now() };
 	write([...read().filter((q) => key(q) !== key(item)), item]);
 }
