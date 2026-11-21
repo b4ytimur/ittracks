@@ -1,21 +1,46 @@
 <script lang="ts">
 	import { describeSchedule } from '$lib/describe';
 	import { enhance } from '$app/forms';
+	import { untrack } from 'svelte';
+	import ViewBar from '$lib/ViewBar.svelte';
+	import { viewOp } from '$lib/viewclient';
+	import { HABIT_LINES, groupBy, passes, type HabitLineKey } from '$lib/views';
 
 	let { data, form } = $props();
 
+	let views = $state(untrack(() => data.views));
+	let view = $state(untrack(() => data.initial));
+	const show = (k: HabitLineKey) => views.habits.lines.includes(k);
+	function toggleLine(k: HabitLineKey) {
+		const lines = show(k) ? views.habits.lines.filter((x) => x !== k) : [...views.habits.lines, k];
+		views.habits = { ...views.habits, lines };
+		viewOp({ op: 'patch', habits: { lines } });
+	}
+
 	const area = (id: string | null) => data.areas.find((a) => a.id === id);
-	const groups = $derived.by(() => {
-		if (!data.groupByArea) return [{ key: 'all', area: null as (typeof data.areas)[number] | null, items: data.habits }];
-		return [...data.areas.map((a) => a.id), '']
-			.map((k) => ({
-				key: k || 'none',
-				area: area(k) ?? null,
-				items: data.habits.filter((h) => (h.areaId && area(h.areaId) ? h.areaId : '') === k)
-			}))
-			.filter((g) => g.items.length);
+	const shown = $derived.by(() => {
+		const list = data.habits.filter((h) => (view.archived || !h.archived) && passes(view, h));
+		if (view.sort === 'name') return [...list].sort((a, b) => a.name.localeCompare(b.name));
+		if (view.sort === 'consistency') return [...list].sort((a, b) => (b.consistency ?? -1) - (a.consistency ?? -1));
+		if (view.sort === 'created') return [...list].sort((a, b) => b.createdAt - a.createdAt);
+		return list;
 	});
+	const groups = $derived(groupBy(shown, view.group, { areas: data.areas }));
+	const identityNames = $derived([...new Set(data.habits.flatMap((h) => h.identities))].sort());
 	const cueText = (c: { time: string | null; range?: string | null } | null) => c?.time ?? c?.range ?? null;
+	const ago = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+	const lineFor = (h: (typeof data.habits)[number]) => {
+		const a = area(h.areaId);
+		return [
+			show('schedule') ? (h.direction === 'break' ? 'Break habit' : describeSchedule(h.schedule)) : null,
+			show('cue') ? cueText(h.cue) : null,
+			show('area') && a && view.group !== 'area' ? `${a.icon} ${a.name}` : null,
+			show('consistency') && h.consistency !== null ? `${h.consistency}% in 30 days` : null,
+			show('last') && h.direction !== 'break' ? (h.lastDone ? `last done ${ago(h.lastDone)}` : 'not done yet') : null
+		]
+			.filter(Boolean)
+			.join(' · ');
+	};
 </script>
 
 <svelte:head><title>Habits · ittracks</title></svelte:head>
@@ -23,7 +48,7 @@
 <header class="bar">
 	<h1>Habits</h1>
 	<div class="row" style="align-items: center">
-		<a href="/identities">Identities</a>
+		{#if !views.hidden.includes('identities')}<a href="/identities">Identities</a>{/if}
 		<a href="/gallery">Gallery</a>
 		<a class="button primary" href="/habits/new" data-sveltekit-reload>New habit</a>
 	</div>
@@ -38,9 +63,31 @@
 	</p>
 {/if}
 
+{#if data.habits.length}
+	<ViewBar
+		page="habits"
+		bind:views
+		bind:current={view}
+		areas={data.areas}
+		identities={views.hidden.includes('identities') ? [] : identityNames}
+		direction
+		archived
+	>
+		<fieldset>
+			<legend class="small-text">Lines on each habit</legend>
+			{#each Object.entries(HABIT_LINES) as [k, label] (k)}
+				<label style="color: var(--text)"
+					><input type="checkbox" checked={show(k as HabitLineKey)} onchange={() => toggleLine(k as HabitLineKey)} /> {label}</label
+				>
+			{/each}
+		</fieldset>
+	</ViewBar>
+	{#if !shown.length}<p class="muted">No habits match these filters.</p>{/if}
+{/if}
+
 {#each groups as g (g.key)}
-	{#if data.groupByArea}
-		<h2 class="area" style="--c: {g.area?.color ?? 'var(--border)'}">{g.area ? `${g.area.icon} ${g.area.name}` : 'No area'}</h2>
+	{#if g.label}
+		<h2 class="area" style="--c: {g.color ?? 'var(--border)'}">{g.label}</h2>
 	{/if}
 	<ul class="list">
 		{#each g.items as h (h.id)}
@@ -49,16 +96,12 @@
 				<a class="card habit" href="/habits/{h.id}" data-sveltekit-reload style="--c: {a?.color ?? 'transparent'}">
 					<strong>{h.name}</strong>
 					{#if h.archived}<span class="chip">Archived</span>{/if}
-					<div class="muted" style="font-size: 0.9rem">
-						{h.direction === 'break' ? 'Break habit' : describeSchedule(h.schedule)}{cueText(h.cue) ? ` · ${cueText(h.cue)}` : ''}{a && !data.groupByArea ? ` · ${a.icon} ${a.name}` : ''}
-					</div>
+					{#if lineFor(h)}<div class="muted" style="font-size: 0.9rem">{lineFor(h)}</div>{/if}
 				</a>
 			</li>
 		{/each}
 	</ul>
 {/each}
-
-<p class="small-text"><a href={data.showArchived ? '/habits' : '/habits?archived'}>{data.showArchived ? 'Hide archived habits' : 'Show archived habits'}</a></p>
 
 <details class="card" style="margin-top: 1rem">
 	<summary>Import a template file</summary>
@@ -87,7 +130,10 @@
 	}
 	.small-text {
 		font-size: 0.85rem;
-		margin-top: 1rem;
+	}
+	fieldset {
+		border: 1px solid var(--border);
+		border-radius: 6px;
 	}
 	.chip {
 		margin-left: 0.35rem;
