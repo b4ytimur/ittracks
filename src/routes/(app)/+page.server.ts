@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { error, fail, redirect } from '@sveltejs/kit';
+import { checkSettings } from '$lib/rules/settings';
 import { and, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { craving, habit, occurrence, prepTick, slip, slot, variant } from '$lib/server/db/schema';
@@ -70,7 +71,7 @@ export const actions: Actions = {
 		const f = await request.formData();
 		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
 		if (!o) error(404);
-		quickDone(o.occ.id, levelOf(f));
+		if (quickDone(o.occ.id, levelOf(f)) === 'needsInput') redirect(303, `/log/${o.occ.id}?quick`);
 		return { finished: o.habit.id, did: { occurrence: o.occ.id, habit: o.habit.name, clear: true } };
 	},
 	/** Tick or untick a prep step for tomorrow's Occurrence. */
@@ -118,7 +119,7 @@ export const actions: Actions = {
 		const f = await request.formData();
 		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
 		if (!o) error(404);
-		if (o.occ.status === 'due') sameAsLast(o.occ.id);
+		if (o.occ.status === 'due' && sameAsLast(o.occ.id) === 'needsInput') redirect(303, `/log/${o.occ.id}?quick`);
 		return { finished: o.habit.id, did: { occurrence: o.occ.id, habit: o.habit.name, clear: true } };
 	},
 	skip: async ({ request, locals }) => {
@@ -140,14 +141,13 @@ export const actions: Actions = {
 		const f = await request.formData();
 		const dayStart = field(f, 'dayStart');
 		if (!time.test(dayStart)) return fail(400, { error: 'Pick a time like 04:00.' });
+		const ranges = readRanges(f);
 		const s = getSettings(locals.account!.id);
+		const conflict = checkSettings({ ...s, dayStart, ranges })[0];
+		if (conflict) return fail(400, { error: conflict.reason });
 		// First run: the user also picked how much to see. Existing views are never replaced here.
 		const tpl = templateById(field(f, 'template'));
-		saveSettings(locals.account!.id, {
-			dayStart,
-			ranges: readRanges(f),
-			...(tpl && !s.views ? { views: fromTemplate(tpl.id) } : {})
-		});
+		saveSettings(locals.account!.id, { dayStart, ranges, ...(tpl && !s.views ? { views: fromTemplate(tpl.id) } : {}) });
 	},
 	/** Start a rotation's next Variant today, ahead of its rest days. */
 	early: async ({ request, locals, cookies }) => {

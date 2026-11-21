@@ -119,8 +119,11 @@ sw.addEventListener('notificationclick', (event) => {
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ action: event.action })
 			})
-				.then((res) => {
-					if (!res.ok) return openApp(url);
+				.then(async (res) => {
+					if (res.ok) return;
+					// The server may name a better page, such as the quick log for a required field.
+					const body = (await res.json().catch(() => null)) as { open?: string } | null;
+					return openApp(body?.open ?? url);
 				})
 				.catch(() => openApp(url))
 		);

@@ -153,3 +153,26 @@ describe('template view hint (format v4)', () => {
 		expect(templateFile.parse({ ...gym, version: 3, view: undefined }).view).toBeNull();
 	});
 });
+
+describe('view rules', async () => {
+	const { checkViews } = await import('./rules/views');
+	it('templates break no rules', () => {
+		for (const t of TEMPLATES) expect(checkViews(fromTemplate(t.id), { ranges: 4 }).filter((i) => i.severity === 'block')).toEqual([]);
+	});
+	it('blocks opening with another page\'s saved view', () => {
+		const v = fromTemplate('standard');
+		v.saved.push({ id: 's1', name: 'Lib', page: 'library', state: viewState.parse({}) });
+		v.open.today = 's1';
+		expect(checkViews(v, { ranges: 0 }).map((i) => i.severity)).toContain('block');
+	});
+	it('warns when a hidden feature is still used by a view or section', () => {
+		const v = fromTemplate('standard');
+		v.hidden = ['identities', 'prep'];
+		v.defaults.today = viewState.parse({ group: 'identity' });
+		const r = checkViews(v, { ranges: 0 });
+		expect(r.filter((i) => i.severity === 'warn').map((i) => i.path).sort()).toEqual(['hidden', 'today.sections']);
+	});
+	it('warns about the time-aware view without parts of the day', () => {
+		expect(checkViews(fromTemplate('routine'), { ranges: 0 }).map((i) => i.path)).toContain('today.timeAware');
+	});
+});

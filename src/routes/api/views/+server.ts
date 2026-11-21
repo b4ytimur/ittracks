@@ -1,7 +1,8 @@
 import { error, json } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { getViews, saveViews } from '$lib/server/settings';
+import { getSettings, getViews, saveViews } from '$lib/server/settings';
+import { checkViews } from '$lib/rules/views';
 import { PAGES, savedView, switchTemplate, templateById, viewSettings, viewState, type ViewSettings } from '$lib/views';
 import type { RequestHandler } from './$types';
 
@@ -89,6 +90,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			break;
 	}
 	next = viewSettings.parse(next);
+	const issues = checkViews(next, { ranges: getSettings(accountId).ranges.length });
+	const block = issues.find((i) => i.severity === 'block');
+	if (block) error(400, block.reason);
 	saveViews(accountId, next);
-	return json({ ok: true, views: next, id, previous });
+	return json({ ok: true, views: next, id, previous, warnings: issues.map((i) => i.reason) });
 };
