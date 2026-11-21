@@ -8,7 +8,7 @@ import { formulaProblem } from './formula';
 export interface Catalog {
 	habits: { id: string; name: string; direction: 'build' | 'break'; archived: boolean; areaId: string | null; hasCost: boolean; logged: number }[];
 	tasks: { id: string; name: string; areaId: string | null; tags: string[]; strength: boolean; cardio: boolean; targets: boolean; logged: number }[];
-	metrics: { id: string; taskId: string; name: string; type: string; unit: string | null; repeats: boolean; targets: boolean }[];
+	metrics: { id: string; taskId: string; name: string; type: string; unit: string | null; repeats: boolean; targets: boolean; scored?: boolean }[];
 	tags: string[];
 	areas: { id: string; name: string; icon: string; color: string }[];
 	identities: { id: string; name: string }[];
@@ -42,7 +42,16 @@ export function catalogOf(P: Prepared, extra: { areas: Catalog['areas']; identit
 					logged: (P.logsByTask.get(t.id) ?? []).length
 				};
 			}),
-		metrics: P.ds.metrics.map((m) => ({ id: m.id, taskId: m.taskId, name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, targets: targeted.has(m.id) })),
+		metrics: P.ds.metrics.map((m) => ({
+			id: m.id,
+			taskId: m.taskId,
+			name: m.name,
+			type: m.type,
+			unit: m.unit,
+			repeats: m.repeats,
+			targets: targeted.has(m.id),
+			scored: m.type === 'choice' && !!m.scores && Object.keys(m.scores).length > 0
+		})),
 		tags: [...new Set(P.ds.tasks.flatMap((t) => t.tags.map((x) => x.name)))].sort((a, b) => a.localeCompare(b)),
 		areas: extra.areas,
 		identities: extra.identities
@@ -55,6 +64,8 @@ export interface StatCtx {
 	fieldTypes: string[];
 	/** Every field read is logged per set. */
 	repeats: boolean;
+	/** Every field read is a Choice with a number per option (mood 5 to 1). */
+	scored: boolean;
 	/** The fields read have units that can't be added together. */
 	mixedUnits: boolean;
 	/** Some Task in scope has a weight and a reps field. */
@@ -78,6 +89,7 @@ export interface StatCtx {
 export const emptyCtx = (): StatCtx => ({
 	fieldTypes: [],
 	repeats: false,
+	scored: false,
 	mixedUnits: false,
 	weightReps: true,
 	pace: true,
@@ -128,6 +140,7 @@ export function statCtx(card: StatCard, c: Catalog, opts: { hidden?: string[]; m
 	return {
 		fieldTypes: types,
 		repeats: fields.length > 0 && fields.every((f) => f.repeats),
+		scored: fields.length > 0 && fields.every((f) => f.scored),
 		mixedUnits: dims.size > 1 || types.length > 1,
 		weightReps: tasks.some((t) => t.strength),
 		pace: tasks.some((t) => t.cardio),
@@ -148,7 +161,7 @@ export function perLogChoices(card: StatCard, c: Catalog, measures: CustomMeasur
 		const fields = cardFields(card, c);
 		const t = fields[0]?.type;
 		if (t === 'checkbox') return ['ticked'];
-		if (t === 'choice') return ['option'];
+		if (t === 'choice') return fields.every((f) => f.scored) ? ['option', 'score'] : ['option'];
 		if (t === 'text') return ['present'];
 		return fields.length && fields.every((f) => f.repeats) ? ['sum', 'best', 'avg', 'sets'] : ['value'];
 	}

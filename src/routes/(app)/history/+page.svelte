@@ -3,6 +3,7 @@
 	import ViewBar from '$lib/ViewBar.svelte';
 	import { STATUSES } from '$lib/views';
 	import { viewOp } from '$lib/viewclient';
+	import Markdown from '$lib/Markdown.svelte';
 
 	let { data } = $props();
 
@@ -37,7 +38,10 @@
 
 <header class="bar">
 	<h1>History</h1>
-	{#if data.canBackfill}<a class="button small" href="/day">Log a past day</a>{/if}
+	<div class="row">
+		{#if data.journal}<a class="button small" href="/journal">Journal</a>{/if}
+		{#if data.canBackfill}<a class="button small" href="/day">Log a past day</a>{/if}
+	</div>
 </header>
 
 {#if data.history.length}
@@ -58,20 +62,25 @@
 	</h2>
 	<ul class="list">
 		{#each day.occurrences as o (o.id)}
-			<li>
-				<a class="card" href="/log/{o.id}">
+			<li class="card">
+				<a class="occ" href="/log/{o.id}">
 					<div class="row">
 						<span class="grow"
 							><strong>{o.habit}</strong>{#if o.variant}<span class="chip" style="margin-left: 0.35rem">{o.variant}</span>{/if}</span
 						>
 						<span class="muted" class:missed={o.status === 'missed'}>
-							{statusWord[o.status]}{!views.history.values && data.entryCounts[o.id] ? ` · ${data.entryCounts[o.id]} entries` : ''}
+							{statusWord[o.status]}{data.partial[o.id]
+								? ` · ${data.partial[o.id]}`
+								: !views.history.values && data.entryCounts[o.id]
+									? ` · ${data.entryCounts[o.id]} entries`
+									: ''}
 						</span>
 					</div>
 					{#if views.history.values}
 						{#each data.values[o.id] ?? [] as line (line)}<div class="muted small-text">{line}</div>{/each}
 					{/if}
 				</a>
+				{#if o.notes?.trim()}<div class="notes"><Markdown text={o.notes} small /></div>{/if}
 			</li>
 		{/each}
 		{#each day.slips as s, i (i)}
@@ -90,6 +99,16 @@
 <style>
 	.missed {
 		color: var(--danger);
+	}
+	.occ {
+		display: block;
+		text-decoration: none;
+		color: inherit;
+	}
+	.notes {
+		margin-top: 0.4rem;
+		padding-top: 0.4rem;
+		border-top: 1px solid var(--border);
 	}
 	.small-text {
 		font-size: 0.85rem;

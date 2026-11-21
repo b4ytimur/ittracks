@@ -10,7 +10,10 @@
 	import ViewBar from '$lib/ViewBar.svelte';
 	import { viewOp } from '$lib/viewclient';
 	import { headlineText } from '$lib/engine/stats';
+	import { isPartial, progressText } from '$lib/engine/progress';
+	import { invalidateAll } from '$app/navigation';
 	import { addDays } from '$lib/engine/dates';
+	import DayNote from '$lib/DayNote.svelte';
 	import {
 		DONE_MODES,
 		LINES,
@@ -102,6 +105,26 @@
 			},
 			after: afterDid
 		});
+
+	/** +1 from Today: count one more toward the target, with Undo taking that tap back. */
+	const plus = (occurrenceId: string, name: string) =>
+		queueable(`${name}`, {
+			onQueued: () => showToast(`Counted for ${name}. It will sync when you're back online.`),
+			after: (result) => {
+				if (result.type !== 'success') return;
+				const p = result.data?.plus as { value: number; target: number; unit: string; done: boolean } | undefined;
+				if (!p) return;
+				const n = (x: number) => String(Math.round(x * 100) / 100);
+				showToast(`${name}: ${n(p.value)} of ${n(p.target)}${p.unit ? ` ${p.unit}` : ''}${p.done ? '. Done!' : '.'}`, async () => {
+					await postAction('?/plus', { occurrence: occurrenceId, by: '-1' });
+					await invalidateAll();
+				});
+			}
+		});
+	const stepLabel = (p: { type: string; unit: string; step: number | null }) => {
+		const step = p.step ?? (p.type === 'duration' ? 5 : p.unit === 'kg' ? 2.5 : p.unit === 'lb' || p.unit === 'lbs' ? 5 : 1);
+		return `+${step}${p.type === 'duration' || (p.type === 'number' && p.unit) ? ` ${p.unit}` : ''}`;
+	};
 
 	// The one-time day question.
 	let dayStart = $state('04:00');
@@ -531,8 +554,17 @@
 				{#if line('cue') && cueLine(item.cue)}<div class="muted small-text">{cueLine(item.cue)}</div>{/if}
 				<div class="muted small-text">
 					{#if st === 'done'}Done{#if levels}&nbsp;at {levelName[o.level ?? 'target']}{/if}{:else if st === 'skipped'}Skipped{:else}Due{/if}
+					{#if item.progress && st !== 'skipped' && (st === 'due' || isPartial(item.progress))}<span class="progress">· {progressText(item.progress)}</span>{/if}
 					{#if headlineOf(item)}· {headlineOf(item)}{/if}
 				</div>
+				{#if item.progress && st === 'due' && (item.progress.kind === 'steps' || item.progress.value > 0)}
+					<progress
+						class="bar"
+						max={item.progress.kind === 'steps' ? item.progress.total : item.progress.target}
+						value={item.progress.kind === 'steps' ? item.progress.done : item.progress.value}
+						aria-label="{item.name}: {progressText(item.progress)}"
+					></progress>
+				{/if}
 				{#if item.atRisk && st === 'due'}
 					<div class="warn small-text">You missed last time. Don't miss twice{levels ? ': even the Minimum counts' : ''}.</div>
 				{/if}
@@ -556,7 +588,13 @@
 				{/if}
 			</div>
 			{#if st === 'due'}
-				{#if o.slotCount > 0}
+				{#if item.progress?.kind === 'amount' && !pending[o.id]}
+					<form method="POST" action="?/plus" use:enhance={plus(o.id, item.name)}>
+						<input type="hidden" name="occurrence" value={o.id} />
+						<button class="primary" title="Count one more toward {item.progress.target}" aria-label="{stepLabel(item.progress)} for {item.name}">{stepLabel(item.progress)}</button>
+					</form>
+					<a class="button" href="/log/{o.id}" aria-label="Log {item.name}">Log</a>
+				{:else if o.slotCount > 0}
 					{#if item.inProgress}
 						<a class="button primary" href="/log/{o.id}" aria-label="Resume {item.name}">Resume</a>
 					{:else}
@@ -809,6 +847,8 @@
 	{/if}
 {/snippet}
 
+{#if data.dayNote !== null}<DayNote date={data.today} text={data.dayNote} />{/if}
+
 {#if form?.error && !form?.habit}<p class="error">{form.error}</p>{/if}
 
 {#if celebrating}
@@ -826,6 +866,13 @@
 	}
 	.widget progress {
 		width: 100%;
+	}
+	progress.bar {
+		display: block;
+		width: 100%;
+		max-width: 12rem;
+		height: 0.4rem;
+		margin-top: 0.25rem;
 	}
 	.week {
 		display: grid;

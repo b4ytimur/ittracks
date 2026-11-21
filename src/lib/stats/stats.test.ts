@@ -15,7 +15,7 @@ import {
 	type Prepared
 } from './engine';
 import { emptyStats, makeCard, readStats, type StatCardInput } from './model';
-import { BOARD_TEMPLATES, boardTemplate, galleryCards, habitCards, headlineOptions, startingBoards, suggestedCards, type BoardTemplateId } from './auto';
+import { BOARD_TEMPLATES, boardTemplate, galleryCards, habitCards, headlineOptions, startingBoards, suggestedCards, taskCards, type BoardTemplateId } from './auto';
 import { catalogOf, perLogChoices, statCtx } from './catalog';
 import { checkCard, checkStatsSettings } from '../rules/stats';
 
@@ -307,6 +307,24 @@ describe('fields', () => {
 			['good', 1],
 			['ok', 1]
 		]);
+	});
+
+	it('averages a scored choice by its numbers (mood 5 to 1)', () => {
+		const ds = dataset();
+		ds.metrics = ds.metrics.map((m) => (m.id === 'mood' ? { ...m, scores: { good: 5, ok: 3, bad: 1 } } : m));
+		const P = prepare(ds);
+		const r = run({ what: { source: 'field', metrics: ['mood'] }, perLog: 'score', overTime: 'avg' }, P);
+		expect(r.total).toBe(4);
+		const catalog = catalogOf(P, { areas: [], identities: [] });
+		expect(perLogChoices(makeCard({ what: { source: 'field', metrics: ['mood'] } }), catalog, [])).toEqual(['option', 'score']);
+		const card = makeCard({ what: { source: 'field', metrics: ['mood'] }, perLog: 'score', overTime: 'avg' });
+		expect(checkCard(card, statCtx(card, catalog))).toEqual([]);
+		// Without numbers on the options, the number can't be read.
+		const plain = catalogOf(prepare(dataset()), { areas: [], identities: [] });
+		expect(checkCard(card, statCtx(card, plain)).map((i) => i.reason).join()).toMatch(/needs a Choice field with a number/);
+		// Automatic cards chart the average next to the counts.
+		const auto = taskCards(P, P.ds.tasks.find((t) => t.id === 'journal')!);
+		expect(auto.filter((c) => c.what.metrics.includes('mood')).map((c) => c.perLog)).toEqual(['score', 'option']);
 	});
 
 	it('shows a checkbox as the share of logs ticked', () => {

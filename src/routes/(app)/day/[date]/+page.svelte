@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isPartial, progressText } from '$lib/engine/progress';
 	import { enhance } from '$app/forms';
 	import { goto, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
@@ -7,6 +8,8 @@
 	import { postAction, showToast } from '$lib/toast.svelte';
 	import { queueable } from '$lib/queueable';
 	import { addDays } from '$lib/engine/dates';
+	import DayNote from '$lib/DayNote.svelte';
+	import Markdown from '$lib/Markdown.svelte';
 
 	let { data, form } = $props();
 
@@ -30,8 +33,11 @@
 	const notLogged = (it: Item) => !it.occurrence || it.occurrence.status === 'missed' || it.occurrence.status === 'due';
 	function statusText(it: Item): string {
 		const o = it.occurrence;
-		if (o?.status === 'done')
-			return `Done${it.levels && o.level ? ` at ${levelName[o.level]}` : ''}${o.entries ? ` · ${o.entries} ${o.entries === 1 ? 'entry' : 'entries'}` : ''}`;
+		if (o?.status === 'done') {
+			const p = data.progress[o.id];
+			const detail = isPartial(p) ? ` · ${progressText(p!)}` : o.entries ? ` · ${o.entries} ${o.entries === 1 ? 'entry' : 'entries'}` : '';
+			return `Done${it.levels && o.level ? ` at ${levelName[o.level]}` : ''}${detail}`;
+		}
 		if (o?.status === 'skipped') return 'Skipped';
 		if (o?.status === 'missed') return 'Missed';
 		if (it.paused) return 'Paused that day';
@@ -57,6 +63,11 @@
 			showToast(`${slipped.limit ? 'Logged one' : 'Slip logged'} for ${slipped.habit} on ${short(data.date)}.`, () =>
 				postAction('?/unslip', { id: slipped.id }).then(() => {})
 			);
+			return;
+		}
+		const started = result.data?.started as { habit: string } | undefined;
+		if (started) {
+			showToast(`${started.habit} now starts on ${short(data.date)}.`);
 			return;
 		}
 		const removed = result.data?.unslipped as Record<string, unknown> | undefined;
@@ -118,6 +129,10 @@
 
 {#if form?.error && !form?.habit}<p class="error">{form.error}</p>{/if}
 
+{#if data.dayNote !== null}
+	{#key data.date}<DayNote date={data.date} text={data.dayNote} />{/key}
+{/if}
+
 <h2>Due that day</h2>
 {#if data.due.length}
 	<ul class="list">
@@ -134,6 +149,32 @@
 			{#each data.other as item (item.habitId)}{@render row(item)}{/each}
 		</ul>
 	</details>
+{/if}
+
+{#if data.later.length}
+	<h2>Started later</h2>
+	<p class="muted small-text">
+		These habits start after {short(data.date)}. If you really began on this day, start them from here and log it.
+	</p>
+	<ul class="list">
+		{#each data.later as l (l.habitId)}
+			<li class="card" id="h-{l.habitId}">
+				<div class="row">
+					<div class="grow">
+						<strong>{l.name}</strong>
+						<div class="muted small-text">Starts {short(l.startDate)}</div>
+					</div>
+					{#if l.direction === 'break' || canLog}
+						<form method="POST" action="?/start" use:enhance={after}>
+							<input type="hidden" name="habit" value={l.habitId} />
+							<button aria-label="Start {l.name} from {short(data.date)}">Start from this day</button>
+						</form>
+					{/if}
+				</div>
+				{#if form?.habit === l.habitId && form?.error}<p class="error small-text">{form.error}</p>{/if}
+			</li>
+		{/each}
+	</ul>
 {/if}
 
 {#if data.breaking.length}
@@ -194,6 +235,7 @@
 				<a class="name" href="/habits/{item.habitId}/chain"><strong>{item.name}</strong></a>
 				{#if item.variants.length && !(open && canLog)}<span class="chip">{item.variants.find((v) => v.id === item.variantId)?.name}</span>{/if}
 				<div class="muted small-text" class:missed={o?.status === 'missed'}>{statusText(item)}</div>
+				{#if o && data.notes[o.id]}<div class="lognote"><Markdown text={data.notes[o.id]} small /></div>{/if}
 			</div>
 			{#if canLog && open}
 				{#if item.slotCount > 0}
@@ -276,6 +318,9 @@
 	}
 	.finished {
 		opacity: 0.75;
+	}
+	.lognote {
+		margin-top: 0.3rem;
 	}
 	.missed {
 		color: var(--danger);

@@ -22,13 +22,14 @@ import { identityFor, listIdentities } from '$lib/server/repo/identities';
 import { listTagNames, listTasks, saveTask } from '$lib/server/repo/tasks';
 import { listAreas } from '$lib/server/repo/areas';
 import { getViews, getSettings, saveSettings } from '$lib/server/settings';
-import { userToday } from '$lib/server/today';
+import { repaused, settle, unarchived, userToday } from '$lib/server/today';
 import { ownedHabit } from '$lib/server/owned';
 import { BUILTIN_TASK_TYPES, metricsFromType } from '$lib/task-types';
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { metric, pause } from '$lib/server/db/schema';
+import type { ScheduleForm } from '$lib/forms';
 import type { Actions, PageServerLoad } from './$types';
 
 /** Numeric Metrics per Task, so Slots can set targets for each level. */
@@ -45,6 +46,21 @@ function numericMetrics(taskIds: string[]) {
 	for (const m of rows)
 		(out[m.taskId] ??= []).push({ id: m.id, name: m.name, unit: m.unit || (m.type === 'duration' ? 'min' : '') });
 	return out;
+}
+
+/** Tasks with at least one field logged per set. */
+function repeatingTasks(taskIds: string[]): string[] {
+	if (!taskIds.length) return [];
+	return [
+		...new Set(
+			db
+				.select({ taskId: metric.taskId })
+				.from(metric)
+				.where(and(inArray(metric.taskId, taskIds), eq(metric.repeats, true)))
+				.all()
+				.map((m) => m.taskId)
+		)
+	];
 }
 
 const blank = (today: string): HabitForm => ({
@@ -70,7 +86,8 @@ const blank = (today: string): HabitForm => ({
 	cost: null,
 	limit: null,
 	progression: null,
-	areaId: null
+	areaId: null,
+	unlogged: 'missed'
 });
 
 export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
@@ -103,6 +120,8 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		fixed,
 		tasks,
 		metrics: numericMetrics(tasks.map((t) => t.id)),
+		/** Tasks that log something per set: only their Slots can have Target sets. */
+		repeating: repeatingTasks(tasks.map((t) => t.id)),
 		tags: listTagNames(accountId),
 		habits: allHabits.filter((x) => x.id !== params.id).map(({ id, name, direction }) => ({ id, name, direction })),
 		identities: listIdentities(accountId),
@@ -179,6 +198,7 @@ export const actions: Actions = {
 			newTask: {
 				id,
 				name,
+				repeats: metrics.some((m) => m.repeats),
 				metrics: metrics
 					.filter((m) => m.type === 'number' || m.type === 'count' || m.type === 'duration')
 					.map((m) => ({ id: m.id, name: m.name, unit: m.unit || (m.type === 'duration' ? 'min' : '') }))
@@ -191,7 +211,7 @@ export const actions: Actions = {
 		if (!statement) return fail(400, { error: 'Write the identity as a sentence.' });
 		return { identityId: identityFor(locals.account!.id, statement), statement };
 	},
-	pause: async ({ request, locals, params }) => {
+	pause: async ({ request, locals, params, cookies }) => {
 		const f = await request.formData();
 		const h = ownedHabit(locals.account!.id, params.id);
 		if (!h) error(404);
@@ -201,18 +221,29 @@ export const actions: Actions = {
 		db.insert(pause)
 			.values({ id: randomUUID(), accountId: locals.account!.id, habitId: h.id, start, end, note: String(f.get('note') ?? '').slice(0, 120) || null })
 			.run();
+		// A pause over past days takes back the misses counted for them.
+		repaused(locals.account!.id, h.id, start, end, userToday(locals.account!.id, cookies.get('tz')));
 		return { paused: true };
 	},
-	unpause: async ({ request, locals }) => {
+	unpause: async ({ request, locals, cookies }) => {
 		const id = String((await request.formData()).get('id') ?? '');
-		db.delete(pause).where(and(eq(pause.id, id), eq(pause.accountId, locals.account!.id))).run();
+		const where = and(eq(pause.id, id), eq(pause.accountId, locals.account!.id));
+		const p = db.select().from(pause).where(where).get();
+		if (!p) return;
+		db.delete(pause).where(where).run();
+		repaused(locals.account!.id, p.habitId, p.start, p.end, userToday(locals.account!.id, cookies.get('tz')));
 	},
-	archive: ({ locals, params }) => {
+	archive: ({ locals, params, cookies }) => {
+		// Count its misses up to now first: days in the archive are not counted.
+		const h = ownedHabit(locals.account!.id, params.id);
+		if (h?.direction === 'build' && h.schedule)
+			settle(locals.account!.id, h.id, h.schedule as ScheduleForm, userToday(locals.account!.id, cookies.get('tz')));
 		setHabitArchived(locals.account!.id, params.id, true);
 		redirect(303, '/habits');
 	},
-	unarchive: ({ locals, params }) => {
+	unarchive: ({ locals, params, cookies }) => {
 		setHabitArchived(locals.account!.id, params.id, false);
+		if (ownedHabit(locals.account!.id, params.id)) unarchived(params.id, userToday(locals.account!.id, cookies.get('tz')));
 		return { unarchived: true };
 	},
 	delete: ({ locals, params }) => {

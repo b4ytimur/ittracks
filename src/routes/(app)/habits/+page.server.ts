@@ -1,7 +1,5 @@
-import { fail } from '@sveltejs/kit';
 import { listHabits } from '$lib/server/repo/habits';
 import { listAreas } from '$lib/server/repo/areas';
-import { addTemplate } from '$lib/server/repo/templates';
 import { getViews } from '$lib/server/settings';
 import { identitiesByHabit } from '$lib/server/repo/identities';
 import { habitStats } from '$lib/engine/stats';
@@ -9,9 +7,8 @@ import { db } from '$lib/server/db';
 import { habit, occurrence } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 import { userToday } from '$lib/server/today';
-import { templateFile } from '$lib/template';
 import { initialState, templateById } from '$lib/views';
-import type { Actions, PageServerLoad } from './$types';
+import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ locals, url, cookies }) => {
 	const accountId = locals.account!.id;
@@ -45,35 +42,12 @@ export const load: PageServerLoad = ({ locals, url, cookies }) => {
 		views,
 		initial,
 		added: url.searchParams.get('added'),
+		/** After an import: how many Tasks were made, and how many came from your Library. */
+		created: Number(url.searchParams.get('created')) || 0,
+		reused: Number(url.searchParams.get('reused')) || 0,
 		suggestView: (() => {
 			const t = templateById(url.searchParams.get('view') ?? '');
 			return t && t.id !== views.template ? { id: t.id, name: t.name, summary: t.summary } : null;
 		})()
 	};
-};
-
-export const actions: Actions = {
-	/** Create a Habit and its Tasks from a template file. */
-	import: async ({ request, locals, cookies }) => {
-		const f = await request.formData();
-		const file = f.get('file');
-		if (!(file instanceof File) || file.size === 0) return fail(400, { error: 'Choose a template file.' });
-		if (file.size > 1_000_000) return fail(400, { error: 'That file is too large for a template.' });
-		let parsed;
-		try {
-			parsed = templateFile.safeParse(JSON.parse(await file.text()));
-		} catch {
-			return fail(400, { error: 'That file is not valid JSON.' });
-		}
-		if (!parsed.success) return fail(400, { error: 'That file is not an ittracks template.' });
-		const accountId = locals.account!.id;
-		const r = addTemplate(accountId, parsed.data, {
-			today: userToday(accountId, cookies.get('tz')),
-			reuse: f.get('separate') !== 'on'
-		});
-		if ('error' in r) return fail(400, { error: r.error });
-		const t = templateById(parsed.data.view ?? '');
-		const suggest = t && t.id !== getViews(accountId).template ? { id: t.id, name: t.name, summary: t.summary } : null;
-		return { imported: r.name, taskCount: r.created, reused: r.reused, suggestView: suggest };
-	}
 };

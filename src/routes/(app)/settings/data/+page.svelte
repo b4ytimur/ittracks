@@ -12,7 +12,8 @@
 <section class="card stack">
 	<h2 style="margin: 0">Export a habit</h2>
 	<p class="muted small-text" style="margin: 0">
-		Saves a habit and its Tasks as a template file you can share or import elsewhere. Your logs stay here.
+		Saves a habit and its Tasks as a template file you can share or import elsewhere, with its Areas and the Tasks its
+		auto-filled slots pick from. Share… adds a description and questions for the person adding it. Your logs stay here.
 	</p>
 	{#if data.habits.length}
 		<ul class="list">
@@ -20,6 +21,7 @@
 				<li class="row" style="align-items: center">
 					<span class="grow">{h.name}</span>
 					<a class="button export" href="/habits/{h.id}/template.json" download>Export</a>
+					<a class="button export" href="/habits/{h.id}/share">Share…</a>
 				</li>
 			{/each}
 		</ul>
@@ -31,8 +33,8 @@
 <section class="card stack">
 	<h2 style="margin: 0">Import or browse</h2>
 	<p class="muted small-text" style="margin: 0">
-		Import a template file from the <a href="/habits">Habits</a> tab (Import a template file), or pick a ready-made one
-		from the <a href="/gallery">gallery</a>.
+		<a href="/habits/import">Import a template file</a> (you see what it adds and answer its questions first), or pick a
+		ready-made one from the <a href="/gallery">gallery</a>.
 	</p>
 </section>
 

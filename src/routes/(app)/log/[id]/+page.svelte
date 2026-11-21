@@ -1,13 +1,16 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { goto } from '$app/navigation';
+	import { beforeNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import Timer from './Timer.svelte';
 	import Stepper from './Stepper.svelte';
 	import { defaultStep } from '$lib/task-types';
 	import { enqueue, isOffline } from '$lib/outbox.svelte';
 	import { postAction, showToast } from '$lib/toast.svelte';
+	import NoteBox from '$lib/NoteBox.svelte';
+	import Markdown from '$lib/Markdown.svelte';
+	import { starterFor, untouched } from '$lib/journal';
 
 	let { data, form } = $props();
 
@@ -16,11 +19,15 @@
 		sets: { done: boolean; values: Values }[];
 		summary: Values;
 		subs: Record<string, boolean>;
+		/** The tick of a Yes or no Task (no fields and no sub-tasks). */
+		tick?: boolean;
 	}
 	type Item = (typeof data.items)[number];
 	type Metric = NonNullable<Item['task']>['metrics'][number];
 
 	const isSummary = (v: Values) => v._summary === true;
+	/** A Yes or no Task: nothing to fill in, so it gets one tick box. */
+	const isYesNo = (t: Item['task']) => !!t && !t.metrics.length && !t.subtasks.length;
 	/** Quick log (from a shortcut or link): only the fields marked for quick logs. */
 	const quickMode = $derived(page.url.searchParams.has('quick'));
 	/** Not finished yet: due today, or a past day that was missed, skipped or never logged. */
@@ -35,6 +42,19 @@
 		if (m.prefill === 'blank' || m.type === 'checkbox') return undefined;
 		if (m.prefill === 'target') return target ?? last;
 		return last ?? target;
+	}
+
+	const isLong = (m: Metric) => m.type === 'text' && m.long;
+	/** Long text fields that are still empty start with their prompt and starter text (never last time's text). */
+	function withStarters(summary: Values, t: NonNullable<Item['task']>): Values {
+		for (const m of t.metrics) {
+			if (!isLong(m) || m.repeats) continue;
+			const v = summary[m.id];
+			if (typeof v === 'string' && v.trim()) continue;
+			const start = starterFor(m, data.occurrence.date);
+			if (start) summary[m.id] = start;
+		}
+		return summary;
 	}
 
 	/** The planned sets and values for a Slot, before anything is logged: a prefill from last time. */
@@ -59,7 +79,8 @@
 		) as Values;
 		// Sub-tasks start unticked too: you tick the ones you did.
 		const subs = Object.fromEntries(t.subtasks.map((s) => [s.id, false]));
-		return { sets, summary, subs };
+		// A Yes or no Task starts unticked like any tick box.
+		return { sets, summary: withStarters(summary, t), subs, tick: false };
 	}
 
 	/**
@@ -80,8 +101,9 @@
 			if (due) sets.push(...planned(it).sets.slice(sets.length));
 			return {
 				sets,
-				summary: { ...savedSummary },
-				subs: Object.fromEntries(t.subtasks.map((s) => [s.id, !!data.subDone[s.id]]))
+				summary: due ? withStarters({ ...savedSummary }, t) : { ...savedSummary },
+				subs: Object.fromEntries(t.subtasks.map((s) => [s.id, !!data.subDone[s.id]])),
+				tick: isYesNo(t) && it.saved.some((v) => v.done === true)
 			};
 		});
 	}
@@ -174,6 +196,7 @@
 	const saveUrl = () => `/log/${data.occurrence.id}?/save`;
 
 	async function autosave() {
+		saveTimer = undefined;
 		const body = payload(false, true);
 		saveState = 'saving';
 		try {
@@ -187,7 +210,37 @@
 		}
 	}
 
-	/** Every set counts as done on a quick log, since only some fields are shown. */
+	// Leaving before the autosave ran (Back right after a tick): save first, then go, so the
+	// page you land on already shows it.
+	beforeNavigate((nav) => {
+		if (saveTimer === undefined) return;
+		clearTimeout(saveTimer);
+		// Leaving the app (or Back to a page loaded on its own): the page goes away, so send
+		// the save in a request that outlives it.
+		if (nav.willUnload || !nav.to) {
+			saveTimer = undefined;
+			const body = new FormData();
+			body.set('payload', payload(false, true));
+			void fetch(saveUrl(), { method: 'POST', body, keepalive: true, headers: { 'x-sveltekit-action': 'true' } }).catch(() => {});
+			return;
+		}
+		// The browser's own Back can't wait; the save still goes out.
+		if (nav.type === 'popstate') return void autosave();
+		nav.cancel();
+		const to = nav.to.url;
+		autosave().finally(() => goto(to));
+	});
+	/** Stop a pending autosave, for actions that save the log another way. */
+	const dropAutosave = () => {
+		clearTimeout(saveTimer);
+		saveTimer = undefined;
+	};
+
+	/**
+	 * What gets saved. Only ticked sets: a planned set nobody ticked was not done (Finish asks
+	 * first, see untickedSets). Every set counts as done on a quick log, since only some
+	 * fields are shown there.
+	 */
 	function payload(finish: boolean, stay = false) {
 		const entries: { taskId: string; values: Values }[] = [];
 		data.items.forEach((it, i) => {
@@ -195,25 +248,54 @@
 			if (!t) return;
 			const s = log[i];
 			const repeatingIds = t.metrics.filter((m) => m.repeats).map((m) => m.id);
-			// Finish saves every set with a value typed in, ticked or not; Save for later keeps only ticked ones.
-			const hasValue = (set: { done: boolean; values: Values }) =>
-				set.done || (quickMode && finish) || (finish && repeatingIds.some((id) => set.values[id] !== null && set.values[id] !== undefined && set.values[id] !== ''));
-			for (const set of s.sets.filter(hasValue)) {
+			const counts = (set: { done: boolean; values: Values }) => set.done || (quickMode && finish);
+			for (const set of s.sets.filter(counts)) {
 				entries.push({
 					taskId: t.id,
 					values: Object.fromEntries(repeatingIds.map((id) => [id, set.values[id] ?? null]))
 				});
 			}
-			const filled = Object.entries(s.summary).filter(([, v]) => v !== '' && v !== null && v !== undefined);
+			// A long text field that still holds only its starter text counts as not written.
+			const longs = new Map(t.metrics.filter(isLong).map((m) => [m.id, m]));
+			const filled = Object.entries(s.summary).filter(
+				([k, v]) => v !== '' && v !== null && v !== undefined && !(longs.has(k) && untouched(longs.get(k)!, v, data.occurrence.date))
+			);
 			if (filled.length) entries.push({ taskId: t.id, values: { ...Object.fromEntries(filled), _summary: true } });
 			for (const [subId, done] of Object.entries(s.subs)) {
 				if (done) entries.push({ taskId: subId, values: { done: true } });
 			}
+			if (s.tick && isYesNo(t)) entries.push({ taskId: t.id, values: { done: true } });
 		});
 		return JSON.stringify({ finish, stay, notes, entries, level, back: data.back });
 	}
 
 	const empty = (v: unknown) => v === undefined || v === null || v === '' || v === false;
+
+	/** Planned sets with values in them that nobody ticked, which Finish would leave out. */
+	function untickedSets(): number {
+		if (quickMode || !isOpen) return 0;
+		let n = 0;
+		data.items.forEach((it, i) => {
+			const ids = it.task?.metrics.filter((m) => m.repeats).map((m) => m.id) ?? [];
+			n += log[i]?.sets.filter((set) => !set.done && ids.some((id) => !empty(set.values[id]))).length ?? 0;
+		});
+		return n;
+	}
+	/** Finish was pressed with unticked sets: ask whether they were done. */
+	let askUnticked = $state(0);
+	let finishForm = $state<HTMLFormElement>();
+	let untickedAnswered = false;
+	async function finishWith(tickAll: boolean) {
+		if (tickAll)
+			data.items.forEach((it, i) => {
+				const ids = it.task?.metrics.filter((m) => m.repeats).map((m) => m.id) ?? [];
+				for (const set of log[i].sets) if (ids.some((id) => !empty(set.values[id]))) set.done = true;
+			});
+		untickedAnswered = true;
+		askUnticked = 0;
+		await tick();
+		finishForm?.requestSubmit();
+	}
 	/** Required fields that are still empty, by name. */
 	function missing(): string[] {
 		const out: string[] = [];
@@ -223,7 +305,9 @@
 			for (const m of t.metrics.filter((x) => x.required)) {
 				const bad = m.repeats
 					? log[i].sets.some((s) => (s.done || quickMode) && empty(s.values[m.id])) || !log[i].sets.length
-					: empty(log[i].summary[m.id]);
+					: isLong(m)
+						? untouched(m, log[i].summary[m.id], data.occurrence.date)
+						: empty(log[i].summary[m.id]);
 				if (bad) out.push(`${t.name}: ${m.name}`);
 			}
 		});
@@ -263,11 +347,24 @@
 		isOpen && base[i]?.sets[j] !== undefined && (base[i].sets[j].values[id] ?? null) !== (log[i].sets[j].values[id] ?? null);
 	const changedSummary = (i: number, id: string) =>
 		isOpen && (base[i]?.summary[id] ?? null) !== (log[i].summary[id] ?? null);
-	/** The value is still the untouched prefill (last time or the target), not something logged now. */
+	/**
+	 * The value is still the prefill (last time or the target), not something logged now. It is
+	 * compared with the prefill itself, so an autosave and a reload don't turn it into time logged.
+	 */
+	const prefills = untrack(() => data.items.map((it) => planned(it).summary));
 	const isPrefill = (i: number, id: string) =>
-		isOpen && !data.items[i].saved.length && base[i]?.summary[id] != null && !changedSummary(i, id);
+		isOpen && prefills[i]?.[id] != null && (log[i].summary[id] ?? null) === prefills[i][id];
+
+	/** Something is logged already: Same as last fills in only the rest. */
+	const started = $derived(
+		data.items.some((it, i) => it.saved.length || log[i]?.sets.some((x) => x.done) || Object.values(log[i]?.subs ?? {}).some(Boolean))
+	);
 
 	async function sameAsLast() {
+		// What is ticked here is saved first, so it is kept.
+		const pending = saveTimer !== undefined;
+		dropAutosave();
+		if (pending || started) await autosave();
 		if (data.past) return sameAsLastPast();
 		const res = await postAction('/?/same', { occurrence: data.occurrence.id }).catch((e) => e);
 		if (res instanceof Error) {
@@ -281,7 +378,7 @@
 			return;
 		}
 		clearDraft();
-		goto(`/?did=${data.occurrence.id}&clear=1`);
+		goto(`/?did=${data.occurrence.id}${started ? '' : '&clear=1'}`);
 	}
 
 	/** A past day: copy the last log from before that day, then go back to the day. */
@@ -340,8 +437,14 @@
 
 {#if canRepeat && !quickMode}
 	<div class="row repeat">
-		<button type="button" class="primary grow" onclick={sameAsLast}>Same as last time</button>
-		<span class="muted small-text">{data.past ? 'Copies your last log from before this day and finishes.' : 'Copies your last log and finishes.'}</span>
+		<button type="button" class:primary={!started} class="grow" onclick={sameAsLast}>{started ? 'Fill the rest as last time' : 'Same as last time'}</button>
+		<span class="muted small-text"
+			>{started
+				? 'Keeps what you logged here, copies the rest from your last log, and finishes.'
+				: data.past
+					? 'Copies your last log from before this day and finishes.'
+					: 'Copies your last log and finishes.'}</span
+		>
 	</div>
 {/if}
 
@@ -389,6 +492,12 @@
 			<p class="muted small-text recap">
 				Last time ({new Date(rc.date + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}): {rc.text}{rc.best ? ` · best ${rc.best}` : ''}{' · '}<a href="/library/{t.id}">History</a>
 			</p>
+		{/if}
+		{#if t?.notes.trim() && !quickMode}
+			<details class="howto">
+				<summary class="small-text">How to</summary>
+				<div class="howto-body"><Markdown text={t.notes} small /></div>
+			</details>
 		{/if}
 
 		{#if t}
@@ -459,6 +568,13 @@
 								{#each m.choices ?? [] as c (c)}<option>{c}</option>{/each}
 							</select>
 						</label>
+					{:else if m.type === 'text' && isLong(m)}
+						<NoteBox
+							label="{m.name}{m.required ? ' *' : ''}"
+							placeholder="Write here. Markdown works."
+							rows={6}
+							bind:value={() => num(log[i].summary[m.id]), (v) => (log[i].summary[m.id] = v)}
+						/>
 					{:else if m.type === 'text'}
 						<label>{m.name}{m.required ? ' *' : ''} <input value={num(log[i].summary[m.id])} oninput={(e) => (log[i].summary[m.id] = e.currentTarget.value)} /></label>
 					{:else if isNumeric(m)}
@@ -488,6 +604,9 @@
 					{/each}
 				</div>
 			{/if}
+			{#if isYesNo(t) && !quickMode}
+				<label style="color: var(--text)"><input type="checkbox" class="tick" bind:checked={log[i].tick} aria-label="{t.name} done" /> Done</label>
+			{/if}
 		{/if}
 	</section>
 	{/if}
@@ -500,10 +619,19 @@
 {#if quickMode}
 	<p class="muted small-text"><a href="/log/{data.occurrence.id}">Open the full log</a> to change anything else.</p>
 {:else}
-	<label style="margin-top: 1rem">Notes <textarea bind:value={notes} rows="2"></textarea></label>
+	<div style="margin-top: 1rem"><NoteBox bind:value={notes} label="Notes" rows={2} /></div>
 {/if}
 
 {#if problem}<p class="error">{problem}</p>{/if}
+{#if askUnticked}
+	<div class="card stack" role="alert">
+		<p style="margin: 0">{askUnticked === 1 ? '1 planned set isn’t ticked.' : `${askUnticked} planned sets aren’t ticked.`} Did you do {askUnticked === 1 ? 'it' : 'them'}?</p>
+		<div class="row">
+			<button type="button" class="primary" onclick={() => finishWith(false)}>No, save only the ticked sets</button>
+			<button type="button" onclick={() => finishWith(true)}>Yes, tick {askUnticked === 1 ? 'it' : 'them all'} and finish</button>
+		</div>
+	</div>
+{/if}
 {#if form?.error}<p class="error">{form.error}</p>{/if}
 {#if form?.saved}<p class="muted">Saved.</p>{/if}
 
@@ -513,15 +641,25 @@
 		method="POST"
 		action="?/save"
 		class="grow-form"
+		bind:this={finishForm}
 		use:enhance={({ cancel }) => {
 			problem = '';
+			// An answer to the unticked-sets question covers this one press of Finish only.
+			const answered = untickedAnswered;
+			untickedAnswered = false;
 			const gaps = missing();
 			if (gaps.length) {
 				problem = `Fill in: ${gaps.join(', ')}`;
 				cancel();
 				return;
 			}
-			clearTimeout(saveTimer);
+			const unticked = answered ? 0 : untickedSets();
+			if (unticked) {
+				askUnticked = unticked;
+				cancel();
+				return;
+			}
+			dropAutosave();
 			if (!navigator.onLine) {
 				cancel();
 				enqueue(saveUrl(), [['payload', payload(true, true)]], data.habitName);
@@ -616,6 +754,18 @@
 	}
 	.small-text {
 		font-size: 0.85rem;
+	}
+	.howto {
+		margin: 0 0 0.6rem;
+	}
+	.howto summary {
+		cursor: pointer;
+		color: var(--accent);
+	}
+	.howto-body {
+		margin-top: 0.4rem;
+		padding: 0.5rem 0.6rem;
+		border-left: 3px solid var(--border);
 	}
 	.swap summary {
 		cursor: pointer;

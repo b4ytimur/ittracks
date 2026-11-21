@@ -68,6 +68,7 @@
 	{@render row('/settings/day', 'Day and parts of the day', day)}
 	{@render row('/settings/vacation', 'Vacation', vacation)}
 	{@render row('/settings/past-days', 'Logging past days', pastDays)}
+	{@render row('/settings/journal', 'Journal', data.journalOff ? 'Switched off in Features' : data.dayNote ? 'Day note on Today · Markdown export' : 'No day note · Markdown export')}
 </ul>
 
 <h2>Habits and Tasks</h2>

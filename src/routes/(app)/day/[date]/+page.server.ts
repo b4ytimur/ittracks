@@ -2,11 +2,11 @@
 // and add or remove slips. Every change can be undone from the toast.
 import { randomUUID } from 'node:crypto';
 import { error, fail, redirect } from '@sveltejs/kit';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { habit, occurrence, slip } from '$lib/server/db/schema';
 import { ownedHabit } from '$lib/server/owned';
-import { quickDone, sameAsLast, userToday } from '$lib/server/today';
+import { quickDone, recount, sameAsLast, userToday } from '$lib/server/today';
 import {
 	clearDay,
 	loadDay,
@@ -15,10 +15,14 @@ import {
 	replanToday,
 	restore,
 	snapshot,
+	startFrom,
 	unloggedOn,
 	windowFor
 } from '$lib/server/backfill';
-import { getSettings } from '$lib/server/settings';
+import { getSettings, getViews } from '$lib/server/settings';
+import { progressForIds } from '$lib/server/progress';
+import { getDayNote } from '$lib/server/journal';
+import { isHidden } from '$lib/views';
 import { addDays } from '$lib/engine/dates';
 import { earliestLoggable, isRealDate } from '$lib/engine/backfill';
 import type { Level } from '$lib/engine/streak';
@@ -32,13 +36,26 @@ export const load: PageServerLoad = ({ locals, params, cookies }) => {
 	if (!isRealDate(date)) error(404, 'Not a date');
 	if (date >= today) redirect(303, '/');
 	const settings = getSettings(accountId);
+	const day = loadDay(accountId, date, today);
+	const occIds = [...day.due, ...day.other].flatMap((x) => (x.occurrence ? [x.occurrence.id] : []));
 	return {
 		date,
 		today,
 		window: windowFor(accountId, date, today),
 		pastDays: settings.pastDays,
 		earliest: earliestLoggable(today, settings.pastDays),
-		...loadDay(accountId, date, today),
+		...day,
+		/** "3 of 6 glasses", "2 of 4 steps", by Occurrence id. */
+		progress: Object.fromEntries(progressForIds(occIds)),
+		/** Log notes (Markdown) by Occurrence id. */
+		notes: Object.fromEntries(
+			(occIds.length
+				? db.select({ id: occurrence.id, notes: occurrence.notes }).from(occurrence).where(inArray(occurrence.id, occIds)).all()
+				: []
+			).flatMap((o) => (o.notes?.trim() ? [[o.id, o.notes]] : []))
+		) as Record<string, string>,
+		/** J3: the day note, when it is on and the Journal feature is too. */
+		dayNote: settings.dayNote && !isHidden(getViews(accountId), 'journal') ? getDayNote(accountId, date) : null,
 		// The day before, for the "previous day" link: still worth a look if it has gaps.
 		prevUnlogged: unloggedOn(accountId, addDays(date, -1)).length
 	};
@@ -87,6 +104,7 @@ async function change(
 	const undo = snapshot(h.id, date);
 	const r = run({ h, f, today, schedule });
 	replanToday(accountId, h.id, schedule, today, before);
+	recount(accountId, h.id, schedule, date, today);
 	if (r === 'gone') return fail(400, { habit: h.id, error: `${h.name} has nothing to log.` });
 	if (r === 'needsInput') {
 		// A required field is still empty: ask for it on the quick log.
@@ -159,6 +177,21 @@ export const actions: Actions = {
 		const before = planOfToday(h.id, h.schedule as ScheduleForm, today);
 		if (!restore(accountId, snap)) return fail(400, { error: 'Could not undo.' });
 		replanToday(accountId, h.id, h.schedule as ScheduleForm, today, before);
+		const date = (snap as { date?: unknown }).date;
+		if (typeof date === 'string') recount(accountId, h.id, h.schedule as ScheduleForm, date, today);
+	},
+	/** Start a habit from this day, for one that was set up later than it really began. */
+	start: async ({ request, locals, params, cookies }) => {
+		const f = await request.formData();
+		const accountId = locals.account!.id;
+		const h = ownedHabit(accountId, field(f, 'habit'));
+		if (!h || !isRealDate(params.date)) error(404);
+		const today = userToday(accountId, cookies.get('tz'));
+		if (params.date >= today) return fail(400, { habit: h.id, error: 'Pick a day before today.' });
+		if (h.direction === 'build' && windowFor(accountId, params.date, today) !== 'ok')
+			return fail(400, { habit: h.id, error: 'This day is too far back to log. You can change how far back in Settings.' });
+		startFrom(h, params.date);
+		return { started: { habit: h.name } };
 	},
 	/** A slip on this day. Slips can always be added for a past day. */
 	slip: async ({ request, locals, params }) => {

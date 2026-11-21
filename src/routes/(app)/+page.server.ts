@@ -3,17 +3,19 @@ import { error, fail, redirect } from '@sveltejs/kit';
 import { checkSettings } from '$lib/rules/settings';
 import { and, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { craving, habit, occurrence, prepTick, slip, slot, variant } from '$lib/server/db/schema';
+import { craving, entry, habit, occurrence, prepTick, slip, slot, variant } from '$lib/server/db/schema';
 import { createOccurrence, loadPrep, loadToday, quickDone, reopen, sameAsLast, timeIn, userToday } from '$lib/server/today';
 import { raise } from '$lib/engine/progression';
 import { addDays } from '$lib/engine/dates';
 import { getSettings, getViews, saveSettings } from '$lib/server/settings';
-import { DEFAULT_TEMPLATE_NEW, PAGE_PATH, TEMPLATES, fromTemplate, templateById } from '$lib/views';
+import { DEFAULT_TEMPLATE_NEW, PAGE_PATH, TEMPLATES, fromTemplate, isHidden, templateById } from '$lib/views';
+import { getDayNote } from '$lib/server/journal';
 import { listAreas } from '$lib/server/repo/areas';
-import { DEFAULT_RANGES, readRanges } from '$lib/engine/day';
+import { DEFAULT_RANGES, duplicateRange, readRanges } from '$lib/engine/day';
 import type { Level } from '$lib/engine/streak';
 import { ownedHabit, ownedOccurrence } from '$lib/server/owned';
 import { headlineTexts } from '$lib/server/stats';
+import { plusOne } from '$lib/server/progress';
 import { unloggedOn } from '$lib/server/backfill';
 import { logWindow } from '$lib/engine/backfill';
 import type { Actions, PageServerLoad } from './$types';
@@ -53,7 +55,9 @@ export const load: PageServerLoad = ({ locals, cookies, url, request }) => {
 		suggestedTemplate: DEFAULT_TEMPLATE_NEW,
 		views,
 		ranges: settings.ranges,
-		areas: listAreas(accountId)
+		areas: listAreas(accountId),
+		/** J3: the day note, when it is on (Settings) and the Journal feature is too. */
+		dayNote: settings.dayNote && !isHidden(views, 'journal') ? getDayNote(accountId, today) : null
 	};
 };
 
@@ -86,6 +90,19 @@ export const actions: Actions = {
 		if (!o) error(404);
 		if (quickDone(o.occ.id, levelOf(f)) === 'needsInput') redirect(303, `/log/${o.occ.id}?quick`);
 		return { finished: o.habit.id, did: { occurrence: o.occ.id, habit: o.habit.name, clear: true } };
+	},
+	/** +1 toward a habit's one target ("3 of 6 glasses"), or by=-1 to take a tap back. Reaching the target finishes it. */
+	plus: async ({ request, locals }) => {
+		const f = await request.formData();
+		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
+		if (!o) error(404);
+		const by = field(f, 'by') === '-1' ? -1 : 1;
+		const r = plusOne(o.occ.id, by);
+		if (!r) return fail(400, { error: `${o.habit.name} has no single number to count.` });
+		return {
+			plus: { occurrence: o.occ.id, habit: o.habit.name, by, ...r },
+			...(r.done && by > 0 && o.occ.status !== 'done' ? { finished: o.habit.id } : {})
+		};
 	},
 	/** Tick or untick a prep step for tomorrow's Occurrence. */
 	prep: async ({ request, locals, cookies }) => {
@@ -132,8 +149,10 @@ export const actions: Actions = {
 		const f = await request.formData();
 		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
 		if (!o) error(404);
+		// Same as last keeps what was already logged, so Undo must not clear it.
+		const started = !!db.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, o.occ.id)).get();
 		if (o.occ.status === 'due' && sameAsLast(o.occ.id) === 'needsInput') redirect(303, `/log/${o.occ.id}?quick`);
-		return { finished: o.habit.id, did: { occurrence: o.occ.id, habit: o.habit.name, clear: true } };
+		return { finished: o.habit.id, did: { occurrence: o.occ.id, habit: o.habit.name, clear: !started } };
 	},
 	skip: async ({ request, locals }) => {
 		const f = await request.formData();
@@ -154,6 +173,8 @@ export const actions: Actions = {
 		const f = await request.formData();
 		const dayStart = field(f, 'dayStart');
 		if (!time.test(dayStart)) return fail(400, { error: 'Pick a time like 04:00.' });
+		const twice = duplicateRange(f);
+		if (twice) return fail(400, { error: `Two parts of the day are called “${twice}”. Give each its own name.` });
 		const ranges = readRanges(f);
 		const s = getSettings(locals.account!.id);
 		const conflict = checkSettings({ ...s, dayStart, ranges })[0];

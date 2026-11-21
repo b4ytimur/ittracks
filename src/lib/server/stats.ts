@@ -4,7 +4,7 @@ import { and, asc, eq, inArray, lte, ne } from 'drizzle-orm';
 import { db } from './db';
 import { area, craving, entry, habit, habitIdentity, identity, metric, occurrence, slip, slot, tag, task, taskTag, variant } from './db/schema';
 import { getSettings, getViews, saveSettings } from './settings';
-import { timeIn, userToday } from './today';
+import { settleAll, timeIn, userToday } from './today';
 import { listAreas } from './repo/areas';
 import { listIdentities } from './repo/identities';
 import { computeCard, describeLog, prepare, type CardResult, type Ctx, type Dataset, type Prepared } from '$lib/stats/engine';
@@ -85,7 +85,7 @@ export function loadDataset(accountId: string, tz?: string): Dataset {
 			archived: t.archived,
 			tags: tags.filter((x) => x.taskId === t.id).map((x) => ({ name: x.name, level: x.level }))
 		})),
-		metrics: metrics.map((m) => ({ id: m.id, taskId: m.taskId, name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, choices: m.choices ?? null })),
+		metrics: metrics.map((m) => ({ id: m.id, taskId: m.taskId, name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, choices: m.choices ?? null, scores: m.scores ?? null })),
 		variants: variants.map((v) => ({ id: v.id, habitId: v.habitId, name: v.name })),
 		slots: slots.map((x) => ({ id: x.id, variantId: x.variantId, taskId: x.taskId, sets: x.sets, targets: x.targets ?? null, minTargets: x.minTargets ?? null, stretchTargets: x.stretchTargets ?? null })),
 		occurrences: occs.map((o) => ({
@@ -156,6 +156,8 @@ export function catalogFor(accountId: string, P: Prepared): Catalog {
 
 /** Everything for one request: the logs, prepared once. */
 export function statsContext(accountId: string, tz?: string) {
+	// Due days nobody logged count as misses in Stats too, even before Today is opened.
+	settleAll(accountId, userToday(accountId, tz));
 	const ds = loadDataset(accountId, tz);
 	const P = prepare(ds);
 	return { ds, P, today: ds.today };
@@ -247,7 +249,7 @@ export function recapFor(accountId: string, taskIds: string[], excludeOcc: strin
 		areas: [],
 		habits: habits.map((h) => ({ id: h.id, name: h.name, direction: h.direction, areaId: h.areaId, startDate: h.startDate, archived: h.archived, identities: [], cost: null, streakRule: DEFAULT_STREAK_RULE, minimumCounts: true, limit: null })),
 		tasks: tasks.map((t) => ({ id: t.id, name: t.name, areaId: t.areaId, parentTaskId: t.parentTaskId, archived: t.archived, tags: [] })),
-		metrics: metrics.map((m) => ({ id: m.id, taskId: m.taskId, name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, choices: m.choices ?? null })),
+		metrics: metrics.map((m) => ({ id: m.id, taskId: m.taskId, name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, choices: m.choices ?? null, scores: m.scores ?? null })),
 		variants: [],
 		slots: [],
 		occurrences: occs.map((o) => ({ id: o.id, habitId: o.habitId, variantId: null, date: o.date, status: o.status, level: o.level ?? null, picks: null, time: null })),

@@ -22,6 +22,8 @@ export const load: PageServerLoad = ({ locals, cookies }) => {
 		dayStart: settings.dayStart ?? null,
 		pastDays: settings.pastDays,
 		nudgeYesterday: settings.nudgeYesterday,
+		dayNote: settings.dayNote,
+		journalOff: views.hidden.includes('journal'),
 		ranges: settings.ranges.map((r) => r.name),
 		vacation: vacations[0] ?? null,
 		moreVacations: Math.max(0, vacations.length - 1),

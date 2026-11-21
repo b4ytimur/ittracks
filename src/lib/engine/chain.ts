@@ -9,7 +9,11 @@ export type Cell =
 	| { kind: 'missed'; forgiven: boolean }
 	| { kind: 'due' }
 	| { kind: 'rest' }
-	| { kind: 'future' };
+	| { kind: 'future' }
+	/** Due, never logged, and the habit ignores days you don't log. */
+	| { kind: 'unlogged' }
+	/** Before the habit's start date. */
+	| { kind: 'before' };
 
 /** Which missed dates the rule forgives. Marks sorted oldest first. Skips count neither way, as in the streak. */
 export function forgivenMisses(marks: Mark[], rule: StreakRule): Set<ISODate> {
@@ -35,13 +39,17 @@ export function forgivenMisses(marks: Mark[], rule: StreakRule): Set<ISODate> {
 	return out;
 }
 
-/** One cell per day from `from` to `to`, inclusive. Days with no Occurrence are rest days. */
+/**
+ * One cell per day from `from` to `to`, inclusive. Days with no Occurrence are rest days,
+ * except days before `start` and the due days listed in `unlogged`.
+ */
 export function chainCells(
 	marks: Mark[],
 	rule: StreakRule,
 	from: ISODate,
 	to: ISODate,
-	today: ISODate
+	today: ISODate,
+	opts: { start?: ISODate; unlogged?: Set<ISODate> } = {}
 ): { date: ISODate; cell: Cell }[] {
 	const byDate = new Map(marks.map((m) => [m.date, m]));
 	const forgiven = forgivenMisses(marks, rule);
@@ -50,7 +58,7 @@ export function chainCells(
 		const m = byDate.get(d);
 		let cell: Cell;
 		if (d > today) cell = { kind: 'future' };
-		else if (!m) cell = { kind: 'rest' };
+		else if (!m) cell = opts.start && d < opts.start ? { kind: 'before' } : opts.unlogged?.has(d) ? { kind: 'unlogged' } : { kind: 'rest' };
 		else if (m.status === 'done') cell = { kind: 'done', level: m.level ?? 'target' };
 		else if (m.status === 'skipped') cell = { kind: 'skipped' };
 		else if (m.status === 'missed') cell = { kind: 'missed', forgiven: forgiven.has(d) };

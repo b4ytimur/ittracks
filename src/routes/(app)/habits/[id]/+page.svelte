@@ -5,7 +5,9 @@
 	import type { HabitForm, ScheduleForm } from '$lib/forms';
 	import { describeSchedule, weekdayNames } from '$lib/describe';
 	import FillRuleEditor from './FillRuleEditor.svelte';
+	import NoteBox from '$lib/NoteBox.svelte';
 	import { limitOn, nextDrop } from '$lib/engine/limit';
+	import { scheduleStartBy } from '$lib/engine/unlogged';
 	import { blocked } from '$lib/rules/core';
 	import { checkHabit, habitRules } from '$lib/rules/habit';
 
@@ -19,6 +21,8 @@
 	let pinned = $state(untrack(() => data.pinned));
 	let tasks = $state(untrack(() => [...data.tasks]));
 	let metricsByTask = $state(untrack(() => ({ ...data.metrics })));
+	/** Tasks that log something per set; a Yes or no Task has no sets to aim for. */
+	let repeating = $state(untrack(() => new Set(data.repeating)));
 
 	// A build habit always has at least one Variant to put Slots in.
 	$effect(() => {
@@ -45,6 +49,20 @@
 	);
 
 	const firstVariant = $derived(h.variants[0]?.id ?? '');
+
+	/**
+	 * A new start date for the habit. The schedule's own start follows: back far enough to
+	 * cover it (by whole cycles, so planned days keep their Variant), or along with it when
+	 * the two were the same day.
+	 */
+	function setStart(v: string) {
+		if (!v) return;
+		const old = h.startDate;
+		h.startDate = v;
+		if (kind !== 'interval' && kind !== 'rotation') return;
+		if (v < start && schedule) start = (scheduleStartBy(schedule, v) as { start: string }).start;
+		else if (start === old) start = v;
+	}
 
 	/** The Schedule as it will be saved. Rotations follow the Variant order. */
 	const schedule = $derived.by((): ScheduleForm | null => {
@@ -236,7 +254,7 @@
 	const has = untrack(() => ({
 		when: !!(data.habit.cue.time || data.habit.cue.place || data.habit.cue.afterHabitId || data.habit.cue.afterText || data.habit.cue.range),
 		levels: data.habit.levels.enabled,
-		streak: !data.isNew && data.habit.streakRule.kind !== 'neverTwice',
+		streak: (!data.isNew && data.habit.streakRule.kind !== 'neverTwice') || data.habit.unlogged === 'ignore',
 		identity: data.habit.identityIds.length > 0,
 		notes: !!data.habit.notes
 	}));
@@ -264,9 +282,10 @@
 		const res = await fetch('?/quickTask', { method: 'POST', body, headers: { 'x-sveltekit-action': 'true' } });
 		const r = deserialize(await res.text());
 		if (r.type === 'success' && r.data?.newTask) {
-			const t = r.data.newTask as { id: string; name: string; metrics: { id: string; name: string; unit: string }[] };
+			const t = r.data.newTask as { id: string; name: string; repeats: boolean; metrics: { id: string; name: string; unit: string }[] };
 			tasks = [...tasks, { id: t.id, name: t.name }].sort((a, b) => a.name.localeCompare(b.name));
 			metricsByTask = { ...metricsByTask, [t.id]: t.metrics };
+			if (t.repeats) repeating = new Set([...repeating, t.id]);
 			s.taskId = t.id;
 			s.fillRule = null;
 			newTaskFor = null;
@@ -391,16 +410,18 @@
 							{#if newTaskError}<p class="error">{newTaskError}</p>{/if}
 						</div>
 					{/if}
-					<label style="width: 8rem"
-						>Target sets
-						<input
-							type="number"
-							min="0"
-							max="50"
-							value={s.sets ?? ''}
-							oninput={(e) => (s.sets = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
-						/>
-					</label>
+					{#if !s.taskId || repeating.has(s.taskId)}
+						<label style="width: 8rem"
+							>Target sets
+							<input
+								type="number"
+								min="0"
+								max="50"
+								value={s.sets ?? ''}
+								oninput={(e) => (s.sets = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
+							/>
+						</label>
+					{/if}
 					{#if !s.fillRule && s.taskId && metricsByTask[s.taskId]?.length}
 						<table class="targets">
 							<thead>
@@ -653,6 +674,20 @@
 	{/if}
 {/snippet}
 
+{#snippet startPart()}
+	<label
+		>Started on
+		<input type="date" value={h.startDate} onchange={(e) => setStart(e.currentTarget.value)} required />
+	</label>
+	<p class="muted small-text" style="margin-top: -0.25rem">
+		Days from here on can be logged. {h.startDate > data.today
+			? 'Nothing is due before then.'
+			: h.startDate < data.today && h.startDate !== savedStart
+				? 'Due days you leave unlogged count as missed, unless you change that under Streak.'
+				: ''}
+	</p>
+{/snippet}
+
 {#snippet breakPart()}
 	<label>Counting from <input type="date" bind:value={h.startDate} required /></label>
 	<p class="muted">
@@ -788,6 +823,9 @@
 			</li>
 		{/if}
 		<li><a class="card" href="?mode=full"><strong>Start blank in the full editor</strong><div class="muted small-text">Every option on one page.</div></a></li>
+		{#if !data.hidden.includes('journal')}
+			<li><a class="card" href="/journal?setup"><strong>Start a daily journal</strong><div class="muted small-text">A few lines each evening with a prompt, a mood to chart, and an optional day note on Today.</div></a></li>
+		{/if}
 	</ul>
 	<p class="muted small-text">You can skip this choice in <a href="/settings/editor">Settings</a>.</p>
 {:else}
@@ -798,7 +836,7 @@
 			<a href="/habits/{data.id}/chain">Chain</a>
 			<a href="/habits/{data.id}/stats">Stats</a>
 			<a href="/habits/new?from={data.id}" data-sveltekit-reload>Duplicate</a>
-			<a href="/habits/{data.id}/template.json" download>Export template</a>
+			<a href="/habits/{data.id}/share">Share as template</a>
 		{/if}
 		<a href="/habits">Cancel</a>
 	</div>
@@ -890,6 +928,7 @@
 
 		<h2>Schedule</h2>
 		{@render schedulePart()}
+		{@render startPart()}
 
 		{#if open.when}
 			<h2>When and where</h2>
@@ -943,6 +982,20 @@
 			{:else if h.streakRule.kind === 'consistency'}
 				<label style="width: 10rem">Over the last N days <input type="number" min="7" max="365" bind:value={h.streakRule.days} /></label>
 			{/if}
+			<fieldset class="card">
+				<legend class="muted">Days you don't log</legend>
+				<label style="color: var(--text)"
+					><input type="radio" bind:group={h.unlogged} value="missed" /> Count as missed once the day is over</label
+				>
+				<label style="color: var(--text)"
+					><input type="radio" bind:group={h.unlogged} value="ignore" /> Don't count them: only what you log counts</label
+				>
+				<p class="muted small-text" style="margin: 0.25rem 0 0">
+					{h.unlogged === 'ignore'
+						? 'A day you forget leaves your streak and consistency as they were. Logging it later still counts.'
+						: 'Streaks, consistency, the chain and Stats treat a forgotten day as a miss. Log or skip it later to change that.'}
+				</p>
+			</fieldset>
 		{/if}
 
 		<details class="extras" open={!!(h.bundle.reward || h.prep.length || h.reward.celebrate || h.reward.jar || h.progression)}>
@@ -1041,14 +1094,14 @@
 	{/if}
 
 	{#if open.notes}
-		<label>Notes <textarea bind:value={h.notes} rows="2"></textarea></label>
+		<NoteBox bind:value={h.notes} label="Notes" hint="Markdown: why this habit matters, the plan, links." />
 	{/if}
 
 	{#if Object.values(open).some((x) => !x)}
 		<div class="chips add-more">
 			{#if h.direction === 'build' && !open.when}<button type="button" class="chip" onclick={() => (open.when = true)}>+ When and where</button>{/if}
 			{#if h.direction === 'build' && !open.levels && !off('levels')}<button type="button" class="chip" onclick={() => (open.levels = true)}>+ Levels</button>{/if}
-			{#if h.direction === 'build' && !open.streak}<button type="button" class="chip" onclick={() => (open.streak = true)}>+ Streak rule (now: never miss twice)</button>{/if}
+			{#if h.direction === 'build' && !open.streak}<button type="button" class="chip" onclick={() => (open.streak = true)}>+ Streak and days you don't log</button>{/if}
 			{#if !open.identity && !off('identities')}<button type="button" class="chip" onclick={() => (open.identity = true)}>+ Identity</button>{/if}
 			{#if !open.notes}<button type="button" class="chip" onclick={() => (open.notes = true)}>+ Notes</button>{/if}
 		</div>
