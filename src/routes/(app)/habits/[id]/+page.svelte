@@ -796,6 +796,7 @@
 	<div class="row">
 		{#if !data.isNew}
 			<a href="/habits/{data.id}/chain">Chain</a>
+			<a href="/habits/{data.id}/stats">Stats</a>
 			<a href="/habits/new?from={data.id}" data-sveltekit-reload>Duplicate</a>
 			<a href="/habits/{data.id}/template.json" download>Export template</a>
 		{/if}

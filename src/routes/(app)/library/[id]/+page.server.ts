@@ -19,6 +19,9 @@ import { metricTypes } from '$lib/metric-types';
 import { db } from '$lib/server/db';
 import { task } from '$lib/server/db/schema';
 import { and, eq } from 'drizzle-orm';
+import { catalogFor, getStats, itemsFor, statsContext } from '$lib/server/stats';
+import { getViews } from '$lib/server/settings';
+import { taskCards } from '$lib/stats/auto';
 import type { Actions, PageServerLoad } from './$types';
 
 const blank = (): TaskForm => ({
@@ -33,7 +36,17 @@ const blank = (): TaskForm => ({
 	collectionIds: []
 });
 
-export const load: PageServerLoad = ({ locals, params, url }) => {
+/** Charts of everything this Task has logged (its history, from the stats engine). */
+function taskHistory(accountId: string, taskId: string, tz: string | undefined) {
+	const { P, today } = statsContext(accountId, tz);
+	const t = P.tasks.get(taskId);
+	if (!t || !(P.logsByTask.get(taskId) ?? []).length) return null;
+	const s = getStats(accountId);
+	const catalog = catalogFor(accountId, P);
+	return { items: itemsFor(taskCards(P, t), P, { catalog, stats: s, hidden: getViews(accountId).hidden, today }), catalog, measures: s.measures };
+}
+
+export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 	const accountId = locals.account!.id;
 	const isNew = params.id === 'new';
 	const form = isNew ? blank() : getTaskForm(accountId, params.id);
@@ -50,6 +63,7 @@ export const load: PageServerLoad = ({ locals, params, url }) => {
 		: !!db.select({ a: task.archived }).from(task).where(and(eq(task.id, params.id), eq(task.accountId, accountId))).get()?.a;
 	return {
 		isNew,
+		taskId: params.id,
 		task: form,
 		archived,
 		allTags: listTagNames(accountId),
@@ -57,7 +71,8 @@ export const load: PageServerLoad = ({ locals, params, url }) => {
 		areas: listAreas(accountId),
 		collections: listCollections(accountId).filter((c) => !c.filter),
 		types: [...BUILTIN_TASK_TYPES, ...settings.taskTypes],
-		usage: isNew ? null : (taskUsage(accountId).get(params.id) ?? { habits: [], lastLogged: null, timesLogged: 0 })
+		usage: isNew ? null : (taskUsage(accountId).get(params.id) ?? { habits: [], lastLogged: null, timesLogged: 0 }),
+		history: isNew ? null : taskHistory(accountId, params.id, cookies.get('tz'))
 	};
 };
 

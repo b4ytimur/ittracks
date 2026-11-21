@@ -82,6 +82,15 @@
 	{@render row('/settings/features', 'Features', features)}
 </ul>
 
+<h2>Stats</h2>
+<ul class="list">
+	{@render row(
+		'/settings/stats',
+		'Your measures and formulas',
+		`${data.stats.measures ? plural(data.stats.measures, 'measure') : 'No measures of your own yet'} · e1RM by ${data.stats.e1rm}`
+	)}
+</ul>
+
 <h2>Notifications</h2>
 <ul class="list">
 	{@render row('/settings/reminders', 'Reminders', reminders)}
