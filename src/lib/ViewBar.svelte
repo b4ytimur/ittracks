@@ -58,7 +58,7 @@
 	async function save() {
 		const n = name.trim();
 		if (!n) return;
-		const r = await viewOp({ op: 'save', page, name: n, current });
+		const r = await viewOp({ op: 'save', page, name: n, state: current });
 		if (r) {
 			views = r.views;
 			name = '';
@@ -77,7 +77,7 @@
 		if (r) views = r.views;
 	}
 	async function makeDefault() {
-		const r = await viewOp({ op: 'default', page, current });
+		const r = await viewOp({ op: 'default', page, state: current });
 		if (r) {
 			views = r.views;
 			showToast('This is now the default for this page.');

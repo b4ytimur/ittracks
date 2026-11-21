@@ -32,7 +32,8 @@ const body = z.discriminatedUnion('op', [
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!locals.account) error(401);
-	const parsed = body.safeParse(await request.json().catch(() => null));
+	const raw = await request.json().catch(() => null);
+	const parsed = body.safeParse(raw);
 	if (!parsed.success) error(400, 'Not a view change');
 	const accountId = locals.account.id;
 	const b = parsed.data;
@@ -64,16 +65,20 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		case 'default':
 			next = { ...v, defaults: { ...v.defaults, [b.page]: b.state } };
 			break;
-		case 'patch':
+		case 'patch': {
+			// Zod fills defaults for keys that weren't sent; only apply what the request named.
+			const sent = (group: string, parsedGroup: Record<string, unknown> | undefined) =>
+				Object.fromEntries(Object.keys(raw?.[group] ?? {}).filter((k) => parsedGroup && k in parsedGroup).map((k) => [k, parsedGroup![k]]));
 			next = {
 				...v,
-				today: { ...v.today, ...(b.today ?? {}) },
-				habits: { ...v.habits, ...(b.habits ?? {}) },
-				history: { ...v.history, ...(b.history ?? {}) },
-				hidden: b.hidden ?? v.hidden,
+				today: { ...v.today, ...sent('today', b.today) },
+				habits: { ...v.habits, ...sent('habits', b.habits) },
+				history: { ...v.history, ...sent('history', b.history) },
+				hidden: raw && 'hidden' in raw && b.hidden ? b.hidden : v.hidden,
 				startPage: b.startPage ?? v.startPage
 			};
 			break;
+		}
 		case 'template':
 			if (!templateById(b.id)) error(400, 'No such template');
 			previous = v;
