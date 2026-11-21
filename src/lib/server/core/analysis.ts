@@ -147,7 +147,7 @@ function bucketed(points: Point[], buckets: BucketInfo[]): Point[][] {
 const round = (v: number | null) => (v === null ? null : Math.round(v * 1000) / 1000);
 
 /** Work out one request: its buckets, its series and the points behind them. */
-function compute(actor: Actor, P: Prepared, spec: SeriesSpec) {
+export function compute(actor: Actor, P: Prepared, spec: SeriesSpec) {
 	const card = cardOf(actor, P, spec);
 	const range = rangeFor(actor, P, spec);
 	const stats = getStats(actor.accountId);
@@ -207,6 +207,21 @@ function compute(actor: Actor, P: Prepared, spec: SeriesSpec) {
 		total: round(scale(combine(points.map((p) => ({ v: p.value, w: 1, date: p.date })), how))),
 		bucket: kindOf
 	};
+}
+
+export type Computed = ReturnType<typeof compute>;
+
+/**
+ * A request's first series, one value per bucket, null outside the tracked span. Sums of an
+ * empty bucket are 0, but only between a series' first and last log: before someone started
+ * tracking, a 0 would be made up.
+ */
+export function observed(r: Computed): (number | null)[] {
+	const vals = r.series[0]?.values ?? r.buckets.map(() => null);
+	const has = r.buckets.map((b) => r.points.some((p) => p.date >= b.from && p.date <= b.to));
+	const first = has.indexOf(true);
+	const last = has.lastIndexOf(true);
+	return vals.map((v, i) => (first < 0 || i < first || i > last ? null : v));
 }
 
 /** A time series of any measure: the Stats page's numbers, as data. */
@@ -276,17 +291,8 @@ export function correlation(
 	const shared = { from: input.from, to: input.to, days: input.days ?? 90, bucket: input.bucket ?? 'day', split: 'none' as const };
 	const A = compute(actor, P, { ...input.a, ...shared });
 	const B = compute(actor, P, { ...input.b, ...shared });
-	// Sums of an empty bucket are 0, but only between a series' first and last log: before
-	// someone started tracking, a 0 would be made up.
-	const valuesOf = (r: typeof A) => {
-		const vals = r.series[0]?.values ?? r.buckets.map(() => null);
-		const has = r.buckets.map((b) => r.points.some((p) => p.date >= b.from && p.date <= b.to));
-		const first = has.indexOf(true);
-		const last = has.lastIndexOf(true);
-		return vals.map((v, i) => (first < 0 || i < first || i > last ? null : v));
-	};
-	const av = valuesOf(A);
-	const bv = valuesOf(B);
+	const av = observed(A);
+	const bv = observed(B);
 	const lag = Math.max(-60, Math.min(60, Math.round(input.lag ?? 0)));
 	const pairs: { from: string; a: number; b: number; bFrom: string }[] = [];
 	for (let i = 0; i < av.length; i++) {
@@ -298,14 +304,14 @@ export function correlation(
 		pairs.push({ from: A.buckets[i].from, a: x, b: y, bFrom: B.buckets[j].from });
 	}
 	const c = correlate(pairs.map((p) => p.a), pairs.map((p) => p.b));
-	const what = (r: typeof A) => `${r.label}${r.unit ? ` (${r.share ? '%' : r.unit})` : ''}`;
+	const what = (r: Computed) => `${r.label}${r.unit ? ` (${r.share ? '%' : r.unit})` : ''}`;
 	const by = shared.bucket;
 	let reading: string;
 	if (c.pearson === null) reading = `Not enough paired ${by}s to compare (${c.n}). Widen the range or use a larger bucket.`;
 	else
 		reading =
 			`${c.strength === 'none' ? 'No clear link' : `A ${c.strength} ${c.direction === 'up' ? 'positive' : 'negative'} link`} between ${what(A)} and ${what(B)}` +
-			`${lag ? ` ${Math.abs(lag)} ${by}${Math.abs(lag) === 1 ? '' : 's'} ${lag > 0 ? 'later' : 'earlier'}` : ''}: r = ${c.pearson}, ρ = ${c.spearman}, ` +
+			`${lag ? ` ${Math.abs(lag)} ${by}${Math.abs(lag) === 1 ? '' : 's'} ${lag > 0 ? 'later' : 'earlier'}` : ''}: r = ${c.pearson}${c.ci95 ? ` (95% CI ${c.ci95[0]} to ${c.ci95[1]})` : ''}, ρ = ${c.spearman}, ` +
 			`p ${c.p === null ? 'n/a' : c.p < 0.001 ? '< 0.001' : `= ${c.p}`}, n = ${c.n} ${by}s.` +
 			(c.p !== null && c.p >= 0.05 ? ' This could easily be chance.' : '') +
 			' A correlation alone does not show that one causes the other.';

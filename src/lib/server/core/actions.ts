@@ -11,6 +11,7 @@ import { ActionError, requireScope, type Actor, type Scope } from './actor';
 import { addSlip, logDone, logSkip, logTask, logUndo, logValue, removeSlip, resistCraving, writeDayNote, writeLogNote } from './log';
 import { describe, getRecord, habitSummary, listLogs, listValues, searchNotes, today } from './read';
 import { analysisOptions, correlation, series } from './analysis';
+import { statsCompare, statsDescribe, statsGroups, statsTrend } from './statistics';
 import { listEvents, EVENT_TYPES } from './events';
 import { BUCKETS, OVER_TIME, SOURCES, SPLITS } from '$lib/stats/model';
 
@@ -48,6 +49,11 @@ const seriesSpec = z.object({
 	range: z.string().max(20).optional().describe('Instead of from/to: week, 7d, month, 30d, 90d, year, 12m, all, since:YYYY-MM-DD.'),
 	...range
 });
+
+/** One measure, as series takes it but without split or range: what the statistics tools analyse. */
+const measureSpec = seriesSpec.omit({ split: true, bucket: true, from: true, to: true, days: true, range: true });
+const statBucket = z.enum(['day', 'week', 'month']).optional().describe('One value per day (default), week or month.');
+const period = z.object({ from: z.string().max(10), to: z.string().max(10) });
 
 export interface ActionDef<I extends z.ZodTypeAny = z.ZodTypeAny> {
 	name: string;
@@ -165,16 +171,67 @@ export const ACTIONS: ActionDef[] = [
 		scope: 'read',
 		title: 'Correlate two measures',
 		description:
-			'How two measures move together per day, week or month: Pearson r, Spearman ρ, a p-value, n, and the line fit, with a plain reading. a and b take the same fields as series (without split). lag pairs a with b that many buckets later (e.g. sleep vs next day\'s training: lag 1). Buckets where either side has no data are left out. includePairs returns the paired values.',
+			'How two measures move together per day, week or month: Pearson r with a p-value and 95% CI, Spearman ρ with its p-value, n, and the line fit, with a plain reading. a and b take the same fields as series (without split). lag pairs a with b that many buckets later (e.g. sleep vs next day\'s training: lag 1). Buckets where either side has no data are left out. includePairs returns the paired values.',
 		input: z.object({
-			a: seriesSpec.omit({ split: true, bucket: true, from: true, to: true, days: true, range: true }),
-			b: seriesSpec.omit({ split: true, bucket: true, from: true, to: true, days: true, range: true }),
+			a: measureSpec,
+			b: measureSpec,
 			bucket: z.enum(['day', 'week', 'month']).optional(),
 			...range,
 			lag: z.number().int().min(-60).max(60).optional(),
 			includePairs: z.boolean().optional()
 		}),
 		run: (a, i) => correlation(a, i)
+	}),
+	def({
+		name: 'stats_describe',
+		version: 1,
+		kind: 'read',
+		scope: 'read',
+		title: 'Describe a measure statistically',
+		description:
+			'Descriptive statistics of one measure per day, week or month: n, mean with a 95% CI, median, sd, quartiles, IQR, MAD, coefficient of variation, skewness, kurtosis, outliers (Tukey) and unusual days (modified z-score > 3.5) with refs, plus lag-1 autocorrelation, a plain reading and caveats. measure takes the same fields as series (without split). Default: the last 90 days, per day.',
+		input: z.object({ measure: measureSpec, bucket: statBucket, ...range }),
+		run: (a, i) => statsDescribe(a, i)
+	}),
+	def({
+		name: 'stats_trend',
+		version: 1,
+		kind: 'read',
+		scope: 'read',
+		title: 'Test for a trend and a shift',
+		description:
+			"Is a measure going up or down? Least-squares slope per bucket with a 95% CI, p and R²; the Mann-Kendall test (no distribution assumed) with Kendall's τ and Sen's slope; and the most likely single shift in the mean with a permutation p-value (changePoint: false to skip). Gaps count as gaps, not zeros before tracking began. Includes a plain reading and caveats. Default: the last 90 days, per day.",
+		input: z.object({ measure: measureSpec, bucket: statBucket, ...range, changePoint: z.boolean().optional() }),
+		run: (a, i) => statsTrend(a, i)
+	}),
+	def({
+		name: 'stats_compare',
+		version: 1,
+		kind: 'read',
+		scope: 'read',
+		title: 'Compare before and after',
+		description:
+			"Did a measure change after a date (a new routine, a supplement, a move)? Send at (the first day after) and optionally days (how many days on each side; default as many as have passed since, up to 90), or explicit before and after periods. Returns both sides' descriptives, the difference with a 95% CI (Welch's t-test), Mann-Whitney U, Hedges' g and rank-biserial r with words for their size; for yes/no measures (such as done) the two rates with Fisher's exact test and Cohen's h. Includes a plain reading and caveats; before/after is not an experiment.",
+		input: z.object({
+			measure: measureSpec,
+			bucket: statBucket,
+			at: z.string().max(10).optional().describe('First day after the change, YYYY-MM-DD.'),
+			days: z.number().int().min(1).max(3660).optional().describe('Days on each side of at.'),
+			before: period.optional().describe('Instead of at: the period before, {from, to}.'),
+			after: period.optional().describe('Instead of at: the period after, {from, to}.')
+		}),
+		run: (a, i) => statsCompare(a, i)
+	}),
+	def({
+		name: 'stats_groups',
+		version: 1,
+		kind: 'read',
+		scope: 'read',
+		title: 'Compare weekdays or months',
+		description:
+			'Does a measure differ by day of the week (by weekday), weekday vs weekend (by weekend) or month (by month)? Per-group n, mean, median and sd; Kruskal-Wallis with ε² and one-way ANOVA with η²; and each group against the rest (Mann-Whitney, Holm-corrected) to show which ones stand out. Includes a plain reading and caveats. Default: the last 90 days (365 for months).',
+		input: z.object({ measure: measureSpec, by: z.enum(['weekday', 'weekend', 'month']), ...range }),
+		run: (a, i) => statsGroups(a, i)
 	}),
 	def({
 		name: 'search_notes',

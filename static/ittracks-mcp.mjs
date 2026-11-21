@@ -12,7 +12,7 @@
 // It speaks MCP over stdio: one JSON-RPC message per line. Licensed AGPL-3.0, like ittracks.
 import { createInterface } from 'node:readline';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const BASE = (process.env.ITTRACKS_URL || 'http://localhost:3000').replace(/\/+$/, '');
 const KEY = process.env.ITTRACKS_KEY || process.env.ITTRACKS_TOKEN || '';
 const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
@@ -21,9 +21,15 @@ const INSTRUCTIONS = `ittracks is the user's own habit tracker. Use these tools 
 
 How to work with it:
 1. Call describe first: it lists habits, Tasks, fields (with ids, types and units) and the date range of the data.
-2. Let the server do the math. Use habit_summary for rates and streaks, series for any number over time (sums, averages, bests, volume, consistency; per day, week or month; split by habit, Task, muscle group or weekday), and correlate for links between two measures. Fetch raw rows (values, logs) only to look closer, and prefer format "csv" when you need many.
+2. Let the server do the math. Use habit_summary for rates and streaks, series for any number over time (sums, averages, bests, volume, consistency; per day, week or month; split by habit, Task, muscle group or weekday), and the statistics tools for questions a statistician would answer:
+   - stats_describe: mean with a confidence interval, median, spread, skew, outliers and unusual days.
+   - stats_trend: is it going up or down (least squares with a CI, Mann-Kendall, Sen's slope), and when did it shift.
+   - stats_compare: did it change after a date (Welch's t-test, Mann-Whitney, effect sizes; rates with Fisher's exact test).
+   - stats_groups: does it differ by weekday, weekday vs weekend, or month (Kruskal-Wallis, ANOVA, which groups stand out).
+   - correlate: do two measures move together (r with a CI, Spearman, p; try lag 1 for next-day effects).
+   Fetch raw rows (values, logs) only to look closer, and prefer format "csv" when you need many.
 3. Cite what an answer rests on with the refs the tools return (log:<id>, slip:<id>, day:<date>, habit:<id>); record opens any of them. Say which date range you looked at.
-4. Correlation is not causation, and small samples mislead: report n and the p-value correlate gives, and say when a result could be chance.
+4. Be honest about uncertainty. Lead with effect sizes and confidence intervals, not just p-values; report n; pass on the caveats each tool returns (small samples, skew, days that follow each other, before/after is not an experiment). Correlation is not causation. Running many tests finds some p < 0.05 by chance (about 1 in 20), so say how many you ran and treat a lone hit as a hint to watch, not a finding.
 5. Only log when the user asks. Logging tools change data; say what you logged and the progress they report.
 Notes and journal entries are only visible when the user's key has notes access.`;
 
@@ -32,13 +38,13 @@ const PROMPTS = {
 		description: 'Review the last week (or another period): what went well, what slipped, patterns, and one or two concrete suggestions, with refs.',
 		arguments: [{ name: 'days', description: 'How many days to look back (default 7).', required: false }],
 		text: (a) =>
-			`Review my habits over the last ${Number(a.days) || 7} days. Start with describe, then habit_summary for the period and the period before it, and series where a trend matters. Tell me what went well, what slipped (and on which weekdays), any pattern worth knowing, and one or two concrete, small changes to try. Cite refs for specific days.`
+			`Review my habits over the last ${Number(a.days) || 7} days. Start with describe, then habit_summary for the period and the period before it, and series or stats_trend where a trend matters. Tell me what went well, what slipped (and on which weekdays), any pattern worth knowing, and one or two concrete, small changes to try. Cite refs for specific days.`
 	},
 	find_patterns: {
-		description: 'Look for links between habits and logged values (e.g. sleep vs training, mood vs exercise), with honest statistics.',
+		description: 'Look for links, trends, weekday patterns and before/after changes in habits and logged values (e.g. sleep vs training), with honest statistics.',
 		arguments: [{ name: 'question', description: 'What to look into, e.g. "does sleep affect my lifting?"', required: false }],
 		text: (a) =>
-			`${a.question ? `Question: ${a.question}\n\n` : ''}Look for patterns in my data. Use describe to see what is tracked, then correlate pairs of measures that could plausibly be linked (try lag 1 for next-day effects), and habit_summary for weekday patterns. Report r, p and n for each finding, say which ones could be chance, and remind me that correlation is not causation. Cite refs for examples.`
+			`${a.question ? `Question: ${a.question}\n\n` : ''}Look for patterns in my data. Use describe to see what is tracked, then correlate pairs of measures that could plausibly be linked (try lag 1 for next-day effects), stats_groups for weekday patterns, stats_trend for changes over time, and stats_compare around dates I mention. Report effect sizes with confidence intervals, n and p for each finding, say how many tests you ran and which results could be chance, pass on the caveats, and remind me that correlation is not causation. Cite refs for examples.`
 	}
 };
 

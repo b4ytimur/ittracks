@@ -217,8 +217,9 @@
 <h2>AI assistants (MCP)</h2>
 <section class="card stack">
 	<p class="muted small-text" style="margin: 0">
-		Claude, Cursor and other assistants that support MCP can read your habits, do the math on this server (rates, streaks,
-		trends, correlations) and point to the logs their answers rest on. They log only when you ask.
+		Claude, Cursor and other assistants that support MCP can read your habits, run the statistics on this server (trends,
+		before/after tests, weekday patterns, correlations, unusual days, each with its sample size and caveats) and point to
+		the logs their answers rest on. They log only when you ask.
 	</p>
 	<ol class="small-text stack" style="margin: 0; padding-left: 1.2rem">
 		<li>Download <a href="/ittracks-mcp.mjs" download>ittracks-mcp.mjs</a>. It needs Node.js 18 or newer and nothing else.</li>
@@ -231,7 +232,7 @@
 	</ol>
 	<p class="muted small-text" style="margin: 0">
 		Replace <code>/path/to/</code> with where you saved the file. What the assistant reads is sent to its provider, so pick the
-		access with that in mind. Try asking it for a weekly review, or whether your sleep affects your training.
+		access with that in mind. Try asking it for a weekly review, whether your sleep affects your training, or whether a new routine made a difference.
 	</p>
 </section>
 

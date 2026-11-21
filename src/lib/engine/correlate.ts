@@ -1,6 +1,8 @@
 // Plain statistics for the analysis tools: a summary of numbers, Pearson and Spearman
-// correlation with a p-value, and a straight-line fit. Small and dependency-free, so an AI
-// assistant (or a script) gets the math done on the server instead of in its head.
+// correlation with p-values and a confidence interval, and a straight-line fit, so an AI
+// assistant (or a script) gets the math done on the server instead of in its head. The
+// t distribution comes from jStat (see statistics.ts).
+import { correlationCI, tP } from './statistics';
 
 export interface Summary {
 	n: number;
@@ -86,64 +88,14 @@ export function fitLine(a: number[], b: number[]): { slope: number; intercept: n
 	return { slope: r6(slope), intercept: r6(mb - slope * ma) };
 }
 
-// Regularized incomplete beta function, for the t-distribution (Numerical Recipes, betacf).
-function logGamma(x: number): number {
-	const c = [76.18009172947146, -86.50532032941677, 24.01409824083091, -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5];
-	let y = x;
-	const tmp = x + 5.5 - (x + 0.5) * Math.log(x + 5.5);
-	let ser = 1.000000000190015;
-	for (const k of c) ser += k / ++y;
-	return -tmp + Math.log((2.5066282746310005 * ser) / x);
-}
-
-function betacf(a: number, b: number, x: number): number {
-	const MAXIT = 200;
-	const EPS = 3e-14;
-	const FPMIN = 1e-300;
-	const qab = a + b;
-	const qap = a + 1;
-	const qam = a - 1;
-	let c = 1;
-	let d = 1 - (qab * x) / qap;
-	if (Math.abs(d) < FPMIN) d = FPMIN;
-	d = 1 / d;
-	let h = d;
-	for (let m = 1; m <= MAXIT; m++) {
-		const m2 = 2 * m;
-		let aa = (m * (b - m) * x) / ((qam + m2) * (a + m2));
-		d = 1 + aa * d;
-		if (Math.abs(d) < FPMIN) d = FPMIN;
-		c = 1 + aa / c;
-		if (Math.abs(c) < FPMIN) c = FPMIN;
-		d = 1 / d;
-		h *= d * c;
-		aa = (-(a + m) * (qab + m) * x) / ((a + m2) * (qap + m2));
-		d = 1 + aa * d;
-		if (Math.abs(d) < FPMIN) d = FPMIN;
-		c = 1 + aa / c;
-		if (Math.abs(c) < FPMIN) c = FPMIN;
-		d = 1 / d;
-		const del = d * c;
-		h *= del;
-		if (Math.abs(del - 1) < EPS) break;
-	}
-	return h;
-}
-
-export function incompleteBeta(x: number, a: number, b: number): number {
-	if (x <= 0) return 0;
-	if (x >= 1) return 1;
-	const bt = Math.exp(logGamma(a + b) - logGamma(a) - logGamma(b) + a * Math.log(x) + b * Math.log(1 - x));
-	return x < (a + 1) / (a + b + 2) ? (bt * betacf(a, b, x)) / a : 1 - (bt * betacf(b, a, 1 - x)) / b;
-}
-
 /** Two-sided p-value that a correlation r over n pairs is really zero (t-test, n − 2 degrees of freedom). */
 export function correlationP(r: number, n: number): number | null {
 	if (n < 4) return null;
 	if (Math.abs(r) >= 1) return 0;
 	const df = n - 2;
 	const t = (r * Math.sqrt(df)) / Math.sqrt(1 - r * r);
-	return r6(incompleteBeta(df / (df + t * t), df / 2, 0.5));
+	const p = tP(t, df);
+	return p === null ? null : r6(p);
 }
 
 /** Words for a correlation's size, as most textbooks use them. */
@@ -157,7 +109,12 @@ export interface Correlation {
 	n: number;
 	pearson: number | null;
 	spearman: number | null;
+	/** p-value of Pearson's r (t-test). */
 	p: number | null;
+	/** 95% confidence interval of Pearson's r (Fisher's z). */
+	ci95: [number, number] | null;
+	/** p-value of Spearman's ρ (t approximation). */
+	spearmanP: number | null;
 	strength: ReturnType<typeof strength>;
 	direction: 'up' | 'down' | 'none';
 	fit: { slope: number; intercept: number } | null;
@@ -173,6 +130,8 @@ export function correlate(a: number[], b: number[]): Correlation {
 		pearson: r === null ? null : r6(r),
 		spearman: rho === null ? null : r6(rho),
 		p: r === null ? null : correlationP(r, n),
+		ci95: r === null ? null : correlationCI(r, n),
+		spearmanP: rho === null ? null : correlationP(rho, n),
 		strength: strength(r),
 		direction: r === null || Math.abs(r) < 0.1 ? 'none' : r > 0 ? 'up' : 'down',
 		fit: fitLine(a, b)

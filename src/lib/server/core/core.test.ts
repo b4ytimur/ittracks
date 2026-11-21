@@ -258,9 +258,79 @@ describe('reading and analysis', () => {
 		expect(after.events[0].seq).toBe(all.events[6].seq);
 	});
 
+	it('describes a measure statistically and flags unusual days', () => {
+		run(app, 'log_value', { habit: 'water', date: addDays(today, -32), value: 40, finish: 'yes' });
+		const d = run(app, 'stats_describe', { measure: { source: 'field', fields: ['Water'] }, days: 40 }) as {
+			n: number;
+			descriptives: { mean: number; meanCI95: [number, number]; median: number };
+			unusual: { from: string; ref: string }[];
+			reading: string;
+			caveats: string[];
+		};
+		expect(d.n).toBeGreaterThanOrEqual(31);
+		expect(d.descriptives.meanCI95[0]).toBeLessThan(d.descriptives.mean);
+		expect(d.unusual.map((u) => u.from)).toContain(addDays(today, -32));
+		expect(d.unusual[0].ref).toMatch(/^day:/);
+		expect(d.reading).toMatch(/unusual day/);
+	});
+
+	it('finds a weekday pattern', () => {
+		// Water was logged as (days ago mod 7) + 2: the same amount on each weekday.
+		const g = run(app, 'stats_groups', { measure: { source: 'field', fields: ['Water'] }, by: 'weekday', from: addDays(today, -31), to: addDays(today, -2) }) as {
+			groups: { label: string; n: number; sd: number | null }[];
+			kruskalWallis: { p: number; size: string };
+			reading: string;
+		};
+		expect(g.groups.map((x) => x.label)).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+		expect(g.kruskalWallis.p).toBeLessThan(0.001);
+		expect(g.kruskalWallis.size).toBe('large');
+		expect(g.reading).toMatch(/the groups differ/);
+	});
+
+	it('tests a trend, a shift, and before vs after', () => {
+		db.update(habit).set({ startDate: addDays(today, -60), settledThrough: null }).where(eq(habit.id, ids.lang)).run();
+		// 15 days around 10 minutes, then 15 days around 25.
+		for (let i = 31; i >= 2; i--)
+			run(app, 'log_value', { habit: 'Language practice', date: addDays(today, -i), field: 'Minutes', value: (i > 16 ? 10 : 25) + ((i * 7) % 5) - 2, finish: 'yes' });
+		const measure = { source: 'field', fields: ['Minutes'], habits: ['Language practice'] };
+		const t = run(app, 'stats_trend', { measure, from: addDays(today, -31), to: addDays(today, -2) }) as {
+			leastSquares: { slope: number; p: number };
+			mannKendall: { p: number };
+			changePoint: { from: string; shift: number; p: number };
+			reading: string;
+		};
+		expect(t.leastSquares.slope).toBeGreaterThan(0);
+		expect(t.mannKendall.p).toBeLessThan(0.01);
+		expect(t.changePoint.from).toBe(addDays(today, -16));
+		expect(t.changePoint.shift).toBeGreaterThan(10);
+		expect(t.changePoint.p).toBeLessThan(0.01);
+		const c = run(app, 'stats_compare', { measure, at: addDays(today, -16), days: 15 }) as {
+			before: { n: number };
+			after: { n: number };
+			result: { meanDifference: number; welch: { p: number; diffCI95: [number, number] }; size: string };
+			reading: string;
+			caveats: string[];
+		};
+		expect(c.before.n).toBe(15);
+		expect(c.after.n).toBe(15);
+		expect(c.result.meanDifference).toBeCloseTo(15, 0);
+		expect(c.result.welch.p).toBeLessThan(0.001);
+		expect(c.result.welch.diffCI95[0]).toBeGreaterThan(10);
+		expect(c.result.size).toBe('large');
+		expect(c.caveats.join(' ')).toMatch(/not an experiment/);
+		// Yes/no data is compared as two rates.
+		const done = run(app, 'stats_compare', { measure: { source: 'outcomes', measure: 'rate', habits: ['water'] }, at: addDays(today, -16), days: 15 }) as {
+			methods: string[];
+			result: { proportions: { fisherP: number } | null };
+		};
+		expect(done.result.proportions).not.toBeNull();
+		expect(done.methods.join(' ')).toMatch(/Fisher/);
+		expect(() => run(app, 'stats_compare', { measure })).toThrow(/Send at/);
+	});
+
 	it('makes a JSON Schema for every action', () => {
 		const c = catalog(app);
-		expect(c.actions.length).toBe(21);
+		expect(c.actions.length).toBe(25);
 		for (const a of c.actions) expect(a.input).toHaveProperty('type', 'object');
 	});
 });
