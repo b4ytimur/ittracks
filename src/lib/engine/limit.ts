@@ -44,6 +44,17 @@ export function usedIn(l: Limit, slips: { date: ISODate; count: number }[], date
 }
 
 /**
+ * Did the slips logged on `date` stay within the limit? For a weekly limit this counts the
+ * week's slips up to and including that day: days before the week goes over are within
+ * the limit, and the day that goes over (and any later day with slips that week) is not.
+ */
+export function withinOn(l: Limit, slips: { date: ISODate; count: number }[], date: ISODate): boolean {
+	const from = periodStart(l, date);
+	const used = slips.filter((s) => s.date >= from && s.date <= date).reduce((n, s) => n + s.count, 0);
+	return used <= limitOn(l, from);
+}
+
+/**
  * Whole periods in a row within the limit, counted back from the last finished one.
  * The current period counts too while it is still within the limit.
  */
