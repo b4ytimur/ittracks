@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { goto } from '$app/navigation';
+	import { beforeNavigate, goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import Timer from './Timer.svelte';
 	import Stepper from './Stepper.svelte';
 	import { defaultStep } from '$lib/task-types';
@@ -174,6 +174,7 @@
 	const saveUrl = () => `/log/${data.occurrence.id}?/save`;
 
 	async function autosave() {
+		saveTimer = undefined;
 		const body = payload(false, true);
 		saveState = 'saving';
 		try {
@@ -187,7 +188,37 @@
 		}
 	}
 
-	/** Every set counts as done on a quick log, since only some fields are shown. */
+	// Leaving before the autosave ran (Back right after a tick): save first, then go, so the
+	// page you land on already shows it.
+	beforeNavigate((nav) => {
+		if (saveTimer === undefined) return;
+		clearTimeout(saveTimer);
+		// Leaving the app (or Back to a page loaded on its own): the page goes away, so send
+		// the save in a request that outlives it.
+		if (nav.willUnload || !nav.to) {
+			saveTimer = undefined;
+			const body = new FormData();
+			body.set('payload', payload(false, true));
+			void fetch(saveUrl(), { method: 'POST', body, keepalive: true, headers: { 'x-sveltekit-action': 'true' } }).catch(() => {});
+			return;
+		}
+		// The browser's own Back can't wait; the save still goes out.
+		if (nav.type === 'popstate') return void autosave();
+		nav.cancel();
+		const to = nav.to.url;
+		autosave().finally(() => goto(to));
+	});
+	/** Stop a pending autosave, for actions that save the log another way. */
+	const dropAutosave = () => {
+		clearTimeout(saveTimer);
+		saveTimer = undefined;
+	};
+
+	/**
+	 * What gets saved. Only ticked sets: a planned set nobody ticked was not done (Finish asks
+	 * first, see untickedSets). Every set counts as done on a quick log, since only some
+	 * fields are shown there.
+	 */
 	function payload(finish: boolean, stay = false) {
 		const entries: { taskId: string; values: Values }[] = [];
 		data.items.forEach((it, i) => {
@@ -195,10 +226,8 @@
 			if (!t) return;
 			const s = log[i];
 			const repeatingIds = t.metrics.filter((m) => m.repeats).map((m) => m.id);
-			// Finish saves every set with a value typed in, ticked or not; Save for later keeps only ticked ones.
-			const hasValue = (set: { done: boolean; values: Values }) =>
-				set.done || (quickMode && finish) || (finish && repeatingIds.some((id) => set.values[id] !== null && set.values[id] !== undefined && set.values[id] !== ''));
-			for (const set of s.sets.filter(hasValue)) {
+			const counts = (set: { done: boolean; values: Values }) => set.done || (quickMode && finish);
+			for (const set of s.sets.filter(counts)) {
 				entries.push({
 					taskId: t.id,
 					values: Object.fromEntries(repeatingIds.map((id) => [id, set.values[id] ?? null]))
@@ -214,6 +243,32 @@
 	}
 
 	const empty = (v: unknown) => v === undefined || v === null || v === '' || v === false;
+
+	/** Planned sets with values in them that nobody ticked, which Finish would leave out. */
+	function untickedSets(): number {
+		if (quickMode || !isOpen) return 0;
+		let n = 0;
+		data.items.forEach((it, i) => {
+			const ids = it.task?.metrics.filter((m) => m.repeats).map((m) => m.id) ?? [];
+			n += log[i]?.sets.filter((set) => !set.done && ids.some((id) => !empty(set.values[id]))).length ?? 0;
+		});
+		return n;
+	}
+	/** Finish was pressed with unticked sets: ask whether they were done. */
+	let askUnticked = $state(0);
+	let finishForm = $state<HTMLFormElement>();
+	let untickedAnswered = false;
+	async function finishWith(tickAll: boolean) {
+		if (tickAll)
+			data.items.forEach((it, i) => {
+				const ids = it.task?.metrics.filter((m) => m.repeats).map((m) => m.id) ?? [];
+				for (const set of log[i].sets) if (ids.some((id) => !empty(set.values[id]))) set.done = true;
+			});
+		untickedAnswered = true;
+		askUnticked = 0;
+		await tick();
+		finishForm?.requestSubmit();
+	}
 	/** Required fields that are still empty, by name. */
 	function missing(): string[] {
 		const out: string[] = [];
@@ -263,11 +318,24 @@
 		isOpen && base[i]?.sets[j] !== undefined && (base[i].sets[j].values[id] ?? null) !== (log[i].sets[j].values[id] ?? null);
 	const changedSummary = (i: number, id: string) =>
 		isOpen && (base[i]?.summary[id] ?? null) !== (log[i].summary[id] ?? null);
-	/** The value is still the untouched prefill (last time or the target), not something logged now. */
+	/**
+	 * The value is still the prefill (last time or the target), not something logged now. It is
+	 * compared with the prefill itself, so an autosave and a reload don't turn it into time logged.
+	 */
+	const prefills = untrack(() => data.items.map((it) => planned(it).summary));
 	const isPrefill = (i: number, id: string) =>
-		isOpen && !data.items[i].saved.length && base[i]?.summary[id] != null && !changedSummary(i, id);
+		isOpen && prefills[i]?.[id] != null && (log[i].summary[id] ?? null) === prefills[i][id];
+
+	/** Something is logged already: Same as last fills in only the rest. */
+	const started = $derived(
+		data.items.some((it, i) => it.saved.length || log[i]?.sets.some((x) => x.done) || Object.values(log[i]?.subs ?? {}).some(Boolean))
+	);
 
 	async function sameAsLast() {
+		// What is ticked here is saved first, so it is kept.
+		const pending = saveTimer !== undefined;
+		dropAutosave();
+		if (pending || started) await autosave();
 		if (data.past) return sameAsLastPast();
 		const res = await postAction('/?/same', { occurrence: data.occurrence.id }).catch((e) => e);
 		if (res instanceof Error) {
@@ -281,7 +349,7 @@
 			return;
 		}
 		clearDraft();
-		goto(`/?did=${data.occurrence.id}&clear=1`);
+		goto(`/?did=${data.occurrence.id}${started ? '' : '&clear=1'}`);
 	}
 
 	/** A past day: copy the last log from before that day, then go back to the day. */
@@ -340,8 +408,14 @@
 
 {#if canRepeat && !quickMode}
 	<div class="row repeat">
-		<button type="button" class="primary grow" onclick={sameAsLast}>Same as last time</button>
-		<span class="muted small-text">{data.past ? 'Copies your last log from before this day and finishes.' : 'Copies your last log and finishes.'}</span>
+		<button type="button" class:primary={!started} class="grow" onclick={sameAsLast}>{started ? 'Fill the rest as last time' : 'Same as last time'}</button>
+		<span class="muted small-text"
+			>{started
+				? 'Keeps what you logged here, copies the rest from your last log, and finishes.'
+				: data.past
+					? 'Copies your last log from before this day and finishes.'
+					: 'Copies your last log and finishes.'}</span
+		>
 	</div>
 {/if}
 
@@ -504,6 +578,15 @@
 {/if}
 
 {#if problem}<p class="error">{problem}</p>{/if}
+{#if askUnticked}
+	<div class="card stack" role="alert">
+		<p style="margin: 0">{askUnticked === 1 ? '1 planned set isn’t ticked.' : `${askUnticked} planned sets aren’t ticked.`} Did you do {askUnticked === 1 ? 'it' : 'them'}?</p>
+		<div class="row">
+			<button type="button" class="primary" onclick={() => finishWith(false)}>No, save only the ticked sets</button>
+			<button type="button" onclick={() => finishWith(true)}>Yes, tick {askUnticked === 1 ? 'it' : 'them all'} and finish</button>
+		</div>
+	</div>
+{/if}
 {#if form?.error}<p class="error">{form.error}</p>{/if}
 {#if form?.saved}<p class="muted">Saved.</p>{/if}
 
@@ -513,15 +596,25 @@
 		method="POST"
 		action="?/save"
 		class="grow-form"
+		bind:this={finishForm}
 		use:enhance={({ cancel }) => {
 			problem = '';
+			// An answer to the unticked-sets question covers this one press of Finish only.
+			const answered = untickedAnswered;
+			untickedAnswered = false;
 			const gaps = missing();
 			if (gaps.length) {
 				problem = `Fill in: ${gaps.join(', ')}`;
 				cancel();
 				return;
 			}
-			clearTimeout(saveTimer);
+			const unticked = answered ? 0 : untickedSets();
+			if (unticked) {
+				askUnticked = unticked;
+				cancel();
+				return;
+			}
+			dropAutosave();
 			if (!navigator.onLine) {
 				cancel();
 				enqueue(saveUrl(), [['payload', payload(true, true)]], data.habitName);

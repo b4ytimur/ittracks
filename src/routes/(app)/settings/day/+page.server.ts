@@ -2,7 +2,7 @@ import { fail } from '@sveltejs/kit';
 import { checkSettings } from '$lib/rules/settings';
 import { getSettings, getViews, saveSettings } from '$lib/server/settings';
 import { readRenames, renameRanges, usedRanges } from '$lib/server/repo/ranges';
-import { readRanges } from '$lib/engine/day';
+import { duplicateRange, readRanges } from '$lib/engine/day';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ locals }) => {
@@ -19,6 +19,8 @@ export const actions: Actions = {
 		const f = await request.formData();
 		const dayStart = String(f.get('dayStart') ?? '');
 		if (!hhmm.test(dayStart)) return fail(400, { dayError: 'Pick a time like 04:00.' });
+		const twice = duplicateRange(f);
+		if (twice) return fail(400, { dayError: `Two parts of the day are called “${twice}”. Give each its own name.` });
 		const ranges = readRanges(f);
 		const conflict = checkSettings({ ...getSettings(accountId), dayStart, ranges }).find((i) => i.severity === 'block');
 		if (conflict) return fail(400, { dayError: conflict.reason });

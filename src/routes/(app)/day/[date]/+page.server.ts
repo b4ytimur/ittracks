@@ -6,7 +6,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { habit, occurrence, slip } from '$lib/server/db/schema';
 import { ownedHabit } from '$lib/server/owned';
-import { quickDone, sameAsLast, userToday } from '$lib/server/today';
+import { quickDone, recount, sameAsLast, userToday } from '$lib/server/today';
 import {
 	clearDay,
 	loadDay,
@@ -15,6 +15,7 @@ import {
 	replanToday,
 	restore,
 	snapshot,
+	startFrom,
 	unloggedOn,
 	windowFor
 } from '$lib/server/backfill';
@@ -87,6 +88,7 @@ async function change(
 	const undo = snapshot(h.id, date);
 	const r = run({ h, f, today, schedule });
 	replanToday(accountId, h.id, schedule, today, before);
+	recount(accountId, h.id, schedule, date, today);
 	if (r === 'gone') return fail(400, { habit: h.id, error: `${h.name} has nothing to log.` });
 	if (r === 'needsInput') {
 		// A required field is still empty: ask for it on the quick log.
@@ -159,6 +161,21 @@ export const actions: Actions = {
 		const before = planOfToday(h.id, h.schedule as ScheduleForm, today);
 		if (!restore(accountId, snap)) return fail(400, { error: 'Could not undo.' });
 		replanToday(accountId, h.id, h.schedule as ScheduleForm, today, before);
+		const date = (snap as { date?: unknown }).date;
+		if (typeof date === 'string') recount(accountId, h.id, h.schedule as ScheduleForm, date, today);
+	},
+	/** Start a habit from this day, for one that was set up later than it really began. */
+	start: async ({ request, locals, params, cookies }) => {
+		const f = await request.formData();
+		const accountId = locals.account!.id;
+		const h = ownedHabit(accountId, field(f, 'habit'));
+		if (!h || !isRealDate(params.date)) error(404);
+		const today = userToday(accountId, cookies.get('tz'));
+		if (params.date >= today) return fail(400, { habit: h.id, error: 'Pick a day before today.' });
+		if (h.direction === 'build' && windowFor(accountId, params.date, today) !== 'ok')
+			return fail(400, { habit: h.id, error: 'This day is too far back to log. You can change how far back in Settings.' });
+		startFrom(h, params.date);
+		return { started: { habit: h.name } };
 	},
 	/** A slip on this day. Slips can always be added for a past day. */
 	slip: async ({ request, locals, params }) => {

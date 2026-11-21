@@ -8,11 +8,12 @@ import { db } from './db';
 import { entry, habit, occurrence, slip, slot, task, variant } from './db/schema';
 import { dueOn, type Schedule } from '$lib/engine/schedule';
 import { carriesOver, dependsOnHistory, isRealDate, logWindow, variantFor, type LogWindow } from '$lib/engine/backfill';
+import { scheduleStartBy } from '$lib/engine/unlogged';
 import { pauseOn } from '$lib/engine/pause';
 import { limitOn, usedIn } from '$lib/engine/limit';
 import type { Level } from '$lib/engine/streak';
 import type { ScheduleForm } from '$lib/forms';
-import { createOccurrence, history, pausesOf, pickForVariant, reopen, settle } from './today';
+import { createOccurrence, history, pausesOf, pickForVariant, recount, reopen, settle } from './today';
 import { getSettings } from './settings';
 
 type HabitRow = typeof habit.$inferSelect;
@@ -48,14 +49,23 @@ export function windowFor(accountId: string, date: string, today: string): LogWi
 	return logWindow(date, today, getSettings(accountId).pastDays);
 }
 
-const activeHabits = (accountId: string, date: string) =>
+const allActive = (accountId: string) =>
 	db
 		.select()
 		.from(habit)
 		.where(and(eq(habit.accountId, accountId), eq(habit.archived, false)))
 		.orderBy(asc(habit.sortOrder), asc(habit.name))
-		.all()
-		.filter((h) => h.startDate <= date);
+		.all();
+
+const activeHabits = (accountId: string, date: string) => allActive(accountId).filter((h) => h.startDate <= date);
+
+/** A habit that starts after a day, offered to start from that day instead. */
+export interface LaterItem {
+	habitId: string;
+	name: string;
+	direction: 'build' | 'break';
+	startDate: string;
+}
 
 const rowOn = (habitId: string, date: string) =>
 	db
@@ -73,8 +83,13 @@ export function loadDay(accountId: string, date: string, today: string) {
 	const due: PastItem[] = [];
 	const other: PastItem[] = [];
 	const breaking: PastBreakItem[] = [];
+	const later: LaterItem[] = [];
 
-	for (const h of activeHabits(accountId, date)) {
+	for (const h of allActive(accountId)) {
+		if (h.startDate > date) {
+			later.push({ habitId: h.id, name: h.name, direction: h.direction, startDate: h.startDate });
+			continue;
+		}
 		if (h.direction === 'break') {
 			const all = db.select().from(slip).where(eq(slip.habitId, h.id)).orderBy(asc(slip.createdAt)).all();
 			breaking.push({
@@ -118,7 +133,27 @@ export function loadDay(accountId: string, date: string, today: string) {
 		};
 		(occ || wasDue ? due : other).push(item);
 	}
-	return { due, other, breaking };
+	return { due, other, breaking, later };
+}
+
+/**
+ * Start a habit earlier, from `date`: its start date moves back, and so does its schedule's
+ * own start (by whole cycles, so planned days keep their Variant). Due days from then on that
+ * nobody logs count as missed, unless the habit ignores them.
+ */
+export function startFrom(h: HabitRow, date: string) {
+	if (date >= h.startDate) return;
+	const schedule = h.schedule ? scheduleStartBy(h.schedule as Schedule, date) : null;
+	db.update(habit)
+		.set({
+			startDate: date,
+			schedule,
+			// Count the days before the old start too.
+			settledThrough: null,
+			limit: h.limit && h.limit.start > date ? { ...h.limit, start: date } : h.limit
+		})
+		.where(eq(habit.id, h.id))
+		.run();
 }
 
 function canRepeat(habitId: string, except: string | null): boolean {
@@ -168,8 +203,10 @@ export function occurrenceOn(accountId: string, h: HabitRow, date: string, chose
 		}
 		return existing;
 	}
-	const v = pick ?? variantFor(schedule, history(h.id, date), date, ids);
-	return v ? createOccurrence(accountId, h.id, v, date) : null;
+	const past = history(h.id, date);
+	const v = pick ?? variantFor(schedule, past, date, ids);
+	// A day nothing was due is an extra: a rotation that skips ahead keeps its calendar.
+	return v ? createOccurrence(accountId, h.id, v, date, !dueOn(schedule, past, date)) : null;
 }
 
 /** What today's Occurrence was planned as, for schedules a past log can change. */
@@ -201,7 +238,7 @@ export function clearDay(accountId: string, habitId: string, schedule: ScheduleF
 	const occ = rowOn(habitId, date);
 	if (!occ) return;
 	reopen(occ.id, true);
-	settle(accountId, habitId, schedule, today);
+	recount(accountId, habitId, schedule, date, today);
 }
 
 // ---------- Undo: a copy of a day's log, taken before a change ----------
@@ -217,6 +254,7 @@ const snapshotSchema = z.object({
 			notes: z.string().max(5000).nullable(),
 			picks: z.record(z.string(), z.string()).nullable(),
 			finishedAt: z.number().nullable(),
+			extra: z.boolean().default(false),
 			entries: z.array(z.object({ taskId: z.string().uuid(), values: z.record(z.string(), z.unknown()) })).max(1000)
 		})
 		.nullable()
@@ -237,6 +275,7 @@ export function snapshot(habitId: string, date: string): Snapshot {
 					notes: occ.notes,
 					picks: occ.picks ?? null,
 					finishedAt: occ.finishedAt ? occ.finishedAt.getTime() : null,
+					extra: occ.extra,
 					entries: db
 						.select({ taskId: entry.taskId, values: entry.values })
 						.from(entry)
@@ -277,7 +316,8 @@ export function restore(accountId: string, raw: unknown): boolean {
 			level: o.level === 'target' ? null : o.level,
 			notes: o.notes,
 			picks: o.picks,
-			finishedAt: o.finishedAt ? new Date(o.finishedAt) : o.status === 'done' ? new Date() : null
+			finishedAt: o.finishedAt ? new Date(o.finishedAt) : o.status === 'done' ? new Date() : null,
+			extra: o.extra
 		};
 		let id = existing?.id;
 		if (id) {

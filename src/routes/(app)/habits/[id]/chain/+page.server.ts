@@ -3,7 +3,11 @@ import { asc, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { occurrence, slip } from '$lib/server/db/schema';
 import { ownedHabit } from '$lib/server/owned';
-import { userToday } from '$lib/server/today';
+import { pausesOf, settle, userToday } from '$lib/server/today';
+import { missedDays } from '$lib/engine/unlogged';
+import { pauseOn } from '$lib/engine/pause';
+import type { Schedule } from '$lib/engine/schedule';
+import type { ScheduleForm } from '$lib/forms';
 import { getSettings } from '$lib/server/settings';
 import { addDays, weekStart } from '$lib/engine/dates';
 import { chainCells } from '$lib/engine/chain';
@@ -39,13 +43,26 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		return { id: h.id, name: h.name, direction: h.direction, weeks, today, days, cells: [], summary: '', limit: !!h.limit, startDate: h.startDate, canBackfill };
 	}
 
+	const schedule = h.schedule as ScheduleForm | null;
+	// Days nobody logged become misses first, as Today would do.
+	if (schedule) settle(locals.account!.id, h.id, schedule, today);
 	const marks = db
-		.select({ date: occurrence.date, status: occurrence.status, level: occurrence.level })
+		.select({ date: occurrence.date, status: occurrence.status, level: occurrence.level, variantId: occurrence.variantId, extra: occurrence.extra })
 		.from(occurrence)
 		.where(eq(occurrence.habitId, h.id))
 		.orderBy(asc(occurrence.date))
 		.all();
 	const rule = h.streakRule as StreakRule;
+	// A habit that ignores unlogged days still shows them, as "not logged" rather than "not due".
+	const pauses = pausesOf(locals.account!.id);
+	const unlogged =
+		h.unlogged === 'ignore' && schedule
+			? new Set(
+					missedDays(schedule as Schedule, marks, h.startDate, from, addDays(today, -1), (d) => !!pauseOn(pauses, h.id, d)).map(
+						(m) => m.date
+					)
+				)
+			: undefined;
 	return {
 		id: h.id,
 		name: h.name,
@@ -53,7 +70,7 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		weeks,
 		today,
 		days: [],
-		cells: chainCells(marks, rule, from, to, today),
+		cells: chainCells(marks, rule, from, to, today, { start: h.startDate, unlogged }),
 		summary: describeStreak(streak(marks, rule, { minimumCounts: h.minimumCounts, today }), rule),
 		limit: false,
 		startDate: h.startDate,

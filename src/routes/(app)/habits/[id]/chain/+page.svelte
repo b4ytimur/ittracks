@@ -15,7 +15,11 @@
 					: 'missed'
 				: c.kind === 'rest'
 					? 'not due'
-					: c.kind;
+					: c.kind === 'unlogged'
+						? 'not logged'
+						: c.kind === 'before'
+							? 'before you started'
+							: c.kind;
 	const columns = (n: number) => Array.from({ length: n }, (_, w) => w);
 	const nice = (d: string) =>
 		new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
@@ -96,6 +100,7 @@
 		<span><i class="cell forgiven"></i>Missed, forgiven</span>
 		<span><i class="cell missed"></i>Missed</span>
 		<span><i class="cell skipped"></i>Skipped</span>
+		{#if data.cells.some((x) => x.cell.kind === 'unlogged')}<span><i class="cell unlogged"></i>Not logged</span>{/if}
 	{/if}
 </div>
 
@@ -165,6 +170,12 @@
 	.cell.skipped {
 		background: var(--muted);
 		opacity: 0.6;
+	}
+	.cell.unlogged {
+		background: transparent;
+		outline: 1px dashed var(--muted);
+		outline-offset: -1px;
+		opacity: 1;
 	}
 	a.cell:hover,
 	a.cell:focus-visible {
