@@ -6,6 +6,8 @@ import { listAreas } from '$lib/server/repo/areas';
 import { initialState } from '$lib/views';
 import { settleAll, userToday } from '$lib/server/today';
 import { addDays } from '$lib/engine/dates';
+import { progressForIds } from '$lib/server/progress';
+import { isPartial, progressText } from '$lib/engine/progress';
 import { excerpt } from '$lib/markdown';
 import { isHidden } from '$lib/views';
 import type { PageServerLoad } from './$types';
@@ -90,6 +92,12 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		/** The Journal page sits next to History, unless the Journal feature is off. */
 		journal: !isHidden(views, 'journal'),
 		entryCounts: Object.fromEntries(occ.map((o) => [o.id, entries.filter((c) => c.occurrenceId === o.id).length])),
+		/** "3 of 6 glasses" or "2 of 4 steps" for logs that fell short, by Occurrence id. */
+		partial: Object.fromEntries(
+			[...progressForIds(occ.filter((o) => o.status === 'done').map((o) => o.id))]
+				.filter(([, p]) => isPartial(p))
+				.map(([id, p]) => [id, progressText(p)])
+		),
 		// What was logged, one line per Task, for "Show values" in History.
 		values: Object.fromEntries(occ.map((o) => [o.id, summarize(entries.filter((e) => e.occurrenceId === o.id), metrics)])),
 		habits: db

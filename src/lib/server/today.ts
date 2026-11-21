@@ -40,6 +40,8 @@ import { pauseOn, type Pause } from '$lib/engine/pause';
 import { carriesOver, lastTimeFor } from '$lib/engine/backfill';
 import { missedDays, recountFrom, type Unlogged } from '$lib/engine/unlogged';
 import { habitStats, type HabitStats } from '$lib/engine/stats';
+import type { Progress } from '$lib/engine/progress';
+import { progressFor } from './progress';
 
 /**
  * Today's date in the user's time zone, as YYYY-MM-DD. Before `dayStart` (HH:MM)
@@ -412,6 +414,8 @@ export interface TodayItem {
 	/** Paused until this date (inclusive), for habits in a pause. */
 	pausedUntil: string | null;
 	stats: HabitStats;
+	/** How far along today's log is: "3 of 6 glasses" (with +1 on Today) or "2 of 4 steps". */
+	progress: Progress | null;
 }
 
 export interface PrepItem {
@@ -458,6 +462,7 @@ export function loadToday(accountId: string, today: string) {
 		.all();
 
 	let build: TodayItem[] = [];
+	const todayRows: Parameters<typeof progressFor>[0] = [];
 	const resting: TodayItem[] = [];
 	const paused: TodayItem[] = [];
 	const breaking: BreakItem[] = [];
@@ -621,9 +626,13 @@ export function loadToday(accountId: string, today: string) {
 				.get(),
 			areaId: h.areaId,
 			pausedUntil: pauseOn(allPauses, h.id, today)?.end ?? null,
-			stats: habitStats(marks, today)
+			stats: habitStats(marks, today),
+			progress: null
 		};
-		if (occ) build.push(item);
+		if (occ) {
+			build.push(item);
+			todayRows.push(occ);
+		}
 		else if (item.pausedUntil) paused.push(item);
 		else {
 			const early = nextEarly(h.id, schedule, today);
@@ -639,6 +648,8 @@ export function loadToday(accountId: string, today: string) {
 		const t = b.cue.time ?? (b.cue.range ? rangeStart.get(b.cue.range) : null);
 		return t ? String(dayOrder(t, dayStart)).padStart(4, '0') : null;
 	};
+	const progress = progressFor(todayRows);
+	for (const b of build) b.progress = (b.occurrence && progress.get(b.occurrence.id)) || null;
 	build = orderByCue(build.map((b) => ({ ...b, id: b.habitId, time: sortKey(b), afterId: b.afterHabitId })));
 	const onToday = new Set(build.map((b) => b.habitId));
 	for (const b of build) if (b.afterHabitId && !onToday.has(b.afterHabitId)) b.afterHabitId = null;
@@ -817,6 +828,16 @@ function needsInput(occurrenceId: string): boolean {
 	return true;
 }
 
+/**
+ * What a one-tap Done ticks for a Task: its sub-tasks, or the Task itself when it is a plain
+ * Yes or no (no fields and no sub-tasks). Ticks are Entries with `{ done: true }`.
+ */
+function ticksFor(tx: Tx, taskId: string): string[] {
+	const subs = tx.select({ id: task.id, archived: task.archived }).from(task).where(eq(task.parentTaskId, taskId)).all().filter((t) => !t.archived);
+	if (subs.length) return subs.map((t) => t.id);
+	return tx.select({ id: metric.id }).from(metric).where(eq(metric.taskId, taskId)).get() ? [] : [taskId];
+}
+
 /** One tap: done at a level with its targets. Returns 'needsInput' when a required field is still empty. */
 export function quickDone(occurrenceId: string, level: Level | null): 'done' | 'needsInput' | 'gone' {
 	const occ = db.select().from(occurrence).where(eq(occurrence.id, occurrenceId)).get();
@@ -830,6 +851,9 @@ export function quickDone(occurrenceId: string, level: Level | null): 'done' | '
 				if (!taskId) continue;
 				for (const values of targetEntries(tx, s, taskId, level))
 					tx.insert(entry).values({ id: randomUUID(), occurrenceId: occ.id, taskId, values, sortOrder: order++ }).run();
+				// "Done" means every step: tick a Yes or no Task, and each sub-task.
+				for (const id of ticksFor(tx, taskId))
+					tx.insert(entry).values({ id: randomUUID(), occurrenceId: occ.id, taskId: id, values: { done: true }, sortOrder: order++ }).run();
 			}
 		}
 		tx.update(occurrence)

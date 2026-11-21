@@ -7,7 +7,7 @@
 	import { showToast } from '$lib/toast.svelte';
 	import { HABIT_LINES, groupBy, passes, type HabitLineKey } from '$lib/views';
 
-	let { data, form } = $props();
+	let { data } = $props();
 
 	let views = $state(untrack(() => data.views));
 	let viewDismissed = $state(false);
@@ -67,9 +67,15 @@
 	</div>
 </header>
 
-{#if data.added}<p class="card added">Added "{data.added}". It's on Today when it's due.</p>{/if}
-{#if (form?.suggestView ?? data.suggestView) && !viewDismissed}
-	{@const sv = (form?.suggestView ?? data.suggestView)!}
+{#if data.added}
+	<p class="card added">
+		Added "{data.added}"{data.created ? ` with ${data.created} new ${data.created === 1 ? 'Task' : 'Tasks'}` : ''}{data.reused
+			? `${data.created ? ',' : ''} using ${data.reused} from your Library`
+			: ''}. It's on Today when it's due.
+	</p>
+{/if}
+{#if data.suggestView && !viewDismissed}
+	{@const sv = data.suggestView}
 	<div class="card added stack">
 		<span>This habit works well with the <strong>{sv.name}</strong> view. {sv.summary}</span>
 		<div class="row">
@@ -126,18 +132,7 @@
 	</ul>
 {/each}
 
-<details class="card" style="margin-top: 1rem">
-	<summary>Import a template file</summary>
-	<form method="POST" action="?/import" enctype="multipart/form-data" class="stack" style="margin-top: 0.75rem" use:enhance>
-		<input type="file" name="file" accept=".json,application/json" required aria-label="Template file" />
-		<label style="color: var(--text)"><input type="checkbox" name="separate" /> Make new Tasks even if the Library has ones with the same name</label>
-		<button>Import</button>
-	</form>
-</details>
-{#if form?.error}<p class="error">{form.error}</p>{/if}
-{#if form?.imported}
-	<p>Imported "{form.imported}"{form.taskCount ? ` with ${form.taskCount} new Tasks` : ''}{form.reused ? `, reusing ${form.reused} from your Library` : ''}.</p>
-{/if}
+<p style="margin-top: 1rem"><a class="button" href="/habits/import">Import a template file</a></p>
 
 <style>
 	.habit {

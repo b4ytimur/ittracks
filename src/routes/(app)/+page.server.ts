@@ -15,6 +15,7 @@ import { DEFAULT_RANGES, duplicateRange, readRanges } from '$lib/engine/day';
 import type { Level } from '$lib/engine/streak';
 import { ownedHabit, ownedOccurrence } from '$lib/server/owned';
 import { headlineTexts } from '$lib/server/stats';
+import { plusOne } from '$lib/server/progress';
 import { unloggedOn } from '$lib/server/backfill';
 import { logWindow } from '$lib/engine/backfill';
 import type { Actions, PageServerLoad } from './$types';
@@ -89,6 +90,19 @@ export const actions: Actions = {
 		if (!o) error(404);
 		if (quickDone(o.occ.id, levelOf(f)) === 'needsInput') redirect(303, `/log/${o.occ.id}?quick`);
 		return { finished: o.habit.id, did: { occurrence: o.occ.id, habit: o.habit.name, clear: true } };
+	},
+	/** +1 toward a habit's one target ("3 of 6 glasses"), or by=-1 to take a tap back. Reaching the target finishes it. */
+	plus: async ({ request, locals }) => {
+		const f = await request.formData();
+		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
+		if (!o) error(404);
+		const by = field(f, 'by') === '-1' ? -1 : 1;
+		const r = plusOne(o.occ.id, by);
+		if (!r) return fail(400, { error: `${o.habit.name} has no single number to count.` });
+		return {
+			plus: { occurrence: o.occ.id, habit: o.habit.name, by, ...r },
+			...(r.done && by > 0 && o.occ.status !== 'done' ? { finished: o.habit.id } : {})
+		};
 	},
 	/** Tick or untick a prep step for tomorrow's Occurrence. */
 	prep: async ({ request, locals, cookies }) => {

@@ -20,6 +20,7 @@ import {
 	windowFor
 } from '$lib/server/backfill';
 import { getSettings, getViews } from '$lib/server/settings';
+import { progressForIds } from '$lib/server/progress';
 import { getDayNote } from '$lib/server/journal';
 import { isHidden } from '$lib/views';
 import { addDays } from '$lib/engine/dates';
@@ -44,6 +45,8 @@ export const load: PageServerLoad = ({ locals, params, cookies }) => {
 		pastDays: settings.pastDays,
 		earliest: earliestLoggable(today, settings.pastDays),
 		...day,
+		/** "3 of 6 glasses", "2 of 4 steps", by Occurrence id. */
+		progress: Object.fromEntries(progressForIds(occIds)),
 		/** Log notes (Markdown) by Occurrence id. */
 		notes: Object.fromEntries(
 			(occIds.length

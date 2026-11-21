@@ -19,11 +19,15 @@
 		sets: { done: boolean; values: Values }[];
 		summary: Values;
 		subs: Record<string, boolean>;
+		/** The tick of a Yes or no Task (no fields and no sub-tasks). */
+		tick?: boolean;
 	}
 	type Item = (typeof data.items)[number];
 	type Metric = NonNullable<Item['task']>['metrics'][number];
 
 	const isSummary = (v: Values) => v._summary === true;
+	/** A Yes or no Task: nothing to fill in, so it gets one tick box. */
+	const isYesNo = (t: Item['task']) => !!t && !t.metrics.length && !t.subtasks.length;
 	/** Quick log (from a shortcut or link): only the fields marked for quick logs. */
 	const quickMode = $derived(page.url.searchParams.has('quick'));
 	/** Not finished yet: due today, or a past day that was missed, skipped or never logged. */
@@ -75,7 +79,8 @@
 		) as Values;
 		// Sub-tasks start unticked too: you tick the ones you did.
 		const subs = Object.fromEntries(t.subtasks.map((s) => [s.id, false]));
-		return { sets, summary: withStarters(summary, t), subs };
+		// A Yes or no Task starts unticked like any tick box.
+		return { sets, summary: withStarters(summary, t), subs, tick: false };
 	}
 
 	/**
@@ -97,7 +102,8 @@
 			return {
 				sets,
 				summary: due ? withStarters({ ...savedSummary }, t) : { ...savedSummary },
-				subs: Object.fromEntries(t.subtasks.map((s) => [s.id, !!data.subDone[s.id]]))
+				subs: Object.fromEntries(t.subtasks.map((s) => [s.id, !!data.subDone[s.id]])),
+				tick: isYesNo(t) && it.saved.some((v) => v.done === true)
 			};
 		});
 	}
@@ -258,6 +264,7 @@
 			for (const [subId, done] of Object.entries(s.subs)) {
 				if (done) entries.push({ taskId: subId, values: { done: true } });
 			}
+			if (s.tick && isYesNo(t)) entries.push({ taskId: t.id, values: { done: true } });
 		});
 		return JSON.stringify({ finish, stay, notes, entries, level, back: data.back });
 	}
@@ -596,6 +603,9 @@
 						<label style="color: var(--text)"><input type="checkbox" class="tick" bind:checked={log[i].subs[s.id]} /> {s.name}</label>
 					{/each}
 				</div>
+			{/if}
+			{#if isYesNo(t) && !quickMode}
+				<label style="color: var(--text)"><input type="checkbox" class="tick" bind:checked={log[i].tick} aria-label="{t.name} done" /> Done</label>
 			{/if}
 		{/if}
 	</section>

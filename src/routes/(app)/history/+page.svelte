@@ -69,7 +69,11 @@
 							><strong>{o.habit}</strong>{#if o.variant}<span class="chip" style="margin-left: 0.35rem">{o.variant}</span>{/if}</span
 						>
 						<span class="muted" class:missed={o.status === 'missed'}>
-							{statusWord[o.status]}{!views.history.values && data.entryCounts[o.id] ? ` · ${data.entryCounts[o.id]} entries` : ''}
+							{statusWord[o.status]}{data.partial[o.id]
+								? ` · ${data.partial[o.id]}`
+								: !views.history.values && data.entryCounts[o.id]
+									? ` · ${data.entryCounts[o.id]} entries`
+									: ''}
 						</span>
 					</div>
 					{#if views.history.values}
