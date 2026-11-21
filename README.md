@@ -33,6 +33,7 @@ Status: MVP in progress. You can set up habits, log them day to day, track slips
 - "Same as last time" on Today logs the last values in one tap, with Undo.
 - The log saves as you go, and keeps working offline: changes wait on the device and sync when the connection is back.
 - Quick-log links `/q/<habit id>` open a short log with only the fields marked "Show on quick logs". Add `?go=1` to log "same as last time" at once. Pinned habits appear as home screen shortcuts (long-press the app icon).
+- Forgot a day? "Log a past day" on Today (or a day in History, the week strip or a habit's chain) opens that day: mark habits done, skipped or "same as last time", open the full log, or add a slip. A late log counts like one made on the day, streaks included, and "same as last time" copies the log from before that day. Today mentions yesterday when it was left unlogged. Settings can limit how far back you can log, or turn it off.
 
 ## Reminders
 

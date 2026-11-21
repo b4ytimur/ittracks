@@ -37,6 +37,7 @@ import { identitiesByHabit } from './repo/identities';
 import { getSettings } from './settings';
 import { dayOrder, logicalDate } from '$lib/engine/day';
 import { pauseOn, type Pause } from '$lib/engine/pause';
+import { carriesOver, lastTimeFor } from '$lib/engine/backfill';
 import { habitStats, type HabitStats } from '$lib/engine/stats';
 
 /**
@@ -137,7 +138,8 @@ export function pickForVariant(accountId: string, variantId: string): Record<str
 	return picks;
 }
 
-function history(habitId: string, before: string): Done[] {
+/** What was done or skipped before a date, for the schedule. */
+export function history(habitId: string, before: string): Done[] {
 	return db
 		.select({ date: occurrence.date, variantId: occurrence.variantId, status: occurrence.status })
 		.from(occurrence)
@@ -162,16 +164,34 @@ function settlePast(habitId: string, schedule: ScheduleForm, today: string, paus
 			.filter((o) => pauseOn(pauses, habitId, o.date));
 		if (old.length) db.delete(occurrence).where(inArray(occurrence.id, old.map((o) => o.id))).run();
 	}
-	const carriesOver =
-		schedule.kind === 'frequency' ||
-		(schedule.kind === 'rotation' && schedule.step === 'variant' && schedule.onMiss === 'wait');
 	const stale = and(
 		eq(occurrence.habitId, habitId),
 		eq(occurrence.status, 'due'),
 		lt(occurrence.date, today)
 	);
-	if (carriesOver) db.delete(occurrence).where(stale).run();
-	else db.update(occurrence).set({ status: 'missed' }).where(stale).run();
+	if (carriesOver(schedule as Schedule)) {
+		db.delete(occurrence).where(stale).run();
+		return;
+	}
+	// A day the schedule never planned (a past day opened to log by hand, a rotation
+	// started early) that was left without a log goes away instead of counting as a miss.
+	const extra = db
+		.select({ id: occurrence.id, date: occurrence.date })
+		.from(occurrence)
+		.where(stale)
+		.all()
+		.filter(
+			(o) =>
+				!db.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, o.id)).get() &&
+				!dueOn(schedule as Schedule, history(habitId, o.date), o.date)
+		);
+	if (extra.length) db.delete(occurrence).where(inArray(occurrence.id, extra.map((o) => o.id))).run();
+	db.update(occurrence).set({ status: 'missed' }).where(stale).run();
+}
+
+/** Settle a habit's past days without creating today's Occurrence. */
+export function settle(accountId: string, habitId: string, schedule: ScheduleForm, today: string) {
+	settlePast(habitId, schedule, today, pausesForHabit(accountId, habitId));
 }
 
 /** Create today's Occurrence for a build habit if one is due and none exists yet. */
@@ -705,12 +725,15 @@ export function sameAsLast(occurrenceId: string): 'done' | 'needsInput' | 'gone'
 	const occ = db.select().from(occurrence).where(eq(occurrence.id, occurrenceId)).get();
 	if (!occ) return 'gone';
 	const lastLevel =
-		db
-			.select({ level: occurrence.level })
-			.from(occurrence)
-			.where(and(eq(occurrence.habitId, occ.habitId), eq(occurrence.status, 'done')))
-			.orderBy(desc(occurrence.date), desc(occurrence.finishedAt))
-			.get()?.level ?? null;
+		lastTimeFor(
+			db
+				.select({ id: occurrence.id, date: occurrence.date, level: occurrence.level })
+				.from(occurrence)
+				.where(and(eq(occurrence.habitId, occ.habitId), eq(occurrence.status, 'done')))
+				.orderBy(desc(occurrence.date), desc(occurrence.finishedAt))
+				.all(),
+			occ
+		)?.level ?? null;
 	db.transaction((tx) => {
 		tx.delete(entry).where(eq(entry.occurrenceId, occ.id)).run();
 		let order = 0;
@@ -748,14 +771,21 @@ export function reopen(occurrenceId: string, clear: boolean) {
 
 /** The most recent Entries of a Task before a given Occurrence, used to prefill. */
 export function lastEntries(taskId: string, beforeOccurrenceId: string) {
-	const prev = db
-		.select({ id: occurrence.id })
-		.from(entry)
-		.innerJoin(occurrence, eq(entry.occurrenceId, occurrence.id))
-		.where(and(eq(entry.taskId, taskId), eq(occurrence.status, 'done')))
-		.orderBy(desc(occurrence.date), desc(occurrence.finishedAt))
-		.all()
-		.find((o) => o.id !== beforeOccurrenceId);
+	const occ = db
+		.select({ id: occurrence.id, date: occurrence.date })
+		.from(occurrence)
+		.where(eq(occurrence.id, beforeOccurrenceId))
+		.get();
+	const prev = lastTimeFor(
+		db
+			.select({ id: occurrence.id, date: occurrence.date })
+			.from(entry)
+			.innerJoin(occurrence, eq(entry.occurrenceId, occurrence.id))
+			.where(and(eq(entry.taskId, taskId), eq(occurrence.status, 'done')))
+			.orderBy(desc(occurrence.date), desc(occurrence.finishedAt))
+			.all(),
+		occ
+	);
 	if (!prev) return [];
 	return db
 		.select({ values: entry.values })
