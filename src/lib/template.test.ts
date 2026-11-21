@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TEMPLATE_VERSION, applyAnswers, fromTemplate, templateFile, toTemplate, type TemplateFile } from './template';
-import { habitForm, type HabitForm, type TaskForm } from './forms';
+import { habitForm, noteDefaults, type HabitForm, type TaskForm } from './forms';
 
 const T1 = '00000000-0000-4000-8000-000000000001';
 const M1 = '00000000-0000-4000-8000-000000000002';
@@ -17,8 +17,8 @@ const bench: TaskForm = {
 	restTimerSeconds: 120,
 	tags: [{ name: 'chest', level: 3 }],
 	metrics: [
-		{ id: M1, name: 'Weight', type: 'number', unit: 'kg', repeats: true, choices: [], prefill: 'last', step: 2.5, required: true, quick: true },
-		{ id: M2, name: 'Reps', type: 'count', unit: '', repeats: true, choices: [], prefill: 'target', step: null, required: false, quick: false }
+		{ id: M1, name: 'Weight', type: 'number', unit: 'kg', repeats: true, choices: [], prefill: 'last', step: 2.5, required: true, quick: true, ...noteDefaults() },
+		{ id: M2, name: 'Reps', type: 'count', unit: '', repeats: true, choices: [], prefill: 'target', step: null, required: false, quick: false, ...noteDefaults() }
 	],
 	subtasks: [{ id: '00000000-0000-4000-8000-000000000008', name: 'Warm-up set' }],
 	areaId: null,
@@ -152,6 +152,35 @@ describe('templates', () => {
 		expect(tpl.version).toBe(TEMPLATE_VERSION);
 		expect([w.prefill, w.step, w.required, w.quick]).toEqual(['last', 2.5, true, true]);
 		expect([r.prefill, r.step, r.required, r.quick]).toEqual(['target', null, false, false]);
+	});
+
+	it('carries long text fields, prompts and scored choices (version 5)', () => {
+		const journal: TaskForm = {
+			...bench,
+			name: 'Journal',
+			notes: '## How\nWrite **anything**.',
+			restTimerEnabled: false,
+			subtasks: [],
+			metrics: [
+				{ ...bench.metrics[0], repeats: false, type: 'text', unit: '', step: null, prefill: 'blank', required: false, long: true, starter: '## Wins\n\n## Lessons', prompts: ['What went well?', 'What did you learn?'], promptOrder: 'random', scores: {} },
+				{ ...bench.metrics[1], repeats: false, type: 'choice', choices: ['Great', 'Okay', 'Bad'], prefill: 'blank', scores: { Great: 5, Okay: 3, Bad: 1 } }
+			]
+		};
+		const one = { ...gym, variants: [{ ...gym.variants[0], slots: [{ ...gym.variants[0].slots[0], targets: {}, minTargets: {}, stretchTargets: {} }] }], schedule: { kind: 'frequency' as const, times: 7, period: 'week' as const, variantId: VA } };
+		const file = templateFile.parse(JSON.parse(JSON.stringify(toTemplate(one, new Map([[T1, journal]])))));
+		expect(file.version).toBe(5);
+		const back = fromTemplate(file, '2026-12-01').tasks[0].form;
+		expect(back.notes).toBe(journal.notes);
+		expect(back.metrics[0]).toMatchObject({ long: true, starter: '## Wins\n\n## Lessons', prompts: ['What went well?', 'What did you learn?'], promptOrder: 'random' });
+		expect(back.metrics[1].scores).toEqual({ Great: 5, Okay: 3, Bad: 1 });
+	});
+
+	it('imports version 4 files with one-line text fields and no numbers', () => {
+		const v4 = structuredClone(tpl) as unknown as { version: number; tasks: { metrics: Record<string, unknown>[] }[] };
+		v4.version = 4;
+		for (const t of v4.tasks) for (const m of t.metrics) { delete m.long; delete m.starter; delete m.prompts; delete m.promptOrder; delete m.scores; }
+		const { tasks } = fromTemplate(templateFile.parse(v4), '2026-12-01');
+		expect(tasks[0].form.metrics[0]).toMatchObject(noteDefaults());
 	});
 
 	it('gives older files sensible log settings', () => {

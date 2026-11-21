@@ -1,12 +1,12 @@
 {
 	"format": "ittracks-template",
-	"version": 3,
+	"version": 5,
 	"name": "Journaling",
-	"description": "One sentence and a mood every evening. Small enough to never skip.",
+	"description": "A few lines every evening: a prompt to answer, a mood you can chart, and room to write more when you want. On a busy day, just pick the mood.",
 	"meta": {
 		"category": "Mind",
 		"daysPerWeek": 7,
-		"minutesPerDay": 5,
+		"minutesPerDay": 10,
 		"equipment": [],
 		"area": "Mind"
 	},
@@ -21,7 +21,7 @@
 	"habit": {
 		"name": "Journal",
 		"direction": "build",
-		"notes": "",
+		"notes": "Write a few lines each evening. A prompt shows at the top; answer it or write about anything.\n\nOn a busy day, a quick log with only your mood still counts.\n\nEverything you write shows on the **Journal** page (History → Journal), and can be exported as Markdown for Obsidian.",
 		"schedule": {
 			"kind": "interval",
 			"every": 1,
@@ -62,7 +62,7 @@
 		{
 			"key": "journal",
 			"name": "Journal",
-			"notes": "",
+			"notes": "Write without editing yourself. Markdown works: `**bold**`, `- lists`, `## headings`.",
 			"restTimerEnabled": false,
 			"restTimerSeconds": 90,
 			"tags": [
@@ -73,16 +73,32 @@
 			],
 			"metrics": [
 				{
-					"key": "journalt",
-					"name": "Today in a sentence",
+					"key": "journale",
+					"name": "Entry",
 					"type": "text",
 					"unit": "",
 					"repeats": false,
 					"choices": [],
 					"step": null,
 					"required": false,
-					"quick": true,
-					"prefill": "blank"
+					"quick": false,
+					"prefill": "blank",
+					"long": true,
+					"starter": "**Today:** \n\n**Grateful for:** ",
+					"prompts": [
+						"What went well today?",
+						"What drained your energy, and what gave you energy?",
+						"What did you learn today?",
+						"What would you do differently if you had today again?",
+						"Who made your day better, and how?",
+						"What are you looking forward to tomorrow?",
+						"What is on your mind right now?",
+						"What small win are you proud of?",
+						"What did you avoid today, and why?",
+						"What do you want to remember about today?"
+					],
+					"promptOrder": "order",
+					"scores": {}
 				},
 				{
 					"key": "journalm",
@@ -100,7 +116,43 @@
 					"step": null,
 					"required": false,
 					"quick": true,
-					"prefill": "blank"
+					"prefill": "blank",
+					"long": false,
+					"starter": "",
+					"prompts": [],
+					"promptOrder": "order",
+					"scores": {
+						"Great": 5,
+						"Good": 4,
+						"Okay": 3,
+						"Low": 2,
+						"Bad": 1
+					}
+				},
+				{
+					"key": "journaln",
+					"name": "Energy",
+					"type": "choice",
+					"unit": "",
+					"repeats": false,
+					"choices": [
+						"High",
+						"Okay",
+						"Low"
+					],
+					"step": null,
+					"required": false,
+					"quick": false,
+					"prefill": "blank",
+					"long": false,
+					"starter": "",
+					"prompts": [],
+					"promptOrder": "order",
+					"scores": {
+						"High": 3,
+						"Okay": 2,
+						"Low": 1
+					}
 				}
 			],
 			"subtasks": []

@@ -5,9 +5,15 @@ import { metricTypes } from './metric-types';
 const id = z.string().uuid();
 const name = z.string().trim().min(1, 'A name is required').max(120, 'Keep names to 120 characters or fewer');
 
+/** Notes are Markdown (src/lib/markdown.ts): room for real instructions or a journal entry. */
+export const NOTE_MAX = 20000;
+
+/** How a long text field picks the day's prompt. */
+export const PROMPT_ORDERS = { order: 'In order, one a day', random: 'Random each day' } as const;
+
 export const taskForm = z.object({
 	name,
-	notes: z.string().max(2000).default(''),
+	notes: z.string().max(NOTE_MAX).default(''),
 	restTimerEnabled: z.boolean(),
 	restTimerSeconds: z.number().int().min(5).max(3600),
 	tags: z.array(z.object({ name: z.string().trim().min(1).max(40), level: z.number().int().min(1).max(3) })),
@@ -22,7 +28,16 @@ export const taskForm = z.object({
 			prefill: z.enum(['last', 'target', 'blank']).default('last'),
 			step: z.number().positive().max(10000).nullable().default(null),
 			required: z.boolean().default(false),
-			quick: z.boolean().default(true)
+			quick: z.boolean().default(true),
+			/** Text field: several lines of Markdown, shown as a note box on the log screen. */
+			long: z.boolean().default(false),
+			/** Long text field: what a new log starts with, e.g. "## Wins" and "## Lessons". */
+			starter: z.string().max(2000).default(''),
+			/** Long text field: one prompt shows each day and is saved with the answer. */
+			prompts: z.array(z.string().trim().min(1).max(200)).max(100).default([]),
+			promptOrder: z.enum(['order', 'random']).default('order'),
+			/** Choice field: a number for each option (Great = 5 ... Bad = 1), so Stats can chart it. */
+			scores: z.record(z.string(), z.number().min(-1000).max(1000)).default({})
 		})
 	),
 	subtasks: z.array(z.object({ id, name })),
@@ -31,6 +46,14 @@ export const taskForm = z.object({
 	collectionIds: z.array(id).default([])
 });
 export type MetricForm = TaskForm['metrics'][number];
+/** Notes and journal options a new Metric starts with: one line, no prompts, no numbers. */
+export const noteDefaults = (): Pick<MetricForm, 'long' | 'starter' | 'prompts' | 'promptOrder' | 'scores'> => ({
+	long: false,
+	starter: '',
+	prompts: [],
+	promptOrder: 'order',
+	scores: {}
+});
 export type TaskForm = z.infer<typeof taskForm>;
 
 export const fillRule = z.object({
@@ -144,7 +167,7 @@ export const habitForm = z
 	.object({
 		name,
 		direction: z.enum(['build', 'break']),
-		notes: z.string().max(2000).default(''),
+		notes: z.string().max(NOTE_MAX).default(''),
 		startDate: z.string().date(),
 		variants: z.array(
 			z.object({

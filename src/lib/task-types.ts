@@ -1,5 +1,6 @@
 // Starting points for a new Task: which Metrics it logs and whether it rests between sets.
 import type { MetricType } from './metric-types';
+import { noteDefaults } from './forms';
 
 export interface TaskTypeMetric {
 	name: string;
@@ -105,7 +106,8 @@ export function metricsFromType(t: TaskType, weightUnit: string, newId: () => st
 			prefill: (m.type === 'text' || m.type === 'checkbox' ? 'blank' : 'last') as 'last' | 'target' | 'blank',
 			step: m.step,
 			required: false,
-			quick: true
+			quick: true,
+			...noteDefaults()
 		};
 	});
 }

@@ -34,6 +34,8 @@ export interface Settings {
 	pastDays: PastDays;
 	/** Today says when yesterday has habits left unlogged, with a link to log them. */
 	nudgeYesterday: boolean;
+	/** A free Markdown note per day on Today and the Day page. Off unless chosen. Part of the Journal feature. */
+	dayNote: boolean;
 }
 
 const defaults: Settings = {
@@ -45,7 +47,8 @@ const defaults: Settings = {
 	pinned: [],
 	taskTypes: [],
 	pastDays: null,
-	nudgeYesterday: true
+	nudgeYesterday: true,
+	dayNote: false
 };
 
 export function getSettings(accountId: string): Settings {

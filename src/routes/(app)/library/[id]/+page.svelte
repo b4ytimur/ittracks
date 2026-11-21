@@ -3,10 +3,12 @@
 	import CardGrid from '$lib/stats/ui/CardGrid.svelte';
 	import { untrack } from 'svelte';
 	import { enhance } from '$app/forms';
-	import type { MetricForm, TaskForm } from '$lib/forms';
+	import { noteDefaults, type MetricForm, type TaskForm } from '$lib/forms';
+	import NoteBox from '$lib/NoteBox.svelte';
 	import { defaultStep, metricsFromType, type TaskType } from '$lib/task-types';
 	import { blocked } from '$lib/rules/core';
 	import { checkTask, metricRules, taskRules } from '$lib/rules/task';
+	import { promptFor } from '$lib/journal';
 
 	let { data, form } = $props();
 
@@ -19,6 +21,22 @@
 	const restBlock = $derived(blocked(taskRules, t, 'restTimerEnabled', undefined));
 	const quickBlock = (m: MetricForm) => blocked(metricRules, m, 'quick', undefined);
 	const prefillBlock = (m: MetricForm) => blocked(metricRules, m, 'prefill', undefined);
+	const longBlock = (m: MetricForm) => blocked(metricRules, m, 'long', undefined);
+	const repeatsBlock = (m: MetricForm) => blocked(metricRules, m, 'repeats', undefined);
+	const today = new Date().toISOString().slice(0, 10);
+	/** Numbers per option are on while any option has one. */
+	const scored = (m: MetricForm) => Object.keys(m.scores).length > 0;
+	function toggleScores(m: MetricForm, on: boolean) {
+		// A falling scale by default: the first option is the best (Great = 5 ... Bad = 1).
+		m.scores = on ? Object.fromEntries(m.choices.map((c, i) => [c, m.choices.length - i])) : {};
+	}
+	function setScore(m: MetricForm, c: string, v: string) {
+		const n = Number(v);
+		const next = { ...m.scores };
+		if (v === '' || !Number.isFinite(n)) delete next[c];
+		else next[c] = n;
+		m.scores = next;
+	}
 	let newLevel = $state(2);
 
 	const typeLabels: Record<string, string> = {
@@ -27,7 +45,7 @@
 		duration: 'Duration (minutes)',
 		checkbox: 'Checkbox (done?)',
 		choice: 'Choice (pick one)',
-		text: 'Text (notes)'
+		text: 'Text (a word or a journal entry)'
 	};
 
 	function addTag() {
@@ -49,6 +67,7 @@
 			step: null,
 			required: false,
 			quick: true,
+			...noteDefaults(),
 			...preset
 		});
 	}
@@ -158,7 +177,7 @@
 			</div>
 		</div>
 	{/if}
-	<label>Notes <textarea bind:value={t.notes} rows="2"></textarea></label>
+	<NoteBox bind:value={t.notes} label="Notes" hint="Markdown. Shows as “How to” on the log screen: form cues, a link to a video, a warm-up." />
 
 	<h2>Tags</h2>
 	<p class="muted">Tags describe what a Task works on. Fill rules use them to pick Tasks for you.</p>
@@ -220,11 +239,61 @@
 						placeholder="wide, narrow"
 					/>
 				</label>
+				{#if m.choices.length >= 2}
+					<label style="color: var(--text)"
+						><input type="checkbox" checked={scored(m)} onchange={(e) => toggleScores(m, e.currentTarget.checked)} /> Give each option a number, so Stats can chart it (mood 5 to 1)</label
+					>
+					{#if scored(m)}
+						<div class="scores">
+							{#each m.choices as c (c)}
+								<label class="score">{c} <input type="number" step="any" value={m.scores[c] ?? ''} oninput={(e) => setScore(m, c, e.currentTarget.value)} aria-label="Number for {c}" /></label>
+							{/each}
+						</div>
+					{/if}
+				{/if}
+			{/if}
+			{#if m.type === 'text'}
+				<label style="color: var(--text)"
+					><input type="checkbox" bind:checked={m.long} disabled={!!longBlock(m) && !m.long} /> Several lines (Markdown), for a journal entry or a reflection</label
+				>
+				{#if longBlock(m) && !m.long}<p class="muted small-text" style="margin: 0">{longBlock(m)?.reason}.</p>{/if}
+				{#if m.long}
+					<label
+						>Starter text <span class="small-text">(fills each new log, like headings to write under)</span>
+						<textarea bind:value={m.starter} rows="3" maxlength="2000" placeholder={'## Wins\n\n## Lessons'}></textarea>
+					</label>
+					<label
+						>Prompts, one per line <span class="small-text">(one shows each day and is saved with your answer)</span>
+						<textarea
+							value={m.prompts.join('\n')}
+							oninput={(e) =>
+								(m.prompts = e.currentTarget.value
+									.split('\n')
+									.map((s) => s.trim())
+									.filter(Boolean)
+									.slice(0, 100))}
+							rows="3"
+							placeholder={'What went well today?\nWhat would you do differently?'}
+						></textarea>
+					</label>
+					{#if m.prompts.length}
+						<div class="row">
+							<label class="grow"
+								>Which prompt each day
+								<select bind:value={m.promptOrder}>
+									<option value="order">In order, one a day</option>
+									<option value="random">Random, the same all day</option>
+								</select>
+							</label>
+						</div>
+						<p class="muted small-text" style="margin: 0">Today's prompt: “{promptFor(m, today)}”</p>
+					{/if}
+				{/if}
 			{/if}
 			<details class="log-settings">
 				<summary class="small-text">When logging</summary>
 				<div class="row">
-					{#if m.type === 'checkbox'}
+					{#if m.type === 'checkbox' || (m.type === 'text' && m.long)}
 						<p class="muted small-text grow" style="margin: 0">{prefillBlock({ ...m, prefill: 'last' })?.reason}.</p>
 					{:else}
 						<label class="grow"
@@ -253,8 +322,8 @@
 				{#if m.required}<p class="muted small-text" style="margin: 0">{quickBlock({ ...m, quick: false })?.reason}.</p>{/if}
 			</details>
 			<div class="row">
-				<label class="grow" style="color: var(--text)"
-					><input type="checkbox" bind:checked={m.repeats} /> Log per set</label
+				<label class="grow" style="color: var(--text)" title={repeatsBlock(m)?.reason}
+					><input type="checkbox" bind:checked={m.repeats} disabled={!!repeatsBlock(m) && !m.repeats} /> Log per set</label
 				>
 				<button type="button" class="small" onclick={() => move(t.metrics, i, -1)} aria-label="Move up">↑</button>
 				<button type="button" class="small" onclick={() => move(t.metrics, i, 1)} aria-label="Move down">↓</button>
@@ -293,6 +362,7 @@
 	</div>
 
 	{#each [...new Set(ruleCheck.errors.map((i) => i.reason))] as reason (reason)}<p class="error">{reason}</p>{/each}
+	{#each [...new Set(ruleCheck.warnings.map((i) => i.reason))] as reason (reason)}<p class="muted small-text">{reason}.</p>{/each}
 	{#if form?.error}<p class="error">{form.error}</p>{/if}
 
 	<div class="actions">
@@ -325,6 +395,14 @@
 {/if}
 
 <style>
+	.scores {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+	.score {
+		width: 6.5rem;
+	}
 	.log-settings summary {
 		cursor: pointer;
 		color: var(--accent);

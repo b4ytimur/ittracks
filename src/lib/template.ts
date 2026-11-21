@@ -12,6 +12,7 @@ import {
 	progressionForm,
 	rewardForm,
 	streakRuleForm,
+	NOTE_MAX,
 	type HabitForm,
 	type ScheduleForm,
 	type TaskForm
@@ -21,16 +22,19 @@ export const TEMPLATE_FORMAT = 'ittracks-template';
 /**
  * Version 2 adds cues, levels, streak rules, identities and break-habit plans.
  * Version 3 adds per-Metric log settings, gallery details (meta) and setup questions.
+ * Version 5 adds long text fields (several lines of Markdown, starter text, prompts) and
+ * scored choices, and allows 20,000 characters of Markdown in Task and habit notes.
  * Older files still import; the new fields take their defaults.
  */
-export const TEMPLATE_VERSION = 4;
+export const TEMPLATE_VERSION = 5;
 
 const key = z.string().min(1).max(64);
 
 const templateTask = z.object({
 	key,
 	name: z.string().min(1).max(120),
-	notes: z.string().max(2000).default(''),
+	/** Markdown. A shared template's notes come from a stranger: they are only ever shown through src/lib/markdown.ts. */
+	notes: z.string().max(NOTE_MAX).default(''),
 	restTimerEnabled: z.boolean().default(false),
 	restTimerSeconds: z.number().int().min(5).max(3600).default(90),
 	tags: z.array(z.object({ name: z.string().min(1).max(40), level: z.number().int().min(1).max(3) })).default([]),
@@ -46,7 +50,13 @@ const templateTask = z.object({
 				prefill: z.enum(['last', 'target', 'blank']).optional(),
 				step: z.number().positive().max(10000).nullable().default(null),
 				required: z.boolean().default(false),
-				quick: z.boolean().default(true)
+				quick: z.boolean().default(true),
+				// Version 5
+				long: z.boolean().default(false),
+				starter: z.string().max(2000).default(''),
+				prompts: z.array(z.string().trim().min(1).max(200)).max(100).default([]),
+				promptOrder: z.enum(['order', 'random']).default('order'),
+				scores: z.record(z.string(), z.number().min(-1000).max(1000)).default({})
 			})
 		)
 		.default([]),
@@ -92,7 +102,7 @@ export type TemplateMeta = z.infer<typeof templateMeta>;
 
 export const templateFile = z.object({
 	format: z.literal(TEMPLATE_FORMAT),
-	version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+	version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
 	name: z.string().min(1).max(120),
 	/** Version 4: a view template this habit works well with (e.g. "gym"). Only ever offered, never applied by itself. */
 	view: z.string().max(32).nullable().default(null),
@@ -102,7 +112,7 @@ export const templateFile = z.object({
 	habit: z.object({
 		name: z.string().min(1).max(120),
 		direction: z.enum(['build', 'break']),
-		notes: z.string().max(2000).default(''),
+		notes: z.string().max(NOTE_MAX).default(''),
 		/** Same shape as a saved Schedule, with Variant keys instead of ids. */
 		schedule: z.unknown().nullable(),
 		variants: z.array(
@@ -278,7 +288,12 @@ export function toTemplate(
 				prefill: m.prefill,
 				step: m.step,
 				required: m.required,
-				quick: m.quick
+				quick: m.quick,
+				long: m.long,
+				starter: m.starter,
+				prompts: m.prompts,
+				promptOrder: m.promptOrder,
+				scores: m.scores
 			})),
 			subtasks: t.subtasks.map((s) => s.name)
 		}))
@@ -320,7 +335,12 @@ export function fromTemplate(
 				prefill: m.prefill ?? (m.type === 'text' || m.type === 'checkbox' ? ('blank' as const) : ('last' as const)),
 				step: m.step,
 				required: m.required,
-				quick: m.quick
+				quick: m.quick,
+				long: m.long,
+				starter: m.starter,
+				prompts: m.prompts,
+				promptOrder: m.promptOrder,
+				scores: m.scores
 			};
 		});
 		return {

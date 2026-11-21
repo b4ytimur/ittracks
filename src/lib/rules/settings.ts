@@ -3,6 +3,10 @@
 import type { Settings } from '../server/settings';
 import { minutesOf, type DayRange } from '../engine/day';
 import { check, defineRules, evaluate, independent, normalize, onlyWhen, type Issue } from './core';
+import { readViews } from '../views';
+
+/** Is the Journal feature switched off in Features? */
+export const journalOff = (s: Pick<Settings, 'views'>) => readViews(s.views).hidden.includes('journal');
 
 /** Minutes of the day a range covers, as [start, end) spans that don't wrap. */
 function spans(r: DayRange): [number, number][] {
@@ -58,7 +62,12 @@ export const settingsRules = defineRules<Settings, SettingsCtx>({
 		check((s) => s.pastDays !== null && (!Number.isInteger(s.pastDays) || s.pastDays < 0 || s.pastDays > 3650), 'Pick how many days back can be logged')
 	],
 	/** The nudge links to logging yesterday, so it needs past-day logging on. */
-	nudgeYesterday: [onlyWhen((s) => s.pastDays !== 0, 'Turn on logging past days first', false)]
+	nudgeYesterday: [onlyWhen((s) => s.pastDays !== 0, 'Turn on logging past days first', false)],
+	/**
+	 * J3: the day note is part of the Journal feature. Switching a feature off keeps its data
+	 * and settings (FEATURES in views.ts), so this warns instead of clearing.
+	 */
+	dayNote: [check((s) => s.dayNote && journalOff(s), 'The Journal feature is switched off, so the day note stays hidden until you switch it back on', 'warn')]
 });
 
 export function checkSettings(s: Settings, ctx: SettingsCtx = noCtx): Issue[] {

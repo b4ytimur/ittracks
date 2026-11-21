@@ -89,7 +89,12 @@ export function getTaskForm(accountId: string, id: string): TaskForm | null {
 				prefill: m.prefill,
 				step: m.step,
 				required: m.required,
-				quick: m.quick
+				quick: m.quick,
+				long: m.long,
+				starter: m.starter ?? '',
+				prompts: m.prompts ?? [],
+				promptOrder: m.promptOrder,
+				scores: m.scores ?? {}
 			})),
 		subtasks: db
 			.select({ id: task.id, name: task.name })
@@ -203,7 +208,12 @@ export function saveTask(
 				prefill: m.prefill,
 				step: m.step,
 				required: m.required,
-				quick: m.quick
+				quick: m.quick,
+				long: m.long,
+				starter: m.starter || null,
+				prompts: m.prompts.length ? m.prompts : null,
+				promptOrder: m.promptOrder,
+				scores: Object.keys(m.scores).length ? m.scores : null
 			};
 			tx.insert(metric)
 				.values({ id: m.id, taskId, ...values })

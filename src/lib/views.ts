@@ -120,7 +120,8 @@ export const FEATURES = {
 	prep: 'Prepare the day before',
 	ifThen: 'If-then plans',
 	reframe: 'Reframe lines',
-	progression: 'Raise targets suggestions'
+	progression: 'Raise targets suggestions',
+	journal: 'Journal (the Journal page and the day note)'
 } as const;
 export type FeatureKey = keyof typeof FEATURES;
 

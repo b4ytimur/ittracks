@@ -117,8 +117,15 @@ function fieldCards(t: DsTask, m: DsMetric, filter: { habits?: string[] }): Stat
 					];
 		case 'checkbox':
 			return [card({ title: `${name}: ticked`, what, perLog: 'ticked', overTime: 'avg', range: '30d', filter, look: { chart: 'tile' } })];
-		case 'choice':
-			return [card({ title: name, what, perLog: 'option', overTime: 'count', split: 'option', range: '90d', filter, look: { chart: 'breakdown', size: 'wide' } })];
+		case 'choice': {
+			const counts = card({ title: name, what, perLog: 'option', overTime: 'count', split: 'option', range: '90d', filter, look: { chart: 'breakdown', size: 'wide' } });
+			// J5: a scored choice (mood 5 to 1) also gets its average over time.
+			if (!m.scores || !Object.keys(m.scores).length) return [counts];
+			return [
+				card({ title: `${name}, weekly average`, what, perLog: 'score', overTime: 'avg', bucket: 'week', range: '90d', filter, look: { chart: 'line', size: 'wide' } }),
+				counts
+			];
+		}
 		default:
 			return [];
 	}

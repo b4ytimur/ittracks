@@ -6,6 +6,7 @@ import { daysSinceSlip, longestRun, streak, type Level, type Mark, type StreakRu
 import { chainCells } from '../engine/chain';
 import { withinOn, withinStreak, usedIn, limitOn, type Limit } from '../engine/limit';
 import { compile, evaluate, FormulaError } from './formula';
+import { excerpt } from '../markdown';
 import {
 	ADDS_UP,
 	SHARE_MEASURES,
@@ -54,6 +55,8 @@ export interface DsMetric {
 	unit: string | null;
 	repeats: boolean;
 	choices: string[] | null;
+	/** Choice fields: a number per option, for averages (J5). */
+	scores?: Record<string, number> | null;
 }
 export interface DsVariant {
 	id: string;
@@ -773,6 +776,9 @@ export function pointsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range): 
 						push(raw === true ? 1 : 0, series);
 					} else if (card.perLog === 'option') {
 						if (typeof raw === 'string' && raw) push(1, card.split === 'option' || card.split === 'none' ? [{ key: `o:${raw}`, label: raw, w: 1, order: m.choices?.indexOf(raw) ?? 0 }] : tagsFor(base));
+					} else if (card.perLog === 'score') {
+						const sc = typeof raw === 'string' ? m.scores?.[raw] : undefined;
+						if (typeof sc === 'number') push(sc, series);
 					} else if (card.perLog === 'present') {
 						if (filled(raw)) push(1, series);
 					} else {
@@ -1309,6 +1315,8 @@ export function describeLog(l: Log, P: Prepared): string {
 	const fmt = (m: DsMetric, v: unknown) => {
 		if (v === true) return m.name;
 		if (!filled(v)) return null;
+		// A text field can hold a whole journal entry: its start is enough here.
+		if (m.type === 'text' && typeof v === 'string') return excerpt(v, 80);
 		return `${v}${m.unit ? ` ${m.unit}` : ''}`;
 	};
 	const parts: string[] = [];

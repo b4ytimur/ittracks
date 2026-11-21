@@ -35,6 +35,13 @@ Status: MVP in progress. You can set up habits, log them day to day, track slips
 - Quick-log links `/q/<habit id>` open a short log with only the fields marked "Show on quick logs". Add `?go=1` to log "same as last time" at once. Pinned habits appear as home screen shortcuts (long-press the app icon).
 - Forgot a day? "Log a past day" on Today (or a day in History, the week strip or a habit's chain) opens that day: mark habits done, skipped or "same as last time", open the full log, or add a slip. A late log counts like one made on the day, streaks included, and "same as last time" copies the log from before that day. Today mentions yesterday when it was left unlogged. Settings can limit how far back you can log, or turn it off.
 
+## Notes and journal
+
+- Every note (Tasks, habits, logs, slips) is plain Markdown: a Write / Preview box with bold, list and link buttons. A Task's notes show as "How to" on its log screen. Raw HTML is off, only web, mail and in-app links are kept, and images show as links, so notes from a shared template can't run code or load tracking pixels.
+- A Text field can have several lines (Markdown), with starter text and a list of prompts (one a day, in order or random, saved with the answer). A Choice can give each option a number (mood 5 to 1) so Stats can average it.
+- The journal is a normal habit: "Start a daily journal" on the new habit screen adds one. History → Journal shows everything written, by day, with search, habit and mood filters and "On this day". An optional day note (Settings → Journal) adds one free note per day to Today and the Day page.
+- Notes and journal entries are private: they never go into templates or anything shared. Settings → Journal downloads them as Markdown, one file per day, for an Obsidian vault.
+
 ## Reminders
 
 Habits with a cue time (or a part of the day) can send a push notification at that time, with Done, Minimum and Snooze buttons. The server creates its own push keys on first start and stores them in the database, so there is nothing to configure. Turn reminders on per device in Settings. Push needs HTTPS (or `localhost`); on iPhone and iPad it works only after adding the app to the Home Screen.

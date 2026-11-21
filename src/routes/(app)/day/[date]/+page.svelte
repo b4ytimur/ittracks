@@ -7,6 +7,8 @@
 	import { postAction, showToast } from '$lib/toast.svelte';
 	import { queueable } from '$lib/queueable';
 	import { addDays } from '$lib/engine/dates';
+	import DayNote from '$lib/DayNote.svelte';
+	import Markdown from '$lib/Markdown.svelte';
 
 	let { data, form } = $props();
 
@@ -118,6 +120,10 @@
 
 {#if form?.error && !form?.habit}<p class="error">{form.error}</p>{/if}
 
+{#if data.dayNote !== null}
+	{#key data.date}<DayNote date={data.date} text={data.dayNote} />{/key}
+{/if}
+
 <h2>Due that day</h2>
 {#if data.due.length}
 	<ul class="list">
@@ -194,6 +200,7 @@
 				<a class="name" href="/habits/{item.habitId}/chain"><strong>{item.name}</strong></a>
 				{#if item.variants.length && !(open && canLog)}<span class="chip">{item.variants.find((v) => v.id === item.variantId)?.name}</span>{/if}
 				<div class="muted small-text" class:missed={o?.status === 'missed'}>{statusText(item)}</div>
+				{#if o && data.notes[o.id]}<div class="lognote"><Markdown text={data.notes[o.id]} small /></div>{/if}
 			</div>
 			{#if canLog && open}
 				{#if item.slotCount > 0}
@@ -276,6 +283,9 @@
 	}
 	.finished {
 		opacity: 0.75;
+	}
+	.lognote {
+		margin-top: 0.3rem;
 	}
 	.missed {
 		color: var(--danger);

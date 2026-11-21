@@ -9,7 +9,7 @@ import { candidates, lastEntries, userToday } from '$lib/server/today';
 import { getSettings } from '$lib/server/settings';
 import { recapFor } from '$lib/server/stats';
 import { planOfToday, replanToday, windowFor } from '$lib/server/backfill';
-import type { ScheduleForm } from '$lib/forms';
+import { NOTE_MAX, type ScheduleForm } from '$lib/forms';
 import { pickTask, type FillRule } from '$lib/engine/fill';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -36,7 +36,13 @@ export interface LogTask {
 			step: number | null;
 			required: boolean;
 			quick: boolean;
+			long: boolean;
+			starter: string;
+			prompts: string[];
+			promptOrder: 'order' | 'random';
 		}[];
+		/** Markdown: shown as a collapsible "How to" on the log screen. */
+		notes: string;
 		subtasks: { id: string; name: string }[];
 	} | null;
 	saved: Record<string, unknown>[];
@@ -53,13 +59,14 @@ function loadTask(id: string) {
 		name: t.name,
 		restTimerEnabled: t.restTimerEnabled,
 		restTimerSeconds: t.restTimerSeconds,
+		notes: t.notes ?? '',
 		metrics: db
 			.select()
 			.from(metric)
 			.where(eq(metric.taskId, id))
 			.orderBy(asc(metric.sortOrder))
 			.all()
-			.map(({ id, name, type, unit, repeats, choices, prefill, step, required, quick }) => ({
+			.map(({ id, name, type, unit, repeats, choices, prefill, step, required, quick, long, starter, prompts, promptOrder }) => ({
 				id,
 				name,
 				type,
@@ -69,7 +76,11 @@ function loadTask(id: string) {
 				prefill,
 				step,
 				required,
-				quick
+				quick,
+				long: type === 'text' && long,
+				starter: starter ?? '',
+				prompts: prompts ?? [],
+				promptOrder
 			})),
 		subtasks: db
 			.select({ id: task.id, name: task.name })
@@ -165,7 +176,7 @@ const savePayload = z.object({
 	finish: z.boolean(),
 	/** Autosave and offline sync: save without leaving the page. */
 	stay: z.boolean().default(false),
-	notes: z.string().max(5000),
+	notes: z.string().max(NOTE_MAX),
 	level: z.enum(['minimum', 'target', 'stretch']).default('target'),
 	/** Where to go after Finish on a past day. */
 	back: z.string().max(200).nullish(),

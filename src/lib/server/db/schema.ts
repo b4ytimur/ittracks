@@ -154,7 +154,16 @@ export const metric = sqliteTable('metric', {
 	/** A required field must be filled before Finish. */
 	required: integer('required', { mode: 'boolean' }).notNull().default(false),
 	/** Shown on quick logs (shortcuts, links, reminder buttons). Others keep their prefill. */
-	quick: integer('quick', { mode: 'boolean' }).notNull().default(true)
+	quick: integer('quick', { mode: 'boolean' }).notNull().default(true),
+	/** Text field with several lines of Markdown: a note box on the log screen. */
+	long: integer('long', { mode: 'boolean' }).notNull().default(false),
+	/** What a new log of a long text field starts with. */
+	starter: text('starter'),
+	/** Long text field: one prompt shows each day and is saved with the answer. */
+	prompts: text('prompts', { mode: 'json' }).$type<string[]>(),
+	promptOrder: text('prompt_order', { enum: ['order', 'random'] }).notNull().default('order'),
+	/** Choice field: a number per option, so Stats can average it (mood 1 to 5). */
+	scores: text('scores', { mode: 'json' }).$type<Record<string, number>>()
 });
 
 /** A top-level group with a color and icon, for Habits and Tasks: Fitness, Learning... */
@@ -377,6 +386,26 @@ export const slip = sqliteTable('slip', {
 });
 
 /** A craving resisted on a break habit, usually by doing the if-then replacement. */
+/**
+ * One free Markdown note per day: not a habit, no streak. Private, like every note: never
+ * part of templates or any sharing feature.
+ */
+export const dayNote = sqliteTable(
+	'day_note',
+	{
+		accountId: text('account_id')
+			.notNull()
+			.references(() => account.id, { onDelete: 'cascade' }),
+		/** YYYY-MM-DD in the user's time zone. */
+		date: text('date').notNull(),
+		text: text('text').notNull(),
+		updatedAt: integer('updated_at', { mode: 'timestamp' })
+			.notNull()
+			.$defaultFn(() => new Date())
+	},
+	(t) => [primaryKey({ columns: [t.accountId, t.date] })]
+);
+
 export const craving = sqliteTable('craving', {
 	id: id(),
 	habitId: text('habit_id')
