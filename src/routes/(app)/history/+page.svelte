@@ -37,10 +37,7 @@
 
 <header class="bar">
 	<h1>History</h1>
-	<div class="row" style="align-items: center">
-		{#if data.canBackfill}<a class="button small" href="/day">Log a past day</a>{/if}
-		<a href="/settings">Settings</a>
-	</div>
+	{#if data.canBackfill}<a class="button small" href="/day">Log a past day</a>{/if}
 </header>
 
 {#if data.history.length}

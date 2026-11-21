@@ -480,7 +480,7 @@
 					{/each}
 				</details>
 			{/if}
-			<p class="muted small-text">More, like hiding whole features or switching template, is in <a href="/settings#views">Settings</a>.</p>
+			<p class="muted small-text">To switch template, go to <a href="/settings/views">Settings, Views</a>. To hide whole features, go to <a href="/settings/features">Settings, Features</a>.</p>
 		</div>
 	</details>
 {/snippet}

@@ -108,11 +108,11 @@
 </nav>
 
 {#if data.window === 'off'}
-	<p class="card muted small-text">Logging past days is off, so this day can only be looked at. <a href="/settings#past-days">Change it in Settings</a>.</p>
+	<p class="card muted small-text">Logging past days is off, so this day can only be looked at. <a href="/settings/past-days">Change it in Settings</a>.</p>
 {:else if data.window === 'tooOld'}
 	<p class="card muted small-text">
 		You can log up to {data.pastDays === 1 ? 'yesterday' : `${data.pastDays} days back`}, so this day can only be looked at. Slips can still be added.
-		<a href="/settings#past-days">Change it in Settings</a>.
+		<a href="/settings/past-days">Change it in Settings</a>.
 	</p>
 {/if}
 

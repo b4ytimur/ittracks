@@ -7,7 +7,7 @@ import { userToday } from '$lib/server/today';
 import { getSettings } from '$lib/server/settings';
 import { addDays, weekStart } from '$lib/engine/dates';
 import { chainCells } from '$lib/engine/chain';
-import { limitOn } from '$lib/engine/limit';
+import { withinOn } from '$lib/engine/limit';
 import { describeStreak, streak, type StreakRule } from '$lib/engine/streak';
 import type { PageServerLoad } from './$types';
 
@@ -28,11 +28,11 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		const days = [];
 		for (let d = from; d <= to; d = addDays(d, 1)) {
 			const count = slips.filter((s) => s.date === d).reduce((n, s) => n + s.count, 0);
-			const max = h.limit && h.limit.period === 'day' ? limitOn(h.limit, d) : 0;
+			// A day with slips is within the limit while the day's (or the week's, so far) total stays under it.
+			const within = !!h.limit && withinOn(h.limit, slips, d);
 			days.push({
 				date: d,
-				kind:
-					d > today ? 'future' : d < h.startDate ? 'before' : count === 0 ? 'clean' : count <= max ? 'within' : 'slip',
+				kind: d > today ? 'future' : d < h.startDate ? 'before' : count === 0 ? 'clean' : within ? 'within' : 'slip',
 				count
 			});
 		}
