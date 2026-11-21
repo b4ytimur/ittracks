@@ -11,9 +11,9 @@ export type Cell =
 	| { kind: 'rest' }
 	| { kind: 'future' };
 
-/** Which missed dates the rule forgives. Marks sorted oldest first. */
+/** Which missed dates the rule forgives. Marks sorted oldest first. Skips count neither way, as in the streak. */
 export function forgivenMisses(marks: Mark[], rule: StreakRule): Set<ISODate> {
-	const acted = marks.filter((m) => m.status !== 'due');
+	const acted = marks.filter((m) => m.status !== 'due' && m.status !== 'skipped');
 	const out = new Set<ISODate>();
 	if (rule.kind === 'neverTwice') {
 		acted.forEach((m, i) => {
