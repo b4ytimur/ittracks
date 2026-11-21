@@ -129,11 +129,11 @@ const keysOf = <T extends Record<string, string>>(o: T) => Object.keys(o) as [ke
 export const viewSettings = z.object({
 	template: str(32).default('standard'),
 	/** What a page opens with: the last filter you used, the page default, or a saved view (its id). */
-	open: z.partialRecord(z.enum(PAGES), str(64)).default({}),
+	open: z.record(z.string().max(16), str(64)).default({}),
 	/** The page default each page resets to. */
-	defaults: z.partialRecord(z.enum(PAGES), viewState).default({}),
+	defaults: z.record(z.string().max(16), viewState).default({}),
 	/** The last state of each page, kept while `open` is "last". */
-	last: z.partialRecord(z.enum(PAGES), viewState).default({}),
+	last: z.record(z.string().max(16), viewState).default({}),
 	saved: z.array(savedView).max(60).default([]),
 	startPage: z.enum(PAGES).default('today'),
 	today: z

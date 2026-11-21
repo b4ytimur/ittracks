@@ -19,8 +19,8 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 	if (occ.status !== 'due') return { name: h.name, state: occ.status, occurrenceId: occ.id };
 	const hasSlots = !!(occ.variantId && db.select({ id: slot.id }).from(slot).where(eq(slot.variantId, occ.variantId)).get());
 	if (url.searchParams.get('go') === '1') {
-		if (hasSlots) sameAsLast(occ.id);
-		else quickDone(occ.id, null);
+		const r = hasSlots ? sameAsLast(occ.id) : quickDone(occ.id, null);
+		if (r === 'needsInput') redirect(303, `/log/${occ.id}?quick`);
 		redirect(303, `/?did=${occ.id}&clear=1`);
 	}
 	if (!hasSlots) {
