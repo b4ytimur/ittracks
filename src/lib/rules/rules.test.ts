@@ -186,6 +186,16 @@ describe('task rules', () => {
 		expect([m.unit, m.step, m.choices, m.prefill]).toEqual(['', null, [], 'last']);
 	});
 
+	it('M5: a tick box always starts unticked', () => {
+		const t = task();
+		t.metrics[0] = { ...t.metrics[0], type: 'checkbox', prefill: 'last' };
+		expect(checkTask(t).form.metrics[0].prefill).toBe('blank');
+		t.metrics[0].prefill = 'target';
+		expect(checkTask(t).form.metrics[0].prefill).toBe('blank');
+		t.metrics[0] = { ...t.metrics[0], type: 'count', prefill: 'last' };
+		expect(checkTask(t).form.metrics[0].prefill).toBe('last');
+	});
+
 	it('M3: a required field always shows on quick logs', () => {
 		const t = task();
 		t.metrics[0] = { ...t.metrics[0], required: true, quick: false };
@@ -232,11 +242,20 @@ describe('settings rules', () => {
 		...patch
 	});
 
+	it('removing a part of the day a habit uses warns, but never blocks the save', () => {
+		const base = settings({ ranges: [{ name: 'Morning', start: '05:00', end: '11:00' }] });
+		expect(checkSettings(base, { usedRanges: ['Morning'] })).toEqual([]);
+		const issues = checkSettings({ ...base, ranges: [] }, { usedRanges: ['Morning'] });
+		expect(issues.map((i) => i.severity)).toEqual(['warn']);
+		// Without knowing what habits use (the first-run day question), there is nothing to warn about.
+		expect(checkSettings({ ...base, ranges: [] })).toEqual([]);
+	});
+
 	it('the yesterday nudge needs past-day logging on, and is cleared when it is off', () => {
-		expect(blocked(settingsRules, settings({ pastDays: 0 }), 'nudgeYesterday', undefined)?.reason).toBe(
+		expect(blocked(settingsRules, settings({ pastDays: 0 }), 'nudgeYesterday', { usedRanges: [] })?.reason).toBe(
 			'Turn on logging past days first'
 		);
-		expect(blocked(settingsRules, settings({ pastDays: 7 }), 'nudgeYesterday', undefined)).toBeNull();
+		expect(blocked(settingsRules, settings({ pastDays: 7 }), 'nudgeYesterday', { usedRanges: [] })).toBeNull();
 		expect(cleanSettings(settings({ pastDays: 0 })).nudgeYesterday).toBe(false);
 		expect(cleanSettings(settings({ pastDays: 1 })).nudgeYesterday).toBe(true);
 	});

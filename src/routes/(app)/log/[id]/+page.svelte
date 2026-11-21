@@ -26,46 +26,63 @@
 	/** Not finished yet: due today, or a past day that was missed, skipped or never logged. */
 	const isOpen = $derived(data.occurrence.status !== 'done' && data.canLog);
 
-	/** Where a field's starting value comes from, per its log setting. */
+	/**
+	 * Where a field's starting value comes from, per its log setting. A tick box always
+	 * starts unticked: a tick says you did it this time, so it is never copied.
+	 */
 	function prefillValue(m: Metric, it: Item, last: unknown): unknown {
 		const target = it.targets[m.id];
-		if (m.prefill === 'blank') return undefined;
+		if (m.prefill === 'blank' || m.type === 'checkbox') return undefined;
 		if (m.prefill === 'target') return target ?? last;
 		return last ?? target;
 	}
 
-	/** Build the editable state for each Slot: saved values, or a prefill from last time. */
+	/** The planned sets and values for a Slot, before anything is logged: a prefill from last time. */
+	function planned(it: Item): ItemState {
+		const t = it.task;
+		if (!t) return { sets: [], summary: {}, subs: {} };
+		const repeating = t.metrics.filter((m) => m.repeats);
+		const single = t.metrics.filter((m) => !m.repeats);
+		const prev = it.previous.filter((v) => !isSummary(v));
+		const prevSummary = it.previous.find(isSummary) ?? {};
+		const count = repeating.length ? (it.sets ?? (prev.length || 1)) : 0;
+		const sets = Array.from({ length: count }, (_, i) => ({
+			done: false,
+			values: Object.fromEntries(
+				repeating
+					.map((m) => [m.id, prefillValue(m, it, (prev[i] ?? prev.at(-1))?.[m.id])] as const)
+					.filter(([, v]) => v !== undefined)
+			) as Values
+		}));
+		const summary = Object.fromEntries(
+			single.map((m) => [m.id, prefillValue(m, it, prevSummary[m.id])] as const).filter(([, v]) => v !== undefined)
+		) as Values;
+		// Sub-tasks start unticked too: you tick the ones you did.
+		const subs = Object.fromEntries(t.subtasks.map((s) => [s.id, false]));
+		return { sets, summary, subs };
+	}
+
+	/**
+	 * Build the editable state for each Slot. A finished log shows what was saved. A log
+	 * that is still due shows the saved (ticked) sets first, then the planned sets not
+	 * logged yet, so leaving half way through a workout loses nothing.
+	 */
 	function initial(): ItemState[] {
 		return data.items.map((it) => {
 			const t = it.task;
 			if (!t) return { sets: [], summary: {}, subs: {} };
-			const repeating = t.metrics.filter((m) => m.repeats);
-			const single = t.metrics.filter((m) => !m.repeats);
 			const savedSets = it.saved.filter((v) => !isSummary(v));
 			const savedSummary = it.saved.find(isSummary) ?? {};
-			if (it.saved.length || data.occurrence.status === 'done') {
-				return {
-					sets: savedSets.map((values) => ({ done: true, values: { ...values } })),
-					summary: { ...savedSummary },
-					subs: Object.fromEntries(t.subtasks.map((s) => [s.id, !!data.subDone[s.id]]))
-				};
-			}
-			const prev = it.previous.filter((v) => !isSummary(v));
-			const prevSummary = it.previous.find(isSummary) ?? {};
-			const count = repeating.length ? (it.sets ?? (prev.length || 1)) : 0;
-			const sets = Array.from({ length: count }, (_, i) => ({
-				done: false,
-				values: Object.fromEntries(
-					repeating
-						.map((m) => [m.id, prefillValue(m, it, (prev[i] ?? prev.at(-1))?.[m.id])] as const)
-						.filter(([, v]) => v !== undefined)
-				) as Values
-			}));
-			const summary = Object.fromEntries(
-				single.map((m) => [m.id, prefillValue(m, it, prevSummary[m.id])] as const).filter(([, v]) => v !== undefined)
-			) as Values;
-			const subs = Object.fromEntries(t.subtasks.map((s) => [s.id, it.previousSubs.includes(s.id)]));
-			return { sets, summary, subs };
+			// Not finished: due today, or a past day that was missed, skipped or never logged.
+			const due = data.occurrence.status !== 'done';
+			if (due && !it.saved.length) return planned(it);
+			const sets = savedSets.map((values) => ({ done: true, values: { ...values } }));
+			if (due) sets.push(...planned(it).sets.slice(sets.length));
+			return {
+				sets,
+				summary: { ...savedSummary },
+				subs: Object.fromEntries(t.subtasks.map((s) => [s.id, !!data.subDone[s.id]]))
+			};
 		});
 	}
 
@@ -246,6 +263,9 @@
 		isOpen && base[i]?.sets[j] !== undefined && (base[i].sets[j].values[id] ?? null) !== (log[i].sets[j].values[id] ?? null);
 	const changedSummary = (i: number, id: string) =>
 		isOpen && (base[i]?.summary[id] ?? null) !== (log[i].summary[id] ?? null);
+	/** The value is still the untouched prefill (last time or the target), not something logged now. */
+	const isPrefill = (i: number, id: string) =>
+		isOpen && !data.items[i].saved.length && base[i]?.summary[id] != null && !changedSummary(i, id);
 
 	async function sameAsLast() {
 		if (data.past) return sameAsLastPast();
@@ -313,7 +333,7 @@
 </header>
 
 {#if !data.canLog && data.occurrence.status !== 'done'}
-	<p class="card muted small-text">This day is further back than Settings allow logging, so it can only be looked at. <a href="/settings#past-days">Change it in Settings</a>.</p>
+	<p class="card muted small-text">This day is further back than Settings allow logging, so it can only be looked at. <a href="/settings/past-days">Change it in Settings</a>.</p>
 {:else if data.past && isOpen}
 	<p class="muted small-text past">Logging a past day. It counts like a log on the day.</p>
 {/if}
@@ -446,6 +466,7 @@
 						{#if m.type === 'duration' && !quickMode && !data.past}
 							<Timer
 								bind:value={() => log[i].summary[m.id] as number | null, (v) => (log[i].summary[m.id] = v)}
+								replace={isPrefill(i, m.id)}
 								target={targetAt(it, m.id) ?? null}
 								storageKey="timer:{data.occurrence.id}:{m.id}"
 							/>
