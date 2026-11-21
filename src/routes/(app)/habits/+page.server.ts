@@ -2,19 +2,48 @@ import { fail } from '@sveltejs/kit';
 import { listHabits } from '$lib/server/repo/habits';
 import { listAreas } from '$lib/server/repo/areas';
 import { addTemplate } from '$lib/server/repo/templates';
-import { getSettings } from '$lib/server/settings';
+import { getViews } from '$lib/server/settings';
+import { identitiesByHabit } from '$lib/server/repo/identities';
+import { habitStats } from '$lib/engine/stats';
+import { db } from '$lib/server/db';
+import { habit, occurrence } from '$lib/server/db/schema';
+import { eq } from 'drizzle-orm';
 import { userToday } from '$lib/server/today';
 import { templateFile } from '$lib/template';
+import { initialState } from '$lib/views';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = ({ locals, url }) => {
+export const load: PageServerLoad = ({ locals, url, cookies }) => {
 	const accountId = locals.account!.id;
-	const showArchived = url.searchParams.has('archived');
+	const today = userToday(accountId, cookies.get('tz'));
+	const idents = identitiesByHabit(accountId);
+	// Every Occurrence of the user's habits in one query, for consistency and "last done".
+	const marks = new Map<string, { date: string; status: string }[]>();
+	for (const m of db
+		.select({ habitId: occurrence.habitId, date: occurrence.date, status: occurrence.status })
+		.from(occurrence)
+		.innerJoin(habit, eq(occurrence.habitId, habit.id))
+		.where(eq(habit.accountId, accountId))
+		.all())
+		marks.set(m.habitId, [...(marks.get(m.habitId) ?? []), m]);
+	const views = getViews(accountId);
+	// The old ?archived link still works: it turns the archived filter on.
+	const initial = initialState(views, 'habits');
+	if (url.searchParams.has('archived')) initial.archived = true;
 	return {
-		habits: listHabits(accountId, { archived: showArchived }),
+		habits: listHabits(accountId, { archived: true }).map((h) => {
+			const st = habitStats(marks.get(h.id) ?? [], today);
+			return {
+				...h,
+				createdAt: h.createdAt.getTime(),
+				identities: idents.get(h.id) ?? [],
+				consistency: h.direction === 'break' ? null : st.consistency,
+				lastDone: st.lastDone
+			};
+		}),
 		areas: listAreas(accountId),
-		groupByArea: getSettings(accountId).groupByArea,
-		showArchived,
+		views,
+		initial,
 		added: url.searchParams.get('added')
 	};
 };

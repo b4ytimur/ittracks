@@ -1,6 +1,6 @@
 // Turns Schedules into today's Occurrences, and gathers what the Today screen shows.
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, inArray, isNull, lt, max, or } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, max, or } from 'drizzle-orm';
 import { db } from './db';
 import {
 	craving,
@@ -37,6 +37,7 @@ import { identitiesByHabit } from './repo/identities';
 import { getSettings } from './settings';
 import { dayOrder, logicalDate } from '$lib/engine/day';
 import { pauseOn, type Pause } from '$lib/engine/pause';
+import { habitStats, type HabitStats } from '$lib/engine/stats';
 
 /**
  * Today's date in the user's time zone, as YYYY-MM-DD. Before `dayStart` (HH:MM)
@@ -251,6 +252,7 @@ export interface TodayItem {
 	areaId: string | null;
 	/** Paused until this date (inclusive), for habits in a pause. */
 	pausedUntil: string | null;
+	stats: HabitStats;
 }
 
 export interface PrepItem {
@@ -459,7 +461,8 @@ export function loadToday(accountId: string, today: string) {
 				.where(and(eq(occurrence.habitId, h.id), eq(occurrence.status, 'done')))
 				.get(),
 			areaId: h.areaId,
-			pausedUntil: pauseOn(allPauses, h.id, today)?.end ?? null
+			pausedUntil: pauseOn(allPauses, h.id, today)?.end ?? null,
+			stats: habitStats(marks, today)
 		};
 		if (occ) build.push(item);
 		else if (item.pausedUntil) paused.push(item);
@@ -483,7 +486,23 @@ export function loadToday(accountId: string, today: string) {
 	const doneToday = new Set(build.filter((b) => b.occurrence?.status === 'done').map((b) => b.habitId));
 	for (const b of build)
 		b.upNext = !!b.afterHabitId && doneToday.has(b.afterHabitId) && b.occurrence?.status === 'due';
-	return { build, resting, paused, breaking };
+	return { build, resting, paused, breaking, week: weekStrip(accountId, today) };
+}
+
+/** Done and scheduled per day since Monday, for the week strip on Today. */
+export function weekStrip(accountId: string, today: string) {
+	const monday = weekStart(today);
+	const rows = db
+		.select({ date: occurrence.date, status: occurrence.status })
+		.from(occurrence)
+		.innerJoin(habit, eq(occurrence.habitId, habit.id))
+		.where(and(eq(habit.accountId, accountId), gte(occurrence.date, monday), lte(occurrence.date, addDays(monday, 6))))
+		.all();
+	return Array.from({ length: 7 }, (_, i) => {
+		const date = addDays(monday, i);
+		const day = rows.filter((r) => r.date === date && r.status !== 'skipped');
+		return { date, done: day.filter((r) => r.status === 'done').length, of: day.length };
+	});
 }
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
