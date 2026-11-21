@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { deserialize, enhance } from '$app/forms';
+	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { HabitForm, ScheduleForm } from '$lib/forms';
 	import { describeSchedule, weekdayNames } from '$lib/describe';
 	import FillRuleEditor from './FillRuleEditor.svelte';
@@ -282,6 +283,17 @@
 			slots: v.slots.map((x) => ({ ...structuredClone($state.snapshot(x)), id: crypto.randomUUID() }))
 		});
 	}
+
+	/**
+	 * Save without reloading the page. A refused save (a conflict, a missing field) keeps
+	 * everything typed in, new habit or not, and brings the reason into view.
+	 */
+	const keepOnError: SubmitFunction = () => async ({ result, update }) => {
+		await update({ reset: false });
+		if (result.type !== 'failure') return;
+		await tick();
+		document.querySelector('#habit-form .save-error')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+	};
 
 	const guidedSteps = ['What', 'When', 'Cue', 'Check'];
 	const canNext = $derived(step === 0 ? !!h.name.trim() : true);
@@ -804,7 +816,7 @@
 	</p>
 {/if}
 
-<form method="POST" action="?/save" class="stack" id="habit-form">
+<form method="POST" action="?/save" class="stack" id="habit-form" use:enhance={keepOnError}>
 	<input type="hidden" name="payload" value={payload} />
 
 	{#if mode === 'guided'}
@@ -853,7 +865,7 @@
 			<label style="color: var(--text)"><input type="checkbox" bind:checked={pinned} /> Add to home screen shortcuts</label>
 		{/if}
 
-		{#if form?.error}<p class="error">{form.error}</p>{/if}
+		{#if form?.error}<p class="error save-error" role="alert">{form.error}</p>{/if}
 		<div class="actions">
 			{#if step > 0}<button type="button" onclick={() => step--}>Back</button>{:else}<span></span>{/if}
 			{#if step < guidedSteps.length - 1}
@@ -1052,7 +1064,7 @@
 
 	{#each uniq(ruleCheck.errors.map((i) => i.reason)) as reason (reason)}<p class="error">{reason}</p>{/each}
 	{#each uniq(ruleCheck.warnings.map((i) => i.reason)) as reason (reason)}<p class="blocked">Heads up: {reason}</p>{/each}
-	{#if form?.error}<p class="error">{form.error}</p>{/if}
+	{#if form?.error}<p class="error save-error" role="alert">{form.error}</p>{/if}
 
 	<div class="actions">
 		<button class="primary">Save habit</button>
