@@ -10,6 +10,7 @@
 	import ViewBar from '$lib/ViewBar.svelte';
 	import { viewOp } from '$lib/viewclient';
 	import { headlineText } from '$lib/engine/stats';
+	import { addDays } from '$lib/engine/dates';
 	import {
 		DONE_MODES,
 		LINES,
@@ -202,6 +203,25 @@
 	const atRiskItems = $derived(data.build.filter((b) => b.atRisk && !isDone(b)));
 	const weekdayShort = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'narrow' });
 
+	// "Yesterday wasn't logged": hidden on this device until the next day, once dismissed.
+	const yesterday = $derived(addDays(data.today, -1));
+	let nudgeHiddenFor = $state<string | null>(null);
+	onMount(() => {
+		try {
+			nudgeHiddenFor = localStorage.getItem('nudge-hidden');
+		} catch {
+			/* storage blocked */
+		}
+	});
+	function hideNudge() {
+		nudgeHiddenFor = yesterday;
+		try {
+			localStorage.setItem('nudge-hidden', yesterday);
+		} catch {
+			/* storage blocked */
+		}
+	}
+
 	const dateLabel = $derived(
 		new Date(data.today + 'T12:00:00').toLocaleDateString(undefined, {
 			weekday: 'long',
@@ -236,7 +256,7 @@
 <header class="bar">
 	<div>
 		<h1>Today</h1>
-		<div class="muted">{dateLabel}</div>
+		<div class="muted">{dateLabel}{#if data.canBackfill}{' · '}<a href="/day">Log a past day</a>{/if}</div>
 	</div>
 	{#if !hidden('identities')}<a href="/identities">Identities</a>{/if}
 </header>
@@ -275,6 +295,18 @@
 			<span class="muted small-text grow">You can change this any time in Settings.</span>
 		</div>
 	</form>
+{/if}
+
+{#if data.unlogged.length && nudgeHiddenFor !== yesterday}
+	<div class="card nudge row" role="status">
+		<span class="grow small-text"
+			>Yesterday {data.unlogged.length === 1 ? 'one habit was' : `${data.unlogged.length} habits were`} not logged: {data.unlogged
+				.slice(0, 3)
+				.join(', ')}{data.unlogged.length > 3 ? ' and more' : ''}. Did you do {data.unlogged.length === 1 ? 'it' : 'them'}?</span
+		>
+		<a class="button small primary" href="/day/{yesterday}">Log yesterday</a>
+		<button class="small link" onclick={hideNudge} aria-label="Hide this until tomorrow">Hide</button>
+	</div>
 {/if}
 
 {#if !data.build.length && !data.resting.length && !data.breaking.length && !data.paused.length}
@@ -316,10 +348,17 @@
 	{:else if w === 'week'}
 		<div class="card widget week" role="group" aria-label="This week">
 			{#each data.week as d (d.date)}
-				<div class="day" class:today={d.date === data.today} class:full={d.of > 0 && d.done === d.of}>
-					<span class="muted small-text">{weekdayShort(d.date)}</span>
-					<span>{d.date > data.today ? '' : d.of ? `${d.done}/${d.of}` : '–'}</span>
-				</div>
+				{#if d.date < data.today && data.canBackfill}
+					<a class="day" class:full={d.of > 0 && d.done === d.of} href="/day/{d.date}" aria-label="Log {shortDate(d.date)}">
+						<span class="muted small-text">{weekdayShort(d.date)}</span>
+						<span>{d.of ? `${d.done}/${d.of}` : '–'}</span>
+					</a>
+				{:else}
+					<div class="day" class:today={d.date === data.today} class:full={d.of > 0 && d.done === d.of}>
+						<span class="muted small-text">{weekdayShort(d.date)}</span>
+						<span>{d.date > data.today ? '' : d.of ? `${d.done}/${d.of}` : '–'}</span>
+					</div>
+				{/if}
 			{/each}
 		</div>
 	{:else if w === 'atRisk' && atRiskItems.length}
@@ -799,6 +838,19 @@
 	}
 	.week .today {
 		font-weight: 600;
+	}
+	.week a.day {
+		color: inherit;
+		text-decoration: none;
+		border-radius: 6px;
+	}
+	.week a.day:hover {
+		background: var(--border);
+	}
+	.nudge {
+		align-items: center;
+		margin-bottom: 0.75rem;
+		border-color: var(--accent);
 	}
 	.week .full span:last-child {
 		color: var(--accent);

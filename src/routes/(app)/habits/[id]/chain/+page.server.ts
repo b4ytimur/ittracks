@@ -4,6 +4,7 @@ import { db } from '$lib/server/db';
 import { occurrence, slip } from '$lib/server/db/schema';
 import { ownedHabit } from '$lib/server/owned';
 import { userToday } from '$lib/server/today';
+import { getSettings } from '$lib/server/settings';
 import { addDays, weekStart } from '$lib/engine/dates';
 import { chainCells } from '$lib/engine/chain';
 import { limitOn } from '$lib/engine/limit';
@@ -19,6 +20,8 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 	const weeks = Math.min(Math.max(Number(url.searchParams.get('weeks')) || WEEKS, 4), 104);
 	const from = addDays(weekStart(today), -7 * (weeks - 1));
 	const to = addDays(weekStart(today), 6);
+	// Past days open the day page to log or change them; slips can always be added there.
+	const canBackfill = h.direction === 'break' || getSettings(locals.account!.id).pastDays !== 0;
 
 	if (h.direction === 'break') {
 		const slips = db.select({ date: slip.date, count: slip.count }).from(slip).where(eq(slip.habitId, h.id)).all();
@@ -33,7 +36,7 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 				count
 			});
 		}
-		return { id: h.id, name: h.name, direction: h.direction, weeks, today, days, cells: [], summary: '', limit: !!h.limit };
+		return { id: h.id, name: h.name, direction: h.direction, weeks, today, days, cells: [], summary: '', limit: !!h.limit, startDate: h.startDate, canBackfill };
 	}
 
 	const marks = db
@@ -52,6 +55,8 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		days: [],
 		cells: chainCells(marks, rule, from, to, today),
 		summary: describeStreak(streak(marks, rule, { minimumCounts: h.minimumCounts, today }), rule),
-		limit: false
+		limit: false,
+		startDate: h.startDate,
+		canBackfill
 	};
 };

@@ -3,7 +3,8 @@ import { habitForm, taskForm, type HabitForm, type TaskForm } from '../forms';
 import { blocked, get, set } from './core';
 import { checkHabit, habitRules, slotRules } from './habit';
 import { checkTask, metricRules } from './task';
-import { overlappingRanges } from './settings';
+import { checkSettings, cleanSettings, overlappingRanges, settingsRules } from './settings';
+import type { Settings } from '../server/settings';
 
 const V = '00000000-0000-4000-8000-000000000001';
 const S = '00000000-0000-4000-8000-000000000002';
@@ -216,5 +217,34 @@ describe('settings rules', () => {
 		expect(overlappingRanges([r('Morning', '05:00', '11:00'), r('Day', '11:00', '17:00')])).toBeNull();
 		expect(overlappingRanges([r('Morning', '05:00', '11:00'), r('Late', '10:00', '12:00')])).not.toBeNull();
 		expect(overlappingRanges([r('Night', '22:00', '04:00'), r('Early', '03:00', '06:00')])).not.toBeNull();
+	});
+
+	const settings = (patch: Partial<Settings>): Settings => ({
+		weightUnit: 'kg',
+		ranges: [],
+		guidedSetup: true,
+		showAllSections: false,
+		groupByArea: false,
+		pinned: [],
+		taskTypes: [],
+		pastDays: null,
+		nudgeYesterday: true,
+		...patch
+	});
+
+	it('the yesterday nudge needs past-day logging on, and is cleared when it is off', () => {
+		expect(blocked(settingsRules, settings({ pastDays: 0 }), 'nudgeYesterday', undefined)?.reason).toBe(
+			'Turn on logging past days first'
+		);
+		expect(blocked(settingsRules, settings({ pastDays: 7 }), 'nudgeYesterday', undefined)).toBeNull();
+		expect(cleanSettings(settings({ pastDays: 0 })).nudgeYesterday).toBe(false);
+		expect(cleanSettings(settings({ pastDays: 1 })).nudgeYesterday).toBe(true);
+	});
+
+	it('how far back must be a whole number of days, or any time', () => {
+		expect(checkSettings(settings({ pastDays: null }))).toEqual([]);
+		expect(checkSettings(settings({ pastDays: 30 }))).toEqual([]);
+		expect(checkSettings(settings({ pastDays: -1 }))[0]?.path).toBe('pastDays');
+		expect(checkSettings(settings({ pastDays: 2.5 }))[0]?.path).toBe('pastDays');
 	});
 });

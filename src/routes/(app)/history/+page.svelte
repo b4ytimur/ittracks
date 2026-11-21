@@ -37,7 +37,10 @@
 
 <header class="bar">
 	<h1>History</h1>
-	<a href="/settings">Settings</a>
+	<div class="row" style="align-items: center">
+		{#if data.canBackfill}<a class="button small" href="/day">Log a past day</a>{/if}
+		<a href="/settings">Settings</a>
+	</div>
 </header>
 
 {#if data.history.length}
@@ -52,7 +55,10 @@
 {/if}
 
 {#each days as day (day.date)}
-	<h2>{label(day.date)}</h2>
+	<h2 class="dayhead">
+		{label(day.date)}
+		{#if data.canBackfill && day.date < data.today}<a class="small-text" href="/day/{day.date}" aria-label="Log or change {label(day.date)}">Log this day</a>{/if}
+	</h2>
 	<ul class="list">
 		{#each day.occurrences as o (o.id)}
 			<li>
@@ -90,6 +96,15 @@
 	}
 	.small-text {
 		font-size: 0.85rem;
+	}
+	.dayhead {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 1rem;
+	}
+	.dayhead a {
+		font-weight: 400;
 	}
 	.values {
 		color: var(--text);
