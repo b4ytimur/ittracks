@@ -4,6 +4,7 @@
 import { addDays, daysBetween, toDays, fromDays, weekStart, weekday, type ISODate } from '../engine/dates';
 import { daysSinceSlip, longestRun, streak, type Level, type Mark, type StreakRule } from '../engine/streak';
 import { chainCells } from '../engine/chain';
+import { withinOn, withinStreak, usedIn, limitOn, type Limit } from '../engine/limit';
 import { compile, evaluate, FormulaError } from './formula';
 import {
 	ADDS_UP,
@@ -33,6 +34,8 @@ export interface DsHabit {
 	cost: { amount: number; unit: string; perDay: number | null } | null;
 	streakRule: StreakRule;
 	minimumCounts: boolean;
+	/** Reduce mode: slips are allowed up to a daily or weekly limit. */
+	limit: Limit | null;
 }
 export interface DsTask {
 	id: string;
@@ -901,7 +904,7 @@ export interface CardResult {
 	rows?: { key: string; label: string; total: number | null; best: number | null; last: number | null; lastDate: ISODate | null; logs: number }[];
 	grid?: { rows: string[]; cols: string[]; values: (number | null)[][] };
 	sessions?: { date: ISODate; occId: string; habit: string; task: string; text: string; met: number | null }[];
-	streaks?: { habitId: string; name: string; current: number; unit: 'streak' | 'percent' | 'days'; best: number | null; atRisk: boolean; strip: { date: ISODate; status: string }[] }[];
+	streaks?: { habitId: string; name: string; current: number; unit: 'streak' | 'percent' | 'days' | 'withinDays' | 'withinWeeks'; best: number | null; atRisk: boolean; strip: { date: ISODate; status: string }[] }[];
 	goalRows?: { key: string; label: string; value: number | null; goal: number | null; goalMax: number | null; period: string }[];
 	breakdown?: { key: string; label: string; value: number; share: number }[];
 }
@@ -1356,6 +1359,24 @@ function streaksFor(card: StatCard, P: Prepared, ctx: Ctx): NonNullable<CardResu
 		.slice(0, card.look.top);
 	const from = addDays(ctx.today, -27);
 	return hs.map((h) => {
+		if (h.direction === 'break' && h.limit) {
+			// Reduce mode: periods in a row within the limit, the same count as Today.
+			const l = h.limit;
+			const slips = P.ds.slips.filter((s) => s.habitId === h.id);
+			const current = withinStreak(l, slips, h.startDate, ctx.today);
+			const step = l.period === 'week' ? 7 : 1;
+			let best = 0;
+			let run = 0;
+			for (let d = l.period === 'week' ? weekStart(h.startDate) : h.startDate; d <= ctx.today; d = addDays(d, step)) {
+				run = usedIn(l, slips, d) > limitOn(l, d) ? 0 : run + 1;
+				best = Math.max(best, run);
+			}
+			const slipDays = new Set(slips.map((s) => s.date));
+			const strip = [];
+			for (let d = from; d <= ctx.today; d = addDays(d, 1))
+				strip.push({ date: d, status: d < h.startDate ? 'rest' : !slipDays.has(d) ? 'clean' : withinOn(l, slips, d) ? 'within' : 'slip' });
+			return { habitId: h.id, name: h.name, current, unit: l.period === 'week' ? ('withinWeeks' as const) : ('withinDays' as const), best, atRisk: false, strip };
+		}
 		if (h.direction === 'break') {
 			// The same counts as Today and the habit page.
 			const slipDates = P.ds.slips.filter((s) => s.habitId === h.id).map((s) => s.date);
@@ -1405,7 +1426,7 @@ export interface DrillRow {
 
 /** The logs behind a number: a whole card, one bucket, or one series in one bucket. */
 export function drill(card: StatCard, P: Prepared, ctx: Ctx, range: Range, seriesKey: string | null): DrillRow[] {
-	const share = unitOf(card, P, ctx).share;
+	const share = SHARE_MEASURES.includes(card.perLog);
 	const ps = pointsFor(card, P, ctx, range).filter((p) => !seriesKey || seriesKey === 'all' || p.series.some((s) => s.key === seriesKey));
 	const logBy = new Map(P.logs.map((l) => [`${l.occ.id}|${l.task.id}`, l]));
 	return ps

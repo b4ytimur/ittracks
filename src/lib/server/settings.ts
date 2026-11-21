@@ -27,6 +27,8 @@ export interface Settings {
 	taskTypes: TaskType[];
 	/** The starting Areas were created once; deleting them all doesn't bring them back. */
 	areasSeeded?: boolean;
+	/** Stats boards, cards and custom measures (src/lib/stats/model.ts). Unset until Stats is first opened. */
+	stats?: unknown;
 }
 
 const defaults: Settings = {

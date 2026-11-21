@@ -33,6 +33,7 @@ function dataset(): Dataset {
 		cost: null,
 		streakRule: { kind: 'neverTwice' as const },
 		minimumCounts: true,
+		limit: null,
 		...extra
 	});
 	const occ = (id: string, habitId: string, variantId: string, date: string, status: 'done' | 'missed' | 'due' | 'skipped', time: string | null = null, level: 'minimum' | 'target' | 'stretch' | null = null) => ({
@@ -426,5 +427,15 @@ describe('storage', () => {
 
 	it('writes CSV a spreadsheet will not run as a formula', () => {
 		expect(toCsv([['=HYPERLINK("x")', '-3', 'a,b']])).toBe(`"'=HYPERLINK(""x"")",-3,"a,b"\n`);
+	});
+});
+
+describe('auto card ids', () => {
+	it('stay the same between page loads, so edits and downloads find them', () => {
+		const P = prepare(dataset());
+		const a = habitCards(P, P.habits.get('gym')!).map((c) => c.id);
+		const b = habitCards(prepare(dataset()), P.habits.get('gym')!).map((c) => c.id);
+		expect(a).toEqual(b);
+		expect(new Set(a).size).toBe(a.length);
 	});
 });
