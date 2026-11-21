@@ -52,6 +52,8 @@ export const settingsRules = defineRules<Settings, SettingsCtx>({
 	pinned: independent,
 	taskTypes: independent,
 	areasSeeded: independent,
+	/** Stats boards, cards and measures have their own registry: rules/stats.ts. */
+	stats: independent,
 	pastDays: [
 		check((s) => s.pastDays !== null && (!Number.isInteger(s.pastDays) || s.pastDays < 0 || s.pastDays > 3650), 'Pick how many days back can be logged')
 	],

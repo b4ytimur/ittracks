@@ -28,6 +28,8 @@ export interface Settings {
 	taskTypes: TaskType[];
 	/** The starting Areas were created once; deleting them all doesn't bring them back. */
 	areasSeeded?: boolean;
+	/** Stats boards, cards and custom measures (src/lib/stats/model.ts). Unset until Stats is first opened. */
+	stats?: unknown;
 	/** How far back past days can be logged: null any time, 0 off, N days back. */
 	pastDays: PastDays;
 	/** Today says when yesterday has habits left unlogged, with a link to log them. */
