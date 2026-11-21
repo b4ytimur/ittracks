@@ -100,7 +100,7 @@
 		<label class="opt"
 			><input type="checkbox" bind:checked={f.includePool} disabled={!!why('includePool')} />
 			<span
-				>{ctx.pool === 1 ? 'The Task' : `The ${ctx.pool} Tasks`} the auto-filled slots pick from{#if data.poolNames.length}<br /><span class="muted small-text"
+				>{ctx.pool === 1 ? 'The Task' : ctx.pool ? `The ${ctx.pool} Tasks` : 'Tasks'} the auto-filled slots pick from{#if data.poolNames.length}<br /><span class="muted small-text"
 						>{data.poolNames.slice(0, 6).join(', ')}{data.poolNames.length > 6 ? ` and ${data.poolNames.length - 6} more` : ''}</span
 					>{:else if why('includePool')}<br /><span class="muted small-text">{why('includePool')}</span>{/if}</span
 			></label
