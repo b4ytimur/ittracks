@@ -603,7 +603,7 @@
 		><input type="checkbox" bind:checked={h.remind} disabled={!!remindBlock && !h.remind} title={remindBlock?.reason} /> Remind me {h.cue.time ? 'at this time' : h.cue.range ? `when the ${h.cue.range.toLowerCase()} starts` : `(${remindBlock?.reason.toLowerCase() ?? 'set a time first'})`}</label
 	>
 	{#if h.remind}
-		<p class="muted small-text">Turn on reminders for this device in <a href="/settings">Settings</a>.</p>
+		<p class="muted small-text">Turn on reminders for this device in <a href="/settings/reminders">Settings</a>.</p>
 	{/if}
 {/snippet}
 
@@ -789,7 +789,7 @@
 		{/if}
 		<li><a class="card" href="?mode=full"><strong>Start blank in the full editor</strong><div class="muted small-text">Every option on one page.</div></a></li>
 	</ul>
-	<p class="muted small-text">You can skip this choice in <a href="/settings">Settings</a>.</p>
+	<p class="muted small-text">You can skip this choice in <a href="/settings/editor">Settings</a>.</p>
 {:else}
 <header class="bar">
 	<h1>{data.isNew ? (data.copiedFrom ? `Copy of ${data.copiedFrom}` : 'New habit') : 'Edit habit'}</h1>
@@ -1087,7 +1087,7 @@
 {#if !data.isNew && h.direction === 'build' && mode === 'full'}
 	<section class="card stack" id="pause" style="margin-top: 1.5rem">
 		<h2 style="margin-top: 0">Pause</h2>
-		<p class="muted small-text" style="margin: 0">Paused days aren't due and never break the streak. For a break from every habit, use Vacation in <a href="/settings">Settings</a>.</p>
+		<p class="muted small-text" style="margin: 0">Paused days aren't due and never break the streak. For a break from every habit, use <a href="/settings/vacation">Vacation</a> in Settings.</p>
 		{#each data.pauses as p (p.id)}
 			<form method="POST" action="?/unpause" class="row" style="align-items: center" use:enhance>
 				<input type="hidden" name="id" value={p.id} />

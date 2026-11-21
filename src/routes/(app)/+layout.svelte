@@ -10,7 +10,8 @@
 		{ href: '/', label: 'Today' },
 		{ href: '/habits', label: 'Habits' },
 		{ href: '/library', label: 'Library' },
-		{ href: '/history', label: 'History' }
+		{ href: '/history', label: 'History' },
+		{ href: '/settings', label: 'Settings' }
 	];
 	const active = (href: string) =>
 		href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(href);
