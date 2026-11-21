@@ -41,14 +41,23 @@ const body = z.discriminatedUnion('op', [
 	z.object({ op: z.literal('drill'), card: statCard, ctx: ctxIn, from: isoDate, to: isoDate, series: z.string().max(200).nullable() })
 ]);
 
-/** Check a card against the rules, clear what can't apply, and refuse it if a rule blocks it. */
-function cleanCard(card: StatCard, catalog: Catalog, s: StatsSettings, hidden: string[]): StatCard {
+/** Check a card against the rules and clear what can't apply. Gives the blocking reason instead when a rule refuses it. */
+function tryClean(card: StatCard, catalog: Catalog, s: StatsSettings, hidden: string[]): StatCard | string {
 	const ctx = statCtx(card, catalog, { hidden, measures: s.measures });
 	const fixed = normalize(cardRules, card, ctx).form;
 	const block = checkCard(fixed, ctx).find((i) => i.severity === 'block');
-	if (block) error(400, block.reason);
-	return statCard.parse(fixed);
+	return block ? block.reason : statCard.parse(fixed);
 }
+
+/** tryClean, refusing the request when a rule blocks the card. */
+function cleanCard(card: StatCard, catalog: Catalog, s: StatsSettings, hidden: string[]): StatCard {
+	const c = tryClean(card, catalog, s, hidden);
+	if (typeof c === 'string') error(400, c);
+	return c;
+}
+
+/** A card as Today shows it: always a single number. */
+const asTile = (card: StatCard): StatCard => ({ ...card, look: { ...card.look, chart: 'tile' } });
 
 const move = <T,>(xs: T[], i: number, dir: number) => {
 	const j = i + dir;
@@ -83,7 +92,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 		return json({ result: computeCard(card, P, ctx), issues: checkCard(card, sc), card });
 	}
 
-	const needsData = ['board.add', 'card.save', 'card.delete', 'card.move', 'habit.reset'].includes(b.op);
+	const needsData = ['board.add', 'card.save', 'card.delete', 'card.move', 'habit.reset', 'headline'].includes(b.op);
 	const P: Prepared | null = needsData ? statsContext(accountId, tz).P : null;
 	let s = P ? boardsOf(accountId, P) : getStats(accountId);
 	let added: string | undefined;
@@ -98,6 +107,14 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 		const h = P!.habits.get(w.habit);
 		if (!h) error(404, 'No such habit');
 		return [s.habitCards[h.id] ?? habitCards(P!, h), (cards) => (s = { ...s, habitCards: { ...s.habitCards, [h.id]: cards } })];
+	};
+
+	/** Keep a habit's Today number in step with its cards: drop it when its card is gone. */
+	const syncHeadline = (habitId: string, cards: StatCard[]) => {
+		const hl = s.headlines[habitId];
+		if (!hl || cards.some((c) => c.id === hl.id)) return;
+		const { [habitId]: _, ...rest } = s.headlines;
+		s = { ...s, headlines: rest };
 	};
 
 	switch (b.op) {
@@ -128,6 +145,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 			break;
 		case 'board.restore': {
 			if (s.boards.some((x) => x.id === b.board.id)) break;
+			if (s.boards.length >= MAX_BOARDS) error(400, `At most ${MAX_BOARDS} boards`);
 			const boards = [...s.boards];
 			boards.splice(Math.min(b.index, boards.length), 0, b.board);
 			s = { ...s, boards };
@@ -146,11 +164,18 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 				put(next);
 			}
 			added = card.id;
+			// An edited card that is also the habit's Today number: Today shows the new version.
+			if ('habit' in b.where && s.headlines[b.where.habit]?.id === card.id) {
+				const tile = tryClean(asTile(card), catalog, s, hidden);
+				if (typeof tile !== 'string') s = { ...s, headlines: { ...s.headlines, [b.where.habit]: tile } };
+			}
 			break;
 		}
 		case 'card.delete': {
 			const [cards, put] = cardsAt(b.where);
-			put(cards.filter((c) => c.id !== b.id));
+			const left = cards.filter((c) => c.id !== b.id);
+			put(left);
+			if ('habit' in b.where) syncHeadline(b.where.habit, left);
 			break;
 		}
 		case 'card.move': {
@@ -161,6 +186,9 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 		case 'habit.reset': {
 			const { [b.habit]: _, ...rest } = s.habitCards;
 			s = { ...s, habitCards: rest };
+			const h = P!.habits.get(b.habit);
+			// A Today number from an automatic card stays (its id is stable); one from your own card goes.
+			syncHeadline(b.habit, h ? habitCards(P!, h) : []);
 			break;
 		}
 		case 'open':
@@ -172,8 +200,11 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 			s = { ...s, last: b.id };
 			break;
 		case 'headline': {
+			if (!P!.habits.has(b.habit)) error(404, 'No such habit');
 			const { [b.habit]: _, ...rest } = s.headlines;
-			s = { ...s, headlines: b.card ? { ...rest, [b.habit]: { ...b.card, look: { ...b.card.look, chart: 'tile' } } } : rest };
+			// Only habits that are still there keep a Today number.
+			const kept = Object.fromEntries(Object.entries(rest).filter(([k]) => P!.habits.has(k)));
+			s = { ...s, headlines: b.card ? { ...kept, [b.habit]: cleanCard(asTile(b.card), catalogFor(accountId, P!), s, hidden) } : kept };
 			break;
 		}
 		case 'settings':
@@ -191,7 +222,10 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 			break;
 	}
 
-	const next = statsSettings.parse(s);
+	const checked = statsSettings.safeParse(s);
+	if (!checked.success)
+		error(400, checked.error.issues[0]?.code === 'too_big' ? `Stats holds at most ${MAX_BOARDS} boards and ${MAX_CARDS} cards on each` : 'That change could not be saved');
+	const next = checked.data;
 	const issues = checkStatsSettings(next);
 	const block = issues.find((i) => i.severity === 'block');
 	if (block) error(400, block.reason);

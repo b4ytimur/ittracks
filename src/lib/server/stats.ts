@@ -13,6 +13,7 @@ import { startingBoards } from '$lib/stats/auto';
 import { catalogOf, statCtx, type Catalog } from '$lib/stats/catalog';
 import { checkCard } from '$lib/rules/stats';
 import { DEFAULT_STREAK_RULE } from '$lib/engine/streak';
+import { logicalDate } from '$lib/engine/day';
 import { value as formatValue } from '$lib/stats/format';
 
 export function loadDataset(accountId: string, tz?: string): Dataset {
@@ -96,7 +97,7 @@ export function loadDataset(accountId: string, tz?: string): Dataset {
 			level: o.level ?? null,
 			picks: o.picks ?? null,
 			// Logged for another day (past-day logging): the finish time says nothing about when it happened.
-			time: o.finishedAt && timeIn(zone, o.finishedAt) && sameDay(o.finishedAt, o.date, zone) ? timeIn(zone, o.finishedAt) : null
+			time: o.finishedAt && timeIn(zone, o.finishedAt) && sameDay(o.finishedAt, o.date, zone, s.dayStart) ? timeIn(zone, o.finishedAt) : null
 		})),
 		entries: entries.map((e) => ({ occurrenceId: e.occurrenceId, taskId: e.taskId, values: e.values ?? {}, sortOrder: e.sortOrder })),
 		slips: slips.map((x) => ({ habitId: x.habitId, date: x.date, count: x.count, time: x.time })),
@@ -104,18 +105,16 @@ export function loadDataset(accountId: string, tz?: string): Dataset {
 	};
 }
 
-/** Was `at` on `date` (or just after midnight of it, for a day that starts late) in the user's zone? */
-function sameDay(at: Date, date: string, zone: string | undefined): boolean {
+/** Did `at` fall on `date` in the user's zone, counting the day from `dayStart` as Today does? */
+function sameDay(at: Date, date: string, zone: string | undefined, dayStart = '00:00'): boolean {
 	let d: string;
 	try {
 		d = new Intl.DateTimeFormat('en-CA', { timeZone: zone }).format(at);
 	} catch {
 		d = at.toISOString().slice(0, 10);
 	}
-	if (d === date) return true;
 	// A log at 01:00 for a day that starts at 04:00 belongs to the day before.
-	const next = new Date(Date.parse(`${date}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
-	return d === next && timeIn(zone, at) < '06:00';
+	return logicalDate(d, timeIn(zone, at), dayStart) === date;
 }
 
 export function getStats(accountId: string): StatsSettings {
@@ -191,7 +190,9 @@ export function itemsFor(
 /** Today's headline numbers from habit Stats tabs ("Show on Today"), as text per habit. */
 export function headlineTexts(accountId: string, tz?: string): Record<string, string> {
 	const s = getStats(accountId);
-	const entries = Object.entries(s.headlines);
+	// Skip the full read when no picked habit is still there (a headline left from a deleted habit).
+	const live = new Set(db.select({ id: habit.id }).from(habit).where(eq(habit.accountId, accountId)).all().map((h) => h.id));
+	const entries = Object.entries(s.headlines).filter(([habitId]) => live.has(habitId));
 	if (!entries.length) return {};
 	const { P, today } = statsContext(accountId, tz);
 	const ctx = ctxFor(today, s);
