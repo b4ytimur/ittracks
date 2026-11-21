@@ -9,6 +9,7 @@ import {
 } from '$lib/forms';
 import { DEFAULT_STREAK_RULE } from '$lib/engine/streak';
 import {
+	checkHabitForm,
 	checkLinks,
 	copyHabitForm,
 	deleteHabit,
@@ -78,8 +79,10 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 	const settings = getSettings(accountId);
 	const from = url.searchParams.get('from');
 	const source = isNew && from ? getHabitForm(accountId, from) : null;
-	const form = isNew ? (source ? copyHabitForm(source) : blank(userToday(accountId, cookies.get('tz')))) : getHabitForm(accountId, params.id);
-	if (!form) error(404, 'Habit not found');
+	const loaded = isNew ? (source ? copyHabitForm(source) : blank(userToday(accountId, cookies.get('tz')))) : getHabitForm(accountId, params.id);
+	if (!loaded) error(404, 'Habit not found');
+	// Old data may break a conflict rule; fix it with each rule's winner and say what changed.
+	const { form, fixed } = checkHabitForm(loaded, { resolve: true });
 	if (isNew) {
 		form.startDate = userToday(accountId, cookies.get('tz'));
 		const area = url.searchParams.get('area');
@@ -97,6 +100,7 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		mode,
 		copiedFrom: source?.name ?? null,
 		habit: form,
+		fixed,
 		tasks,
 		metrics: numericMetrics(tasks.map((t) => t.id)),
 		tags: listTagNames(accountId),
@@ -133,6 +137,8 @@ export const actions: Actions = {
 		const parsed = habitForm.safeParse(json);
 		if (!parsed.success) return fail(400, { error: firstError(parsed.error) });
 		const accountId = locals.account!.id;
+		const conflict = checkHabitForm(parsed.data).errors[0];
+		if (conflict) return fail(400, { error: conflict.reason });
 		const linkError = checkLinks(accountId, params.id === 'new' ? null : params.id, parsed.data);
 		if (linkError) return fail(400, { error: linkError });
 		const id = saveHabit(accountId, params.id === 'new' ? null : params.id, parsed.data, userToday(accountId, cookies.get('tz')));

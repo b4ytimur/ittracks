@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { listGallery } from '.';
 import { applyAnswers, fromTemplate } from '$lib/template';
 import { habitForm, taskForm } from '$lib/forms';
+import { checkHabit } from '$lib/rules/habit';
+import { checkTask } from '$lib/rules/task';
 
 describe('gallery', () => {
 	const items = listGallery('lb');
@@ -15,6 +17,10 @@ describe('gallery', () => {
 		const made = fromTemplate(applyAnswers(item.template, {}), '2026-01-05');
 		expect(habitForm.safeParse(made.habit).error?.issues ?? []).toEqual([]);
 		for (const t of made.tasks) expect(taskForm.safeParse(t.form).success).toBe(true);
+		// No options that block each other, so adding a starter template never fails.
+		const repeats = (id: string) => made.tasks.find((t) => t.id === id)?.form.metrics.some((m) => m.repeats);
+		expect(checkHabit(made.habit, { taskRepeats: repeats }).errors).toEqual([]);
+		for (const t of made.tasks) expect(checkTask(t.form).errors).toEqual([]);
 		for (const q of item.template.questions)
 			if (q.kind === 'number')
 				for (const m of q.metrics) expect(item.template.tasks.some((t) => t.metrics.some((x) => x.key === m))).toBe(true);
