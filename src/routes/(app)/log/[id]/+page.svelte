@@ -23,7 +23,8 @@
 	const isSummary = (v: Values) => v._summary === true;
 	/** Quick log (from a shortcut or link): only the fields marked for quick logs. */
 	const quickMode = $derived(page.url.searchParams.has('quick'));
-	const isDue = $derived(data.occurrence.status === 'due');
+	/** Not finished yet: due today, or a past day that was missed, skipped or never logged. */
+	const isOpen = $derived(data.occurrence.status !== 'done' && data.canLog);
 
 	/**
 	 * Where a field's starting value comes from, per its log setting. A tick box always
@@ -72,7 +73,8 @@
 			if (!t) return { sets: [], summary: {}, subs: {} };
 			const savedSets = it.saved.filter((v) => !isSummary(v));
 			const savedSummary = it.saved.find(isSummary) ?? {};
-			const due = data.occurrence.status === 'due';
+			// Not finished: due today, or a past day that was missed, skipped or never logged.
+			const due = data.occurrence.status !== 'done';
 			if (due && !it.saved.length) return planned(it);
 			const sets = savedSets.map((values) => ({ done: true, values: { ...values } }));
 			if (due) sets.push(...planned(it).sets.slice(sets.length));
@@ -131,7 +133,7 @@
 	onMount(() => {
 		// Restore work that never reached the server (a reload while offline, a crash).
 		const d = readDraft();
-		if (d && !d.synced && data.occurrence.status === 'due' && d.log.length === log.length) {
+		if (d && !d.synced && data.occurrence.status !== 'done' && d.log.length === log.length) {
 			log = d.log;
 			notes = d.notes;
 			level = d.level;
@@ -146,8 +148,10 @@
 			return;
 		}
 		untrack(() => {
-			if (!isDue) return;
+			if (!isOpen) return;
 			writeDraft(false);
+			// A past day is saved on Finish only, so leaving it half done doesn't leave a partial log.
+			if (data.past) return;
 			clearTimeout(saveTimer);
 			saveTimer = setTimeout(autosave, 1500);
 		});
@@ -206,7 +210,7 @@
 				if (done) entries.push({ taskId: subId, values: { done: true } });
 			}
 		});
-		return JSON.stringify({ finish, stay, notes, entries, level });
+		return JSON.stringify({ finish, stay, notes, entries, level, back: data.back });
 	}
 
 	const empty = (v: unknown) => v === undefined || v === null || v === '' || v === false;
@@ -256,21 +260,22 @@
 	}
 
 	const changedSet = (i: number, j: number, id: string) =>
-		isDue && base[i]?.sets[j] !== undefined && (base[i].sets[j].values[id] ?? null) !== (log[i].sets[j].values[id] ?? null);
+		isOpen && base[i]?.sets[j] !== undefined && (base[i].sets[j].values[id] ?? null) !== (log[i].sets[j].values[id] ?? null);
 	const changedSummary = (i: number, id: string) =>
-		isDue && (base[i]?.summary[id] ?? null) !== (log[i].summary[id] ?? null);
+		isOpen && (base[i]?.summary[id] ?? null) !== (log[i].summary[id] ?? null);
 	/** The value is still the untouched prefill (last time or the target), not something logged now. */
 	const isPrefill = (i: number, id: string) =>
-		isDue && !data.items[i].saved.length && base[i]?.summary[id] != null && !changedSummary(i, id);
+		isOpen && !data.items[i].saved.length && base[i]?.summary[id] != null && !changedSummary(i, id);
 
 	async function sameAsLast() {
+		if (data.past) return sameAsLastPast();
 		const res = await postAction('/?/same', { occurrence: data.occurrence.id }).catch((e) => e);
 		if (res instanceof Error) {
 			if (isOffline(res)) {
 				enqueue('/?/same', [['occurrence', data.occurrence.id]], data.habitName);
 				clearDraft();
 				showToast(`Logged ${data.habitName}. It will sync when you're back online.`);
-				return goto('/');
+				return goto(data.back);
 			}
 			problem = 'Could not save. Try again.';
 			return;
@@ -279,7 +284,22 @@
 		goto(`/?did=${data.occurrence.id}&clear=1`);
 	}
 
-	const canRepeat = $derived(isDue && data.items.some((it) => it.previous.length));
+	/** A past day: copy the last log from before that day, then go back to the day. */
+	async function sameAsLastPast() {
+		try {
+			const res = await postAction(`/day/${data.occurrence.date}?/same`, { habit: data.habitId });
+			const r = await res.json();
+			if (r.type === 'redirect') return goto(r.location);
+			if (r.type !== 'success') throw new Error('refused');
+		} catch {
+			problem = 'Could not save. Try again.';
+			return;
+		}
+		clearDraft();
+		goto(`${data.back}${data.back.includes('?') ? '&' : '?'}did=${data.occurrence.id}`);
+	}
+
+	const canRepeat = $derived(isOpen && data.items.some((it) => it.previous.length));
 
 	const dateLabel = $derived(
 		new Date(data.occurrence.date + 'T12:00:00').toLocaleDateString(undefined, {
@@ -309,13 +329,19 @@
 			{#if saveState === 'saving'}· saving…{:else if saveState === 'saved'}· saved{:else if saveState === 'local'}· saved on this device{/if}
 		</div>
 	</div>
-	<a href="/">Back</a>
+	<a href={data.back}>Back</a>
 </header>
+
+{#if !data.canLog && data.occurrence.status !== 'done'}
+	<p class="card muted small-text">This day is further back than Settings allow logging, so it can only be looked at. <a href="/settings/past-days">Change it in Settings</a>.</p>
+{:else if data.past && isOpen}
+	<p class="muted small-text past">Logging a past day. It counts like a log on the day.</p>
+{/if}
 
 {#if canRepeat && !quickMode}
 	<div class="row repeat">
 		<button type="button" class="primary grow" onclick={sameAsLast}>Same as last time</button>
-		<span class="muted small-text">Copies your last log and finishes.</span>
+		<span class="muted small-text">{data.past ? 'Copies your last log from before this day and finishes.' : 'Copies your last log and finishes.'}</span>
 	</div>
 {/if}
 
@@ -433,11 +459,11 @@
 						<span class="field-label">
 							{m.name}{m.unit ? ` (${m.unit})` : m.type === 'duration' ? ' (min)' : ''}{m.required ? ' *' : ''}
 							{#if targetAt(it, m.id) !== undefined}<span class="small-text">· {data.levels ? levelNames[level].toLowerCase() : 'target'} {targetAt(it, m.id)}</span>{/if}
-							{#if prev !== undefined && isDue}<span class="small-text">· last time {prev}</span>{/if}
+							{#if prev !== undefined && isOpen}<span class="small-text">· last time {prev}</span>{/if}
 						</span>
 						<Stepper value={log[i].summary[m.id] as number | null} step={stepOf(m)} label={m.name}
 							changed={changedSummary(i, m.id)} onchange={(v) => (log[i].summary[m.id] = v)} />
-						{#if m.type === 'duration' && !quickMode}
+						{#if m.type === 'duration' && !quickMode && !data.past}
 							<Timer
 								bind:value={() => log[i].summary[m.id] as number | null, (v) => (log[i].summary[m.id] = v)}
 								replace={isPrefill(i, m.id)}
@@ -475,6 +501,7 @@
 {#if form?.error}<p class="error">{form.error}</p>{/if}
 {#if form?.saved}<p class="muted">Saved.</p>{/if}
 
+{#if data.canLog || data.occurrence.status === 'done'}
 <div class="actions">
 	<form
 		method="POST"
@@ -494,7 +521,7 @@
 				enqueue(saveUrl(), [['payload', payload(true, true)]], data.habitName);
 				clearDraft();
 				showToast(`Logged ${data.habitName}. It will sync when you're back online.`);
-				goto('/');
+				goto(data.back);
 				return;
 			}
 			return async ({ result, update }) => {
@@ -502,7 +529,7 @@
 					enqueue(saveUrl(), [['payload', payload(true, true)]], data.habitName);
 					clearDraft();
 					showToast(`Logged ${data.habitName}. It will sync when you're back online.`);
-					goto('/');
+					goto(data.back);
 					return;
 				}
 				if (result.type === 'redirect' || result.type === 'success') clearDraft();
@@ -514,6 +541,7 @@
 		<button class="primary big">{data.occurrence.status === 'done' ? 'Save changes' : quickMode ? 'Save' : 'Finish'}</button>
 	</form>
 </div>
+{/if}
 
 {#if restLeft !== null}
 	<div style="height: 4rem" aria-hidden="true"></div>
@@ -528,6 +556,9 @@
 {/if}
 
 <style>
+	.past {
+		margin: -0.5rem 0 0.75rem;
+	}
 	.levels {
 		border: 1px solid var(--border);
 		margin-bottom: 0.75rem;

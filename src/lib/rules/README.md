@@ -27,7 +27,7 @@ these files.
 
 In a Svelte editor, `blocked(rules, form, 'field', ctx)` returns the reason a control is
 greyed out, or null. On the server, `checkHabitForm` / `checkTask` / `checkSettings`
-return the cleaned form and the errors to refuse.
+return the cleaned form and the errors to refuse (`cleanSettings` clears Settings that can't apply).
 
 A new form (for example view settings): add `<name>.ts` here with `defineRules<YourForm>`,
 and add its schema and registry to `REGISTRIES` in `coverage.test.ts`.
