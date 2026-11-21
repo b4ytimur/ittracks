@@ -99,7 +99,12 @@
 
 <h2>Data</h2>
 <ul class="list">
-	{@render row('/settings/data', 'Templates and shortcuts', 'Export habits, import templates, quick-log links')}
+	{@render row('/settings/data', 'Export, import and templates', 'Back up or analyse your data, restore it, share habits')}
+	{@render row(
+		'/settings/integrations',
+		'Integrations',
+		`${data.keys ? plural(data.keys, 'key') : 'No keys'} · Shortcuts, quick-log links, AI assistants`
+	)}
 </ul>
 
 <h2>Account</h2>

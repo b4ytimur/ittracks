@@ -11,6 +11,8 @@ import { recapFor } from '$lib/server/stats';
 import { planOfToday, replanToday, windowFor } from '$lib/server/backfill';
 import { NOTE_MAX, type ScheduleForm } from '$lib/forms';
 import { pickTask, type FillRule } from '$lib/engine/fill';
+import { appActor } from '$lib/server/core/actor';
+import { emit } from '$lib/server/core/events';
 import type { Actions, PageServerLoad } from './$types';
 
 export interface LogTask {
@@ -233,6 +235,12 @@ export const actions: Actions = {
 				.where(eq(occurrence.id, o.occ.id))
 				.run();
 		});
+		// The event log: finishing is a habit done; saving a finished log again is an edit.
+		const actor = appActor(locals.account!.id, cookies.get('tz'));
+		const ev = { habitId: o.habit.id, date: o.occ.date };
+		if (p.finish && o.occ.status !== 'done')
+			emit(actor, 'occurrence.done', { ...ev, data: { occurrenceId: o.occ.id, level: p.level === 'target' ? null : p.level, how: 'log', entries: p.entries.length } });
+		else if (o.occ.status === 'done' && !p.stay) emit(actor, 'log.saved', { ...ev, data: { occurrenceId: o.occ.id, entries: p.entries.length } });
 		// A past log can change what is due today (a weekly target met, a rotation moved on).
 		if (past && schedule) {
 			replanToday(locals.account!.id, o.habit.id, schedule, today, plan);

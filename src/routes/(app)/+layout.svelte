@@ -63,11 +63,13 @@
 			{#if toast.current.undo}<button class="small" onclick={undo}>Undo</button>{/if}
 		</div>
 	{/if}
-	<nav class="tabs" aria-label="Main">
-		{#each tabs as tab (tab.href)}
-			<a href={tab.href} aria-current={active(tab.href) ? 'page' : undefined}>{tab.label}</a>
-		{/each}
-	</nav>
+	{#if !page.data.linkOnly}
+		<nav class="tabs" aria-label="Main">
+			{#each tabs as tab (tab.href)}
+				<a href={tab.href} aria-current={active(tab.href) ? 'page' : undefined}>{tab.label}</a>
+			{/each}
+		</nav>
+	{/if}
 </div>
 
 <style>

@@ -1,7 +1,9 @@
 // Actions from a reminder notification's buttons, sent by the service worker.
 import { error, json } from '@sveltejs/kit';
 import { ownedOccurrence } from '$lib/server/owned';
-import { quickDone, sameAsLast, timeIn } from '$lib/server/today';
+import { timeIn } from '$lib/server/today';
+import { appActor } from '$lib/server/core/actor';
+import { doneOcc } from '$lib/server/core/log';
 import { snooze } from '$lib/server/push';
 import { getSettings } from '$lib/server/settings';
 import type { RequestHandler } from './$types';
@@ -17,9 +19,10 @@ export const POST: RequestHandler = async ({ request, locals, params }) => {
 		return json({ ok: true });
 	}
 	if (o.occ.status !== 'due') return json({ ok: true, already: o.occ.status });
-	let r: ReturnType<typeof sameAsLast>;
-	if (action === 'done') r = sameAsLast(o.occ.id);
-	else if (action === 'minimum') r = quickDone(o.occ.id, 'minimum');
+	const actor = appActor(locals.account.id, undefined, 'reminder');
+	let r: ReturnType<typeof doneOcc>;
+	if (action === 'done') r = doneOcc(actor, o.occ, 'same', null);
+	else if (action === 'minimum') r = doneOcc(actor, o.occ, 'targets', 'minimum');
 	else error(400, 'Unknown action');
 	// A required field is still empty: the service worker opens the quick log instead.
 	if (r === 'needsInput') return json({ ok: false, open: `/log/${o.occ.id}?quick` }, { status: 409 });

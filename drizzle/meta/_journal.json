@@ -43,6 +43,13 @@
       "when": 1795300000000,
       "tag": "0005_notes_journal",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1795301441557,
+      "tag": "0006_integrations",
+      "breakpoints": true
     }
   ]
 }

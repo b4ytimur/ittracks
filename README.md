@@ -32,7 +32,7 @@ Status: MVP in progress. You can set up habits, log them day to day, track slips
 - Values start from last time (or the target, or blank, per Metric). Changing a set's value marks it done, and "Finish remaining sets as planned" closes the rest.
 - "Same as last time" on Today logs the last values in one tap, with Undo.
 - The log saves as you go, and keeps working offline: changes wait on the device and sync when the connection is back.
-- Quick-log links `/q/<habit id>` open a short log with only the fields marked "Show on quick logs". Add `?go=1` to log "same as last time" at once. Pinned habits appear as home screen shortcuts (long-press the app icon).
+- Quick-log links `/q/<habit id>` open a short log with only the fields marked "Show on quick logs". Add `?go=1` to log "same as last time" at once, or `?value=250` to add a number. Pinned habits appear as home screen shortcuts (long-press the app icon). With a key (see Integrations) the same links work from Shortcuts, Siri, NFC tags and QR codes without signing in.
 - Forgot a day? "Log a past day" on Today (or a day in History, the week strip or a habit's chain) opens that day: mark habits done, skipped or "same as last time", open the full log, or add a slip. A late log counts like one made on the day, streaks included, and "same as last time" copies the log from before that day. Today mentions yesterday when it was left unlogged. Settings can limit how far back you can log, or turn it off.
 
 ## Notes and journal
@@ -45,6 +45,16 @@ Status: MVP in progress. You can set up habits, log them day to day, track slips
 ## Reminders
 
 Habits with a cue time (or a part of the day) can send a push notification at that time, with Done, Minimum and Snooze buttons. The server creates its own push keys on first start and stores them in the database, so there is nothing to configure. Turn reminders on per device in Settings. Push needs HTTPS (or `localhost`); on iPhone and iPad it works only after adding the app to the Home Screen.
+
+## Integrations
+
+Settings → Integrations makes keys. A key has only the access you give it (Read, Log, Notes, Export), can be limited to some habits, and is shown once; the server keeps only its hash. Every change, from the app or a key, also goes into an append-only event log that records where it came from.
+
+- **Quick-log links that carry a value**: `/q/<habit>?key=itk_…&value=250` (add `&field=Minutes` when the habit has several numbers, `&craving=1` for a break habit, `&reply=text` for one plain line Siri can read out). Programs can POST to the same address with `Authorization: Bearer itk_…`. The settings page builds the link and has a recipe for iPhone Shortcuts, Siri and NFC tags.
+- **AI assistants (MCP)**: `static/ittracks-mcp.mjs` (also served at `/ittracks-mcp.mjs`) is a zero-dependency MCP server for Claude Desktop, Claude Code, Cursor and other MCP clients. It needs Node 18+ and two variables, `ITTRACKS_URL` and `ITTRACKS_KEY`. It is built for analysis: `describe` explains what is tracked, `habit_summary`, `series` and `correlate` do the math on the server (with n and p-values), raw rows come as compact CSV, and every answer carries refs (`log:<id>`, `day:<date>`, …) the assistant can cite and open with `record`. It logs only through the logging tools, which need the Log access.
+- **Export and import**: Settings → Data downloads everything as JSON (a full backup that imports here or on another server, keeping ids so links keep working) or as tidy CSV tables in a zip with a README that explains every column. Restoring replaces the account's data after a preview; logins, keys and devices stay. Large imports need `BODY_SIZE_LIMIT` (the Docker image sets 50M). A key with Export access can download the same files from `/api/v1/export?format=json|csv`.
+
+The actions behind these (`GET /api/v1/actions`, `POST /api/v1/actions/<name>`) are internal for now: they may still change, and they are not documented for other uses. Their code is in `src/lib/server/core/`.
 
 ## Stack
 
@@ -67,7 +77,7 @@ After changing `src/lib/server/db/schema.ts`, run `npm run db:generate` to creat
 docker compose up -d
 ```
 
-The app listens on port 3000 and keeps its database in `./data`. Set `ORIGIN` in `docker-compose.yml` to the address you open it at. On first visit you create the account for your server.
+The app listens on port 3000 and keeps its database in `./data`. Set `ORIGIN` in `docker-compose.yml` to the address you open it at (links and the MCP setup on Settings → Integrations use it). On first visit you create the account for your server.
 
 To install it on your phone, open it in the browser and choose "Add to Home Screen". Phones only offer this over HTTPS, so put the app behind a reverse proxy with a certificate (for example Caddy or Traefik).
 
