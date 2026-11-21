@@ -1,0 +1,23 @@
+# Runs on every pull request and push to main. The type check fails when a form field has
+# no entry in its conflict-rule registry (src/lib/rules); the tests check the same against
+# the Zod schemas and test every rule.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run build

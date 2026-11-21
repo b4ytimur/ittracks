@@ -5,7 +5,8 @@ import { metric, task } from '../db/schema';
 import { applyAnswers, fromTemplate, type TemplateAnswers, type TemplateFile } from '$lib/template';
 import { habitForm } from '$lib/forms';
 import { saveTask } from './tasks';
-import { saveHabit } from './habits';
+import { checkHabitForm, saveHabit } from './habits';
+import { checkTask } from '$lib/rules/task';
 import { identityFor } from './identities';
 import { areaByName } from './areas';
 
@@ -28,6 +29,9 @@ export function addTemplate(
 	const filled = applyAnswers(tpl, opts.answers ?? {});
 	const { tasks, habit, identities } = fromTemplate(filled, opts.today);
 	if (!habitForm.safeParse(habit).success) return { error: 'The template has an invalid habit or schedule.' };
+	// A shared template can't bring in options that block each other.
+	const conflict = [...tasks.flatMap((t) => checkTask(t.form).errors), ...checkHabitForm(habit).errors][0];
+	if (conflict) return { error: `The template has options that conflict: ${conflict.reason}.` };
 
 	const taskMap = new Map<string, string>();
 	const metricMap = new Map<string, string>();

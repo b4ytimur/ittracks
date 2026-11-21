@@ -1,25 +1,34 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { untrack } from 'svelte';
+	import ViewBar from '$lib/ViewBar.svelte';
+	import { groupBy } from '$lib/views';
 
 	let { data } = $props();
 
-	let query = $state('');
-	let tags = $state<string[]>([]);
-	let areaId = $state<string | null>(null);
-	let collectionId = $state<string | null>(page.url.searchParams.get('collection'));
-	let sort = $state<'name' | 'recent' | 'used' | 'logged'>('name');
+	// Search, filters and sort are a view: remembered between visits and savable by name.
+	let views = $state(untrack(() => data.views));
+	let view = $state(
+		untrack(() => {
+			const v = data.initial;
+			const c = page.url.searchParams.get('collection');
+			return c ? { ...v, collection: c } : v;
+		})
+	);
+	const areaId = $derived(view.areas[0] ?? null);
+	const setArea = (id: string | null) => (view.areas = id ? [id] : []);
 	let showTags = $state(false);
 
 	const levelWord = ['', 'low', 'medium', 'high'];
-	const toggleTag = (t: string) => (tags = tags.includes(t) ? tags.filter((x) => x !== t) : [...tags, t]);
+	const toggleTag = (t: string) => (view.tags = view.tags.includes(t) ? view.tags.filter((x) => x !== t) : [...view.tags, t]);
 
 	const shown = $derived.by(() => {
-		const inCollection = collectionId ? new Set(data.collections.find((c) => c.id === collectionId)?.taskIds ?? []) : null;
-		const q = query.trim().toLowerCase();
+		const inCollection = view.collection ? new Set(data.collections.find((c) => c.id === view.collection)?.taskIds ?? []) : null;
+		const q = view.query.trim().toLowerCase();
 		const list = data.tasks.filter(
 			(t) =>
 				(!q || t.name.toLowerCase().includes(q) || t.tags.some((g) => g.name.toLowerCase().includes(q))) &&
-				tags.every((g) => t.tags.some((x) => x.name === g)) &&
+				view.tags.every((g) => t.tags.some((x) => x.name === g)) &&
 				(!areaId || t.areaId === areaId) &&
 				(!inCollection || inCollection.has(t.id))
 		);
@@ -29,78 +38,63 @@
 			used: (a: (typeof list)[number], b: (typeof list)[number]) => b.timesLogged - a.timesLogged || a.name.localeCompare(b.name),
 			logged: (a: (typeof list)[number], b: (typeof list)[number]) =>
 				(b.lastLogged ?? '').localeCompare(a.lastLogged ?? '') || a.name.localeCompare(b.name)
-		}[sort];
+		}[view.sort as 'name' | 'recent' | 'used' | 'logged'] ?? ((a: (typeof list)[number], b: (typeof list)[number]) => a.name.localeCompare(b.name));
 		return [...list].sort(by);
 	});
 
-	const groups = $derived.by(() => {
-		if (!data.groupByArea || areaId) return [{ key: 'all', area: null as (typeof data.areas)[number] | null, items: shown }];
-		const keys = [...data.areas.map((a) => a.id), ''];
-		return keys
-			.map((k) => ({
-				key: k || 'none',
-				area: data.areas.find((a) => a.id === k) ?? null,
-				items: shown.filter((t) => (t.areaId && data.areas.some((a) => a.id === t.areaId) ? t.areaId : '') === k)
-			}))
-			.filter((g) => g.items.length);
-	});
+	const groups = $derived(groupBy(shown, areaId ? 'none' : view.group, { areas: data.areas }));
 
 	const topCollections = $derived(data.collections.filter((c) => !c.parentId));
 	const childrenOf = (id: string) => data.collections.filter((c) => c.parentId === id);
 	const area = (id: string | null) => data.areas.find((a) => a.id === id);
-	const filtering = $derived(!!(query || tags.length || areaId || collectionId));
+	const filtering = $derived(!!(view.query || view.tags.length || areaId || view.collection));
+	const clear = () => (view = { ...view, query: '', tags: [], areas: [], collection: null });
 </script>
 
 <svelte:head><title>Library · ittracks</title></svelte:head>
 
 <header class="bar">
 	<h1>Library</h1>
-	<a class="button primary" href="/library/new{areaId ? `?area=${areaId}` : collectionId ? `?collection=${collectionId}` : ''}">New task</a>
+	<a class="button primary" href="/library/new{areaId ? `?area=${areaId}` : view.collection ? `?collection=${view.collection}` : ''}">New task</a>
 </header>
 
-<input type="search" bind:value={query} placeholder="Search Tasks and tags" aria-label="Search" />
+<ViewBar page="library" bind:views bind:current={view} />
+
+<input type="search" bind:value={view.query} placeholder="Search Tasks and tags" aria-label="Search" />
 
 <div class="chips" role="group" aria-label="Area">
-	<button class="chip small" class:on={!areaId} onclick={() => (areaId = null)}>All areas</button>
+	<button class="chip small" class:on={!areaId} onclick={() => setArea(null)}>All areas</button>
 	{#each data.areas as a (a.id)}
-		<button class="chip small" class:on={areaId === a.id} style="--c: {a.color}" onclick={() => (areaId = areaId === a.id ? null : a.id)}>{a.icon} {a.name}</button>
+		<button class="chip small" class:on={areaId === a.id} style="--c: {a.color}" onclick={() => setArea(areaId === a.id ? null : a.id)}>{a.icon} {a.name}</button>
 	{/each}
 </div>
 
 <div class="chips" role="group" aria-label="Collections">
 	{#each topCollections as c (c.id)}
-		<button class="chip small" class:on={collectionId === c.id} onclick={() => (collectionId = collectionId === c.id ? null : c.id)}
+		<button class="chip small" class:on={view.collection === c.id} onclick={() => (view.collection = view.collection === c.id ? null : c.id)}
 			>{c.smart ? '⚡ ' : ''}{c.name} · {c.taskIds.length}</button
 		>
 		{#each childrenOf(c.id) as k (k.id)}
-			<button class="chip small sub" class:on={collectionId === k.id} onclick={() => (collectionId = collectionId === k.id ? null : k.id)}
+			<button class="chip small sub" class:on={view.collection === k.id} onclick={() => (view.collection = view.collection === k.id ? null : k.id)}
 				>{c.name} › {k.smart ? '⚡ ' : ''}{k.name} · {k.taskIds.length}</button
 			>
 		{/each}
 	{/each}
-	{#if collectionId}<a class="chip small" href="/library/collections/{collectionId}">Edit collection</a>{/if}
+	{#if view.collection}<a class="chip small" href="/library/collections/{view.collection}">Edit collection</a>{/if}
 	<a class="chip small" href="/library/collections/new">+ Collection</a>
 </div>
 
 <div class="row tools">
-	<label class="grow"
-		>Sort
-		<select bind:value={sort}>
-			<option value="name">Name</option>
-			<option value="recent">Newest first</option>
-			<option value="used">Most logged</option>
-			<option value="logged">Last logged</option>
-		</select>
-	</label>
+	<span class="grow"></span>
 	{#if data.tags.length}
-		<button type="button" class="small" onclick={() => (showTags = !showTags)}>Tags{tags.length ? ` (${tags.length})` : ''}</button>
+		<button type="button" class="small" onclick={() => (showTags = !showTags)}>Tags{view.tags.length ? ` (${view.tags.length})` : ''}</button>
 	{/if}
 	<a class="small-text" href={data.showArchived ? '/library' : '/library?archived'}>{data.showArchived ? 'Hide archived' : 'Show archived'}</a>
 </div>
 {#if showTags}
 	<div class="chips" role="group" aria-label="Filter by tags (all must match)">
 		{#each data.tags as t (t)}
-			<button class="chip small" class:on={tags.includes(t)} onclick={() => toggleTag(t)}>{t}</button>
+			<button class="chip small" class:on={view.tags.includes(t)} onclick={() => toggleTag(t)}>{t}</button>
 		{/each}
 	</div>
 {/if}
@@ -111,12 +105,12 @@
 		Add your first one, or <a href="/gallery">add a ready-made habit</a> and its Tasks come with it.
 	</p>
 {:else if shown.length === 0}
-	<p class="muted">Nothing matches. {#if filtering}<button class="link" onclick={() => ((query = ''), (tags = []), (areaId = null), (collectionId = null))}>Clear filters</button>{/if}</p>
+	<p class="muted">Nothing matches. {#if filtering}<button class="link" onclick={clear}>Clear filters</button>{/if}</p>
 {/if}
 
 {#each groups as g (g.key)}
-	{#if data.groupByArea && !areaId}
-		<h2 class="area" style="--c: {g.area?.color ?? 'var(--border)'}">{g.area ? `${g.area.icon} ${g.area.name}` : 'No area'}</h2>
+	{#if g.label}
+		<h2 class="area" style="--c: {g.color ?? 'var(--border)'}">{g.label}</h2>
 	{/if}
 	<ul class="list" style="margin-top: 0.75rem">
 		{#each g.items as t (t.id)}

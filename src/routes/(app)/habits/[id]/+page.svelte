@@ -5,6 +5,8 @@
 	import { describeSchedule, weekdayNames } from '$lib/describe';
 	import FillRuleEditor from './FillRuleEditor.svelte';
 	import { limitOn, nextDrop } from '$lib/engine/limit';
+	import { blocked } from '$lib/rules/core';
+	import { checkHabit, habitRules } from '$lib/rules/habit';
 
 	let { data, form } = $props();
 
@@ -172,6 +174,14 @@
 	const pendingTrigger = $derived(
 		newTrigger.trim() && !h.triggers.includes(newTrigger.trim()) ? [newTrigger.trim()] : []
 	);
+	// ----- Conflict rules (src/lib/rules): what is blocked right now, and why -----
+	const ruleForm = $derived({ ...h, schedule, cue } as HabitForm);
+	const ruleCheck = $derived(checkHabit(ruleForm));
+	const timeBlock = $derived(blocked(habitRules, ruleForm, 'cue.time', {}));
+	const rangeBlock = $derived(blocked(habitRules, ruleForm, 'cue.range', {}));
+	const remindBlock = $derived(blocked(habitRules, ruleForm, 'remind', {}));
+	const uniq = (xs: string[]) => [...new Set(xs)];
+
 	const payload = $derived(
 		JSON.stringify({
 			...h,
@@ -217,6 +227,9 @@
 		const days = Object.keys(weeklyDays).filter((d) => weeklyDays[d]).sort().join('');
 		return days === '0123456' ? 'daily' : days === '01234' ? 'weekdays' : days === '024' ? 'mwf' : null;
 	});
+
+	// Features switched off in Settings stay out of the editor unless this habit already uses them.
+	const off = (f: string) => data.hidden.includes(f as never);
 
 	// ----- Sections that are off stay folded away until asked for -----
 	const has = untrack(() => ({
@@ -531,18 +544,24 @@
 	<div class="row">
 		<label style="width: 8rem"
 			>Time
-			<input type="time" value={h.cue.time ?? ''} oninput={(e) => (h.cue.time = e.currentTarget.value || null)} />
+			<input type="time" value={h.cue.time ?? ''} disabled={!!timeBlock}
+				oninput={(e) => (h.cue.time = e.currentTarget.value || null)} />
 		</label>
 		{#if data.ranges.length}
 			<label class="grow"
 				>Or part of the day
-				<select value={h.cue.range ?? ''} onchange={(e) => (h.cue.range = e.currentTarget.value || null)}>
+				<select value={h.cue.range ?? ''} disabled={!!rangeBlock} onchange={(e) => (h.cue.range = e.currentTarget.value || null)}>
 					<option value="">Any</option>
 					{#each data.ranges as r (r.name)}<option value={r.name}>{r.name} ({r.start}–{r.end})</option>{/each}
 				</select>
 			</label>
 		{/if}
 	</div>
+	{#if timeBlock}
+		<p class="blocked">{timeBlock.reason}. <button type="button" class="link" onclick={() => (h.cue.range = null)}>Use a time instead</button></p>
+	{:else if rangeBlock && data.ranges.length}
+		<p class="blocked">{rangeBlock.reason}. <button type="button" class="link" onclick={() => (h.cue.time = null)}>Use a part of the day instead</button></p>
+	{/if}
 	<label
 		>Where <input value={h.cue.place ?? ''} oninput={(e) => (h.cue.place = e.currentTarget.value)} placeholder="in the park" />
 	</label>
@@ -569,7 +588,7 @@
 	{/if}
 	{#if intention}<p class="intention">{intention}</p>{/if}
 	<label style="color: var(--text)"
-		><input type="checkbox" bind:checked={h.remind} disabled={!h.cue.time && !h.cue.range} /> Remind me {h.cue.time ? 'at this time' : h.cue.range ? `when the ${h.cue.range.toLowerCase()} starts` : '(set a time first)'}</label
+		><input type="checkbox" bind:checked={h.remind} disabled={!!remindBlock && !h.remind} title={remindBlock?.reason} /> Remind me {h.cue.time ? 'at this time' : h.cue.range ? `when the ${h.cue.range.toLowerCase()} starts` : `(${remindBlock?.reason.toLowerCase() ?? 'set a time first'})`}</label
 	>
 	{#if h.remind}
 		<p class="muted small-text">Turn on reminders for this device in <a href="/settings">Settings</a>.</p>
@@ -634,6 +653,7 @@
 		{/if}
 	</p>
 
+	{#if !off('ifThen') || h.ifThen.when || h.ifThen.then}
 	<h2>If-then plan</h2>
 	<p class="muted">Decide now what you'll do when the urge comes, so you have something to do instead.</p>
 	<div class="row">
@@ -652,6 +672,7 @@
 			</select>
 		</label>
 	{/if}
+	{/if}
 
 	<h2>Slip triggers</h2>
 	<p class="muted">Feelings you can pick when you log a slip. Over time Today shows which ones come up most.</p>
@@ -669,6 +690,7 @@
 		<button type="button" onclick={addTrigger}>Add</button>
 	</div>
 
+	{#if !off('cost')}
 	<h2>Cost</h2>
 	<label style="color: var(--text)"
 		><input
@@ -687,6 +709,7 @@
 					oninput={(e) => h.cost && (h.cost.perDay = numOrNull(e.currentTarget.value))} placeholder="optional, e.g. 10" />
 			</label>
 		</div>
+	{/if}
 	{/if}
 
 	<h2>Reduce instead of quitting</h2>
@@ -775,6 +798,12 @@
 	</form>
 {/if}
 
+{#if data.fixed.length}
+	<p class="card blocked" style="margin-bottom: 1rem">
+		Some options on this habit blocked each other, so we fixed them: {data.fixed.join('; ')}. Save to keep this.
+	</p>
+{/if}
+
 <form method="POST" action="?/save" class="stack" id="habit-form">
 	<input type="hidden" name="payload" value={payload} />
 
@@ -855,7 +884,7 @@
 			{@render cuePart()}
 		{/if}
 
-		{#if open.levels}
+		{#if open.levels && (!off('levels') || h.levels.enabled)}
 			<h2>Levels</h2>
 			<label style="color: var(--text)"
 				><input type="checkbox" bind:checked={h.levels.enabled} /> Use levels: a two-minute Minimum, your Target, and a Stretch</label
@@ -905,7 +934,8 @@
 
 		<details class="extras" open={!!(h.bundle.reward || h.prep.length || h.reward.celebrate || h.reward.jar || h.progression)}>
 			<summary>More ways to make it stick (optional)</summary>
-		<h3>Pair it with something you enjoy</h3>
+		{#if !off('rewards') || h.bundle.reward}
+	<h3>Pair it with something you enjoy</h3>
 		<label
 			>Pair with
 			<input bind:value={h.bundle.reward} placeholder="my favourite podcast" />
@@ -915,8 +945,10 @@
 				><input type="checkbox" bind:checked={h.bundle.strict} /> Save it as a treat for after the habit is done</label
 			>
 		{/if}
+	{/if}
 
-		<h3>Prepare the day before</h3>
+	{#if !off('prep') || h.prep.length}
+	<h3>Prepare the day before</h3>
 		<p class="muted">Steps that make tomorrow easier. They show on Today the day before this habit is due.</p>
 		{#each h.prep as item, pi (item)}
 			<div class="row">
@@ -929,7 +961,9 @@
 				onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), addPrep())} />
 			<button type="button" onclick={addPrep}>Add</button>
 		</div>
+	{/if}
 
+	{#if !off('rewards') || h.reward.celebrate || h.reward.jar}
 		<h3>Reward</h3>
 		<label style="color: var(--text)"
 			><input type="checkbox" bind:checked={h.reward.celebrate} /> Celebrate when I finish</label
@@ -952,8 +986,8 @@
 			</div>
 			<p class="muted small-text">A pretend jar that fills up as you go. Treat yourself when it's full.</p>
 		{/if}
-
-		{#if hasTargets}
+		{/if}
+		{#if hasTargets && (!off('progression') || h.progression)}
 			<h3>Progression</h3>
 			<label style="color: var(--text)"
 				><input
@@ -980,13 +1014,15 @@
 		</details>
 	{/if}
 
+	{#if !off('reframe') || h.reframe}
 	<h2>Reframe</h2>
 	<label
 		>A line to see on the card
 		<input bind:value={h.reframe} placeholder={h.direction === 'break' ? 'I am free of this' : 'I get to do this today'} />
 	</label>
+	{/if}
 
-	{#if open.identity}
+	{#if open.identity && (!off('identities') || h.identityIds.length)}
 		<h2>Identity</h2>
 		{@render identityPart()}
 	{/if}
@@ -998,9 +1034,9 @@
 	{#if Object.values(open).some((x) => !x)}
 		<div class="chips add-more">
 			{#if h.direction === 'build' && !open.when}<button type="button" class="chip" onclick={() => (open.when = true)}>+ When and where</button>{/if}
-			{#if h.direction === 'build' && !open.levels}<button type="button" class="chip" onclick={() => (open.levels = true)}>+ Levels</button>{/if}
+			{#if h.direction === 'build' && !open.levels && !off('levels')}<button type="button" class="chip" onclick={() => (open.levels = true)}>+ Levels</button>{/if}
 			{#if h.direction === 'build' && !open.streak}<button type="button" class="chip" onclick={() => (open.streak = true)}>+ Streak rule (now: never miss twice)</button>{/if}
-			{#if !open.identity}<button type="button" class="chip" onclick={() => (open.identity = true)}>+ Identity</button>{/if}
+			{#if !open.identity && !off('identities')}<button type="button" class="chip" onclick={() => (open.identity = true)}>+ Identity</button>{/if}
 			{#if !open.notes}<button type="button" class="chip" onclick={() => (open.notes = true)}>+ Notes</button>{/if}
 		</div>
 	{/if}
@@ -1014,6 +1050,8 @@
 		{/if}
 	{/if}
 
+	{#each uniq(ruleCheck.errors.map((i) => i.reason)) as reason (reason)}<p class="error">{reason}</p>{/each}
+	{#each uniq(ruleCheck.warnings.map((i) => i.reason)) as reason (reason)}<p class="blocked">Heads up: {reason}</p>{/each}
 	{#if form?.error}<p class="error">{form.error}</p>{/if}
 
 	<div class="actions">
@@ -1080,6 +1118,11 @@
 	}
 	fieldset {
 		border: 1px solid var(--border);
+	}
+	.blocked {
+		color: var(--muted);
+		font-size: 0.85rem;
+		margin: 0;
 	}
 	.intention {
 		font-style: italic;
