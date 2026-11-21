@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { TEMPLATE_VERSION, applyAnswers, fromTemplate, templateFile, toTemplate, type TemplateFile } from './template';
 import { habitForm, type HabitForm, type TaskForm } from './forms';
+import { shareDetails, shareForm, type ShareCtx } from './share';
+import { checkShare } from './rules/share';
 
 const T1 = '00000000-0000-4000-8000-000000000001';
 const M1 = '00000000-0000-4000-8000-000000000002';
@@ -224,5 +226,118 @@ describe('template questions', () => {
 		expect((rot.habit.schedule as { weekdays: number[] }).weekdays).toEqual([1, 4]);
 		const freq = applyAnswers(base({ kind: 'frequency', times: 3, period: 'week', variantId: 'a' }), { days: [0, 1] });
 		expect((freq.habit.schedule as { times: number }).times).toBe(2);
+	});
+});
+
+describe('sharing without losing anything (version 5)', () => {
+	const AREA = '00000000-0000-4000-8000-000000000020';
+	const SKULL = '00000000-0000-4000-8000-000000000021';
+	const skull: TaskForm = { ...bench, name: 'Skull crusher', tags: [{ name: 'triceps', level: 3 }], subtasks: [], areaId: AREA };
+	const names = { areas: new Map([[AREA, 'Fitness']]) };
+
+	it('carries the Area of the habit and of each Task by name, and the pool Tasks it is given', () => {
+		const tpl = toTemplate({ ...gym, areaId: AREA }, new Map([[T1, bench], [SKULL, skull]]), names);
+		expect(tpl.version).toBe(TEMPLATE_VERSION);
+		expect(tpl.meta?.area).toBe('Fitness');
+		expect(tpl.tasks.map((t) => [t.name, t.area])).toEqual([
+			['Bench press', null],
+			['Skull crusher', 'Fitness']
+		]);
+		const { tasks } = fromTemplate(templateFile.parse(JSON.parse(JSON.stringify(tpl))), '2026-12-01');
+		expect(tasks.map((t) => t.form.name)).toContain('Skull crusher');
+	});
+
+	it('leaves Areas out when asked', () => {
+		const tpl = toTemplate({ ...gym, areaId: AREA }, new Map([[SKULL, skull]]), names, { noArea: true });
+		expect(tpl.meta).toBeNull();
+		expect(tpl.tasks[0].area).toBeNull();
+	});
+
+	it('keeps a part of the day when it is the only cue', () => {
+		const evening = habitForm.parse({ ...gym, cue: { time: null, place: null, afterHabitId: null, afterText: null, range: 'Evening' } });
+		const tpl = toTemplate(evening, new Map([[T1, bench]]));
+		expect(tpl.habit.cue).toEqual({ time: null, place: null, after: null, range: 'Evening' });
+		expect(fromTemplate(tpl, '2026-12-01').habit.cue.range).toBe('Evening');
+	});
+
+	it('suggests the reminder but never turns it on by itself', () => {
+		const tpl = toTemplate(gym, new Map([[T1, bench]]));
+		expect(tpl.habit.remind).toBe(true);
+		expect(fromTemplate(tpl, '2026-12-01').habit.remind).toBe(false);
+		expect(toTemplate(gym, new Map([[T1, bench]]), {}, { noRemind: true }).habit.remind).toBe(false);
+	});
+
+	it('writes the description, gallery details and questions from the Share form', () => {
+		const ctx: ShareCtx = { daysFit: false, days: [], time: '07:00', range: null, area: null, pool: 0, remind: true, metricIds: [M2] };
+		const form = shareForm.parse({
+			name: 'Rosa strength',
+			description: 'Three days a week.',
+			category: 'Gym',
+			askTime: true,
+			numbers: [{ label: 'Your reps', metrics: [M2], default: 8 }]
+		});
+		expect(checkShare(form, ctx).filter((i) => i.severity === 'block')).toEqual([]);
+		const tpl = toTemplate(gym, new Map([[T1, bench]]), {}, shareDetails(form, ctx));
+		expect(templateFile.safeParse(JSON.parse(JSON.stringify(tpl))).success).toBe(true);
+		expect(tpl.name).toBe('Rosa strength');
+		expect(tpl.description).toBe('Three days a week.');
+		expect(tpl.meta?.category).toBe('Gym');
+		expect(tpl.questions.map((q) => q.kind)).toEqual(['time', 'number']);
+		const number = tpl.questions[1];
+		// The question names the file's own Metric key, not a database id.
+		expect(number.kind === 'number' && number.metrics).toEqual([tpl.tasks[0].metrics[1].key]);
+		expect(JSON.stringify(tpl)).not.toContain(M2);
+	});
+
+	it('share rules: a field set by two questions, or a question with no field, is refused', () => {
+		const ctx: ShareCtx = { daysFit: true, days: [0, 2], time: null, range: 'Evening', area: null, pool: 0, remind: false, metricIds: [M1, M2] };
+		const two = shareForm.parse({ name: 'x', numbers: [{ label: 'a', metrics: [M1], default: 1 }, { label: 'b', metrics: [M1], default: 2 }] });
+		expect(checkShare(two, ctx).map((i) => i.reason)).toContain('A field can only be set by one number question');
+		const none = shareForm.parse({ name: 'x', numbers: [{ label: 'a', metrics: [], default: 1 }] });
+		expect(checkShare(none, ctx).some((i) => i.severity === 'block')).toBe(true);
+		const time = shareForm.parse({ name: 'x', askTime: true });
+		expect(checkShare(time, ctx).map((i) => i.severity)).toEqual(['warn']);
+	});
+});
+
+describe('number questions keep Minimum and Stretch in step', () => {
+	const tpl = (scale: boolean): TemplateFile =>
+		templateFile.parse({
+			format: 'ittracks-template',
+			version: 5,
+			name: 'Squat',
+			questions: [{ kind: 'number', key: 'w', label: 'Squat weight', default: 50, metrics: ['m1'], scale }],
+			habit: {
+				name: 'Squat',
+				direction: 'build',
+				schedule: null,
+				variants: [
+					{ key: 'a', name: 'A', slots: [{ task: 't1', fillRule: null, targets: { m1: 50 }, minTargets: { m1: 40 }, stretchTargets: { m1: 60 } }] },
+					{ key: 'c', name: 'C', slots: [{ task: 't1', fillRule: null, targets: { m1: 40 } }] }
+				]
+			},
+			tasks: [{ key: 't1', name: 'Squat', metrics: [{ key: 'm1', name: 'Weight', type: 'number', unit: 'kg', step: 2.5 }] }]
+		});
+
+	it('sets the target and moves Minimum and Stretch with it', () => {
+		const out = applyAnswers(tpl(false), { w: 40 });
+		expect(out.habit.variants[0].slots[0]).toMatchObject({ targets: { m1: 40 }, minTargets: { m1: 32.5 }, stretchTargets: { m1: 47.5 } });
+		// Without scaling, every Slot gets the answer.
+		expect(out.habit.variants[1].slots[0].targets).toEqual({ m1: 40 });
+	});
+
+	it('in proportion, a lighter day stays lighter', () => {
+		const out = applyAnswers(tpl(true), { w: 100 });
+		expect(out.habit.variants[0].slots[0]).toMatchObject({ targets: { m1: 100 }, minTargets: { m1: 80 }, stretchTargets: { m1: 120 } });
+		expect(out.habit.variants[1].slots[0].targets).toEqual({ m1: 80 });
+	});
+
+	it('a time answer replaces a part of the day', () => {
+		const t = templateFile.parse({
+			...tpl(false),
+			questions: [{ kind: 'time', key: 't', label: 'When?', default: '18:00' }],
+			habit: { ...tpl(false).habit, cue: { time: null, place: 'Gym', after: null, range: 'Evening' } }
+		});
+		expect(applyAnswers(t, { t: '19:00' }).habit.cue).toEqual({ time: '19:00', place: 'Gym', after: null, range: null });
 	});
 });

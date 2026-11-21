@@ -803,7 +803,7 @@
 			<a href="/habits/{data.id}/chain">Chain</a>
 			<a href="/habits/{data.id}/stats">Stats</a>
 			<a href="/habits/new?from={data.id}" data-sveltekit-reload>Duplicate</a>
-			<a href="/habits/{data.id}/template.json" download>Export template</a>
+			<a href="/habits/{data.id}/share">Share as template</a>
 		{/if}
 		<a href="/habits">Cancel</a>
 	</div>
