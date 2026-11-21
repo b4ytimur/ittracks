@@ -82,7 +82,8 @@
 		background: var(--danger);
 	}
 	.strip i.within {
-		background: var(--series-4);
+		background: var(--accent);
+		opacity: 0.45;
 	}
 	.strip i.forgiven {
 		background: transparent;

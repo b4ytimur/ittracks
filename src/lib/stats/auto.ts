@@ -150,7 +150,21 @@ function habitCardsOf(P: Prepared, h: DsHabit): StatCard[] {
 	if (hasTargets(P, h.id))
 		out.push(card({ title: 'Target met', what: { source: 'outcomes' }, perLog: 'targetMet', overTime: 'avg', range: '30d', filter, look: { chart: 'tile' } }));
 	out.push(card({ title: 'Calendar', what: { source: 'outcomes' }, perLog: 'done', overTime: 'sum', range: '90d', filter, look: { chart: 'calendar', size: 'full' } }));
-	for (const t of habitTasks(P, h.id)) out.push(...taskCards(P, t, { habitId: h.id }));
+	const tasks = habitTasks(P, h.id);
+	const lifts = tasks.filter((t) => isStrength(P, t));
+	if (lifts.length > 2) {
+		// A full workout: a few cards for the whole session instead of four per exercise.
+		if (lifts.some((t) => t.tags.length))
+			out.push(card({ title: 'Hard sets per muscle group this week', what: { source: 'task' }, perLog: 'hardSets', overTime: 'sum', bucket: 'all', split: 'tag', range: 'week', filter, compare: { goal: 10, goalMax: 20 }, look: { chart: 'bars', size: 'wide', top: 12 } }));
+		out.push(
+			card({ title: 'Volume per week', what: { source: 'task' }, perLog: 'volume', overTime: 'sum', bucket: 'week', range: '90d', filter, look: { chart: 'bars', size: 'wide' } }),
+			card({ title: 'Best estimated 1RM per exercise', what: { source: 'task' }, perLog: 'e1rm', overTime: 'max', split: 'task', range: '90d', filter, look: { chart: 'table', size: 'full', top: 20 } })
+		);
+		const ranked = [...lifts].sort((a, b) => (P.logsByTask.get(b.id)?.length ?? 0) - (P.logsByTask.get(a.id)?.length ?? 0));
+		for (const t of ranked.slice(0, 3))
+			out.push(card({ title: `${t.name}: estimated 1RM`, what: { source: 'task', taskId: t.id }, perLog: 'e1rm', overTime: 'max', bucket: 'session', range: '90d', filter, look: { chart: 'line', size: 'wide' } }));
+	} else for (const t of lifts) out.push(...taskCardsOf(P, t, { habitId: h.id }));
+	for (const t of tasks.filter((x) => !isStrength(P, x))) out.push(...taskCardsOf(P, t, { habitId: h.id }));
 	return out;
 }
 

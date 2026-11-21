@@ -3,22 +3,26 @@
 	import type { CardResult } from '../engine';
 	import { shortDay, value } from '../format';
 
-	let { r, onpick }: { r: CardResult; onpick?: (series: string | null) => void } = $props();
+	let { r, overTime = 'sum', onpick }: { r: CardResult; overTime?: string; onpick?: (series: string | null) => void } = $props();
 	const fmt = (v: number | null) => value(v, r.unit, r.kind);
+	const HEAD: Record<string, string> = { sum: 'Total', count: 'Logs', days: 'Days', avg: 'Average', median: 'Median', min: 'Lowest', max: 'Best', last: 'Last' };
+	// Skip a column that would repeat the first one.
+	const showBest = $derived(overTime !== 'max');
+	const showLast = $derived(overTime !== 'last');
 </script>
 
 <div class="scroll">
 	<table>
 		<thead>
-			<tr><th></th><th>Total</th><th>Best</th><th>Last</th><th>Logs</th></tr>
+			<tr><th></th><th>{HEAD[overTime] ?? 'Total'}</th>{#if showBest}<th>Best</th>{/if}{#if showLast}<th>Last</th>{/if}<th>Logs</th></tr>
 		</thead>
 		<tbody>
 			{#each r.rows ?? [] as x (x.key)}
 				<tr>
 					<th scope="row"><button type="button" class="link" onclick={() => onpick?.(x.key === 'all' ? null : x.key)}>{x.label}</button></th>
 					<td>{fmt(x.total)}</td>
-					<td>{fmt(x.best)}</td>
-					<td>{fmt(x.last)}{#if x.lastDate}<div class="muted small">{shortDay(x.lastDate)}</div>{/if}</td>
+					{#if showBest}<td>{fmt(x.best)}</td>{/if}
+					{#if showLast}<td>{fmt(x.last)}{#if x.lastDate}<div class="muted small">{shortDay(x.lastDate)}</div>{/if}</td>{/if}
 					<td>{x.logs}</td>
 				</tr>
 			{/each}
