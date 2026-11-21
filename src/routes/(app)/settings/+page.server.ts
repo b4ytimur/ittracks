@@ -2,7 +2,7 @@ import { fail } from '@sveltejs/kit';
 import { hash, verify } from '@node-rs/argon2';
 import { db } from '$lib/server/db';
 import { account } from '$lib/server/db/schema';
-import { checkSettings } from '$lib/rules/settings';
+import { checkSettings, cleanSettings } from '$lib/rules/settings';
 import { getSettings, getViews, saveSettings } from '$lib/server/settings';
 import { TEMPLATES } from '$lib/views';
 import { publicKey, sendToAccount, subscriptionCount } from '$lib/server/push';
@@ -66,6 +66,21 @@ export const actions: Actions = {
 		if (conflict) return fail(400, { dayError: conflict.reason });
 		saveSettings(locals.account!.id, { dayStart, ranges });
 		return { daySaved: true };
+	},
+	/** How far back past days can be logged, and the nudge about yesterday. */
+	pastDays: async ({ request, locals }) => {
+		const f = await request.formData();
+		const raw = String(f.get('pastDays') ?? '');
+		const next = {
+			...getSettings(locals.account!.id),
+			pastDays: raw === '' ? null : Number(raw),
+			nudgeYesterday: f.get('nudgeYesterday') === 'on'
+		};
+		const conflict = checkSettings(next)[0];
+		if (conflict) return fail(400, { pastError: conflict.reason });
+		const clean = cleanSettings(next);
+		saveSettings(locals.account!.id, { pastDays: clean.pastDays, nudgeYesterday: clean.nudgeYesterday });
+		return { pastSaved: true };
 	},
 	display: async ({ request, locals }) => {
 		const f = await request.formData();

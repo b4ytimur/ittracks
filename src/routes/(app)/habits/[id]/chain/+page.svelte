@@ -31,6 +31,9 @@
 	const weekDates = $derived(
 		columns(data.weeks).map((w) => (data.direction === 'break' ? data.days[w * 7]?.date : data.cells[w * 7]?.date) ?? '')
 	);
+	/** Past days link to the day page, today to Today. */
+	const hrefOf = (d: string) =>
+		d > data.today || d < data.startDate || !data.canBackfill ? null : d === data.today ? '/' : `/day/${d}#h-${data.id}`;
 	const monthLabel = (w: number) => {
 		const d = weekDates[w];
 		if (!d || (w > 0 && weekDates[w - 1].slice(0, 7) === d.slice(0, 7))) return '';
@@ -59,14 +62,26 @@
 		{#each columns(data.weeks) as w (w)}
 			{#if data.direction === 'break'}
 				{@const x = data.days[w * 7 + d]}
-				<span class="cell {x.kind}" role="img" aria-label="{nice(x.date)}: {breakLabel(x)}" title="{nice(x.date)}: {breakLabel(x)}"></span>
+				{@const href = hrefOf(x.date)}
+				{#if href}
+					<a class="cell {x.kind}" {href} aria-label="{nice(x.date)}: {breakLabel(x)}" title="{nice(x.date)}: {breakLabel(x)}"></a>
+				{:else}
+					<span class="cell {x.kind}" role="img" aria-label="{nice(x.date)}: {breakLabel(x)}" title="{nice(x.date)}: {breakLabel(x)}"></span>
+				{/if}
 			{:else}
 				{@const x = data.cells[w * 7 + d]}
-				<span class="cell {cls(x.cell)}" role="img" aria-label="{nice(x.date)}: {label(x.cell)}" title="{nice(x.date)}: {label(x.cell)}"></span>
+				{@const href = hrefOf(x.date)}
+				{#if href}
+					<a class="cell {cls(x.cell)}" {href} aria-label="{nice(x.date)}: {label(x.cell)}" title="{nice(x.date)}: {label(x.cell)}"></a>
+				{:else}
+					<span class="cell {cls(x.cell)}" role="img" aria-label="{nice(x.date)}: {label(x.cell)}" title="{nice(x.date)}: {label(x.cell)}"></span>
+				{/if}
 			{/if}
 		{/each}
 	{/each}
 </div>
+
+{#if data.canBackfill}<p class="muted small-text tip">Tap a day to log it or change it.</p>{/if}
 
 <div class="legend small-text">
 	{#if data.direction === 'break'}
@@ -149,6 +164,14 @@
 	.cell.skipped {
 		background: var(--muted);
 		opacity: 0.6;
+	}
+	a.cell:hover,
+	a.cell:focus-visible {
+		outline: 2px solid var(--text);
+		outline-offset: 1px;
+	}
+	.tip {
+		margin: 0.75rem 0 0;
 	}
 	.legend {
 		display: flex;
