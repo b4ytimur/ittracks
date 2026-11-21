@@ -274,7 +274,8 @@
 	const num = (v: unknown) => (v === null || v === undefined || v === '' ? '' : String(v));
 	const stepOf = (m: Metric) => m.step ?? defaultStep(m.type, m.unit);
 	const isNumeric = (m: Metric) => m.type === 'number' || m.type === 'count' || m.type === 'duration';
-	const shownMetrics = (ms: Metric[]) => (quickMode ? ms.filter((m) => m.quick) : ms);
+	/** Required fields always show, so a quick log can always be finished. */
+	const shownMetrics = (ms: Metric[]) => (quickMode ? ms.filter((m) => m.quick || m.required) : ms);
 </script>
 
 <svelte:head><title>{data.habitName} · ittracks</title></svelte:head>

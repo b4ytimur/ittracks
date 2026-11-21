@@ -1,6 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 import { firstError, taskForm, type TaskForm } from '$lib/forms';
+import { checkTask } from '$lib/rules/task';
 import {
 	deleteTask,
 	duplicateTask,
@@ -87,6 +88,9 @@ export const actions: Actions = {
 		}
 		const parsed = taskForm.safeParse(json);
 		if (!parsed.success) return fail(400, { error: firstError(parsed.error) });
+		const checked = checkTask(parsed.data);
+		if (checked.errors[0]) return fail(400, { error: checked.errors[0].reason });
+		parsed.data = checked.form;
 		const accountId = locals.account!.id;
 		if (parsed.data.areaId && !listAreas(accountId).some((a) => a.id === parsed.data.areaId)) parsed.data.areaId = null;
 		const id = saveTask(accountId, params.id === 'new' ? null : params.id, parsed.data);
