@@ -37,7 +37,6 @@
 
 <header class="bar">
 	<h1>History</h1>
-	<a href="/settings">Settings</a>
 </header>
 
 {#if data.history.length}
