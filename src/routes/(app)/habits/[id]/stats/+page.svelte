@@ -51,7 +51,7 @@
 	<CardGrid
 		items={data.items}
 		where={{ habit: data.habit.id }}
-		board={{ range: '30d', filter: { areas: [], tags: [], habit: null, identity: null, direction: 'all' } }}
+		board={{ range: '30d', filter: { areas: [], tags: [], habit: data.habit.id, identity: null, direction: 'all' } }}
 		catalog={data.catalog}
 		measures={data.measures}
 		hidden={data.hidden}

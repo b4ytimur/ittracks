@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, inArray, notInArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, lt, notInArray } from 'drizzle-orm';
 import { db } from '../db';
-import { area, habit, habitIdentity, identity, metric, slot, variant } from '../db/schema';
+import { area, entry, habit, habitIdentity, identity, metric, occurrence, slot, variant } from '../db/schema';
 import {
 	DEFAULT_TRIGGERS,
 	defaultLevels,
@@ -114,6 +114,7 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 		limit: h.limit ? { ...h.limit, taper: h.limit.taper ? { floor: 0, ...h.limit.taper } : null } : null,
 		progression: h.progression ?? null,
 		areaId: h.areaId,
+		unlogged: h.unlogged,
 		variants: variants.map((v) => ({
 			id: v.id,
 			name: v.name,
@@ -159,6 +160,40 @@ export function checkLinks(accountId: string, id: string | null, f: HabitForm): 
 		if (owned.length !== new Set(f.identityIds).size) return 'Unknown identity';
 	}
 	return null;
+}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Misses written for days nobody logged follow the habit's settings. Switching to ignore them
+ * takes them away; switching back, or starting earlier, counts them again from the start
+ * (on the next settle). Starting later drops misses before the new start.
+ */
+function settledAfter(
+	tx: Tx,
+	id: string,
+	before: { startDate: string; unlogged: 'missed' | 'ignore' },
+	after: { startDate: string; unlogged: 'missed' | 'ignore' }
+): { settledThrough?: null } {
+	// A miss with nothing logged in it is one the app wrote for an unlogged day.
+	const unloggedMisses = (where: ReturnType<typeof and>) =>
+		tx
+			.select({ id: occurrence.id })
+			.from(occurrence)
+			.where(where)
+			.all()
+			.map((o) => o.id)
+			.filter((oid) => !tx.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, oid)).get());
+	const drop = (ids: string[]) => {
+		if (ids.length) tx.delete(occurrence).where(inArray(occurrence.id, ids)).run();
+	};
+	if (after.unlogged === 'ignore' && before.unlogged !== 'ignore')
+		drop(unloggedMisses(and(eq(occurrence.habitId, id), eq(occurrence.status, 'missed'))));
+	else if (after.startDate > before.startDate)
+		drop(unloggedMisses(and(eq(occurrence.habitId, id), eq(occurrence.status, 'missed'), lt(occurrence.date, after.startDate))));
+	return after.unlogged === 'missed' && (before.unlogged !== 'missed' || after.startDate < before.startDate)
+		? { settledThrough: null }
+		: {};
 }
 
 /** Create or update a Habit with its Variants and Slots. Returns its id, or null if not found. */
@@ -213,16 +248,17 @@ export function saveHabit(
 			cost: isBreak ? f.cost : null,
 			limit: isBreak ? f.limit : null,
 			progression: isBreak ? null : f.progression,
-			areaId: f.areaId
+			areaId: f.areaId,
+			unlogged: isBreak ? ('missed' as const) : (f.unlogged ?? 'missed')
 		};
 		if (id) {
 			const owned = tx
-				.select({ id: habit.id })
+				.select({ id: habit.id, startDate: habit.startDate, unlogged: habit.unlogged })
 				.from(habit)
 				.where(and(eq(habit.id, id), eq(habit.accountId, accountId)))
 				.get();
 			if (!owned) return null;
-			tx.update(habit).set(values).where(eq(habit.id, id)).run();
+			tx.update(habit).set({ ...values, ...settledAfter(tx, id, owned, values) }).where(eq(habit.id, id)).run();
 		} else {
 			tx.insert(habit)
 				.values({ id: habitId, accountId, ...values })

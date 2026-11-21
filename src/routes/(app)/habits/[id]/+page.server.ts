@@ -70,7 +70,8 @@ const blank = (today: string): HabitForm => ({
 	cost: null,
 	limit: null,
 	progression: null,
-	areaId: null
+	areaId: null,
+	unlogged: 'missed'
 });
 
 export const load: PageServerLoad = ({ locals, params, url, cookies }) => {

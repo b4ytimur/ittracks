@@ -4,7 +4,7 @@ import { entry, habit, metric, occurrence, slip, task, variant } from '$lib/serv
 import { getSettings, getViews } from '$lib/server/settings';
 import { listAreas } from '$lib/server/repo/areas';
 import { initialState } from '$lib/views';
-import { userToday } from '$lib/server/today';
+import { settleAll, userToday } from '$lib/server/today';
 import { addDays } from '$lib/engine/dates';
 import type { PageServerLoad } from './$types';
 
@@ -15,6 +15,8 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 	const days = Math.min(Number(url.searchParams.get('days')) || DAYS, 3650);
 	const today = userToday(accountId, cookies.get('tz'));
 	const from = addDays(today, -days);
+	// Days nobody logged show as missed here too.
+	settleAll(accountId, today);
 
 	const occ = db
 		.select({

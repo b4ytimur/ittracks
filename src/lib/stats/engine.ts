@@ -196,12 +196,17 @@ export function prepare(ds: Dataset): Prepared {
 		(t) => t.parentTaskId!
 	);
 
+	// One Log per Slot: a Variant can use the same Task twice (reading in the morning and at
+	// night). Entries come in Slot order, each Slot's sets before its once-per-log values, so
+	// once a Log has those values the next entry of the same Task starts the next Slot's Log.
 	const logsByKey = new Map<string, Log>();
-	const logFor = (o: DsOcc, t: DsTask) => {
-		const k = `${o.id}|${t.id}`;
+	const nth = new Map<string, number>();
+	const sealed = new Set<string>();
+	const logFor = (o: DsOcc, t: DsTask, n: number) => {
+		const k = `${o.id}|${t.id}|${n}`;
 		let l = logsByKey.get(k);
 		if (!l) {
-			const slots = o.variantId ? (slotsByVariant.get(o.variantId) ?? []) : [];
+			const slots = (o.variantId ? (slotsByVariant.get(o.variantId) ?? []) : []).filter((s) => (o.picks?.[s.id] ?? s.taskId) === t.id);
 			l = {
 				occ: o,
 				habit: habits.get(o.habitId)!,
@@ -210,7 +215,7 @@ export function prepare(ds: Dataset): Prepared {
 				single: {},
 				subsTotal: subsOf.get(t.id)?.length ?? 0,
 				subsDone: 0,
-				slot: slots.find((s) => (o.picks?.[s.id] ?? s.taskId) === t.id) ?? null
+				slot: slots[n] ?? slots[0] ?? null
 			};
 			logsByKey.set(k, l);
 		}
@@ -222,13 +227,19 @@ export function prepare(ds: Dataset): Prepared {
 		if (!o || !t || o.status !== 'done' || !habits.has(o.habitId)) continue;
 		if (t.parentTaskId) {
 			const parent = tasks.get(t.parentTaskId);
-			if (parent) logFor(o, parent).subsDone++;
+			if (parent) logFor(o, parent, nth.get(`${o.id}|${parent.id}`) ?? 0).subsDone++;
 			continue;
 		}
-		const l = logFor(o, t);
-		if (e.values._summary) Object.assign(l.single, e.values);
-		else if (Object.keys(e.values).some((k) => (metrics.get(k)?.repeats ?? false))) l.sets.push(e.values);
-		else Object.assign(l.single, e.values);
+		const base = `${o.id}|${t.id}`;
+		let n = nth.get(base) ?? 0;
+		if (sealed.has(`${base}|${n}`)) nth.set(base, ++n);
+		const l = logFor(o, t, n);
+		const isSet = !e.values._summary && Object.keys(e.values).some((k) => (metrics.get(k)?.repeats ?? false));
+		if (isSet) l.sets.push(e.values);
+		else {
+			Object.assign(l.single, e.values);
+			sealed.add(`${base}|${n}`);
+		}
 	}
 	const logs = [...logsByKey.values()].sort((a, b) => a.occ.date.localeCompare(b.occ.date));
 	const roles = new Map([...metricsByTask.entries()].map(([k, ms]) => [k, rolesOf(ms)]));
@@ -281,6 +292,13 @@ const UNITS: Record<string, { dim: string; f: number }> = {
 	miles: { dim: 'd', f: 1.609344 }
 };
 const unitKey = (u: string | null) => (u ?? '').trim().toLowerCase();
+
+/** A field's unit: what it names, or minutes for a duration that names none (as the log screen shows it). */
+export const unitOfMetric = (m: Pick<DsMetric, 'unit' | 'type'>): string | null =>
+	m.unit && m.unit.trim() ? m.unit : m.type === 'duration' ? 'min' : null;
+
+/** Is this a unit of time (s, min, h…)? Times add up in minutes and show as hours and minutes. */
+const isTimeUnit = (u: string | null) => UNITS[unitKey(u)]?.dim === 't';
 
 /** Can values in `a` be added to values in `b`? Same unit, or both known units of one kind. */
 export function convertible(a: string | null, b: string | null): boolean {
@@ -495,10 +513,12 @@ export function fieldsFor(card: StatCard, P: Prepared, ctx: Ctx): { metrics: DsM
 	} else ms = [];
 	if (!ms.length) return { metrics: [], unit: null, left: [] };
 	const type = ms[0].type;
-	const unit = ms[0].unit;
+	const first = unitOfMetric(ms[0]);
+	// Times are added up in minutes whatever unit they were logged in, and shown as hours and minutes.
+	const unit = isTimeUnit(first) ? 'min' : first;
 	const left: string[] = [];
 	const keep = ms.filter((m) => {
-		const ok = m.type === type && convertible(m.unit, unit);
+		const ok = m.type === type && convertible(unitOfMetric(m), unit);
 		if (!ok) left.push(`${m.name} in ${P.tasks.get(m.taskId)?.name ?? 'a Task'} (${m.unit || m.type}) can't be added to ${unit || type} and was left out`);
 		return ok;
 	});
@@ -740,12 +760,29 @@ export function pointsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range): 
 	if (src === 'field') {
 		const { metrics, unit } = fieldsFor(card, P, ctx);
 		for (const m of metrics) {
+			// A box left unticked is never saved, so a finished log that planned this Task and
+			// saved nothing for it counts as unticked.
+			if (card.perLog === 'ticked' && m.type === 'checkbox' && !m.repeats) {
+				const task = P.tasks.get(m.taskId);
+				const logged = new Set((P.logsByTask.get(m.taskId) ?? []).map((l) => l.occ.id));
+				for (const o of P.ds.occurrences) {
+					const habit = P.habits.get(o.habitId);
+					if (!task || !habit || o.status !== 'done' || logged.has(o.id) || !inRange(o.date) || !sc.logOk({ habit, task })) continue;
+					const slots = o.variantId ? (P.slotsByVariant.get(o.variantId) ?? []) : [];
+					if (!slots.some((x) => (o.picks?.[x.id] ?? x.taskId) === m.taskId)) continue;
+					const series =
+						card.split === 'field'
+							? [{ key: `f:${m.name.toLowerCase()}`, label: m.name, w: 1, order: card.what.metrics.indexOf(m.id) }]
+							: tagsFor({ habit, task, occ: o, date: o.date, time: o.time });
+					out.push({ date: o.date, value: 0, series, occId: o.id, habitId: habit.id, taskId: task.id, time: o.time });
+				}
+			}
 			for (const l of P.logsByTask.get(m.taskId) ?? []) {
 				if (!inRange(l.occ.date) || !sc.logOk(l)) continue;
 				const base = { habit: l.habit, task: l.task, occ: l.occ, date: l.occ.date, time: l.occ.time };
 				const push = (value: number, series = tagsFor(base)) =>
 					out.push({ date: l.occ.date, value, series, occId: l.occ.id, habitId: l.habit.id, taskId: l.task.id, time: l.occ.time });
-				const conv = (v: number) => convert(v, m.unit, unit);
+				const conv = (v: number) => convert(v, unitOfMetric(m), unit);
 				const fieldSeries = (): SeriesTag[] => [{ key: `f:${m.name.toLowerCase()}`, label: m.name, w: 1, order: card.what.metrics.indexOf(m.id) }];
 				const series = card.split === 'field' ? fieldSeries() : undefined;
 				if (m.repeats) {
@@ -825,7 +862,8 @@ export function pointsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range): 
 			const to = addDays(ctx.today, -1) < range.to ? addDays(ctx.today, -1) : range.to;
 			for (let d = from; d <= to; d = addDays(d, 1)) {
 				const n = (slipsBy.get(`${h.id}|${d}`) ?? []).reduce((a, s) => a + s.count, 0);
-				out.push({ date: d, value: h.cost.perDay - n * h.cost.amount, series: tagsFor({ habit: h, task: null, occ: null, date: d, time: null }), occId: null, habitId: h.id, taskId: null, time: null });
+				// The old daily rate less what was used that day, at what each one costs (as Today counts it).
+				out.push({ date: d, value: (h.cost.perDay - n) * h.cost.amount, series: tagsFor({ habit: h, task: null, occ: null, date: d, time: null }), occId: null, habitId: h.id, taskId: null, time: null });
 			}
 		}
 	}
@@ -930,7 +968,7 @@ export function unitOf(card: StatCard, P: Prepared, ctx: Ctx): { unit: string; k
 			return { unit: card.perLog === 'sets' ? 'sets' : card.perLog === 'ticked' ? 'ticked' : 'times', kind: 'count', share: false };
 		const f = fieldsFor(card, P, ctx);
 		const m = f.metrics[0];
-		const isTime = m?.type === 'duration' || UNITS[unitKey(f.unit)]?.dim === 't';
+		const isTime = m?.type === 'duration' || isTimeUnit(f.unit);
 		return { unit: isTime ? 'min' : (f.unit ?? ''), kind: isTime ? 'duration' : m?.type === 'count' ? 'count' : 'number', share: false };
 	}
 	// task
@@ -957,6 +995,29 @@ export function unitOf(card: StatCard, P: Prepared, ctx: Ctx): { unit: string; k
 }
 
 const round = (v: number | null, d = 2) => (v === null ? null : Math.round(v * 10 ** d) / 10 ** d);
+
+/** The span a range covers, as a goal names it: "this week", "in the last 30 days". */
+export function rangeName(r: string): string {
+	if (r.startsWith('since:')) return `since ${shortDate(r.slice(6))}`;
+	switch (r) {
+		case 'week':
+			return 'this week';
+		case 'month':
+			return 'this month';
+		case 'year':
+			return 'this year';
+		case '7d':
+			return 'in the last 7 days';
+		case '30d':
+			return 'in the last 30 days';
+		case '90d':
+			return 'in the last 90 days';
+		case '12m':
+			return 'in the last 12 months';
+		default:
+			return 'all time';
+	}
+}
 
 function seriesList(points: Point[]): { key: string; label: string; order: number }[] {
 	const m = new Map<string, { key: string; label: string; order: number }>();
@@ -1120,12 +1181,25 @@ export function computeCard(card: StatCard, P: Prepared, ctx: Ctx): CardResult {
 			break;
 		}
 		case 'goal': {
-			const bk = bucketKind === 'session' || bucketKind === 'all' ? 'week' : bucketKind;
-			const cur = bucketOf(range.to, bk);
+			// Automatic and Whole range measure the goal over the card's range; a bucket size
+			// measures it over the current day, week, month… of that size.
+			const whole = card.bucket === 'auto' || bucketKind === 'session' || bucketKind === 'all';
+			const bk = whole ? null : bucketKind;
+			const cur = bk ? bucketOf(range.to, bk) : range;
 			const inCur = points.filter((p) => p.date >= cur.from && p.date <= range.to);
 			const keys = seriesList(inCur.length ? inCur : points);
 			const g = base.goal;
-			const period = bk === 'day' ? 'today' : bk === 'week' ? 'this week' : bk === 'month' ? 'this month' : bk === 'quarter' ? 'this quarter' : 'this year';
+			const period = !bk
+				? rangeName(rangeKey)
+				: bk === 'day'
+					? 'today'
+					: bk === 'week'
+						? 'this week'
+						: bk === 'month'
+							? 'this month'
+							: bk === 'quarter'
+								? 'this quarter'
+								: 'this year';
 			base.goalRows = (keys.length ? keys : [{ key: 'all', label: '', order: 0 }])
 				.sort((a, b) => a.order - b.order)
 				.slice(0, card.look.top)
@@ -1238,7 +1312,10 @@ function rollingAvg(card: StatCard, P: Prepared, ctx: Ctx, range: Range, buckets
 
 function recordsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range, points: Point[], unit: string, kind: ValueKind): NonNullable<CardResult['records']> {
 	const out: NonNullable<CardResult['records']> = [];
-	const best = (ps: Point[]) => ps.reduce<Point | null>((a, p) => (!a || p.value > a.value ? p : a), null);
+	// "Lowest" cards (and paces) count the smallest number as the best.
+	const lower = card.overTime === 'min' || card.perLog === 'pace';
+	const best = (ps: Point[]) =>
+		ps.reduce<Point | null>((a, p) => (!a || (lower ? p.value < a.value : p.value > a.value) ? p : a), null);
 	const byPeriod = (ps: Point[], b: 'day' | 'week') => {
 		const m = new Map<string, { v: number; date: ISODate }>();
 		for (const p of ps) {

@@ -17,12 +17,17 @@ export function compact(v: number): string {
 	return num(v);
 }
 
-/** Minutes as "45 min" or "2 h 5 min". */
+/** Minutes as "45 min" or "2 h 5 min"; short times keep their seconds: "45 s", "1 min 30 s". */
 export function duration(min: number): string {
 	const neg = min < 0;
-	const m = Math.round(Math.abs(min));
-	const h = Math.floor(m / 60);
-	const out = h ? `${h} h${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`;
+	const secs = Math.round(Math.abs(min) * 60);
+	let out: string;
+	if (secs < 600 && secs % 60 !== 0) out = secs < 60 ? `${secs} s` : `${Math.floor(secs / 60)} min ${secs % 60} s`;
+	else {
+		const m = Math.round(Math.abs(min));
+		const h = Math.floor(m / 60);
+		out = h ? `${h} h${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`;
+	}
 	return neg ? `−${out}` : out;
 }
 
