@@ -216,13 +216,6 @@ export interface ShareDetails {
 	noRemind?: boolean;
 }
 
-/** Read a field a newer HabitForm may have, without depending on it existing yet. */
-const optionalField = <T>(form: object, k: string, ok: (v: unknown) => v is T): T | undefined => {
-	const v = (form as Record<string, unknown>)[k];
-	return ok(v) ? v : undefined;
-};
-const isUnlogged = (v: unknown): v is 'missed' | 'ignore' => v === 'missed' || v === 'ignore';
-
 /** Build a template from a Habit and the Tasks its Slots use (keyed by Task id). */
 export function toTemplate(
 	habit: HabitForm,
@@ -285,7 +278,7 @@ export function toTemplate(
 			levels: habit.levels.enabled ? habit.levels : null,
 			quickDone: habit.quickDone,
 			remind: habit.remind && !share.noRemind,
-			unlogged: optionalField(habit, 'unlogged', isUnlogged) ?? 'missed',
+			unlogged: habit.unlogged ?? 'missed',
 			identities: habit.identityIds
 				.map((id) => names.identities?.get(id))
 				.filter((x): x is string => !!x),
@@ -386,8 +379,7 @@ export function fromTemplate(
 		};
 	});
 	const variantIds = new Map(tpl.habit.variants.map((v) => [v.key, newId()]));
-	// `as`: lets `unlogged` through before and after HabitForm has the field (it lands in a parallel change).
-	const habit = {
+	const habit: HabitForm = {
 		name: tpl.habit.name,
 		direction: tpl.habit.direction,
 		notes: tpl.habit.notes,
@@ -433,7 +425,7 @@ export function fromTemplate(
 		limit: tpl.habit.limit ? { ...tpl.habit.limit, start: startDate } : null,
 		progression: tpl.habit.progression,
 		areaId: null
-	} as HabitForm;
+	};
 	// Rotations and intervals start from the day of import.
 	if (habit.schedule && 'start' in habit.schedule) habit.schedule = { ...habit.schedule, start: startDate };
 	return { tasks, habit, identities: tpl.habit.identities };
