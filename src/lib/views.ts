@@ -154,7 +154,12 @@ export const viewSettings = z.object({
 		.object({ lines: z.array(z.enum(keysOf(HABIT_LINES))).default(['schedule', 'cue', 'area']) })
 		.prefault({}),
 	history: z.object({ values: z.boolean().default(false) }).prefault({}),
-	hidden: z.array(z.enum(keysOf(FEATURES))).default([])
+	hidden: z.array(z.enum(keysOf(FEATURES))).default([]),
+	/**
+	 * Your own changes on top of the template (see `Own`), kept when you switch template.
+	 * Unset on views saved before this was recorded; they are worked out from the template then.
+	 */
+	own: z.record(z.string().max(64), z.unknown()).optional()
 });
 export type ViewSettings = z.infer<typeof viewSettings>;
 
@@ -305,15 +310,228 @@ export function fromTemplate(id: string, opts: { groupByArea?: boolean } = {}): 
 	});
 }
 
-/** Switch template, keeping what belongs to the user: saved views, manual order, per-habit numbers, start page. */
-export function switchTemplate(current: ViewSettings, id: string): ViewSettings {
+const DEFAULT_FIELD_LABEL: Record<keyof ViewState, string> = {
+	areas: 'filter',
+	direction: 'filter',
+	status: 'filter',
+	identity: 'filter',
+	habit: 'filter',
+	query: 'filter',
+	tags: 'filter',
+	collection: 'filter',
+	archived: 'filter',
+	sort: 'sort',
+	group: 'grouping'
+};
+const stateKeys = Object.keys(DEFAULT_FIELD_LABEL) as (keyof ViewState)[];
+
+/** List settings that hold a set of choices: your change is what you turned on and what you turned off. */
+const SET_FIELDS = {
+	'today.widgets': 'Widgets on Today',
+	'today.lines': 'Lines on each habit',
+	'habits.lines': 'Lines on the Habits list',
+	hidden: 'Hidden features'
+} as const;
+/** Settings that are one value each. */
+const ONE_FIELDS = {
+	'today.sections': 'Sections of Today',
+	'today.done': 'Done items',
+	'today.timeAware': 'Only show what fits now',
+	'today.headline': 'Headline number',
+	'history.values': 'Values in History'
+} as const;
+type SetField = keyof typeof SET_FIELDS;
+type OneField = keyof typeof ONE_FIELDS;
+const setFields = Object.keys(SET_FIELDS) as SetField[];
+const oneFields = Object.keys(ONE_FIELDS) as OneField[];
+
+function getField(v: ViewSettings, f: SetField | OneField): unknown {
+	switch (f) {
+		case 'today.sections':
+			return sectionOrder(v);
+		case 'today.widgets':
+		case 'today.lines':
+		case 'today.done':
+		case 'today.timeAware':
+		case 'today.headline':
+			return v.today[f.slice(6) as 'widgets'];
+		case 'habits.lines':
+			return v.habits.lines;
+		case 'history.values':
+			return v.history.values;
+		case 'hidden':
+			return v.hidden;
+	}
+}
+function setField(v: ViewSettings, f: SetField | OneField, value: unknown) {
+	if (f === 'hidden') v.hidden = value as FeatureKey[];
+	else if (f === 'habits.lines') v.habits = { ...v.habits, lines: value as HabitLineKey[] };
+	else if (f === 'history.values') v.history = { ...v.history, values: value as boolean };
+	else v.today = { ...v.today, [f.slice(6)]: value };
+}
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/** What you turned on and off in a list setting, by hand. */
+export const ownDelta = z.object({ add: z.array(str(64)).max(50), remove: z.array(str(64)).max(50) });
+type Delta = z.infer<typeof ownDelta>;
+const isDelta = (x: unknown): x is Delta => ownDelta.safeParse(x).success;
+
+/**
+ * Your own changes on top of the view template, by setting: "today.done" holds the value
+ * you chose, a list setting like "today.lines" holds what you turned on and off, and a page
+ * default holds each field you set ("defaults.today.group"). They survive a template switch.
+ */
+export type Own = Record<string, unknown>;
+
+/** For views saved before own changes were recorded: everything that differs from the template. */
+function deriveOwn(v: ViewSettings): Own {
+	const base = fromTemplate(v.template);
+	const own: Own = {};
+	for (const f of oneFields) if (!same(getField(v, f), getField(base, f))) own[f] = getField(v, f);
+	for (const f of setFields) {
+		const mine = getField(v, f) as string[];
+		const theirs = getField(base, f) as string[];
+		const d = { add: mine.filter((x) => !theirs.includes(x)), remove: theirs.filter((x) => !mine.includes(x)) };
+		if (d.add.length || d.remove.length) own[f] = d;
+	}
+	for (const p of PAGES) {
+		const mine = v.defaults[p];
+		const theirs = base.defaults[p];
+		if (!mine || !theirs) continue;
+		for (const k of stateKeys) if (!same(mine[k], theirs[k])) own[`defaults.${p}.${k}`] = mine[k];
+	}
+	return own;
+}
+
+/** Your own changes, recorded or (for older saved views) worked out. */
+export const ownOf = (v: ViewSettings): Own => v.own ?? deriveOwn(v);
+
+/** One setting you changed on top of your view template. */
+export interface OwnChange {
+	/** "today.done", "hidden", "defaults.today.grouping". */
+	key: string;
+	label: string;
+}
+
+/** Your own changes as a list for Settings: "Done items", "Today grouping". */
+export function ownChanges(v: ViewSettings): OwnChange[] {
+	const own = ownOf(v);
+	const out: OwnChange[] = [];
+	for (const f of [...oneFields, ...setFields])
+		if (f in own) out.push({ key: f, label: (ONE_FIELDS as Record<string, string>)[f] ?? (SET_FIELDS as Record<string, string>)[f] });
+	for (const p of PAGES) {
+		const words = new Set(stateKeys.filter((k) => `defaults.${p}.${k}` in own).map((k) => DEFAULT_FIELD_LABEL[k]));
+		for (const w of ['filter', 'sort', 'grouping']) if (words.has(w)) out.push({ key: `defaults.${p}.${w}`, label: `${PAGE_LABEL[p]} ${w}` });
+	}
+	return out;
+}
+
+/** Layout settings a change can name. */
+export interface LayoutPatch {
+	today?: Partial<ViewSettings['today']>;
+	habits?: Partial<ViewSettings['habits']>;
+	history?: Partial<ViewSettings['history']>;
+	hidden?: FeatureKey[];
+}
+
+/**
+ * Record a layout change as your own. A value set back to what the template gives stops being
+ * yours. In a list, what you just turned on or off is added to what you turned on or off before,
+ * so a choice the current template happens to share is still remembered for the next one.
+ */
+export function recordPatch(v: ViewSettings, patch: LayoutPatch): Own {
+	const own = { ...ownOf(v) };
+	const base = fromTemplate(v.template);
+	const after = structuredClone(v);
+	if (patch.today) after.today = { ...after.today, ...patch.today };
+	if (patch.habits) after.habits = { ...after.habits, ...patch.habits };
+	if (patch.history) after.history = { ...after.history, ...patch.history };
+	if (patch.hidden) after.hidden = patch.hidden;
+	const named = (f: SetField | OneField) => {
+		if (f === 'hidden') return !!patch.hidden;
+		const [group, key] = f.split('.') as ['today' | 'habits' | 'history', string];
+		return !!patch[group] && key in patch[group]!;
+	};
+	for (const f of oneFields) {
+		if (!named(f)) continue;
+		const value = getField(after, f);
+		if (same(value, getField(base, f))) delete own[f];
+		else own[f] = value;
+	}
+	for (const f of setFields) {
+		if (!named(f)) continue;
+		const before = getField(v, f) as string[];
+		const now = getField(after, f) as string[];
+		const on = now.filter((x) => !before.includes(x));
+		const off = before.filter((x) => !now.includes(x));
+		const theirs = getField(base, f) as string[];
+		const d = isDelta(own[f]) ? own[f] : { add: [], remove: [] };
+		// Turning something off undoes an earlier "on"; it is only a "remove" of its own if the template has it.
+		const next = {
+			add: [...d.add.filter((x) => !off.includes(x)), ...on.filter((x) => !d.add.includes(x) && !theirs.includes(x))],
+			remove: [...d.remove.filter((x) => !on.includes(x)), ...off.filter((x) => !d.remove.includes(x) && theirs.includes(x))]
+		};
+		if (next.add.length || next.remove.length) own[f] = next;
+		else delete own[f];
+	}
+	return own;
+}
+
+/** Record a new page default as your own, field by field. */
+export function recordDefault(v: ViewSettings, page: Page, state: ViewState): Own {
+	const own = { ...ownOf(v) };
+	const theirs = fromTemplate(v.template).defaults[page] ?? emptyState();
+	for (const k of stateKeys) {
+		if (same(state[k], theirs[k])) delete own[`defaults.${page}.${k}`];
+		else own[`defaults.${page}.${k}`] = state[k];
+	}
+	return own;
+}
+
+/** Put your own changes on top of a template's settings. */
+function applyOwn(v: ViewSettings, own: Own): ViewSettings {
+	const out = structuredClone(v);
+	for (const f of oneFields) if (f in own) setField(out, f, own[f]);
+	for (const f of setFields) {
+		const d = own[f];
+		if (!isDelta(d)) continue;
+		const list = getField(out, f) as string[];
+		setField(out, f, [...list.filter((x) => !d.remove.includes(x)), ...d.add.filter((x) => !list.includes(x))]);
+	}
+	for (const p of PAGES) {
+		const keys = stateKeys.filter((k) => `defaults.${p}.${k}` in own);
+		if (!keys.length) continue;
+		out.defaults = {
+			...out.defaults,
+			[p]: { ...(out.defaults[p] ?? emptyState()), ...Object.fromEntries(keys.map((k) => [k, own[`defaults.${p}.${k}`]])) }
+		};
+	}
+	// Anything that no longer fits the schema (an old value, a removed option) falls back to the template.
+	const parsed = viewSettings.safeParse(out);
+	return parsed.success ? parsed.data : v;
+}
+
+/**
+ * Switch template. What always belongs to you is kept: saved views, own order, per-habit
+ * numbers, the start page, what each page opens with and the last filter used. With `keep`
+ * (the default), your own changes on top of the old template are kept too, and the new
+ * template only changes the rest. Without it, the new template replaces them.
+ */
+export function switchTemplate(current: ViewSettings, id: string, opts: { keep?: boolean } = {}): ViewSettings {
+	const keep = opts.keep ?? true;
 	const next = fromTemplate(id);
-	return {
+	const out: ViewSettings = {
 		...next,
 		saved: current.saved,
 		startPage: current.startPage,
-		today: { ...next.today, order: current.today.order, headlineFor: current.today.headlineFor }
+		open: current.open,
+		last: current.last,
+		today: { ...next.today, order: current.today.order, headlineFor: current.today.headlineFor },
+		own: {}
 	};
+	if (!keep) return out;
+	const own = ownOf(current);
+	return { ...applyOwn(out, own), own };
 }
 
 /** Read stored views, filling anything missing. Unknown or broken data falls back to the template. */

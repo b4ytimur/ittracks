@@ -19,6 +19,8 @@
 	let pinned = $state(untrack(() => data.pinned));
 	let tasks = $state(untrack(() => [...data.tasks]));
 	let metricsByTask = $state(untrack(() => ({ ...data.metrics })));
+	/** Tasks that log something per set; a Yes or no Task has no sets to aim for. */
+	let repeating = $state(untrack(() => new Set(data.repeating)));
 
 	// A build habit always has at least one Variant to put Slots in.
 	$effect(() => {
@@ -264,9 +266,10 @@
 		const res = await fetch('?/quickTask', { method: 'POST', body, headers: { 'x-sveltekit-action': 'true' } });
 		const r = deserialize(await res.text());
 		if (r.type === 'success' && r.data?.newTask) {
-			const t = r.data.newTask as { id: string; name: string; metrics: { id: string; name: string; unit: string }[] };
+			const t = r.data.newTask as { id: string; name: string; repeats: boolean; metrics: { id: string; name: string; unit: string }[] };
 			tasks = [...tasks, { id: t.id, name: t.name }].sort((a, b) => a.name.localeCompare(b.name));
 			metricsByTask = { ...metricsByTask, [t.id]: t.metrics };
+			if (t.repeats) repeating = new Set([...repeating, t.id]);
 			s.taskId = t.id;
 			s.fillRule = null;
 			newTaskFor = null;
@@ -391,16 +394,18 @@
 							{#if newTaskError}<p class="error">{newTaskError}</p>{/if}
 						</div>
 					{/if}
-					<label style="width: 8rem"
-						>Target sets
-						<input
-							type="number"
-							min="0"
-							max="50"
-							value={s.sets ?? ''}
-							oninput={(e) => (s.sets = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
-						/>
-					</label>
+					{#if !s.taskId || repeating.has(s.taskId)}
+						<label style="width: 8rem"
+							>Target sets
+							<input
+								type="number"
+								min="0"
+								max="50"
+								value={s.sets ?? ''}
+								oninput={(e) => (s.sets = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
+							/>
+						</label>
+					{/if}
 					{#if !s.fillRule && s.taskId && metricsByTask[s.taskId]?.length}
 						<table class="targets">
 							<thead>

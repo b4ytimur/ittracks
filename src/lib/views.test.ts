@@ -11,6 +11,9 @@ import {
 	sameState,
 	sectionOrder,
 	switchTemplate,
+	ownChanges,
+	recordDefault,
+	recordPatch,
 	viewSettings,
 	viewState
 } from './views';
@@ -56,6 +59,113 @@ describe('views', () => {
 		expect(next.today.headlineFor).toEqual({ h1: 'week' });
 		expect(next.startPage).toBe('library');
 		expect(next.hidden).toContain('identities');
+	});
+
+	it('lists the settings changed on top of the template', () => {
+		const v = fromTemplate('standard');
+		expect(ownChanges(v)).toEqual([]);
+		v.today.done = 'collapse';
+		v.today.widgets = ['week'];
+		v.hidden = ['cost'];
+		v.defaults.today = { ...v.defaults.today!, group: 'area' };
+		expect(ownChanges(v).map((c) => c.label)).toEqual(['Done items', 'Widgets on Today', 'Hidden features', 'Today grouping']);
+	});
+
+	it('switching template keeps your layout, page defaults and hidden features by default', () => {
+		const v = fromTemplate('standard');
+		v.today.done = 'collapse';
+		v.today.widgets = ['week'];
+		v.today.lines = v.today.lines.filter((l) => l !== 'reframe');
+		v.today.sections = [
+			{ key: 'breaking', show: true },
+			{ key: 'due', show: true },
+			{ key: 'prep', show: true },
+			{ key: 'paused', show: true },
+			{ key: 'resting', show: true }
+		];
+		v.hidden = ['cost'];
+		v.defaults.today = { ...v.defaults.today!, group: 'area', areas: ['a1'] };
+		v.open = { today: 'default' };
+		const next = switchTemplate(v, 'gym');
+		expect(next.template).toBe('gym');
+		expect(next.today.done).toBe('collapse');
+		expect(next.today.sections[0].key).toBe('breaking');
+		// Gym adds progress and week; you had added week yourself.
+		expect(next.today.widgets).toEqual(['progress', 'week']);
+		// Gym shows four lines; you had taken reframe away, which Gym doesn't show anyway.
+		expect(next.today.lines).toEqual(['cue', 'headline', 'levels', 'progression']);
+		// Gym hides rewards and cost; you had hidden cost.
+		expect(next.hidden.sort()).toEqual(['cost', 'rewards']);
+		expect(next.defaults.today).toMatchObject({ group: 'area', areas: ['a1'] });
+		// Gym's own default for the Library still applies, since you never changed it.
+		expect(next.defaults.library?.sort).toBe('used');
+		expect(next.open).toEqual({ today: 'default' });
+		// Your changes are still yours on top of Gym.
+		expect(ownChanges(next).map((c) => c.label)).toContain('Done items');
+	});
+
+	it('a feature you switched back on stays on after a switch', () => {
+		const v = fromTemplate('minimal');
+		v.hidden = v.hidden.filter((f) => f !== 'levels');
+		const next = switchTemplate(v, 'quitter');
+		expect(next.hidden).not.toContain('levels');
+		expect(next.hidden).toContain('prep');
+	});
+
+	it('switching without keeping replaces your own changes, but never saved views or opens-with', () => {
+		const v = fromTemplate('standard');
+		v.today.done = 'collapse';
+		v.defaults.today = { ...v.defaults.today!, group: 'area' };
+		v.open = { today: 'default' };
+		const next = switchTemplate(v, 'minimal', { keep: false });
+		expect(next.today.done).toBe('collapse'); // Minimal folds done items itself
+		expect(next.defaults.today?.group).toBe('none');
+		expect(next.open).toEqual({ today: 'default' });
+		const reset = switchTemplate({ ...v, today: { ...v.today, done: 'hide' } }, 'standard', { keep: false });
+		expect(reset.today.done).toBe('keep');
+		expect(ownChanges(reset)).toEqual([]);
+	});
+
+	it('switching away and back with your changes kept changes nothing of yours', () => {
+		const v = fromTemplate('minimal');
+		v.today.widgets = ['progress'];
+		v.today.lines = ['cue'];
+		v.today.done = 'keep';
+		const back = switchTemplate(switchTemplate(v, 'standard'), 'minimal');
+		expect(back.today.widgets).toEqual(['progress']);
+		expect(back.today.lines).toEqual(['cue']);
+		expect(back.today.done).toBe('keep');
+	});
+
+	it('remembers what you change by hand across switches, even when a template shares it', () => {
+		// Ruth: on Minimal, turns on Progress today, the When and where line, and Done items stay where they are.
+		let v = fromTemplate('minimal');
+		v = { ...v, own: recordPatch(v, { today: { widgets: ['progress'] } }), today: { ...v.today, widgets: ['progress'] } };
+		v = { ...v, own: recordPatch(v, { today: { lines: ['cue'] } }), today: { ...v.today, lines: ['cue'] } };
+		v = { ...v, own: recordPatch(v, { today: { done: 'keep' } }), today: { ...v.today, done: 'keep' } };
+		const back = switchTemplate(switchTemplate(v, 'standard'), 'minimal');
+		expect(back.today.widgets).toEqual(['progress']);
+		expect(back.today.lines).toEqual(['cue']);
+		expect(back.today.done).toBe('keep');
+		expect(ownChanges(back).map((c) => c.label)).toEqual(['Done items', 'Widgets on Today', 'Lines on each habit']);
+	});
+
+	it('a value set back to the template is no longer your own', () => {
+		const v = fromTemplate('standard');
+		const own = recordPatch({ ...v, today: { ...v.today, done: 'hide' }, own: { 'today.done': 'hide' } }, { today: { done: 'keep' } });
+		expect(own).toEqual({});
+		const off = recordPatch(v, { today: { widgets: ['week'] } });
+		expect(off).toEqual({ 'today.widgets': { add: ['week'], remove: [] } });
+		const on = recordPatch({ ...v, today: { ...v.today, widgets: ['week'] }, own: off }, { today: { widgets: [] } });
+		expect(on).toEqual({});
+	});
+
+	it('a page default you set is yours, field by field', () => {
+		const v = fromTemplate('routine');
+		const own = recordDefault(v, 'today', viewState.parse({ group: 'area', sort: 'manual' }));
+		expect(own).toEqual({ 'defaults.today.group': 'area' });
+		const next = switchTemplate({ ...v, own }, 'standard');
+		expect(next.defaults.today).toMatchObject({ group: 'area', sort: 'cue' });
 	});
 
 	it('opens with last, the page default, or a saved view', () => {

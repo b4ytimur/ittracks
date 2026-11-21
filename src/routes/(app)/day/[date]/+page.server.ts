@@ -19,6 +19,7 @@ import {
 	windowFor
 } from '$lib/server/backfill';
 import { getSettings } from '$lib/server/settings';
+import { progressForIds } from '$lib/server/progress';
 import { addDays } from '$lib/engine/dates';
 import { earliestLoggable, isRealDate } from '$lib/engine/backfill';
 import type { Level } from '$lib/engine/streak';
@@ -32,13 +33,16 @@ export const load: PageServerLoad = ({ locals, params, cookies }) => {
 	if (!isRealDate(date)) error(404, 'Not a date');
 	if (date >= today) redirect(303, '/');
 	const settings = getSettings(accountId);
+	const day = loadDay(accountId, date, today);
 	return {
 		date,
 		today,
 		window: windowFor(accountId, date, today),
 		pastDays: settings.pastDays,
 		earliest: earliestLoggable(today, settings.pastDays),
-		...loadDay(accountId, date, today),
+		...day,
+		/** "3 of 6 glasses", "2 of 4 steps", by Occurrence id. */
+		progress: Object.fromEntries(progressForIds([...day.due, ...day.other].flatMap((i) => (i.occurrence ? [i.occurrence.id] : [])))),
 		// The day before, for the "previous day" link: still worth a look if it has gaps.
 		prevUnlogged: unloggedOn(accountId, addDays(date, -1)).length
 	};

@@ -59,6 +59,8 @@ export const viewRules = defineRules<ViewSettings, ViewCtx>({
 	'today.order': independent,
 	'habits.lines': independent,
 	'history.values': independent,
+	// A record of which settings you changed by hand; it blocks nothing.
+	own: independent,
 	hidden: [
 		check(
 			(v) => v.hidden.includes('identities') && usesIdentities(v),

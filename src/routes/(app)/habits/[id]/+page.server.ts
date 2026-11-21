@@ -47,6 +47,21 @@ function numericMetrics(taskIds: string[]) {
 	return out;
 }
 
+/** Tasks with at least one field logged per set. */
+function repeatingTasks(taskIds: string[]): string[] {
+	if (!taskIds.length) return [];
+	return [
+		...new Set(
+			db
+				.select({ taskId: metric.taskId })
+				.from(metric)
+				.where(and(inArray(metric.taskId, taskIds), eq(metric.repeats, true)))
+				.all()
+				.map((m) => m.taskId)
+		)
+	];
+}
+
 const blank = (today: string): HabitForm => ({
 	name: '',
 	direction: 'build',
@@ -103,6 +118,8 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		fixed,
 		tasks,
 		metrics: numericMetrics(tasks.map((t) => t.id)),
+		/** Tasks that log something per set: only their Slots can have Target sets. */
+		repeating: repeatingTasks(tasks.map((t) => t.id)),
 		tags: listTagNames(accountId),
 		habits: allHabits.filter((x) => x.id !== params.id).map(({ id, name, direction }) => ({ id, name, direction })),
 		identities: listIdentities(accountId),
@@ -179,6 +196,7 @@ export const actions: Actions = {
 			newTask: {
 				id,
 				name,
+				repeats: metrics.some((m) => m.repeats),
 				metrics: metrics
 					.filter((m) => m.type === 'number' || m.type === 'count' || m.type === 'duration')
 					.map((m) => ({ id: m.id, name: m.name, unit: m.unit || (m.type === 'duration' ? 'min' : '') }))

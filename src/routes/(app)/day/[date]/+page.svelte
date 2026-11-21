@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isPartial, progressText } from '$lib/engine/progress';
 	import { enhance } from '$app/forms';
 	import { goto, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
@@ -30,8 +31,11 @@
 	const notLogged = (it: Item) => !it.occurrence || it.occurrence.status === 'missed' || it.occurrence.status === 'due';
 	function statusText(it: Item): string {
 		const o = it.occurrence;
-		if (o?.status === 'done')
-			return `Done${it.levels && o.level ? ` at ${levelName[o.level]}` : ''}${o.entries ? ` · ${o.entries} ${o.entries === 1 ? 'entry' : 'entries'}` : ''}`;
+		if (o?.status === 'done') {
+			const p = data.progress[o.id];
+			const detail = isPartial(p) ? ` · ${progressText(p!)}` : o.entries ? ` · ${o.entries} ${o.entries === 1 ? 'entry' : 'entries'}` : '';
+			return `Done${it.levels && o.level ? ` at ${levelName[o.level]}` : ''}${detail}`;
+		}
 		if (o?.status === 'skipped') return 'Skipped';
 		if (o?.status === 'missed') return 'Missed';
 		if (it.paused) return 'Paused that day';
