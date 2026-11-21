@@ -1,6 +1,9 @@
 import { and, desc, eq, gte, inArray, ne } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { entry, habit, occurrence, slip, variant } from '$lib/server/db/schema';
+import { entry, habit, metric, occurrence, slip, task, variant } from '$lib/server/db/schema';
+import { getViews } from '$lib/server/settings';
+import { listAreas } from '$lib/server/repo/areas';
+import { initialState } from '$lib/views';
 import { userToday } from '$lib/server/today';
 import { addDays } from '$lib/engine/dates';
 import type { PageServerLoad } from './$types';
@@ -19,6 +22,7 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 			status: occurrence.status,
 			habitId: habit.id,
 			habit: habit.name,
+			areaId: habit.areaId,
 			variant: variant.name
 		})
 		.from(occurrence)
@@ -27,15 +31,25 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		.where(and(eq(habit.accountId, accountId), ne(occurrence.status, 'due'), gte(occurrence.date, from)))
 		.orderBy(desc(occurrence.date))
 		.all();
-	const counts = occ.length
+	const entries = occ.length
 		? db
-				.select({ occurrenceId: entry.occurrenceId })
+				.select({ occurrenceId: entry.occurrenceId, taskId: entry.taskId, task: task.name, values: entry.values })
 				.from(entry)
+				.innerJoin(task, eq(entry.taskId, task.id))
 				.where(inArray(entry.occurrenceId, occ.map((o) => o.id)))
+				.orderBy(entry.sortOrder)
+				.all()
+		: [];
+	const metrics = entries.length
+		? db
+				.select({ id: metric.id, taskId: metric.taskId, name: metric.name, type: metric.type, unit: metric.unit })
+				.from(metric)
+				.where(inArray(metric.taskId, [...new Set(entries.map((e) => e.taskId))]))
+				.orderBy(metric.sortOrder)
 				.all()
 		: [];
 	const slips = db
-		.select({ date: slip.date, count: slip.count, habit: habit.name })
+		.select({ date: slip.date, count: slip.count, habit: habit.name, habitId: habit.id, areaId: habit.areaId })
 		.from(slip)
 		.innerJoin(habit, eq(slip.habitId, habit.id))
 		.where(and(eq(habit.accountId, accountId), gte(slip.date, from)))
@@ -61,11 +75,43 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 	occ.forEach((o) => day(o.date).occurrences.push(o));
 	slips.forEach((s) => day(s.date).slips.push(s));
 
+	const views = getViews(accountId);
 	return {
 		days,
-		entryCounts: Object.fromEntries(
-			occ.map((o) => [o.id, counts.filter((c) => c.occurrenceId === o.id).length])
-		),
+		entryCounts: Object.fromEntries(occ.map((o) => [o.id, entries.filter((c) => c.occurrenceId === o.id).length])),
+		// What was logged, one line per Task, for "Show values" in History.
+		values: Object.fromEntries(occ.map((o) => [o.id, summarize(entries.filter((e) => e.occurrenceId === o.id), metrics)])),
+		habits: db
+			.select({ id: habit.id, name: habit.name })
+			.from(habit)
+			.where(eq(habit.accountId, accountId))
+			.orderBy(habit.name)
+			.all(),
+		areas: listAreas(accountId),
+		views,
+		initial: initialState(views, 'history'),
 		history: [...byDay.entries()].sort((a, b) => b[0].localeCompare(a[0]))
 	};
 };
+
+type Metric = { id: string; taskId: string; name: string; type: string; unit: string | null };
+
+/** "Bench press: 80 kg × 8, 80 kg × 8" — one line per Task, sets in order. */
+function summarize(entries: { taskId: string; task: string; values: Record<string, unknown> }[], metrics: Metric[]): string[] {
+	const byTask = new Map<string, { task: string; sets: string[] }>();
+	for (const e of entries) {
+		const parts = metrics
+			.filter((m) => m.taskId === e.taskId)
+			.map((m) => {
+				const v = e.values[m.id];
+				if (v === undefined || v === null || v === '' || v === false) return null;
+				if (v === true) return m.name;
+				return `${v}${m.unit ? ` ${m.unit}` : ''}`;
+			})
+			.filter(Boolean);
+		if (!parts.length) continue;
+		const t = byTask.get(e.taskId) ?? byTask.set(e.taskId, { task: e.task, sets: [] }).get(e.taskId)!;
+		t.sets.push(parts.join(' × '));
+	}
+	return [...byTask.values()].map((t) => `${t.task}: ${t.sets.join(', ')}`);
+}

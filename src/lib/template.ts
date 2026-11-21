@@ -23,7 +23,7 @@ export const TEMPLATE_FORMAT = 'ittracks-template';
  * Version 3 adds per-Metric log settings, gallery details (meta) and setup questions.
  * Older files still import; the new fields take their defaults.
  */
-export const TEMPLATE_VERSION = 3;
+export const TEMPLATE_VERSION = 4;
 
 const key = z.string().min(1).max(64);
 
@@ -92,8 +92,10 @@ export type TemplateMeta = z.infer<typeof templateMeta>;
 
 export const templateFile = z.object({
 	format: z.literal(TEMPLATE_FORMAT),
-	version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+	version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
 	name: z.string().min(1).max(120),
+	/** Version 4: a view template this habit works well with (e.g. "gym"). Only ever offered, never applied by itself. */
+	view: z.string().max(32).nullable().default(null),
 	description: z.string().max(2000).default(''),
 	meta: templateMeta.nullable().default(null),
 	questions: z.array(templateQuestion).max(10).default([]),
@@ -202,6 +204,7 @@ export function toTemplate(
 		version: TEMPLATE_VERSION,
 		name: habit.name,
 		description: '',
+		view: null,
 		meta: null,
 		questions: [],
 		habit: {

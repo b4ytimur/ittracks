@@ -3,6 +3,7 @@ import { db } from './db';
 import { settings } from './db/schema';
 import type { DayRange } from '$lib/engine/day';
 import type { TaskType } from '$lib/task-types';
+import { readViews, type ViewSettings } from '$lib/views';
 
 export interface Settings {
 	weightUnit: string;
@@ -16,8 +17,10 @@ export interface Settings {
 	guidedSetup: boolean;
 	/** The habit editor shows every section, not just the ones in use. */
 	showAllSections: boolean;
-	/** Today, Habits and the Library group by Area. */
+	/** Before views: Today, Habits and the Library group by Area. Now only seeds the Standard view. */
 	groupByArea: boolean;
+	/** Filters, sorts, layout and the view template. Unset until first saved (reads as Standard). */
+	views?: ViewSettings;
 	/** Habits offered as home screen shortcuts, in order. */
 	pinned: string[];
 	/** Task types the user saved, offered next to the built-in ones. */
@@ -47,4 +50,14 @@ export function saveSettings(accountId: string, next: Partial<Settings>) {
 		.values({ accountId, data: data as unknown as Record<string, unknown> })
 		.onConflictDoUpdate({ target: settings.accountId, set: { data: data as unknown as Record<string, unknown> } })
 		.run();
+}
+
+/** The user's views, with defaults filled in. */
+export function getViews(accountId: string): ViewSettings {
+	const s = getSettings(accountId);
+	return readViews(s.views, { groupByArea: s.groupByArea });
+}
+
+export function saveViews(accountId: string, views: ViewSettings) {
+	saveSettings(accountId, { views });
 }

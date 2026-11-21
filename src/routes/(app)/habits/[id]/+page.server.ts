@@ -21,7 +21,7 @@ import {
 import { identityFor, listIdentities } from '$lib/server/repo/identities';
 import { listTagNames, listTasks, saveTask } from '$lib/server/repo/tasks';
 import { listAreas } from '$lib/server/repo/areas';
-import { getSettings, saveSettings } from '$lib/server/settings';
+import { getViews, getSettings, saveSettings } from '$lib/server/settings';
 import { userToday } from '$lib/server/today';
 import { ownedHabit } from '$lib/server/owned';
 import { BUILTIN_TASK_TYPES, metricsFromType } from '$lib/task-types';
@@ -109,6 +109,7 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		areas: listAreas(accountId),
 		ranges: settings.ranges,
 		showAllSections: settings.showAllSections,
+		hidden: getViews(accountId).hidden,
 		pinned: !isNew && settings.pinned.includes(params.id),
 		archived: !isNew && !!ownedHabit(accountId, params.id)?.archived,
 		pauses: isNew

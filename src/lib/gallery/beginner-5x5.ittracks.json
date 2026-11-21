@@ -1,6 +1,7 @@
 {
 	"format": "ittracks-template",
-	"version": 3,
+	"version": 4,
+	"view": "gym",
 	"name": "Beginner 5x5 strength",
 	"description": "Two workouts, A and B, alternating with a rest day between. Five sets of five; add a little weight each time.",
 	"meta": {
