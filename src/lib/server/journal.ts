@@ -1,9 +1,9 @@
 // The journal on the server: day notes, and the feed of everything written per day (journal
 // fields, log notes, slip notes, the day note). Private: nothing here is ever exported as a
 // template or shared; only the owner's Markdown export reads it.
-import { and, asc, eq, gte, inArray, isNotNull, lte } from 'drizzle-orm';
+import { and, asc, eq, gte, isNotNull, lte } from 'drizzle-orm';
 import { db } from './db';
-import { dayNote, entry, habit, metric, occurrence, slip } from './db/schema';
+import { dayNote, entry, habit, metric, occurrence, slip, task } from './db/schema';
 import { NOTE_MAX } from '$lib/forms';
 import type { JournalDay, JournalItem } from '$lib/journal';
 
@@ -61,23 +61,38 @@ export function loadJournal(accountId: string, range: JournalRange, opts: { toda
 		.where(and(eq(habit.accountId, accountId), inRange(occurrence.date)))
 		.orderBy(asc(habit.sortOrder), asc(habit.name))
 		.all();
-	const entries = occs.length
-		? db
-				.select({ occurrenceId: entry.occurrenceId, taskId: entry.taskId, values: entry.values })
-				.from(entry)
-				.where(inArray(entry.occurrenceId, occs.map((o) => o.id)))
-				.orderBy(asc(entry.sortOrder))
-				.all()
-		: [];
-	const metrics = entries.length
-		? db
-				.select({ id: metric.id, taskId: metric.taskId, name: metric.name, type: metric.type, repeats: metric.repeats, scores: metric.scores })
-				.from(metric)
-				.where(inArray(metric.taskId, [...new Set(entries.map((e) => e.taskId))]))
-				.orderBy(asc(metric.sortOrder))
-				.all()
-				.filter((m) => !m.repeats && (m.type === 'text' || m.type === 'choice'))
-		: [];
+	// Joined on the account and the dates, not passed as a list of ids: a search or the export
+	// reads years of logs, more than SQLite takes as parameters.
+	const byOcc = new Map<string, { taskId: string; values: Record<string, unknown> }[]>();
+	if (occs.length) {
+		for (const e of db
+			.select({ occurrenceId: entry.occurrenceId, taskId: entry.taskId, values: entry.values })
+			.from(entry)
+			.innerJoin(occurrence, eq(entry.occurrenceId, occurrence.id))
+			.innerJoin(habit, eq(occurrence.habitId, habit.id))
+			.where(and(eq(habit.accountId, accountId), inRange(occurrence.date)))
+			.orderBy(asc(entry.sortOrder))
+			.all()) {
+			if (e.values._summary !== true) continue;
+			const list = byOcc.get(e.occurrenceId) ?? byOcc.set(e.occurrenceId, []).get(e.occurrenceId)!;
+			list.push(e);
+		}
+	}
+	const taskIds = [...new Set([...byOcc.values()].flat().map((e) => e.taskId))];
+	const byTask = new Map<string, { id: string; name: string; type: string; scores: Record<string, number> | null }[]>();
+	if (taskIds.length) {
+		for (const m of db
+			.select({ id: metric.id, taskId: metric.taskId, name: metric.name, type: metric.type, repeats: metric.repeats, scores: metric.scores })
+			.from(metric)
+			.innerJoin(task, eq(metric.taskId, task.id))
+			.where(eq(task.accountId, accountId))
+			.orderBy(asc(metric.sortOrder))
+			.all()) {
+			if (m.repeats || (m.type !== 'text' && m.type !== 'choice')) continue;
+			const list = byTask.get(m.taskId) ?? byTask.set(m.taskId, []).get(m.taskId)!;
+			list.push(m);
+		}
+	}
 
 	for (const o of occs) {
 		const d = day(o.date);
@@ -85,8 +100,8 @@ export function loadJournal(accountId: string, range: JournalRange, opts: { toda
 		const href = `/log/${o.id}?back=${back}`;
 		const wrote: JournalItem[] = [];
 		const answers: JournalDay['moods'] = [];
-		for (const e of entries.filter((x) => x.occurrenceId === o.id && x.values._summary === true)) {
-			for (const m of metrics.filter((x) => x.taskId === e.taskId)) {
+		for (const e of byOcc.get(o.id) ?? []) {
+			for (const m of byTask.get(e.taskId) ?? []) {
 				const v = e.values[m.id];
 				if (typeof v !== 'string' || !v.trim()) continue;
 				if (m.type === 'text') wrote.push({ kind: 'field', title: `${o.habit} · ${m.name}`, habitId: o.habitId, habit: o.habit, text: v, href });
@@ -111,18 +126,4 @@ export function loadJournal(accountId: string, range: JournalRange, opts: { toda
 	}
 
 	return [...days.values()].filter((d) => d.items.length || d.moods.length).sort((a, b) => b.date.localeCompare(a.date));
-}
-
-/** The first day anything was written, to know whether "Show older" has more. */
-export function firstJournalDate(accountId: string): string | null {
-	const n = db.select({ date: dayNote.date }).from(dayNote).where(eq(dayNote.accountId, accountId)).orderBy(asc(dayNote.date)).limit(1).get();
-	const o = db
-		.select({ date: occurrence.date })
-		.from(occurrence)
-		.innerJoin(habit, eq(occurrence.habitId, habit.id))
-		.where(eq(habit.accountId, accountId))
-		.orderBy(asc(occurrence.date))
-		.limit(1)
-		.get();
-	return [n?.date, o?.date].filter((x): x is string => !!x).sort()[0] ?? null;
 }

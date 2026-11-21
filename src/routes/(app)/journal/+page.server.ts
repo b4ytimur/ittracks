@@ -38,7 +38,7 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 	const mood = url.searchParams.get('mood') ?? '';
 	const filtered = !!(q || habit || mood);
 	// A search looks through everything; browsing shows the last few months.
-	const days = filtered ? 3650 : Math.min(Number(url.searchParams.get('days')) || DAYS, 3650);
+	const days = filtered ? 3650 : Math.max(1, Math.min(Math.round(Number(url.searchParams.get('days'))) || DAYS, 3650));
 	const all = loadJournal(accountId, { from: addDays(today, -days), to: today }, { today });
 
 	const shown = all
@@ -56,6 +56,7 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 				}))
 				.filter((x) => x.day);
 
+	const journalHabit = hasJournal(accountId);
 	return {
 		today,
 		off: isHidden(getViews(accountId), 'journal'),
@@ -71,8 +72,8 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 			.sort((a, b) => a.name.localeCompare(b.name)),
 		moods: [...new Set(all.flatMap((d) => d.moods.map((m) => m.value)))],
 		/** J7: offer the setup when there is no journal yet, or when asked. */
-		setup: url.searchParams.has('setup') || (!all.length && !hasJournal(accountId) && !settings.dayNote),
-		hasJournal: hasJournal(accountId),
+		setup: url.searchParams.has('setup') || (!all.length && !journalHabit && !settings.dayNote),
+		hasJournal: journalHabit,
 		dayNoteOn: settings.dayNote
 	};
 };
