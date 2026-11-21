@@ -37,6 +37,8 @@ export function buildStreak(statuses: OccurrenceStatus[]): number {
 
 /**
  * The streak under a rule, from Marks sorted oldest first. Due Occurrences are ignored.
+ * A skip counts neither way: it doesn't add to the streak and doesn't break it, so
+ * skipping can't grow a streak under any rule.
  * `minimumCounts` decides whether a done at the Minimum level keeps the streak alive;
  * when it doesn't, that Occurrence counts as a miss.
  */
@@ -47,7 +49,7 @@ export function streak(
 ): StreakResult {
 	const minimumCounts = opts.minimumCounts ?? true;
 	const acted = marks
-		.filter((m) => m.status !== 'due')
+		.filter((m) => m.status !== 'due' && m.status !== 'skipped')
 		.map((m) =>
 			m.status === 'done' && m.level === 'minimum' && !minimumCounts
 				? { ...m, status: 'missed' as const }
@@ -96,10 +98,10 @@ export function streak(
 		}
 
 		case 'consistency': {
-			// Share of the last N days' Occurrences that were done; skipped ones count neither way.
-			const today = opts.today ?? acted.at(-1)?.date ?? '';
+			// Share of the last N days' Occurrences that were done (skips are already left out).
+			const today = opts.today ?? marks.filter((m) => m.status !== 'due').at(-1)?.date ?? '';
 			const from = today ? addDays(today, -(rule.days - 1)) : '';
-			const window = acted.filter((m) => m.date >= from && m.date <= today && m.status !== 'skipped');
+			const window = acted.filter((m) => m.date >= from && m.date <= today);
 			const done = window.filter((m) => m.status === 'done').length;
 			return {
 				value: window.length ? Math.round((done / window.length) * 100) : 0,

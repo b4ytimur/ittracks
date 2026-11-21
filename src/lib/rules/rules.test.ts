@@ -3,7 +3,7 @@ import { habitForm, taskForm, type HabitForm, type TaskForm } from '../forms';
 import { blocked, get, set } from './core';
 import { checkHabit, habitRules, slotRules } from './habit';
 import { checkTask, metricRules } from './task';
-import { overlappingRanges } from './settings';
+import { checkSettings, overlappingRanges } from './settings';
 
 const V = '00000000-0000-4000-8000-000000000001';
 const S = '00000000-0000-4000-8000-000000000002';
@@ -185,6 +185,16 @@ describe('task rules', () => {
 		expect([m.unit, m.step, m.choices, m.prefill]).toEqual(['', null, [], 'last']);
 	});
 
+	it('M5: a tick box always starts unticked', () => {
+		const t = task();
+		t.metrics[0] = { ...t.metrics[0], type: 'checkbox', prefill: 'last' };
+		expect(checkTask(t).form.metrics[0].prefill).toBe('blank');
+		t.metrics[0].prefill = 'target';
+		expect(checkTask(t).form.metrics[0].prefill).toBe('blank');
+		t.metrics[0] = { ...t.metrics[0], type: 'count', prefill: 'last' };
+		expect(checkTask(t).form.metrics[0].prefill).toBe('last');
+	});
+
 	it('M3: a required field always shows on quick logs', () => {
 		const t = task();
 		t.metrics[0] = { ...t.metrics[0], required: true, quick: false };
@@ -216,5 +226,14 @@ describe('settings rules', () => {
 		expect(overlappingRanges([r('Morning', '05:00', '11:00'), r('Day', '11:00', '17:00')])).toBeNull();
 		expect(overlappingRanges([r('Morning', '05:00', '11:00'), r('Late', '10:00', '12:00')])).not.toBeNull();
 		expect(overlappingRanges([r('Night', '22:00', '04:00'), r('Early', '03:00', '06:00')])).not.toBeNull();
+	});
+
+	it('removing a part of the day a habit uses warns, but never blocks the save', () => {
+		const base = { weightUnit: 'kg', ranges: [{ name: 'Morning', start: '05:00', end: '11:00' }], guidedSetup: true, showAllSections: false, groupByArea: false, pinned: [], taskTypes: [] };
+		expect(checkSettings(base, { usedRanges: ['Morning'] })).toEqual([]);
+		const issues = checkSettings({ ...base, ranges: [] }, { usedRanges: ['Morning'] });
+		expect(issues.map((i) => i.severity)).toEqual(['warn']);
+		// Without knowing what habits use (the first-run day question), there is nothing to warn about.
+		expect(checkSettings({ ...base, ranges: [] })).toEqual([]);
 	});
 });
