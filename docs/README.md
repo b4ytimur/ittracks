@@ -15,7 +15,7 @@ To install or run your own server, see the [main README](../README.md#self-host)
 | [Logging](logging.md) | Today, the log screen, timers, one-tap logging, past days, slips and cravings, History and the chain |
 | [Streaks and missed days](streaks.md) | Streak rules, what counts as missed, the Minimum rule, skips, break-habit counters |
 | [Units](units.md) | Which units convert, changing a unit, your default weight unit |
-| [Bulk editing](bulk-editing.md) | Selecting many habits or Tasks and changing them at once, with preview and Undo |
+| [Bulk editing](bulk-editing.md) | Selecting many habits, Tasks or days and changing them at once, with preview and Undo |
 | [Views and edit mode](views-and-edit-mode.md) | View templates, filters and saved views, editing pages in place, switching features off |
 | [Templates and the Gallery](templates.md) | Sharing a habit as a file, importing one, the built-in Gallery |
 | [Notes and journal](notes-and-journal.md) | Markdown notes, journal habits, prompts, the day note, Obsidian export |
