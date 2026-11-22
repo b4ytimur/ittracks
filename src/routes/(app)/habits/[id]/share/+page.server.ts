@@ -13,6 +13,7 @@ export const load: PageServerLoad = ({ locals, params }) => {
 		schedule: describeSchedule(sc.habit.schedule, undefined, sc.habit.variants),
 		ctx: sc.ctx,
 		metrics: sc.metrics,
-		poolNames: sc.poolNames
+		poolNames: sc.poolNames,
+		inside: sc.inside
 	};
 };

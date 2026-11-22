@@ -179,7 +179,7 @@
 
 {#if data.added}
 	<p class="card added">
-		Added "{data.added}"{data.created ? ` with ${data.created} new ${data.created === 1 ? 'Task' : 'Tasks'}` : ''}{data.reused
+		Added "{data.added}"{data.inside ? ` and the ${data.inside === 1 ? 'habit' : `${data.inside} habits`} inside it` : ''}{data.created ? ` with ${data.created} new ${data.created === 1 ? 'Task' : 'Tasks'}` : ''}{data.reused
 			? `${data.created ? ',' : ''} using ${data.reused} from your Library`
 			: ''}. It's on Today when it's due.
 	</p>

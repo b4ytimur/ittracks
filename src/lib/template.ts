@@ -33,9 +33,12 @@ export const TEMPLATE_FORMAT = 'ittracks-template';
  * of the file with their own sets and targets (`subtasks` still lists the steps by name).
  * Version 7 adds phases: a schedule that runs other schedules one after another ("every day
  * with Ramp-up for 1 week, then every day with Maintain"). Phases start on the day of import.
+ * Version 8 adds the habits inside a habit (`children`), so a routine or a group travels with
+ * everything in it, at any depth. Each names the habit it sits in by key (none: the file's own
+ * habit); one that follows its routine keeps following it, by the routine's Variant keys.
  * Older files still import; the new fields take their defaults.
  */
-export const TEMPLATE_VERSION = 7;
+export const TEMPLATE_VERSION = 8;
 
 const key = z.string().min(1).max(64);
 
@@ -134,90 +137,104 @@ export const templateMeta = z.object({
 });
 export type TemplateMeta = z.infer<typeof templateMeta>;
 
+/** One habit of the file: everything but its logs, with keys instead of ids. */
+const templateHabit = z.object({
+	name: z.string().min(1).max(120),
+	direction: z.enum(['build', 'break']),
+	notes: z.string().max(NOTE_MAX).default(''),
+	/** Same shape as a saved Schedule, with Variant keys instead of ids. */
+	schedule: z.unknown().nullable(),
+	variants: z.array(
+		z.object({
+			key,
+			name: z.string().min(1).max(120),
+			slots: z.array(
+				z.object({
+					task: key.nullable(),
+					fillRule: fillRule.nullable(),
+					sets: z.number().int().min(0).max(50).nullable().default(null),
+					/** Metric key -> target value. */
+					targets: z.record(z.string(), z.number()).default({}),
+					minTargets: z.record(z.string(), z.number()).default({}),
+					stretchTargets: z.record(z.string(), z.number()).default({})
+				})
+			)
+		})
+	),
+	/** Stacking points at a habit outside the template, so it travels as text. */
+	cue: z
+		.object({
+			time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().default(null),
+			place: z.string().max(120).nullable().default(null),
+			after: z.string().max(120).nullable().default(null),
+			range: z.string().max(40).nullable().default(null)
+		})
+		.nullable()
+		.default(null),
+	streakRule: streakRuleForm.nullable().default(null),
+	minimumCounts: z.boolean().default(true),
+	levels: levelsForm.nullable().default(null),
+	quickDone: z.boolean().default(false),
+	/** Version 5: the author had a reminder on. Imports offer to turn it on; it starts off otherwise. */
+	remind: z.boolean().default(false),
+	/** Version 5: whether a due day left unlogged counts as missed, or is ignored. */
+	unlogged: z.enum(['missed', 'ignore']).default('missed'),
+	/** Identity statements, matched to the importer's identities by text. */
+	identities: z.array(z.string().min(1).max(120)).default([]),
+	ifThen: z.object({ when: z.string().max(120), then: z.string().max(120) }).nullable().default(null),
+	triggers: z.array(z.string().min(1).max(40)).max(20).nullable().default(null),
+	// Added later in version 2; older files simply leave them out.
+	reframe: z.string().max(120).default(''),
+	bundle: bundleForm.nullable().default(null),
+	prep: z.array(z.string().min(1).max(120)).max(20).default([]),
+	reward: rewardForm.nullable().default(null),
+	cost: costForm.nullable().default(null),
+	/** Reduce mode; the taper restarts from the import date. */
+	limit: z
+		.object({
+			max: z.number().int().min(0).max(1000),
+			period: z.enum(['day', 'week']),
+			taper: z
+				.object({
+					by: z.number().int().min(1).max(100),
+					every: z.enum(['week', 'month']),
+					floor: z.number().int().min(0).max(1000).default(0)
+				})
+				.nullable()
+		})
+		.nullable()
+		.default(null),
+	progression: progressionForm.nullable().default(null)
+});
+export type TemplateHabit = z.infer<typeof templateHabit>;
+
+/** Version 8: a habit inside the file's habit, or inside another one of these (`parent`, by key). */
+const templateChild = templateHabit.extend({ key, parent: key.nullable().default(null) });
+export type TemplateChild = z.infer<typeof templateChild>;
+
 export const templateFile = z.object({
 	format: z.literal(TEMPLATE_FORMAT),
-	version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6), z.literal(7)]),
+	version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6), z.literal(7), z.literal(8)]),
 	name: z.string().min(1).max(120),
 	/** Version 4: a view template this habit works well with (e.g. "gym"). Only ever offered, never applied by itself. */
 	view: z.string().max(32).nullable().default(null),
 	description: z.string().max(2000).default(''),
 	meta: templateMeta.nullable().default(null),
 	questions: z.array(templateQuestion).max(10).default([]),
-	habit: z.object({
-		name: z.string().min(1).max(120),
-		direction: z.enum(['build', 'break']),
-		notes: z.string().max(NOTE_MAX).default(''),
-		/** Same shape as a saved Schedule, with Variant keys instead of ids. */
-		schedule: z.unknown().nullable(),
-		variants: z.array(
-			z.object({
-				key,
-				name: z.string().min(1).max(120),
-				slots: z.array(
-					z.object({
-						task: key.nullable(),
-						fillRule: fillRule.nullable(),
-						sets: z.number().int().min(0).max(50).nullable().default(null),
-						/** Metric key -> target value. */
-						targets: z.record(z.string(), z.number()).default({}),
-						minTargets: z.record(z.string(), z.number()).default({}),
-						stretchTargets: z.record(z.string(), z.number()).default({})
-					})
-				)
-			})
-		),
-		/** Stacking points at a habit outside the template, so it travels as text. */
-		cue: z
-			.object({
-				time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().default(null),
-				place: z.string().max(120).nullable().default(null),
-				after: z.string().max(120).nullable().default(null),
-				range: z.string().max(40).nullable().default(null)
-			})
-			.nullable()
-			.default(null),
-		streakRule: streakRuleForm.nullable().default(null),
-		minimumCounts: z.boolean().default(true),
-		levels: levelsForm.nullable().default(null),
-		quickDone: z.boolean().default(false),
-		/** Version 5: the author had a reminder on. Imports offer to turn it on; it starts off otherwise. */
-		remind: z.boolean().default(false),
-		/** Version 5: whether a due day left unlogged counts as missed, or is ignored. */
-		unlogged: z.enum(['missed', 'ignore']).default('missed'),
-		/** Identity statements, matched to the importer's identities by text. */
-		identities: z.array(z.string().min(1).max(120)).default([]),
-		ifThen: z.object({ when: z.string().max(120), then: z.string().max(120) }).nullable().default(null),
-		triggers: z.array(z.string().min(1).max(40)).max(20).nullable().default(null),
-		// Added later in version 2; older files simply leave them out.
-		reframe: z.string().max(120).default(''),
-		bundle: bundleForm.nullable().default(null),
-		prep: z.array(z.string().min(1).max(120)).max(20).default([]),
-		reward: rewardForm.nullable().default(null),
-		cost: costForm.nullable().default(null),
-		/** Reduce mode; the taper restarts from the import date. */
-		limit: z
-			.object({
-				max: z.number().int().min(0).max(1000),
-				period: z.enum(['day', 'week']),
-				taper: z
-					.object({
-						by: z.number().int().min(1).max(100),
-						every: z.enum(['week', 'month']),
-						floor: z.number().int().min(0).max(1000).default(0)
-					})
-					.nullable()
-			})
-			.nullable()
-			.default(null),
-		progression: progressionForm.nullable().default(null)
-	}),
+	habit: templateHabit,
+	/** Version 8: the habits inside it, parents before the habits inside them. */
+	children: z.array(templateChild).max(100).default([]),
 	tasks: z.array(templateTask)
 });
 export type TemplateFile = z.infer<typeof templateFile>;
 
-/** The schedule with every Variant id it names passed through `map` (phases: in each phase). */
-export function mapSchedule<S extends ScheduleForm | PlainScheduleForm>(s: S | null, map: (id: string) => string): S | null;
-export function mapSchedule(s: ScheduleForm | null, map: (id: string) => string): ScheduleForm | null {
+/**
+ * The schedule with every Variant id it names passed through `map` (phases: in each phase).
+ * One that follows its routine also names the routine's Variants (`on`): those go through
+ * `parentMap`, and stay as they are without one.
+ */
+export function mapSchedule<S extends ScheduleForm | PlainScheduleForm>(s: S | null, map: (id: string) => string, parentMap?: (id: string) => string): S | null;
+export function mapSchedule(s: ScheduleForm | null, map: (id: string) => string, parentMap?: (id: string) => string): ScheduleForm | null {
 	if (!s) return null;
 	switch (s.kind) {
 		case 'phases':
@@ -232,8 +249,7 @@ export function mapSchedule(s: ScheduleForm | null, map: (id: string) => string)
 		case 'group':
 			return s;
 		case 'follow':
-			// The routine's Variants don't travel with one habit, so `on` stays as it is.
-			return { ...s, variantId: map(s.variantId) };
+			return { ...s, variantId: map(s.variantId), on: s.on && parentMap ? s.on.map(parentMap) : s.on };
 	}
 }
 
@@ -261,14 +277,24 @@ export interface ShareDetails {
 	noHowTo?: boolean;
 }
 
-/** Build a template from a Habit and the Tasks its Slots use (keyed by Task id). */
+/** A habit inside the one being shared: its id, the habit it sits in, and its form. */
+export interface InsideHabit {
+	id: string;
+	parentId: string;
+	form: HabitForm;
+}
+
+/**
+ * Build a template from a Habit, the habits inside it (`children`, parents first) and the Tasks
+ * their Slots use (keyed by Task id). A child whose parent isn't among the children sits in `habit`.
+ */
 export function toTemplate(
 	habit: HabitForm,
 	tasks: Map<string, TaskForm>,
 	names: TemplateNames = {},
-	share: ShareDetails = {}
+	share: ShareDetails = {},
+	children: InsideHabit[] = []
 ): TemplateFile {
-	const variantKey = new Map(habit.variants.map((v, i) => [v.id, `v${i + 1}`]));
 	const taskKey = new Map([...tasks.keys()].map((id, i) => [id, `t${i + 1}`]));
 	const metricKey = new Map<string, string>();
 	for (const [id, t] of tasks) {
@@ -281,6 +307,64 @@ export function toTemplate(
 	const questions = (share.questions ?? []).map((q) =>
 		q.kind === 'number' ? { ...q, metrics: q.metrics.map((m) => metricKey.get(m) ?? m).filter((m) => [...metricKey.values()].includes(m)) } : q
 	);
+	// Variant keys are each habit's own (v1, v2…); a follower names its routine's by the routine's keys.
+	const variantKeys = (h: HabitForm) => new Map(h.variants.map((v, i) => [v.id, `v${i + 1}`]));
+	const rootKeys = variantKeys(habit);
+	const childKey = new Map(children.map((c, i) => [c.id, `h${i + 1}`]));
+	const childVariantKeys = new Map(children.map((c) => [c.id, variantKeys(c.form)]));
+
+	const habitOf = (h: HabitForm, keys: Map<string, string>, parentKeys: Map<string, string> | undefined): TemplateHabit => ({
+		name: h.name,
+		direction: h.direction,
+		notes: share.withNote ? h.notes : '',
+		schedule: mapSchedule(
+			h.schedule,
+			(id) => keys.get(id) ?? id,
+			parentKeys && ((id) => parentKeys.get(id) ?? id)
+		),
+		variants: h.variants.map((v) => ({
+			key: keys.get(v.id)!,
+			name: v.name,
+			slots: v.slots.map((s) => ({
+				task: s.taskId ? (taskKey.get(s.taskId) ?? null) : null,
+				fillRule: s.fillRule,
+				sets: s.sets,
+				targets: rekey(s.targets, metricKey),
+				minTargets: rekey(s.minTargets, metricKey),
+				stretchTargets: rekey(s.stretchTargets, metricKey)
+			}))
+		})),
+		cue:
+			h.cue.time || h.cue.range || h.cue.place || h.cue.afterHabitId || h.cue.afterText
+				? {
+						time: h.cue.time,
+						place: h.cue.place,
+						after: (h.cue.afterHabitId && names.habits?.get(h.cue.afterHabitId)) || h.cue.afterText || null,
+						range: h.cue.range
+					}
+				: null,
+		streakRule: h.streakRule,
+		minimumCounts: h.minimumCounts,
+		levels: h.levels.enabled ? h.levels : null,
+		quickDone: h.quickDone,
+		remind: h.remind && !share.noRemind,
+		unlogged: h.unlogged ?? 'missed',
+		identities: h.identityIds.map((id) => names.identities?.get(id)).filter((x): x is string => !!x),
+		ifThen:
+			h.direction === 'break' && (h.ifThen.when || h.ifThen.then || h.ifThen.habitId)
+				? { when: h.ifThen.when, then: h.ifThen.then || (h.ifThen.habitId ? (names.habits?.get(h.ifThen.habitId) ?? '') : '') }
+				: null,
+		// Words only: ids belong to one account's logs.
+		triggers: h.direction === 'break' ? h.triggers.map((o) => o.name) : null,
+		reframe: h.reframe,
+		bundle: h.bundle.reward ? h.bundle : null,
+		prep: h.prep,
+		reward: h.reward.celebrate || h.reward.message || h.reward.jar ? h.reward : null,
+		cost: h.cost,
+		limit: h.limit ? { max: h.limit.max, period: h.limit.period, taper: h.limit.taper } : null,
+		progression: h.progression
+	});
+
 	return {
 		format: TEMPLATE_FORMAT,
 		version: TEMPLATE_VERSION,
@@ -289,63 +373,15 @@ export function toTemplate(
 		view: null,
 		meta,
 		questions,
-		habit: {
-			name: habit.name,
-			direction: habit.direction,
-			notes: share.withNote ? habit.notes : '',
-			schedule: mapSchedule(habit.schedule, (id) => variantKey.get(id) ?? id),
-			variants: habit.variants.map((v) => ({
-				key: variantKey.get(v.id)!,
-				name: v.name,
-				slots: v.slots.map((s) => ({
-					task: s.taskId ? (taskKey.get(s.taskId) ?? null) : null,
-					fillRule: s.fillRule,
-					sets: s.sets,
-					targets: rekey(s.targets, metricKey),
-					minTargets: rekey(s.minTargets, metricKey),
-					stretchTargets: rekey(s.stretchTargets, metricKey)
-				}))
-			})),
-			cue:
-				habit.cue.time || habit.cue.range || habit.cue.place || habit.cue.afterHabitId || habit.cue.afterText
-					? {
-							time: habit.cue.time,
-							place: habit.cue.place,
-							after:
-								(habit.cue.afterHabitId && names.habits?.get(habit.cue.afterHabitId)) ||
-								habit.cue.afterText ||
-								null,
-							range: habit.cue.range
-						}
-					: null,
-			streakRule: habit.streakRule,
-			minimumCounts: habit.minimumCounts,
-			levels: habit.levels.enabled ? habit.levels : null,
-			quickDone: habit.quickDone,
-			remind: habit.remind && !share.noRemind,
-			unlogged: habit.unlogged ?? 'missed',
-			identities: habit.identityIds
-				.map((id) => names.identities?.get(id))
-				.filter((x): x is string => !!x),
-			ifThen:
-				habit.direction === 'break' && (habit.ifThen.when || habit.ifThen.then || habit.ifThen.habitId)
-					? {
-							when: habit.ifThen.when,
-							then:
-								habit.ifThen.then ||
-								(habit.ifThen.habitId ? (names.habits?.get(habit.ifThen.habitId) ?? '') : '')
-						}
-					: null,
-			// Words only: ids belong to one account's logs.
-			triggers: habit.direction === 'break' ? habit.triggers.map((o) => o.name) : null,
-			reframe: habit.reframe,
-			bundle: habit.bundle.reward ? habit.bundle : null,
-			prep: habit.prep,
-			reward: habit.reward.celebrate || habit.reward.message || habit.reward.jar ? habit.reward : null,
-			cost: habit.cost,
-			limit: habit.limit ? { max: habit.limit.max, period: habit.limit.period, taper: habit.limit.taper } : null,
-			progression: habit.progression
-		},
+		habit: habitOf(habit, rootKeys, undefined),
+		children: children.map((c) => {
+			const parent = childKey.get(c.parentId) ?? null;
+			return {
+				key: childKey.get(c.id)!,
+				parent,
+				...habitOf(c.form, childVariantKeys.get(c.id)!, parent ? childVariantKeys.get(c.parentId) : rootKeys)
+			};
+		}),
 		tasks: [...tasks].map(([id, t]) => ({
 			key: taskKey.get(id)!,
 			name: t.name,
@@ -401,8 +437,21 @@ function rekey(r: Record<string, number>, map: Map<string, string>): Record<stri
 	);
 }
 
+/** A habit made from a template, with the identity statements to link it to. */
+export interface MadeHabit {
+	habit: HabitForm;
+	identities: string[];
+}
+
+/** One of the habits inside, with the key of the habit it sits in (null: the file's own habit). */
+export interface MadeChild extends MadeHabit {
+	key: string;
+	parent: string | null;
+}
+
 /**
- * Turn a template into new Tasks and a new Habit with fresh ids.
+ * Turn a template into new Tasks and new Habits with fresh ids: the file's habit, and the habits
+ * inside it in the file's order (their `parentId` is left for the caller, who saves them).
  * `newId` is injectable for tests; `startDate` is today's date.
  * Identity statements come back separately; the caller links them to real Identities.
  */
@@ -410,7 +459,7 @@ export function fromTemplate(
 	tpl: TemplateFile,
 	startDate: string,
 	newId: () => string = () => crypto.randomUUID()
-): { tasks: { id: string; form: TaskForm }[]; habit: HabitForm; identities: string[] } {
+): { tasks: { id: string; form: TaskForm }[]; habit: HabitForm; identities: string[]; children: MadeChild[] } {
 	const taskIds = new Map(tpl.tasks.map((t) => [t.key, newId()]));
 	const metricIds = new Map<string, string>();
 	const tasks = tpl.tasks.map((t) => {
@@ -473,60 +522,77 @@ export function fromTemplate(
 			: t.subtasks.map((name) => ({ kind: 'step' as const, id: newId(), name }));
 		tasks[i].form.parts = parts;
 	});
-	const variantIds = new Map(tpl.habit.variants.map((v) => [v.key, newId()]));
-	const habit: HabitForm = {
-		name: tpl.habit.name,
-		direction: tpl.habit.direction,
-		notes: tpl.habit.notes,
-		startDate,
-		variants: tpl.habit.variants.map((v) => ({
-			id: variantIds.get(v.key)!,
-			name: v.name,
-			slots: v.slots.map((s) => ({
-				id: newId(),
-				taskId: s.task ? (taskIds.get(s.task) ?? null) : null,
-				fillRule: s.fillRule,
-				sets: s.sets,
-				targets: rekey(s.targets, metricIds),
-				minTargets: rekey(s.minTargets, metricIds),
-				stretchTargets: rekey(s.stretchTargets, metricIds)
-			}))
-		})),
-		schedule: mapSchedule(tpl.habit.schedule as ScheduleForm | null, (k) => variantIds.get(k) ?? k),
-		cue: {
-			time: tpl.habit.cue?.time ?? null,
-			place: tpl.habit.cue?.place ?? null,
-			afterHabitId: null,
-			afterText: tpl.habit.cue?.after ?? null,
-			range: tpl.habit.cue?.range ?? null
-		},
-		// Version 1 files predate streak rules; they keep the strict rule they were made with.
-		streakRule: tpl.habit.streakRule ?? (tpl.version === 1 ? { kind: 'strict' } : { kind: 'neverTwice' }),
-		minimumCounts: tpl.habit.minimumCounts,
-		levels: tpl.habit.levels ?? defaultLevels(),
-		quickDone: tpl.habit.quickDone,
-		// Reminders are a choice for each device, so imports start with them off. The import
-		// page offers to turn on one the template suggests (`tpl.habit.remind`).
-		remind: false,
-		unlogged: tpl.habit.unlogged,
-		// A template is one habit; it is added at the top level, outside any group.
-		parentId: null,
-		identityIds: [],
-		ifThen: { when: tpl.habit.ifThen?.when ?? '', then: tpl.habit.ifThen?.then ?? '', habitId: null },
-		triggers: tpl.habit.triggers ? tpl.habit.triggers.map((name) => ({ id: newId(), name })) : defaultTriggers(),
-		reframe: tpl.habit.reframe,
-		bundle: tpl.habit.bundle ?? { reward: '', strict: false },
-		prep: tpl.habit.prep,
-		reward: tpl.habit.reward ?? { celebrate: false, message: '', jar: null },
-		cost: tpl.habit.cost,
-		limit: tpl.habit.limit ? { ...tpl.habit.limit, start: startDate } : null,
-		progression: tpl.habit.progression,
-		areaId: null
+
+	/** One habit of the file, with its Variants' new ids by key (a follower maps its routine's through `parentIds`). */
+	const habitFrom = (th: TemplateHabit, parentIds: Map<string, string> | undefined) => {
+		const variantIds = new Map(th.variants.map((v) => [v.key, newId()]));
+		const habit: HabitForm = {
+			name: th.name,
+			direction: th.direction,
+			notes: th.notes,
+			startDate,
+			variants: th.variants.map((v) => ({
+				id: variantIds.get(v.key)!,
+				name: v.name,
+				slots: v.slots.map((s) => ({
+					id: newId(),
+					taskId: s.task ? (taskIds.get(s.task) ?? null) : null,
+					fillRule: s.fillRule,
+					sets: s.sets,
+					targets: rekey(s.targets, metricIds),
+					minTargets: rekey(s.minTargets, metricIds),
+					stretchTargets: rekey(s.stretchTargets, metricIds)
+				}))
+			})),
+			schedule: mapSchedule(
+				th.schedule as ScheduleForm | null,
+				(k) => variantIds.get(k) ?? k,
+				parentIds && ((k) => parentIds.get(k) ?? k)
+			),
+			cue: {
+				time: th.cue?.time ?? null,
+				place: th.cue?.place ?? null,
+				afterHabitId: null,
+				afterText: th.cue?.after ?? null,
+				range: th.cue?.range ?? null
+			},
+			// Version 1 files predate streak rules; they keep the strict rule they were made with.
+			streakRule: th.streakRule ?? (tpl.version === 1 ? { kind: 'strict' } : { kind: 'neverTwice' }),
+			minimumCounts: th.minimumCounts,
+			levels: th.levels ?? defaultLevels(),
+			quickDone: th.quickDone,
+			// Reminders are a choice for each device, so imports start with them off. The import
+			// page offers to turn on one the template suggests (`tpl.habit.remind`).
+			remind: false,
+			unlogged: th.unlogged,
+			// Added at the top level; the caller puts the habits inside where they belong.
+			parentId: null,
+			identityIds: [],
+			ifThen: { when: th.ifThen?.when ?? '', then: th.ifThen?.then ?? '', habitId: null },
+			triggers: th.triggers ? th.triggers.map((name) => ({ id: newId(), name })) : defaultTriggers(),
+			reframe: th.reframe,
+			bundle: th.bundle ?? { reward: '', strict: false },
+			prep: th.prep,
+			reward: th.reward ?? { celebrate: false, message: '', jar: null },
+			cost: th.cost,
+			limit: th.limit ? { ...th.limit, start: startDate } : null,
+			progression: th.progression,
+			areaId: null
+		};
+		// Rotations, intervals and phases start from the day of import.
+		if (habit.schedule && 'start' in habit.schedule) habit.schedule = { ...habit.schedule, start: startDate };
+		if (habit.schedule?.kind === 'phases') habit.schedule = tidyPhases(habit.schedule);
+		return { made: { habit, identities: th.identities }, variantIds };
 	};
-	// Rotations, intervals and phases start from the day of import.
-	if (habit.schedule && 'start' in habit.schedule) habit.schedule = { ...habit.schedule, start: startDate };
-	if (habit.schedule?.kind === 'phases') habit.schedule = tidyPhases(habit.schedule);
-	return { tasks, habit, identities: tpl.habit.identities };
+
+	const root = habitFrom(tpl.habit, undefined);
+	const ids = new Map<string | null, Map<string, string>>([[null, root.variantIds]]);
+	const children = tpl.children.map((c) => {
+		const one = habitFrom(c, ids.get(c.parent));
+		ids.set(c.key, one.variantIds);
+		return { key: c.key, parent: c.parent, ...one.made };
+	});
+	return { tasks, ...root.made, children };
 }
 
 /** Round to a step (2.5 kg, 1 rep), without float noise. */
@@ -555,7 +621,11 @@ function onDays(s: PlainScheduleForm, days: number[], variantKeys: string[]): Pl
 	return s;
 }
 
-/** Fill a template from the answers to its questions. Unanswered questions take their default. */
+/**
+ * Fill a template from the answers to its questions. Unanswered questions take their default.
+ * Days and time are the file's own habit's (the habits inside that follow it take its days);
+ * a number sets its fields wherever they are.
+ */
 export function applyAnswers(tpl: TemplateFile, answers: TemplateAnswers): TemplateFile {
 	const out: TemplateFile = structuredClone(tpl);
 	for (const q of tpl.questions) {
@@ -576,7 +646,8 @@ export function applyAnswers(tpl: TemplateFile, answers: TemplateAnswers): Templ
 			const n = typeof a === 'number' && Number.isFinite(a) ? a : q.default;
 			const ratio = q.scale && q.default > 0 ? n / q.default : null;
 			const metricsOf = new Map(out.tasks.map((t) => [t.key, new Map(t.metrics.map((m) => [m.key, m]))]));
-			for (const v of out.habit.variants)
+			// Every Slot with these fields, in the habit and in the habits inside it.
+			for (const v of [out.habit, ...out.children].flatMap((h) => h.variants))
 				for (const slot of v.slots) {
 					const has = slot.task ? metricsOf.get(slot.task) : undefined;
 					if (!has) continue;

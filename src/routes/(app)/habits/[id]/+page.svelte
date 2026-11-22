@@ -1008,7 +1008,8 @@
 			<a href="/habits/{data.id}/chain">Chain</a>
 			<a href="/habits/{data.id}/stats">Stats</a>
 			<a href="/habits/new?from={data.id}" data-sveltekit-reload>Duplicate</a>
-			{#if s0?.kind !== 'group'}<a href="/habits/{data.id}/share">Share as template</a>{/if}
+			<!-- A group travels with the habits inside it; with none, it has nothing to give. -->
+			{#if s0?.kind !== 'group' || data.inside.some((x) => !x.archived)}<a href="/habits/{data.id}/share">Share as template</a>{/if}
 		{/if}
 		<a href="/habits">Cancel</a>
 	</div>

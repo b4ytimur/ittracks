@@ -1,12 +1,13 @@
-// Adding a template: answer its questions, reuse Tasks already in the Library, then save.
+// Adding a template: answer its questions, reuse Tasks already in the Library, then save the
+// habit and the habits inside it, all or nothing.
 import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '../db';
 import { metric, task } from '../db/schema';
 import { applyAnswers, fromTemplate, type TemplateAnswers, type TemplateFile } from '$lib/template';
-import { habitForm, type TaskForm } from '$lib/forms';
+import { habitForm, type HabitForm, type TaskForm } from '$lib/forms';
 import { MAX_DEPTH } from '$lib/engine/parts';
 import { saveTask } from './tasks';
-import { checkHabitForm, saveHabit } from './habits';
+import { checkHabitForm, checkLinks, saveHabit } from './habits';
 import { checkTask } from '$lib/rules/task';
 import { identityFor } from './identities';
 import { areaFor } from './areas';
@@ -16,7 +17,16 @@ export interface AddResult {
 	name: string;
 	created: number;
 	reused: number;
+	/** Habits added inside it. */
+	inside: number;
 }
+
+/** Where adding a template lands: Habits, saying what was added (and the view it suggests). */
+export const addedPath = (r: AddResult, view: string | null) =>
+	`/habits?added=${encodeURIComponent(r.name)}&created=${r.created}&reused=${r.reused}&inside=${r.inside}${view ? `&view=${encodeURIComponent(view)}` : ''}`;
+
+/** Thrown inside the save to undo everything written so far. */
+class Refused extends Error {}
 
 /**
  * Create a Habit from a template. With `reuse`, a template Task whose name matches one in
@@ -36,10 +46,18 @@ export function addTemplate(
 	}
 ): AddResult | { error: string } {
 	const filled = applyAnswers(tpl, opts.answers ?? {});
-	const { tasks, habit, identities } = fromTemplate(filled, opts.today);
+	const { tasks, habit, identities, children } = fromTemplate(filled, opts.today);
 	if (opts.remind && filled.habit.remind && (habit.cue.time || habit.cue.range)) habit.remind = true;
-	if (!habitForm.safeParse(habit).success) return { error: 'The template has an invalid habit or schedule.' };
-	// A shared template can't bring in options that block each other.
+	// Each habit inside comes after the one it sits in, so it can be put there once that one is saved.
+	const before = new Set<string | null>([null]);
+	for (const c of children) {
+		if (!before.has(c.parent)) return { error: `The template can't be added: "${c.habit.name}" sits in a habit the template doesn't have before it.` };
+		before.add(c.key);
+	}
+	const habits = [habit, ...children.map((c) => c.habit)];
+	if (habits.some((h) => !habitForm.safeParse(h).success)) return { error: 'The template has an invalid habit or schedule.' };
+	// A shared template can't bring in options that block each other. The habits inside are
+	// checked once they know the habit they sit in, as they are saved.
 	const conflict = [...tasks.flatMap((t) => checkTask(t.form).errors), ...checkHabitForm(habit).errors][0];
 	if (conflict) return { error: `The template has options that conflict: ${conflict.reason}.` };
 
@@ -69,7 +87,7 @@ export function addTemplate(
 	// Only Metrics that matched carry their targets over to a reused Task.
 	const remap = (r: Record<string, number>) =>
 		Object.fromEntries(Object.entries(r).filter(([k]) => metricMap.has(k)).map(([k, v]) => [metricMap.get(k)!, v]));
-	for (const v of habit.variants)
+	for (const v of habits.flatMap((h) => h.variants))
 		for (const s of v.slots) {
 			if (s.taskId && taskMap.has(s.taskId)) {
 				s.taskId = taskMap.get(s.taskId)!;
@@ -102,16 +120,36 @@ export function addTemplate(
 		return { error: `The template has Tasks inside each other more than ${MAX_DEPTH} levels deep.` };
 
 	const addAreas = opts.addAreas ?? true;
-	const areaId = areaFor(accountId, tpl.meta?.area, addAreas);
-	const taskArea = new Map(tpl.tasks.map((t, i) => [tasks[i]?.id, t.area]));
-	for (const t of ordered) {
-		const own = taskArea.get(t.id);
-		saveTask(accountId, null, { ...t.form, areaId: own ? areaFor(accountId, own, addAreas) : areaId }, t.id);
+	try {
+		return db.transaction(() => {
+			const areaId = areaFor(accountId, tpl.meta?.area, addAreas);
+			const taskArea = new Map(tpl.tasks.map((t, i) => [tasks[i]?.id, t.area]));
+			for (const t of ordered) {
+				const own = taskArea.get(t.id);
+				saveTask(accountId, null, { ...t.form, areaId: own ? areaFor(accountId, own, addAreas) : areaId }, t.id);
+			}
+			// The habits inside go in the same Area as the habit, each one after the habit it sits in.
+			const save = (h: HabitForm, statements: string[], parentId: string | null) => {
+				h.areaId = areaId;
+				h.parentId = parentId;
+				h.identityIds = statements.map((statement) => identityFor(accountId, statement));
+				if (parentId) {
+					const conflict = checkHabitForm(h).errors[0];
+					if (conflict) throw new Refused(`"${h.name}" has options that conflict: ${conflict.reason}.`);
+					const refused = checkLinks(accountId, null, h);
+					if (refused) throw new Refused(`"${h.name}" can't go inside its habit: ${refused}.`);
+				}
+				return saveHabit(accountId, null, h, opts.today)!;
+			};
+			const habitId = save(habit, identities, null);
+			const saved = new Map<string | null, string>([[null, habitId]]);
+			for (const c of children) saved.set(c.key, save(c.habit, c.identities, saved.get(c.parent)!));
+			return { habitId, name: habit.name, created: toCreate.length, reused: taskMap.size, inside: children.length };
+		});
+	} catch (e) {
+		if (e instanceof Refused) return { error: `The template can't be added: ${e.message}` };
+		throw e;
 	}
-	habit.areaId = areaId;
-	habit.identityIds = identities.map((statement) => identityFor(accountId, statement));
-	const habitId = saveHabit(accountId, null, habit, opts.today)!;
-	return { habitId, name: habit.name, created: toCreate.length, reused: taskMap.size };
 }
 
 /** How many levels of parts sit below a new Task of a template (reused Tasks count as none). */

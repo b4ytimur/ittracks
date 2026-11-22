@@ -74,6 +74,7 @@ export const load: PageServerLoad = ({ locals, url, cookies }) => {
 		/** After an import: how many Tasks were made, and how many came from your Library. */
 		created: Number(url.searchParams.get('created')) || 0,
 		reused: Number(url.searchParams.get('reused')) || 0,
+		inside: Number(url.searchParams.get('inside')) || 0,
 		suggestView: (() => {
 			const t = templateById(url.searchParams.get('view') ?? '');
 			return t && t.id !== views.template ? { id: t.id, name: t.name, summary: t.summary } : null;

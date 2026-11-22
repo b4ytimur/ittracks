@@ -1,16 +1,18 @@
-// Sharing a habit as a template file: the Tasks it uses, the Library Tasks its auto-filled
-// Slots can pick, Area names, and what the person sharing adds (description, questions).
+// Sharing a habit as a template file: the habits inside it, the Tasks they use, the Library
+// Tasks their auto-filled Slots can pick, Area names, and what the person sharing adds
+// (description, questions).
 import { getHabitForm, listHabits } from './repo/habits';
 import { listIdentities } from './repo/identities';
 import { getTaskForm } from './repo/tasks';
 import { listAreas } from './repo/areas';
 import { candidates } from './today';
 import { matches, type FillRule } from '$lib/engine/fill';
-import { toTemplate, type ShareDetails, type TemplateFile } from '$lib/template';
+import { toTemplate, type InsideHabit, type ShareDetails, type TemplateFile } from '$lib/template';
 import { scheduleDays, type ShareCtx } from '$lib/share';
 import type { HabitForm, TaskForm } from '$lib/forms';
 import { isFollow, isGroup } from '$lib/engine/schedule';
 import { standaloneSchedule } from '$lib/engine/follow';
+import { descendants, flatten } from '$lib/engine/tree';
 
 /** Library Tasks an auto-filled Slot of this habit can pick, by id (Tasks already in a fixed Slot left out). */
 export function poolTaskIds(accountId: string, habit: HabitForm): string[] {
@@ -27,17 +29,43 @@ export interface ShareOptions extends ShareDetails {
 	noPool?: boolean;
 }
 
-/** The template file for a habit, or null when it isn't the account's. */
-export function shareFile(accountId: string, habitId: string, opts: ShareOptions = {}): TemplateFile | null {
+/**
+ * The habits inside one, at any depth, each before the habits inside it. Archived habits stay
+ * out, and so does what sits inside them.
+ */
+export function insideHabits(accountId: string, id: string): InsideHabit[] {
+	const active = listHabits(accountId).filter((h) => h.direction === 'build');
+	const below = descendants(active, id);
+	return flatten(active.filter((h) => below.has(h.id))).flatMap(({ node }) => {
+		const form = node.parentId ? getHabitForm(accountId, node.id) : null;
+		return form ? [{ id: node.id, parentId: node.parentId!, form }] : [];
+	});
+}
+
+/**
+ * The habit to share and the habits inside it, or null when it isn't the account's or has
+ * nothing to give (a group with no habits inside: its days come from them).
+ */
+function shareTree(accountId: string, habitId: string): { habit: HabitForm; inside: InsideHabit[] } | null {
 	const habit = getHabitForm(accountId, habitId);
-	// A template is one habit; a group's days come from other habits, so it can't travel alone.
-	if (!habit || isGroup(habit.schedule)) return null;
-	// One that follows its routine travels with the routine's days as its own.
+	if (!habit) return null;
+	const inside = insideHabits(accountId, habitId);
+	if (isGroup(habit.schedule) && !inside.length) return null;
+	return { habit, inside };
+}
+
+/** The template file for a habit and the habits inside it, or null (see shareTree). */
+export function shareFile(accountId: string, habitId: string, opts: ShareOptions = {}): TemplateFile | null {
+	const tree = shareTree(accountId, habitId);
+	if (!tree) return null;
+	const { habit, inside } = tree;
+	// One that follows its routine travels with the routine's days as its own: the routine stays here.
 	if (isFollow(habit.schedule)) {
 		const parent = habit.parentId ? getHabitForm(accountId, habit.parentId) : null;
 		habit.schedule = standaloneSchedule(parent?.schedule ?? null, habit.schedule, habit.startDate) as typeof habit.schedule;
 	}
 	habit.parentId = null;
+	const all = [habit, ...inside.map((c) => c.form)];
 	const tasks = new Map<string, TaskForm>();
 	// A Task travels with the Library Tasks inside it.
 	const add = (id: string) => {
@@ -47,9 +75,9 @@ export function shareFile(accountId: string, habitId: string, opts: ShareOptions
 		tasks.set(id, t);
 		for (const p of t.parts) if (p.kind === 'task') add(p.taskId);
 	};
-	for (const v of habit.variants) for (const s of v.slots) if (s.taskId) add(s.taskId);
+	for (const h of all) for (const v of h.variants) for (const s of v.slots) if (s.taskId) add(s.taskId);
 	// Without them, an auto-filled Slot finds nothing to pick on the other side.
-	if (!opts.noPool) for (const id of poolTaskIds(accountId, habit)) add(id);
+	if (!opts.noPool) for (const h of all) for (const id of poolTaskIds(accountId, h)) add(id);
 	return toTemplate(
 		habit,
 		tasks,
@@ -58,7 +86,8 @@ export function shareFile(accountId: string, habitId: string, opts: ShareOptions
 			identities: new Map(listIdentities(accountId).map((i) => [i.id, i.statement])),
 			areas: new Map(listAreas(accountId).map((a) => [a.id, a.name]))
 		},
-		opts
+		opts,
+		inside
 	);
 }
 
@@ -77,31 +106,32 @@ export interface ShareMetric {
 
 /** What the Share page needs: the facts the form's rules read, the fields to ask about, and the pool. */
 export function shareContext(accountId: string, habitId: string) {
-	const habit = getHabitForm(accountId, habitId);
-	if (!habit || isGroup(habit.schedule)) return null;
+	const tree = shareTree(accountId, habitId);
+	if (!tree) return null;
+	const { habit, inside } = tree;
+	const all = [habit, ...inside.map((c) => c.form)];
 	const metrics: ShareMetric[] = [];
-	const seen = new Set<string>();
 	const withHowTo = new Set<string>();
-	for (const v of habit.variants)
-		for (const s of v.slots) {
-			if (!s.taskId) continue;
-			const t = getTaskForm(accountId, s.taskId);
-			if (!t) continue;
-			if (t.notes.trim()) withHowTo.add(s.taskId);
-			for (const m of t.metrics) {
-				if (!['number', 'count', 'duration'].includes(m.type)) continue;
-				const target = s.targets[m.id] ?? null;
-				const known = metrics.find((x) => x.id === m.id);
-				if (known) {
-					known.target ??= target;
-					continue;
+	// A number question can set a field in any of the habits.
+	for (const h of all)
+		for (const v of h.variants)
+			for (const s of v.slots) {
+				if (!s.taskId) continue;
+				const t = getTaskForm(accountId, s.taskId);
+				if (!t) continue;
+				if (t.notes.trim()) withHowTo.add(s.taskId);
+				for (const m of t.metrics) {
+					if (!['number', 'count', 'duration'].includes(m.type)) continue;
+					const target = s.targets[m.id] ?? null;
+					const known = metrics.find((x) => x.id === m.id);
+					if (known) {
+						known.target ??= target;
+						continue;
+					}
+					metrics.push({ id: m.id, task: t.name, name: m.name, unit: m.unit || (m.type === 'duration' ? 'min' : ''), target });
 				}
-				if (seen.has(m.id)) continue;
-				seen.add(m.id);
-				metrics.push({ id: m.id, task: t.name, name: m.name, unit: m.unit || (m.type === 'duration' ? 'min' : ''), target });
 			}
-		}
-	const pool = poolTaskIds(accountId, habit);
+	const pool = [...new Set(all.flatMap((h) => poolTaskIds(accountId, h)))];
 	const poolTasks = pool.flatMap((id) => {
 		const t = getTaskForm(accountId, id);
 		return t ? [{ id, ...t }] : [];
@@ -117,10 +147,17 @@ export function shareContext(accountId: string, habitId: string) {
 		area,
 		pool: pool.length,
 		remind: habit.remind,
-		note: !!habit.notes.trim(),
+		note: all.some((h) => !!h.notes.trim()),
 		howTo: withHowTo.size,
 		metricIds: metrics.map((m) => m.id)
 	};
 	const poolNames = poolTasks.map((t) => t.name);
-	return { habit, ctx, metrics, poolNames };
+	/** The habits that go along, each with how deep it sits (1: directly inside). */
+	const depth = new Map<string, number>([[habitId, 0]]);
+	const insideNames = inside.map((c) => {
+		const d = (depth.get(c.parentId) ?? 0) + 1;
+		depth.set(c.id, d);
+		return { name: c.form.name, depth: d };
+	});
+	return { habit, ctx, metrics, poolNames, inside: insideNames };
 }

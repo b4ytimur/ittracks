@@ -25,7 +25,7 @@ Choose when a day is done:
 - **Done when**: **Every habit inside that is due is done**, or **A number of them are done** (**How many**). On a day only some are due, the number counts the ones due.
 - Tick **A day with fewer done still counts at the Minimum** and set **Habits for the Minimum**. The Minimum must be fewer habits than the target.
 
-On Today, a group shows a progress bar of the habits inside it. You can't log a group, set a reminder on it or share it as a template; do those on the habits inside.
+On Today, a group shows a progress bar of the habits inside it. You can't log a group or set a reminder on it; do those on the habits inside. Sharing a group or a routine as a template takes the habits inside it along (see [Templates](templates.md#share-a-habit)).
 
 Groups can sit inside other groups, but not inside routines. Moving a habit into or out of a group recounts the group's past days from the habits inside it now.
 

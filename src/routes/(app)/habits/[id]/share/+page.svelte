@@ -93,6 +93,14 @@
 
 	<section class="card stack">
 		<h2>What travels with it</h2>
+		{#if data.inside.length}
+			<div>
+				<span>{data.inside.length === 1 ? 'The habit inside it' : `The ${data.inside.length} habits inside it`}, with their schedules and Tasks</span>
+				<ul class="inside muted small-text">
+					{#each data.inside as h, i (i)}<li style:margin-left="{(h.depth - 1) * 1}rem">{h.name}</li>{/each}
+				</ul>
+			</div>
+		{/if}
 		<label class="opt" title={why('includeArea') ?? ''}
 			><input type="checkbox" bind:checked={f.includeArea} disabled={!!why('includeArea')} />
 			<span>Area{ctx.area ? ` "${ctx.area}"` : ''}, and the Areas of its Tasks{#if why('includeArea')}<br /><span class="muted small-text">{why('includeArea')}</span>{/if}</span></label
@@ -225,5 +233,9 @@
 	}
 	.small-text {
 		font-size: 0.85rem;
+	}
+	.inside {
+		margin: 0.2rem 0 0;
+		padding-left: 1.1rem;
 	}
 </style>

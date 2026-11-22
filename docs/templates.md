@@ -1,6 +1,6 @@
 # Templates and the Gallery
 
-A template is a file (`.ittracks.json`) holding one habit: its Variants, schedule, targets, Fill rules and the Tasks it uses. It never holds your logs, slips, journal entries or notes on logs. Anyone can import it on any ittracks server.
+A template is a file (`.ittracks.json`) holding one habit, and the habits inside it if it's a routine or a group: their Variants, schedules, targets, Fill rules and the Tasks they use. It never holds your logs, slips, journal entries or notes on logs. Anyone can import it on any ittracks server.
 
 ## Share a habit
 
@@ -18,7 +18,7 @@ A template is a file (`.ittracks.json`) holding one habit: its Variants, schedul
    - Up to 10 questions in all.
 5. **Download the template** and send the file.
 
-A group can't be shared. A routine shares as one habit: the habits inside it don't come with it.
+A routine or a group shares as a whole program: the habits inside it come along, at any depth, with their schedules and Tasks. Habits that follow the routine keep following it, on the same Variants. Archived habits stay out, and so does what sits inside them. A group with no habits inside can't be shared, since its days come from them. A habit inside a routine shared on its own takes the routine's days as a schedule of its own.
 
 For a plain export with no questions, use **Settings → Export, import and templates → Export a habit**.
 
@@ -29,6 +29,7 @@ For a plain export with no questions, use **Settings → Export, import and temp
 - The **Habit name**, with a note if you already have a habit by that name.
 - The template's questions (days, time, starting numbers), and the next four weeks with your answers.
 - Its Tasks. A Task with the same name as one in your Library uses yours, unless you tick **Make separate Tasks instead**.
+- The habits inside it, if any, with their days and Tasks. They are added inside the new habit, all at once: if one can't go where the file puts it, nothing is added. A starting-number question sets its targets in every habit that has them.
 - Areas you don't have yet, with a box to add them.
 - **Remind me**, when the habit has a time or part of the day.
 
@@ -42,4 +43,4 @@ Filter by search, category, **Any days a week**, **Any time a day** and **No equ
 
 ## File format
 
-The format is defined in `src/lib/template.ts` and is at version 7 (version 7 added phases, which start on the day you add the template). Older files (versions 1 to 6) still import; newer fields take their defaults. Notes in a template come from a stranger, so they are shown with raw HTML off and images as links (see [Notes](notes-and-journal.md)).
+The format is defined in `src/lib/template.ts` and is at version 8. Version 7 added phases, which start on the day you add the template. Version 8 added `children`: the habits inside the file's habit, each naming the habit it sits in by key, parents first. Older files (versions 1 to 7) still import as one habit; newer fields take their defaults. Notes in a template come from a stranger, so they are shown with raw HTML off and images as links (see [Notes](notes-and-journal.md)).
