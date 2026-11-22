@@ -4,9 +4,11 @@
 	import { statsOp } from '$lib/stats/client';
 	import type { StatCard } from '$lib/stats/model';
 	import CardGrid from '$lib/stats/ui/CardGrid.svelte';
+	import EditButton from '$lib/ui/EditButton.svelte';
 
 	let { data } = $props();
-	let customizing = $state(false);
+	/** Edit mode is a flag on this same page: the grid shows handles, sizes and Edit on each card. */
+	let editing = $state(false);
 	let adding = $state(false);
 
 	async function op(body: Record<string, unknown>, done: string) {
@@ -35,11 +37,11 @@
 		<div class="row" style="align-items: center">
 			<a href="/habits/{data.habit.id}/chain">Chain</a>
 			<a href="/habits/{data.habit.id}">Edit</a>
-			<button type="button" class:primary={customizing} onclick={() => ((customizing = !customizing), (adding = false))}>{customizing ? 'Done' : 'Customize'}</button>
+			<EditButton bind:editing label="Customize" onchange={() => (adding = false)} />
 		</div>
 	</header>
 
-	{#if customizing}
+	{#if editing}
 		<div class="row tools">
 			<button type="button" class="primary" onclick={() => (adding = true)}>Add a card</button>
 			{#if data.customized}
@@ -57,7 +59,7 @@
 		hidden={data.hidden}
 		suggested={data.suggested}
 		gallery={data.gallery}
-		{customizing}
+		{editing}
 		bind:adding
 		csv={(id) => `/stats/export?habit=${data.habit.id}&card=${id}`}
 		headlines={data.headline ? [data.headline] : []}
