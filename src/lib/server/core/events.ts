@@ -21,7 +21,11 @@ export const EVENT_TYPES = {
 	'craving.resisted': { v: 1, about: 'A craving was resisted. data: cravingId' },
 	'craving.removed': { v: 1, about: 'A resisted craving was taken back. data: cravingId' },
 	'note.saved': { v: 1, about: 'A note was saved (the text is never in the event). data: kind, occurrenceId' },
-	'data.imported': { v: 1, about: 'A full export was restored into this account. data: counts' }
+	'data.imported': { v: 1, about: 'A full export was restored into this account. data: counts' },
+	'metric.unit_changed': {
+		v: 1,
+		about: "A field's unit changed after it had values. Converted: its past values (and targets) were multiplied by factor; otherwise they kept their numbers. data: taskId, metricId, from, to, converted, factor"
+	}
 } as const;
 export type EventType = keyof typeof EVENT_TYPES;
 

@@ -47,7 +47,8 @@ function slotsFor(occs: OccRow[], level?: (o: OccRow) => Level | null): Map<stri
 		? db
 				.select({ id: metric.id, taskId: metric.taskId, name: metric.name, type: metric.type, unit: metric.unit, repeats: metric.repeats, step: metric.step })
 				.from(metric)
-				.where(inArray(metric.taskId, taskIds))
+				// A log is measured by the fields it asks for: archived ones are kept for History only.
+				.where(and(inArray(metric.taskId, taskIds), eq(metric.archived, false)))
 				.orderBy(asc(metric.sortOrder))
 				.all()
 		: [];
@@ -210,6 +211,19 @@ export function rejudge(habitId: string, before: string) {
 /** How much one tap of +1 adds: the Metric's own step, else a sensible one for its type. */
 export const plusStep = (m: { type: string; unit: string | null; step: number | null }) =>
 	m.step ?? defaultStep(m.type, m.unit);
+
+/** Each Metric's step by id, for a raise by steps (engine/progression.ts). */
+export function stepsOf(metricIds: string[], q: Pick<typeof db, 'select'> = db): Record<string, number> {
+	if (!metricIds.length) return {};
+	return Object.fromEntries(
+		q
+			.select({ id: metric.id, type: metric.type, unit: metric.unit, step: metric.step })
+			.from(metric)
+			.where(inArray(metric.id, [...new Set(metricIds)]))
+			.all()
+			.map((m) => [m.id, plusStep(m)])
+	);
+}
 
 /**
  * +1 from Today, for a habit with one number to reach: add one step to the value logged so

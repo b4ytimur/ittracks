@@ -9,7 +9,8 @@
 	import { limitOn, nextDrop } from '$lib/engine/limit';
 	import { sameSchedule, scheduleStartBy } from '$lib/engine/unlogged';
 	import { blocked } from '$lib/rules/core';
-	import { checkHabit, habitRules } from '$lib/rules/habit';
+	import { checkHabit, habitPast, habitRules } from '$lib/rules/habit';
+	import { lockedNow } from '$lib/rules/history';
 
 	let { data, form } = $props();
 
@@ -23,6 +24,19 @@
 	let metricsByTask = $state(untrack(() => ({ ...data.metrics })));
 	/** Tasks that log something per set; a Yes or no Task has no sets to aim for. */
 	let repeating = $state(untrack(() => new Set(data.repeating)));
+	/** History policies (src/lib/rules/history.ts): build or break is fixed once something is logged. */
+	const directionLocked = untrack(() => lockedNow(habitPast, 'direction', data.directionLocked));
+	/** One raise by steps, per Slot target: "Weight +2.5 kg", in each field's own step and unit. */
+	const raiseLines = $derived.by(() => {
+		if (h.progression?.unit !== 'steps') return [];
+		const by = h.progression.by;
+		const out = new Set<string>();
+		for (const v of h.variants)
+			for (const s of v.slots)
+				for (const m of (s.taskId && metricsByTask[s.taskId]) || [])
+					if (s.targets[m.id] !== undefined) out.add(`${m.name} +${Math.round(m.step * by * 1000) / 1000}${m.unit ? ` ${m.unit}` : ''}`);
+		return [...out];
+	});
 
 	// A build habit always has at least one Variant to put Slots in.
 	$effect(() => {
@@ -287,7 +301,7 @@
 		const res = await fetch('?/quickTask', { method: 'POST', body, headers: { 'x-sveltekit-action': 'true' } });
 		const r = deserialize(await res.text());
 		if (r.type === 'success' && r.data?.newTask) {
-			const t = r.data.newTask as { id: string; name: string; repeats: boolean; metrics: { id: string; name: string; unit: string }[] };
+			const t = r.data.newTask as { id: string; name: string; repeats: boolean; metrics: { id: string; name: string; unit: string; step: number }[] };
 			tasks = [...tasks, { id: t.id, name: t.name }].sort((a, b) => a.name.localeCompare(b.name));
 			metricsByTask = { ...metricsByTask, [t.id]: t.metrics };
 			if (t.repeats) repeating = new Set([...repeating, t.id]);
@@ -656,12 +670,13 @@
 	<fieldset class="card">
 		<legend class="muted">Type</legend>
 		<label style="color: var(--text)"
-			><input type="radio" bind:group={h.direction} value="build" /> Build: something to do</label
+			><input type="radio" bind:group={h.direction} value="build" disabled={!!directionLocked && h.direction !== 'build'} /> Build: something to do</label
 		>
 		<label style="color: var(--text)"
-			><input type="radio" bind:group={h.direction} value="break" /> Break: something to stop, with
+			><input type="radio" bind:group={h.direction} value="break" disabled={!!directionLocked && h.direction !== 'break'} /> Break: something to stop, with
 			a slip counter</label
 		>
+		{#if directionLocked}<p class="muted small-text" style="margin: 0.25rem 0 0">{directionLocked}.</p>{/if}
 	</fieldset>
 {/snippet}
 
@@ -1108,10 +1123,15 @@
 					<label style="width: 7rem"
 						><select bind:value={h.progression.unit} aria-label="Raise unit">
 							<option value="percent">%</option>
-							<option value="amount">units</option>
+							<option value="steps">steps</option>
 						</select></label
 					>
 				</div>
+				{#if h.progression.unit === 'steps'}
+					<p class="muted small-text">
+						A step is each field's own +/− step, in its own unit{raiseLines.length ? `: ${raiseLines.join(', ')}` : ''}. Change a step in the Task's “When logging”.
+					</p>
+				{/if}
 				<p class="muted small-text">ittracks only suggests it. Nothing changes until you accept.</p>
 			{/if}
 		{/if}

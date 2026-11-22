@@ -162,6 +162,8 @@ export function describe(actor: Actor) {
 					type: m.type,
 					unit: metricUnit(m),
 					perSet: m.repeats,
+					// Removed from the Task after it was logged: its past values are still in the logs.
+					...(m.archived ? { archived: true } : {}),
 					...(m.choices?.length ? { options: m.choices } : {}),
 					...(m.scores && Object.keys(m.scores).length ? { scores: m.scores } : {})
 				}))

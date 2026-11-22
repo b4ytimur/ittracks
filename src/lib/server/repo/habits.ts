@@ -14,7 +14,8 @@ import { keepEarlier, sameSchedule, scheduleStartBy, type EarlierSchedule } from
 import type { Schedule } from '$lib/engine/schedule';
 import { keepGoals, rejudge } from '../progress';
 import type { StreakRule } from '$lib/engine/streak';
-import { checkHabit, type HabitCheck, type HabitCtx } from '$lib/rules/habit';
+import { checkHabit, checkHabitPast, type HabitCheck, type HabitCtx } from '$lib/rules/habit';
+import { habitLogged, PastEditError } from '../history';
 
 /** What the habit rules need to know from the database. */
 export function habitCtx(f: HabitForm): HabitCtx {
@@ -24,7 +25,7 @@ export function habitCtx(f: HabitForm): HabitCtx {
 			? db
 					.select({ taskId: metric.taskId })
 					.from(metric)
-					.where(and(inArray(metric.taskId, ids), eq(metric.repeats, true)))
+					.where(and(inArray(metric.taskId, ids), eq(metric.repeats, true), eq(metric.archived, false)))
 					.all()
 					.map((r) => r.taskId)
 			: []
@@ -243,7 +244,19 @@ function settledAfter(
 		: {};
 }
 
-/** Create or update a Habit with its Variants and Slots. Returns its id, or null if not found. */
+/** Edits of a saved habit its history policies refuse (build or break, once something is logged). */
+export function checkHabitEdit(accountId: string, id: string, f: HabitForm): string | null {
+	const before = getHabitForm(accountId, id);
+	if (!before) return null;
+	// Guarded fields changed: only then is it worth asking whether anything is logged.
+	const issues = checkHabitPast(before, f, true);
+	return issues.length && habitLogged(id) ? issues[0].reason : null;
+}
+
+/**
+ * Create or update a Habit with its Variants and Slots. Returns its id, or null if not found.
+ * An edit its history policies refuse (switching build and break once logged) throws PastEditError.
+ */
 export function saveHabit(
 	accountId: string,
 	id: string | null,
@@ -253,6 +266,8 @@ export function saveHabit(
 ): string | null {
 	// Values that can't apply (Levels on a break habit, a reminder with no time) are cleared.
 	f = checkHabitForm(f).form;
+	const refused = id ? checkHabitEdit(accountId, id, f) : null;
+	if (refused) throw new PastEditError(refused);
 	let judgeAgain = false;
 	const saved = db.transaction((tx) => {
 		// A changed limit or taper applies from today, so past days keep the limit they had.
@@ -365,7 +380,9 @@ export function saveHabit(
 			v.slots.forEach((s, j) => {
 				const taskId = s.fillRule ? null : s.taskId;
 				// Targets only for fields of the Slot's Task: a Task swapped out leaves none behind.
-				const own = taskId ? new Set(tx.select({ id: metric.id }).from(metric).where(eq(metric.taskId, taskId)).all().map((m) => m.id)) : null;
+				const own = taskId
+					? new Set(tx.select({ id: metric.id }).from(metric).where(and(eq(metric.taskId, taskId), eq(metric.archived, false))).all().map((m) => m.id))
+					: null;
 				const keep = (t: Record<string, number>) => (own ? Object.fromEntries(Object.entries(t ?? {}).filter(([k]) => own.has(k))) : (t ?? {}));
 				const targets = keep(s.targets);
 				const minTargets = keep(s.minTargets);

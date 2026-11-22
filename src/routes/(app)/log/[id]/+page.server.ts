@@ -55,7 +55,11 @@ export interface LogTask {
 	previousSubs: string[];
 }
 
-function loadTask(id: string) {
+/**
+ * A Task as the log screen shows it. Archived fields and sub-tasks are left out, except those
+ * this log already has a value or tick for (`kept`), so a past log shows and saves them as they are.
+ */
+function loadTask(id: string, kept: Set<string>) {
 	const t = db.select().from(task).where(eq(task.id, id)).get();
 	if (!t) return null;
 	return {
@@ -70,6 +74,7 @@ function loadTask(id: string) {
 			.where(eq(metric.taskId, id))
 			.orderBy(asc(metric.sortOrder))
 			.all()
+			.filter((m) => !m.archived || kept.has(m.id))
 			.map(({ id, name, type, unit, repeats, choices, prefill, step, required, quick, long, starter, prompts, promptOrder }) => ({
 				id,
 				name,
@@ -87,11 +92,13 @@ function loadTask(id: string) {
 				promptOrder
 			})),
 		subtasks: db
-			.select({ id: task.id, name: task.name })
+			.select({ id: task.id, name: task.name, archived: task.archived })
 			.from(task)
 			.where(eq(task.parentTaskId, id))
 			.orderBy(asc(task.sortOrder))
 			.all()
+			.filter((x) => !x.archived || kept.has(x.id))
+			.map(({ id, name }) => ({ id, name }))
 	};
 }
 
@@ -120,11 +127,13 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		.orderBy(asc(entry.sortOrder))
 		.all();
 
+	// Fields and sub-tasks this log already holds: shown even when archived since.
+	const kept = new Set(entries.flatMap((e) => [e.taskId, ...Object.keys(e.values ?? {})]));
 	// The same Task in two Slots: each Slot gets its own group of Entries, not both.
 	const nth = new Map<string, number>();
 	const items: LogTask[] = slots.map((s) => {
 		const taskId = picks[s.id] ?? s.taskId;
-		const t = taskId ? loadTask(taskId) : null;
+		const t = taskId ? loadTask(taskId, kept) : null;
 		const n = taskId ? (nth.get(taskId) ?? 0) : 0;
 		if (taskId) nth.set(taskId, n + 1);
 		const twice = !!taskId && slots.filter((x) => (picks[x.id] ?? x.taskId) === taskId).length > 1;

@@ -660,7 +660,7 @@
 			{@const p = item.progression}
 			<div class="suggest">
 				<span class="small-text"
-					>You've hit your targets {p.hits} times in a row. Raise them by {p.by}{p.unit === 'percent' ? '%' : ''}?</span
+					>You've hit your targets {p.hits} times in a row. Raise them by {p.by}{p.unit === 'percent' ? '%' : p.by === 1 ? ' step' : ' steps'}?</span
 					>
 					{#each p.changes as line (line)}<div class="muted small-text">{line}</div>{/each}
 				<div class="row">

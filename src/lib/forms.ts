@@ -156,8 +156,10 @@ export const limitForm = z.object({
 });
 export const progressionForm = z.object({
 	after: z.number().int().min(2).max(60),
+	/** A percentage, or a number of steps: each field's own +/- step, in its own unit. */
 	by: z.number().positive().max(1000),
-	unit: z.enum(['percent', 'amount'])
+	// 'amount' is the old name for steps, still read from templates and backups.
+	unit: z.preprocess((v) => (v === 'amount' ? 'steps' : v), z.enum(['percent', 'steps']))
 });
 export type RewardForm = z.infer<typeof rewardForm>;
 

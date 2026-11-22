@@ -164,7 +164,9 @@ export const metric = sqliteTable('metric', {
 	prompts: text('prompts', { mode: 'json' }).$type<string[]>(),
 	promptOrder: text('prompt_order', { enum: ['order', 'random'] }).notNull().default('order'),
 	/** Choice field: a number per option, so Stats can average it (mood 1 to 5). */
-	scores: text('scores', { mode: 'json' }).$type<Record<string, number>>()
+	scores: text('scores', { mode: 'json' }).$type<Record<string, number>>(),
+	/** Removed from its Task after it was logged: hidden from new logs, kept for History and Stats. */
+	archived: integer('archived', { mode: 'boolean' }).notNull().default(false)
 });
 
 /** A top-level group with a color and icon, for Habits and Tasks: Fitness, Learning... */

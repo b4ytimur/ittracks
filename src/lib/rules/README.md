@@ -31,3 +31,23 @@ return the cleaned form and the errors to refuse (`cleanSettings` clears Setting
 
 A new form (for example view settings): add `<name>.ts` here with `defineRules<YourForm>`,
 and add its schema and registry to `REGISTRIES` in `coverage.test.ts`.
+
+# History policies
+
+What an edit may do to data already logged, declared once per field in the same files
+(`habitPast`, `slotPast` in `habit.ts`; `taskPast`, `metricPast` in `task.ts`). The mechanism is
+`history.ts`. Every field of those forms needs one, and `coverage.test.ts` fails when it's missing.
+
+| Kind | Meaning | Example |
+| --- | --- | --- |
+| `display` | Past logs don't depend on it | a name, a prefill, a reminder |
+| `versioned` | The old value is kept with the logs it applied to | schedule, Slot targets, limit |
+| `recompute` | Logs stay; what is worked out from them is worked out again | streak rule, start date |
+| `migrate` | Once logged, a change asks what to do with past values | a Metric's unit: convert or keep the numbers |
+| `locked` | Fixed once logged, except changes `allow` lets through | Metric type (numbers can switch), log per set, build or break |
+| `archive` | List items removed after they were logged are archived, not deleted | Metrics, sub-tasks |
+| `unguarded` | A known gap: the edit still changes how past data reads | choice options, cost per slip |
+
+The editors read them to grey out controls and ask (`lockedNow`, `allowedNow`, `checkTaskPast`);
+the server refuses or migrates with the same functions (`checkTaskEdit`, `checkHabitEdit` in
+`src/lib/server/repo`). Units come from the registry in `src/lib/units.ts`.

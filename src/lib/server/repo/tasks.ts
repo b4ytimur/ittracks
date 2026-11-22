@@ -1,8 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, countDistinct, eq, inArray, isNull, max, notInArray } from 'drizzle-orm';
+import { and, asc, countDistinct, eq, inArray, isNull, max } from 'drizzle-orm';
 import { db } from '../db';
 import { collection, collectionTask, entry, habit, metric, occurrence, slot, tag, task, taskTag, variant } from '../db/schema';
 import type { TaskForm } from '$lib/forms';
+import { checkTaskPast, type TaskPast } from '$lib/rules/task';
+import type { UnitChoice } from '$lib/units';
+import { convertMetricValues, dropTargets, PastEditError, taskLogged } from '../history';
+export { PastEditError };
 
 export interface TaskSummary {
 	id: string;
@@ -76,7 +80,7 @@ export function getTaskForm(accountId: string, id: string): TaskForm | null {
 		metrics: db
 			.select()
 			.from(metric)
-			.where(eq(metric.taskId, id))
+			.where(and(eq(metric.taskId, id), eq(metric.archived, false)))
 			.orderBy(asc(metric.sortOrder))
 			.all()
 			.map((m) => ({
@@ -99,7 +103,7 @@ export function getTaskForm(accountId: string, id: string): TaskForm | null {
 		subtasks: db
 			.select({ id: task.id, name: task.name })
 			.from(task)
-			.where(eq(task.parentTaskId, id))
+			.where(and(eq(task.parentTaskId, id), eq(task.archived, false)))
 			.orderBy(asc(task.sortOrder))
 			.all(),
 		areaId: t.areaId,
@@ -112,22 +116,40 @@ export function getTaskForm(accountId: string, id: string): TaskForm | null {
 	};
 }
 
-/** Create or update a Task with its Tags, Metrics and sub-tasks. Returns its id. */
+/**
+ * What an edit of a saved Task would do to its history: refused edits, unit changes that
+ * need a choice, and what gets archived. Null when the Task isn't this account's.
+ */
+export function checkTaskEdit(accountId: string, id: string, f: TaskForm, units: Record<string, UnitChoice> = {}): TaskPast | null {
+	const before = getTaskForm(accountId, id);
+	return before ? checkTaskPast(before, f, taskLogged(id), units) : null;
+}
+
+/**
+ * Create or update a Task with its Tags, Metrics and sub-tasks. Returns its id. An edit follows
+ * the history policies: a removed field or sub-task with logs is archived, a unit change on a
+ * field with logs converts its past values or keeps them (`units`, per Metric id), and a
+ * locked change throws PastEditError.
+ */
 export function saveTask(
 	accountId: string,
 	id: string | null,
 	f: TaskForm,
-	newId: string = randomUUID()
+	newId: string = randomUUID(),
+	opts: { units?: Record<string, UnitChoice> } = {}
 ): string | null {
 	return db.transaction((tx) => {
 		const taskId = id ?? newId;
+		let past: TaskPast | null = null;
 		if (id) {
 			const owned = tx
 				.select({ id: task.id })
 				.from(task)
-				.where(and(eq(task.id, id), eq(task.accountId, accountId)))
+				.where(and(eq(task.id, id), eq(task.accountId, accountId), isNull(task.parentTaskId)))
 				.get();
 			if (!owned) return null;
+			past = checkTaskEdit(accountId, id, f, opts.units);
+			if (past?.errors[0]) throw new PastEditError(past.errors[0].reason);
 			tx.update(task)
 				.set({
 					name: f.name,
@@ -188,16 +210,31 @@ export function saveTask(
 			tx.insert(taskTag).values({ taskId, tagId: tagRow.id, level: t.level }).run();
 		}
 
-		// Metrics: keep ids stable so past Entries still line up.
-		const metricIds = f.metrics.map((m) => m.id);
-		tx.delete(metric)
-			.where(
-				metricIds.length
-					? and(eq(metric.taskId, taskId), notInArray(metric.id, metricIds))
-					: eq(metric.taskId, taskId)
-			)
-			.run();
+		// Metrics: keep ids stable so past Entries still line up. A removed one with logged
+		// values is archived (History and Stats keep it); one never logged is deleted.
+		const goneMetrics = past?.removed.metrics ?? { archive: [], drop: [] };
+		if (goneMetrics.drop.length) tx.delete(metric).where(and(eq(metric.taskId, taskId), inArray(metric.id, goneMetrics.drop))).run();
+		if (goneMetrics.archive.length) {
+			tx.update(metric).set({ archived: true }).where(and(eq(metric.taskId, taskId), inArray(metric.id, goneMetrics.archive))).run();
+			dropTargets(tx, accountId, goneMetrics.archive);
+		}
+		// Past values follow a unit change the way the user chose: converted, or kept as they are.
+		for (const u of past?.units ?? [])
+			if (u.choice === 'convert' && u.change.kind === 'convertible') convertMetricValues(tx, accountId, taskId, u.metricId, u.change.factor);
+		// Ids only of this Task's own Metrics, or new ones: never another Task's field.
+		const foreignMetrics = new Set(
+			f.metrics.length
+				? tx
+						.select({ id: metric.id, taskId: metric.taskId })
+						.from(metric)
+						.where(inArray(metric.id, f.metrics.map((m) => m.id)))
+						.all()
+						.filter((r) => r.taskId !== taskId)
+						.map((r) => r.id)
+				: []
+		);
 		f.metrics.forEach((m, i) => {
+			if (foreignMetrics.has(m.id)) return;
 			const values = {
 				name: m.name,
 				type: m.type,
@@ -213,7 +250,8 @@ export function saveTask(
 				starter: m.starter || null,
 				prompts: m.prompts.length ? m.prompts : null,
 				promptOrder: m.promptOrder,
-				scores: Object.keys(m.scores).length ? m.scores : null
+				scores: Object.keys(m.scores).length ? m.scores : null,
+				archived: false
 			};
 			tx.insert(metric)
 				.values({ id: m.id, taskId, ...values })
@@ -221,21 +259,30 @@ export function saveTask(
 				.run();
 		});
 
-		// Sub-tasks, one level deep.
-		const subIds = f.subtasks.map((s) => s.id);
-		tx.delete(task)
-			.where(
-				subIds.length
-					? and(eq(task.parentTaskId, taskId), notInArray(task.id, subIds))
-					: eq(task.parentTaskId, taskId)
-			)
-			.run();
-		f.subtasks.forEach((s, i) => {
-			tx.insert(task)
-				.values({ id: s.id, accountId, name: s.name, parentTaskId: taskId, sortOrder: i })
-				.onConflictDoUpdate({ target: task.id, set: { name: s.name, sortOrder: i } })
-				.run();
-		});
+		// Sub-tasks, one level deep. A removed one that was ticked is archived, so its ticks stay.
+		const goneSubs = past?.removed.subtasks ?? { archive: [], drop: [] };
+		if (goneSubs.drop.length) tx.delete(task).where(and(eq(task.parentTaskId, taskId), inArray(task.id, goneSubs.drop))).run();
+		if (goneSubs.archive.length) tx.update(task).set({ archived: true }).where(and(eq(task.parentTaskId, taskId), inArray(task.id, goneSubs.archive))).run();
+		// Ids only of this Task's own sub-tasks, or new ones: never another Task's row.
+		const foreign = new Set(
+			f.subtasks.length
+				? tx
+						.select({ id: task.id, parent: task.parentTaskId })
+						.from(task)
+						.where(inArray(task.id, f.subtasks.map((s) => s.id)))
+						.all()
+						.filter((r) => r.parent !== taskId)
+						.map((r) => r.id)
+				: []
+		);
+		f.subtasks
+			.filter((s) => !foreign.has(s.id))
+			.forEach((s, i) => {
+				tx.insert(task)
+					.values({ id: s.id, accountId, name: s.name, parentTaskId: taskId, sortOrder: i })
+					.onConflictDoUpdate({ target: task.id, set: { name: s.name, sortOrder: i, archived: false } })
+					.run();
+			});
 
 		return taskId;
 	});

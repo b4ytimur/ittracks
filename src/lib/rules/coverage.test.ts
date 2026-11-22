@@ -5,8 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 import { habitForm, taskForm } from '../forms';
-import { habitRules, slotRules } from './habit';
-import { metricRules, taskRules } from './task';
+import { habitPast, habitRules, slotPast, slotRules } from './habit';
+import { metricPast, metricRules, taskPast, taskRules } from './task';
 import { viewRules } from './views';
 import { viewSettings } from '../views';
 import { cardRules, statsSettingsRules } from './stats';
@@ -94,4 +94,25 @@ describe('rule registry coverage', () => {
 				}
 		});
 	}
+});
+
+// History policies (rules/history.ts): every field of a form that logs point at says what an
+// edit may do to the past. Same check: every field listed, nothing else.
+const HISTORY: [string, z.ZodType, object][] = [
+	['habit', habitForm, habitPast],
+	['slot', slotSchema, slotPast],
+	['task', taskForm, taskPast],
+	['metric', metricSchema, metricPast]
+];
+
+describe('history policy coverage', () => {
+	for (const [name, schema, policies] of HISTORY)
+		it(`${name}: every field has a history policy, and every policy names a real field`, () => {
+			const fields = fieldPaths(schema).sort();
+			const listed = Object.keys(policies).sort();
+			expect({ missingPolicies: fields.filter((f) => !listed.includes(f)), unknownFields: listed.filter((l) => !fields.includes(l)) }).toEqual({
+				missingPolicies: [],
+				unknownFields: []
+			});
+		});
 });

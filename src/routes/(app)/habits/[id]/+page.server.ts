@@ -9,6 +9,7 @@ import {
 } from '$lib/forms';
 import { DEFAULT_STREAK_RULE } from '$lib/engine/streak';
 import {
+	checkHabitEdit,
 	checkHabitForm,
 	checkLinks,
 	copyHabitForm,
@@ -18,13 +19,14 @@ import {
 	saveHabit,
 	setHabitArchived
 } from '$lib/server/repo/habits';
+import { habitLogged, PastEditError } from '$lib/server/history';
 import { identityFor, listIdentities } from '$lib/server/repo/identities';
 import { listTagNames, listTasks, saveTask } from '$lib/server/repo/tasks';
 import { listAreas } from '$lib/server/repo/areas';
 import { getViews, getSettings, saveSettings } from '$lib/server/settings';
 import { repaused, settle, unarchived, userToday } from '$lib/server/today';
 import { ownedHabit } from '$lib/server/owned';
-import { BUILTIN_TASK_TYPES, metricsFromType } from '$lib/task-types';
+import { BUILTIN_TASK_TYPES, defaultStep, metricsFromType } from '$lib/task-types';
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
@@ -36,15 +38,15 @@ import type { Actions, PageServerLoad } from './$types';
 function numericMetrics(taskIds: string[]) {
 	if (!taskIds.length) return {};
 	const rows = db
-		.select({ id: metric.id, taskId: metric.taskId, name: metric.name, unit: metric.unit, type: metric.type })
+		.select({ id: metric.id, taskId: metric.taskId, name: metric.name, unit: metric.unit, type: metric.type, step: metric.step })
 		.from(metric)
-		.where(inArray(metric.taskId, taskIds))
+		.where(and(inArray(metric.taskId, taskIds), eq(metric.archived, false)))
 		.orderBy(asc(metric.sortOrder))
 		.all()
 		.filter((m) => m.type === 'number' || m.type === 'count' || m.type === 'duration');
-	const out: Record<string, { id: string; name: string; unit: string }[]> = {};
+	const out: Record<string, { id: string; name: string; unit: string; step: number }[]> = {};
 	for (const m of rows)
-		(out[m.taskId] ??= []).push({ id: m.id, name: m.name, unit: m.unit || (m.type === 'duration' ? 'min' : '') });
+		(out[m.taskId] ??= []).push({ id: m.id, name: m.name, unit: m.unit || (m.type === 'duration' ? 'min' : ''), step: m.step ?? defaultStep(m.type, m.unit) });
 	return out;
 }
 
@@ -56,7 +58,7 @@ function repeatingTasks(taskIds: string[]): string[] {
 			db
 				.select({ taskId: metric.taskId })
 				.from(metric)
-				.where(and(inArray(metric.taskId, taskIds), eq(metric.repeats, true)))
+				.where(and(inArray(metric.taskId, taskIds), eq(metric.repeats, true), eq(metric.archived, false)))
 				.all()
 				.map((m) => m.taskId)
 		)
@@ -140,6 +142,8 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 					.orderBy(asc(pause.start))
 					.all(),
 		today: userToday(accountId, cookies.get('tz')),
+		/** Something is logged: build or break is fixed (history policies, src/lib/rules/history.ts). */
+		directionLocked: !isNew && habitLogged(params.id),
 		/** Something was logged already: a rotation's plan has days to keep when the start moves. */
 		hasLogs:
 			!isNew &&
@@ -171,7 +175,16 @@ export const actions: Actions = {
 		if (linkError) return fail(400, { error: linkError });
 		// A schedule edit applies from today on unless the editor says past days too.
 		const applies = (json as { scheduleApplies?: unknown }).scheduleApplies === 'past' ? 'past' : 'today';
-		const id = saveHabit(accountId, params.id === 'new' ? null : params.id, parsed.data, userToday(accountId, cookies.get('tz')), { scheduleApplies: applies });
+		// History policies: switching build and break once logged is refused.
+		const refused = params.id === 'new' ? null : checkHabitEdit(accountId, params.id, parsed.data);
+		if (refused) return fail(400, { error: refused });
+		let id: string | null;
+		try {
+			id = saveHabit(accountId, params.id === 'new' ? null : params.id, parsed.data, userToday(accountId, cookies.get('tz')), { scheduleApplies: applies });
+		} catch (e) {
+			if (e instanceof PastEditError) return fail(400, { error: e.message });
+			throw e;
+		}
 		if (!id) error(404, 'Habit not found');
 		// Home screen shortcut, kept in Settings so the manifest can list it.
 		const pin = (json as { pinned?: unknown }).pinned;
@@ -211,7 +224,7 @@ export const actions: Actions = {
 				repeats: metrics.some((m) => m.repeats),
 				metrics: metrics
 					.filter((m) => m.type === 'number' || m.type === 'count' || m.type === 'duration')
-					.map((m) => ({ id: m.id, name: m.name, unit: m.unit || (m.type === 'duration' ? 'min' : '') }))
+					.map((m) => ({ id: m.id, name: m.name, unit: m.unit || (m.type === 'duration' ? 'min' : ''), step: m.step ?? defaultStep(m.type, m.unit) }))
 			}
 		};
 	},

@@ -389,6 +389,16 @@ describe('progression', () => {
 
 	it('raises targets and always moves them up', () => {
 		expect(raise({ a: 60, b: 8 }, { after: 3, by: 5, unit: 'percent' })).toEqual({ a: 63, b: 9 });
-		expect(raise({ a: 60 }, { after: 3, by: 2.5, unit: 'amount' })).toEqual({ a: 62.5 });
+	});
+
+	it('raises by steps: each target by its own field\'s step, in its own unit', () => {
+		// Weight steps 2.5 kg, reps step 1: one step is 60 → 62.5 kg and 5 → 6 reps, never 5 → 7.5.
+		const steps = { kg: 2.5, reps: 1 };
+		expect(raise({ kg: 60, reps: 5 }, { after: 3, by: 1, unit: 'steps' }, steps)).toEqual({ kg: 62.5, reps: 6 });
+		expect(raise({ kg: 60, reps: 5 }, { after: 3, by: 2, unit: 'steps' }, steps)).toEqual({ kg: 65, reps: 7 });
+		// A target whose field has no step stays as it is.
+		expect(raise({ kg: 60, other: 3 }, { after: 3, by: 1, unit: 'steps' }, steps)).toEqual({ kg: 62.5, other: 3 });
+		// Old data that says 'amount' is read as steps.
+		expect(raise({ reps: 5 }, { after: 3, by: 1, unit: 'amount' as never }, steps)).toEqual({ reps: 6 });
 	});
 });

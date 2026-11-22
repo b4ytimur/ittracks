@@ -59,7 +59,7 @@ export function addTemplate(
 			continue;
 		}
 		taskMap.set(t.id, match.id);
-		const theirs = db.select().from(metric).where(eq(metric.taskId, match.id)).all();
+		const theirs = db.select().from(metric).where(and(eq(metric.taskId, match.id), eq(metric.archived, false))).all();
 		for (const m of t.form.metrics) {
 			const same = theirs.find((x) => x.name.toLowerCase() === m.name.toLowerCase() && x.type === m.type);
 			if (same) metricMap.set(m.id, same.id);
