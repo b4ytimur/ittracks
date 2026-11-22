@@ -330,7 +330,7 @@ describe('reading and analysis', () => {
 
 	it('makes a JSON Schema for every action', () => {
 		const c = catalog(app);
-		expect(c.actions.length).toBe(25);
+		expect(c.actions.length).toBe(27);
 		for (const a of c.actions) expect(a.input).toHaveProperty('type', 'object');
 	});
 });
