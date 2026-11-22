@@ -12,7 +12,7 @@
 	import { tidyPhases, type Schedule } from '$lib/engine/schedule';
 	import ScheduleFields from '$lib/ui/ScheduleFields.svelte';
 	import EditableList from '$lib/ui/EditableList.svelte';
-	import { addPhase, fitVariants, isPlainKind, phaseDates, plainOfKind, removePhase, type PhaseRow } from '$lib/ui/schedule';
+	import { addPhase, fitVariants, isPlainKind, phaseDates, plainOfKind, removePhase, savedPlain, type PhaseRow } from '$lib/ui/schedule';
 	import { blocked } from '$lib/rules/core';
 	import { checkHabit, habitPast, habitRules } from '$lib/rules/habit';
 	import { lockedNow } from '$lib/rules/history';
@@ -141,7 +141,7 @@
 				return tidyPhases({
 					kind,
 					start: phasesStart,
-					phases: phases.map(({ key: _, ...p }) => ({ ...p, schedule: fitVariants(p.schedule, h.variants, false) })),
+					phases: phases.map(({ key: _, ...p }) => ({ ...p, schedule: savedPlain(p.schedule, h.variants, false) })),
 					...routineRule
 				});
 			case 'group':
@@ -149,7 +149,7 @@
 			case 'follow':
 				return { kind, variantId: ids.has(followVariant) ? followVariant : firstVariant, on: followOn };
 			default:
-				return { ...fitVariants(plain, h.variants, true), ...routineRule };
+				return { ...savedPlain(plain, h.variants, true), ...routineRule };
 		}
 	});
 	/** A schedule edit on a habit with a past: from today on (the default), or past days too. */

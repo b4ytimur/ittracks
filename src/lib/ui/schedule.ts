@@ -27,7 +27,8 @@ export function plainOfKind(kind: PlainKind, from: PlainScheduleForm | null, var
 		case 'interval':
 			return { kind, every: 1, start: begin, variantId: one || first };
 		case 'rotation':
-			return { kind, step: 'variant', onMiss: 'wait', weekdays: [], start: begin, order: variants.map((v) => ({ variantId: v.id, restDays: 1 })) };
+			// Mon, Wed, Fri are ready for a rotation by week; a rotation by Variant saves no weekdays.
+			return { kind, step: 'variant', onMiss: 'wait', weekdays: [0, 2, 4], start: begin, order: variants.map((v) => ({ variantId: v.id, restDays: 1 })) };
 	}
 }
 
@@ -49,9 +50,15 @@ export function fitVariants(s: PlainScheduleForm, variants: Variant[], all: bool
 			const rest = new Map(s.order.map((o) => [o.variantId, o.restDays]));
 			const kept = variants.filter((v) => all || rest.has(v.id));
 			const order = (kept.length ? kept : variants.slice(0, 1)).map((v) => ({ variantId: v.id, restDays: rest.get(v.id) ?? 1 }));
-			return { ...s, order, weekdays: s.step === 'week' ? [...s.weekdays].sort() : [] };
+			return { ...s, order };
 		}
 	}
+}
+
+/** The schedule as it is saved: only Variants the habit has, and weekdays only on a rotation by week. */
+export function savedPlain(s: PlainScheduleForm, variants: Variant[], all: boolean): PlainScheduleForm {
+	const fit = fitVariants(s, variants, all);
+	return fit.kind === 'rotation' ? { ...fit, weekdays: fit.step === 'week' ? [...fit.weekdays].sort() : [] } : fit;
 }
 
 /** A phase row in the editor: a phase with a key the list can keep track of. */

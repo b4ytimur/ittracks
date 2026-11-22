@@ -10,7 +10,7 @@ export const load: PageServerLoad = ({ locals, params }) => {
 		id: params.id,
 		name: sc.habit.name,
 		direction: sc.habit.direction,
-		schedule: describeSchedule(sc.habit.schedule),
+		schedule: describeSchedule(sc.habit.schedule, undefined, sc.habit.variants),
 		ctx: sc.ctx,
 		metrics: sc.metrics,
 		poolNames: sc.poolNames

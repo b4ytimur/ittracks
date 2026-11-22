@@ -29,6 +29,18 @@ Variants take turns. **Rotate by**:
 
 Both take a **Starting** date.
 
+### In phases: one schedule after another
+
+Phases run schedules one after another from a **Starting** date: "every day with Ramp-up for 1 week, then every day with Maintain from then on". Each phase has a length (**For** N **days** or **weeks**) or runs **from then on, with no end**, and a schedule of its own, picked the same way as any schedule above. The title of each phase shows the dates it runs.
+
+- **Targets change with the Variant.** Targets live on a Variant's Tasks, so give each phase its own Variant: Ramp-up aims for 5 glasses, Maintain for 1. Add Variants under **Variants** first.
+- **Each phase starts fresh.** Its schedule runs as if it began on the phase's first day: a rotation starts with its first Variant, every N days counts from that day, and N times a week only counts what you did in this phase. A phase that starts or ends part way through a week asks for its share of the weekly number, rounded down.
+- **A rotation in a phase** picks which Variants take part, under **Variants in this rotation**.
+- **An end date.** When the last phase has a length, nothing is due after it: a 10-day course is one phase of 10 days. Pick **from then on** on the last phase to keep going.
+- **Add, remove and reorder** phases with **+ phase**, **Remove** and the handle. A new phase runs from then on, and the one before it gets a length. Only the last phase can run with no end; the editor refuses a phase after one that never ends, and warns about a Variant no phase uses.
+
+Moving the habit's **Started on** earlier doesn't move the phases. In a routine, habits that follow it on one Variant only come up in the phases that use that Variant, so a whole program can change from Base to Build weeks.
+
 ### From the habits inside it, and following a routine
 
 These two only apply to habits inside other habits. See [Groups and routines](groups-and-routines.md).
@@ -55,5 +67,3 @@ Today lists habits that aren't due under **Not due today**. Press **Start … ea
 - **Pause many habits at once**: select them on the Habits page. See [Bulk editing](bulk-editing.md).
 
 Paused days aren't due and never count as missed. A pause over past days takes back the misses already counted for them. Break-habit counters keep running through a vacation.
-
-> TODO: schedules that change over time ("5 a day in week 1, then 1 a day") are being built. This page will cover them when they land.

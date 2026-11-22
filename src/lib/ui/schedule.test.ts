@@ -1,6 +1,6 @@
 // The schedule editor's rules, shared by the habit's own schedule and each of its phases.
 import { describe, expect, it } from 'vitest';
-import { addPhase, fitVariants, phaseDates, plainOfKind, removePhase, type PhaseRow } from './schedule';
+import { addPhase, fitVariants, phaseDates, plainOfKind, removePhase, savedPlain, type PhaseRow } from './schedule';
 import { describeSchedule } from '../describe';
 import type { ScheduleForm } from '../forms';
 
@@ -20,7 +20,10 @@ describe('schedule editor', () => {
 		expect(fitVariants({ kind: 'frequency', times: 2, period: 'week', variantId: 'gone' }, [A, B], true)).toMatchObject({ variantId: 'a' });
 		const rot = { kind: 'rotation' as const, step: 'variant' as const, onMiss: 'wait' as const, weekdays: [3], start: '2026-11-01', order: [{ variantId: 'b', restDays: 2 }] };
 		// The habit's own rotation goes through every Variant; a phase's keeps the ones it picked.
-		expect(fitVariants(rot, [A, B], true)).toMatchObject({ weekdays: [], order: [{ variantId: 'a', restDays: 1 }, { variantId: 'b', restDays: 2 }] });
+		expect(fitVariants(rot, [A, B], true)).toMatchObject({ weekdays: [3], order: [{ variantId: 'a', restDays: 1 }, { variantId: 'b', restDays: 2 }] });
+		// Saved, a rotation by Variant has no weekdays; the editor keeps them for switching to weeks.
+		expect(savedPlain(rot, [A, B], true)).toMatchObject({ weekdays: [] });
+		expect(savedPlain({ ...rot, step: 'week', weekdays: [4, 0] }, [A, B], true)).toMatchObject({ weekdays: [0, 4] });
 		expect(fitVariants(rot, [A, B], false)).toMatchObject({ order: [{ variantId: 'b', restDays: 2 }] });
 		expect(fitVariants({ ...rot, order: [{ variantId: 'gone', restDays: 0 }] }, [A, B], false)).toMatchObject({ order: [{ variantId: 'a', restDays: 1 }] });
 	});
