@@ -686,11 +686,31 @@ function ensureOwnToday(accountId: string, habitId: string, schedule: ScheduleFo
 		.where(and(eq(occurrence.habitId, habitId), eq(occurrence.date, today)))
 		.get();
 	const paused = !!pauseOn(pauses, habitId, today);
-	if (existing) return paused && existing.status === 'due' ? null : existing;
+	if (existing) return paused && existing.status === 'due' ? null : isFollow(schedule) ? replanFollower(accountId, existing, schedule, today) : existing;
 	if (paused) return null;
 	const variantId = dueOn(schedule as Schedule, history(habitId, today), today, followDue(habitId, schedule, today));
 	if (!variantId) return null;
 	return createOccurrence(accountId, habitId, variantId, today);
+}
+
+/**
+ * A habit that follows its routine takes today from the routine's today, which can change
+ * after it was planned: a waiting rotation moved on, the routine's schedule was edited. While
+ * nothing is in it yet (no value, no note, not logged early by hand), today is planned again:
+ * with the Variant the routine's Variant now brings up, or gone when the routine no longer has
+ * it due. Anything with something in it stays as it was.
+ */
+function replanFollower(accountId: string, occ: typeof occurrence.$inferSelect, schedule: ScheduleForm, today: string) {
+	if (occ.status !== 'due' || occ.extra || occ.notes || hasEntries(occ.id)) return occ;
+	const planned = dueOn(schedule as Schedule, [], today, followDue(occ.habitId, schedule, today));
+	if (planned === occ.variantId) return occ;
+	if (!planned) {
+		db.delete(occurrence).where(eq(occurrence.id, occ.id)).run();
+		return null;
+	}
+	const picks = pickForVariant(accountId, planned);
+	db.update(occurrence).set({ variantId: planned, picks }).where(eq(occurrence.id, occ.id)).run();
+	return { ...occ, variantId: planned, picks };
 }
 
 /** The habit this one sits in. */

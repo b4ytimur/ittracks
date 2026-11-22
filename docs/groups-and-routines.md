@@ -37,6 +37,14 @@ A routine is a build habit with its own schedule and no Tasks of its own. Make o
 
 A habit inside a routine can keep its own schedule, or set **How often** to **Whenever <routine> is due**. If the routine has several Variants, **Only when <routine> is on** limits it to some of them (stretches only on leg day). Pick the habit's own Variant under **Variant**.
 
+### Keeping two rotations in step
+
+When both the routine and the habit inside it have several Variants, **Variant on each of <routine>'s Variants** picks the habit's Variant for each of the routine's. Whenever the routine is on one of them, the habit logs the Variant picked for it, so the two go through their Variants together. For example, a "Gym day" routine rotates through Upper A, Lower A, Upper B and Lower B, and "Bench" only comes up on Upper days: **Heavy** on Upper A and **Light** on Upper B. A missed day, a waiting rotation or a late log moves the routine, and the habit moves with it. **Any other day** is the Variant it logs on a Variant of the routine's that isn't listed (one added later).
+
+When you switch a habit to follow its routine, each of the routine's Variants starts paired with the habit's Variant of the same name, if there is one. A habit that keeps a rotation of its own inside a rotating routine can drift away from it; the editor says so under **How often**. A Variant the habit never logs gets a warning, since it would never come up.
+
+Today's log of a habit that follows its routine is planned again when the routine's today changes (a schedule edit, a rotation that moves on), as long as nothing is logged or noted in it yet. Changing the pairs applies from today on, like any schedule change.
+
 ### How a routine's day counts
 
 On its days, a routine is judged from the habits inside it that are due, with the same **Done when** and Minimum choices as a group (under **On its days, judged from the habits inside**). A habit that follows the routine and wasn't logged on one of its days counts as missed. A day when none of them is due, you tick the routine off like any habit.
@@ -50,4 +58,4 @@ On Today, a routine shows the habits inside it.
 - **Start** opens the routine page: **Next** points to the next habit to do, and each habit has **Log**, **Done**, **Skip** and **Undo**. At the end, **Mark the rest done** gives every open habit its one tap (its last log, or its targets) and **Skip the rest** skips them. A habit with fields to fill in must be opened first.
 - **Done** on the routine marks every habit inside that is due done. **Skip** skips them, and **Undo** takes it back. This works on [past days](logging.md#log-a-past-day) too.
 
-Routines can sit inside other routines. Deleting a routine gives each habit that followed it the closest schedule of its own (its weekdays, or its average gap).
+Routines can sit inside other routines. Deleting a routine gives each habit that followed it the closest schedule of its own: its weekdays, a rotation of the Variants it was paired with (with the routine's other days as rest days), or its average gap.

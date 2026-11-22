@@ -178,6 +178,14 @@ describe('habit rules', () => {
 		expect(r.warnings.map((w) => w.reason)).toEqual(["A Variant isn't in any phase, so it never comes up"]);
 	});
 
+	it('R2: a Variant a habit that follows its routine never logs warns', () => {
+		const h: HabitForm = { ...base(), parentId: H, schedule: { kind: 'follow', variantId: V, on: null } };
+		h.variants.push({ id: H, name: 'B', slots: [] });
+		expect(checkHabit(h).warnings.map((w) => w.reason)).toEqual(["A Variant isn't picked for any of the routine's Variants, so it never comes up"]);
+		h.schedule = { kind: 'follow', variantId: V, on: null, map: { 'routine-b': H } };
+		expect(checkHabit(h).warnings).toEqual([]);
+	});
+
 	it('S4, S5: soft conflicts warn but do not block', () => {
 		const h = base();
 		h.variants.push({ id: H, name: 'B', slots: [] });

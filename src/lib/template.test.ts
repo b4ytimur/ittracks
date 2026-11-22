@@ -514,7 +514,7 @@ describe('habits inside a habit (version 8)', () => {
 	const file = templateFile.parse(JSON.parse(JSON.stringify(tpl)));
 
 	it('exports each habit inside with its parent by key, and no ids', () => {
-		expect(file.version).toBe(8);
+		expect(file.version).toBe(TEMPLATE_VERSION);
 		expect(file.children.map((c) => [c.key, c.parent, c.name])).toEqual([
 			['h1', null, 'Walk'],
 			['h2', null, 'Lifts'],

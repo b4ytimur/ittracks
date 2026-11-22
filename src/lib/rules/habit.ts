@@ -76,6 +76,16 @@ export const habitRules = defineRules<HabitForm, HabitCtx>({
 		onlyWhen(build, BUILD_ONLY, null),
 		// R1: following a routine needs the routine it sits in.
 		check((h) => h.schedule?.kind === 'follow' && !h.parentId, 'Pick the routine it sits in, or give it a schedule of its own'),
+		// R2 (S4 for a habit that follows its routine): a Variant it never logs never comes up.
+		check(
+			(h) => {
+				if (h.schedule?.kind !== 'follow') return false;
+				const used = new Set(variantsIn(h.schedule as Schedule));
+				return h.variants.some((v) => !used.has(v.id));
+			},
+			"A Variant isn't picked for any of the routine's Variants, so it never comes up",
+			'warn'
+		),
 		// G3: the Minimum is fewer habits than the target.
 		check(
 			(h) => h.schedule?.kind === 'group' && h.schedule.minimum !== null && h.schedule.target !== null && h.schedule.minimum >= h.schedule.target,
