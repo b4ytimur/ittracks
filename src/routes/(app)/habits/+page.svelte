@@ -9,7 +9,8 @@
 	import EditButton from '$lib/ui/EditButton.svelte';
 	import InlineText from '$lib/ui/InlineText.svelte';
 	import BulkBar from '$lib/bulk/BulkBar.svelte';
-	import { reorderFrom } from '$lib/ui/list';
+	import { moveKey, reorderFrom, type Move } from '$lib/ui/list';
+	import { isFollow, isGroup } from '$lib/engine/schedule';
 	import { viewOp } from '$lib/viewclient';
 	import { runAction, showToast } from '$lib/toast.svelte';
 	import { HABIT_LINES, groupBy, manualOrder, passes, type HabitLineKey } from '$lib/views';
@@ -72,6 +73,54 @@
 			view.sort = 'manual';
 			showToast('Sorted by My order, shared with Today.');
 		}
+	}
+
+	const byId = (id: string) => habits.find((h) => h.id === id);
+	/**
+	 * Which drops edit mode offers: before and after always; inside only a group or a routine
+	 * (a build habit with no Tasks of its own), for a build habit. A group only goes in a group,
+	 * and a habit that follows its routine's schedule only in a routine. The server checks again.
+	 */
+	function canDrop(m: Move) {
+		if (m.position !== 'inside') return true;
+		const h = byId(m.key);
+		const into = byId(m.target);
+		if (!h || !into || h.direction !== 'build' || !into.holds || into.archived) return false;
+		if (isGroup(h.schedule) && !isGroup(into.schedule)) return false;
+		return !(isFollow(h.schedule) && isGroup(into.schedule));
+	}
+
+	/**
+	 * Indent and outdent: put a habit inside another (at the end of what it holds) or out to the
+	 * level of the habit that held it (just after it). Saved at once, with Undo.
+	 */
+	async function moveTo(id: string, parentId: string | null, after: string, done: string) {
+		const h = byId(id);
+		if (!h) return;
+		const was = { parentId: h.parentId, order: views.today.order };
+		const order = moveKey(mine(habits).map((x) => x.id), id, after, 'after');
+		habits = habits.map((x) => (x.id === id ? { ...x, parentId } : x));
+		views.today = { ...views.today, order };
+		const r = await runAction('?/move', { id, parent: parentId ?? '' });
+		if (!r.ok) {
+			habits = habits.map((x) => (x.id === id ? { ...x, parentId: was.parentId } : x));
+			views.today = { ...views.today, order: was.order };
+			return showToast(r.error ?? "Couldn't move it. Are you online?");
+		}
+		viewOp({ op: 'patch', today: { order } });
+		showToast(done, async () => {
+			await runAction('?/move', { id, parent: was.parentId ?? '' });
+			views.today = { ...views.today, order: was.order };
+			viewOp({ op: 'patch', today: { order: was.order } });
+			await invalidateAll();
+		});
+	}
+	function indent(id: string, into: string) {
+		const last = mine(habits.filter((x) => x.parentId === into && x.id !== id)).at(-1);
+		moveTo(id, into, last?.id ?? into, `Moved ${byId(id)?.name} into ${byId(into)?.name}.`);
+	}
+	function outdent(id: string, from: Habit) {
+		moveTo(id, from.parentId, from.id, `Moved ${byId(id)?.name} out of ${from.name}.`);
 	}
 
 	async function rename(h: Habit, name: string) {
@@ -180,7 +229,10 @@
 {/if}
 
 {#if editing}
-	<p class="muted small-text">Drag ⠿ to reorder, tap a name to rename it. This is My order, shared with Today.</p>
+	<p class="muted small-text">
+		Drag ⠿ to reorder, tap a name to rename it. This is My order, shared with Today. Drop a habit on a group or routine to put it
+		inside, or drag it left to take it out.
+	</p>
 {/if}
 {#if selecting}
 	<BulkBar kind="habit" {selected} visible={shown.map((h) => h.id)} today={data.today} sources={{ areas: areaOptions }} />
@@ -192,10 +244,10 @@
 	{/if}
 	<!-- A habit inside a group sits in a list of its own under it; one whose group isn't listed sits at the top. -->
 	{@const tree = forest(g.items)}
-	{@render habitList(tree.roots, tree.kids, g.label || 'Habits')}
+	{@render habitList(tree.roots, tree.kids, g.label || 'Habits', null)}
 {/each}
 
-{#snippet habitList(items: Habit[], kids: Map<string, Habit[]>, name: string)}
+{#snippet habitList(items: Habit[], kids: Map<string, Habit[]>, name: string, holder: Habit | null)}
 	<EditableList
 		{items}
 		key={(h) => h.id}
@@ -204,7 +256,9 @@
 		{selecting}
 		{selected}
 		ariaLabel={name}
-		onmove={(_, order) => reorder(order)}
+		{canDrop}
+		onmove={(m, order) => (m.position === 'inside' ? indent(m.key, m.target) : reorder(order))}
+		onoutdent={holder ? (k) => outdent(k, holder) : undefined}
 		onremove={archive}
 		removeLabel={(h) => (h.archived ? 'Unarchive' : 'Archive')}
 	>
@@ -226,7 +280,7 @@
 		{/snippet}
 		{#snippet children(h)}
 			{#if kids.get(h.id)?.length}
-				<div class="inside">{@render habitList(kids.get(h.id)!, kids, `Inside ${h.name}`)}</div>
+				<div class="inside">{@render habitList(kids.get(h.id)!, kids, `Inside ${h.name}`, h)}</div>
 			{/if}
 		{/snippet}
 	</EditableList>
