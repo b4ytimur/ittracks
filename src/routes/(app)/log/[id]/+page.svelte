@@ -11,6 +11,7 @@
 	import NoteBox from '$lib/NoteBox.svelte';
 	import Markdown from '$lib/Markdown.svelte';
 	import { starterFor, untouched } from '$lib/journal';
+	import { isSuggestion, keepsSuggestions, onlySuggested, type PlaceStart } from '$lib/prefill';
 
 	let { data, form } = $props();
 
@@ -103,7 +104,8 @@
 			if (due) sets.push(...planned(it).sets.slice(sets.length));
 			return {
 				sets,
-				summary: due ? withStarters({ ...savedSummary }, t) : { ...savedSummary },
+				// Still open: fields not saved yet show their suggestion again (it is saved only once touched or confirmed).
+				summary: due ? { ...planned(it).summary, ...savedSummary } : { ...savedSummary },
 				tick: isYesNo(it) && it.saved.some((v) => v.done === true)
 			};
 		});
@@ -237,10 +239,18 @@
 		saveTimer = undefined;
 	};
 
+	/** What each place started with: its suggested values (last time's, or targets) and what was saved. */
+	const starts = $derived<PlaceStart[]>(
+		data.items.map((it) => ({ prefill: planned(it).summary, saved: it.saved.find(isSummary) ?? {}, savedAny: it.saved.length > 0 }))
+	);
+	/** Finish was answered "Yes" for places that still show only suggested values: they are kept. */
+	let suggestionsConfirmed = $state(false);
+
 	/**
 	 * What gets saved. Only ticked sets: a planned set nobody ticked was not done (Finish asks
 	 * first, see untickedSets). Every set counts as done on a quick log, since only some
-	 * fields are shown there.
+	 * fields are shown there. A suggested value (last time's, or the target) nobody touched is
+	 * not saved as you go, and on Finish only as src/lib/prefill.ts says.
 	 */
 	function payload(finish: boolean, stay = false) {
 		// Each value says where it sits, so the same Task in two places keeps its own.
@@ -262,8 +272,14 @@
 			}
 			// A long text field that still holds only its starter text counts as not written.
 			const longs = new Map(t.metrics.filter(isLong).map((m) => [m.id, m]));
+			const keep = (quickMode && finish) || keepsSuggestions(log, starts, i, { finish, confirmed: suggestionsConfirmed });
 			const filled = Object.entries(s.summary).filter(
-				([k, v]) => v !== '' && v !== null && v !== undefined && !(longs.has(k) && untouched(longs.get(k)!, v, data.occurrence.date))
+				([k, v]) =>
+					v !== '' &&
+					v !== null &&
+					v !== undefined &&
+					!(longs.has(k) && untouched(longs.get(k)!, v, data.occurrence.date)) &&
+					(keep || !isSuggestion(s, starts[i], k))
 			);
 			if (filled.length) entries.push({ taskId: t.id, path, values: { ...Object.fromEntries(filled), _summary: true } });
 			if (s.tick && isYesNo(it)) entries.push({ taskId: t.id, path, values: { done: true } });
@@ -285,8 +301,27 @@
 		});
 		return n;
 	}
-	/** Finish was pressed with unticked sets: ask whether they were done. */
+	/** Places that still show only suggested values while others have a log (a session left half way), by name. */
+	function suggestedPlaces(): string[] {
+		if (quickMode || !isOpen) return [];
+		return onlySuggested(log, starts).map((i) => {
+			const it = data.items[i];
+			const round = [...it.path.matchAll(/#(\d+)/g)].at(-1)?.[1];
+			return `${it.task?.name ?? 'Task'}${round ? ` (round ${round})` : ''}`;
+		});
+	}
+	/** Finish was pressed with unticked sets or places with only suggested values: ask whether they were done. */
 	let askUnticked = $state(0);
+	let askSuggested = $state<string[]>([]);
+	const asking = $derived(askUnticked > 0 || askSuggested.length > 0);
+	const askText = $derived.by(() => {
+		const sets = askUnticked === 1 ? '1 planned set isn’t ticked' : `${askUnticked} planned sets aren’t ticked`;
+		const names = askSuggested.length > 4 ? `${askSuggested.slice(0, 4).join(', ')} and ${askSuggested.length - 4} more` : askSuggested.join(', ');
+		const places = `${names} still ${askSuggested.length === 1 ? 'shows' : 'show'} last time’s values or targets, with nothing logged`;
+		const one = askUnticked + askSuggested.length === 1;
+		const parts = [askUnticked ? sets : '', askSuggested.length ? places : ''].filter(Boolean);
+		return `${parts.join(', and ')}. Did you do ${one ? 'it' : 'them'}?`;
+	});
 	let finishForm = $state<HTMLFormElement>();
 	let untickedAnswered = false;
 	async function finishWith(tickAll: boolean) {
@@ -295,8 +330,10 @@
 				const ids = it.task?.metrics.filter((m) => m.repeats).map((m) => m.id) ?? [];
 				for (const set of log[i].sets) if (ids.some((id) => !empty(set.values[id]))) set.done = true;
 			});
+		suggestionsConfirmed = tickAll;
 		untickedAnswered = true;
 		askUnticked = 0;
+		askSuggested = [];
 		await tick();
 		finishForm?.requestSubmit();
 	}
@@ -633,12 +670,17 @@
 {/if}
 
 {#if problem}<p class="error">{problem}</p>{/if}
-{#if askUnticked}
+{#if asking}
+	{@const one = askUnticked + askSuggested.length === 1}
 	<div class="card stack" role="alert">
-		<p style="margin: 0">{askUnticked === 1 ? '1 planned set isn’t ticked.' : `${askUnticked} planned sets aren’t ticked.`} Did you do {askUnticked === 1 ? 'it' : 'them'}?</p>
+		<p style="margin: 0">{askText}</p>
 		<div class="row">
-			<button type="button" class="primary" onclick={() => finishWith(false)}>No, save only the ticked sets</button>
-			<button type="button" onclick={() => finishWith(true)}>Yes, tick {askUnticked === 1 ? 'it' : 'them all'} and finish</button>
+			<button type="button" class="primary" onclick={() => finishWith(false)}
+				>{askSuggested.length ? 'No, save only what I logged' : 'No, save only the ticked sets'}</button
+			>
+			<button type="button" onclick={() => finishWith(true)}
+				>{askSuggested.length ? `Yes, keep ${one ? 'it' : 'them'} and finish` : `Yes, tick ${one ? 'it' : 'them all'} and finish`}</button
+			>
 		</div>
 	</div>
 {/if}
@@ -664,8 +706,10 @@
 				return;
 			}
 			const unticked = answered ? 0 : untickedSets();
-			if (unticked) {
+			const suggested = answered ? [] : suggestedPlaces();
+			if (unticked || suggested.length) {
 				askUnticked = unticked;
+				askSuggested = suggested;
 				cancel();
 				return;
 			}

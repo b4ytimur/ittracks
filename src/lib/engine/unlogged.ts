@@ -2,7 +2,7 @@
 // habit is set to ignore days you don't log. Pure functions, so the rules can be tested
 // without a database; the server writes the misses as Occurrences (see server/today.ts).
 import { addDays, daysBetween, weekStart, type ISODate } from './dates';
-import { dueOn, phaseOn, phaseSpans, type Done, type ParentDue, type Rotation, type Schedule } from './schedule';
+import { dueOn, isPhases, phaseOn, phaseSpans, tidyPhases, type Done, type ParentDue, type Rotation, type Schedule } from './schedule';
 
 /** What a due day that ends with no log counts as. A per-habit setting. */
 export type Unlogged = 'missed' | 'ignore';
@@ -169,6 +169,25 @@ export function scheduleStartBy<S extends Schedule>(s: S, date: ISODate): S {
 	const back = daysBetween(date, s.start);
 	const cycle = cycleOf(s);
 	return cycle ? { ...s, start: addDays(s.start, -Math.ceil(back / cycle) * cycle) } : { ...s, start: date };
+}
+
+/** The schedule as it would be with its own start on `start` (phases move every phase with it). */
+function withStart(s: Schedule, start: ISODate): Schedule {
+	if (isPhases(s)) return tidyPhases({ ...s, start });
+	return 'start' in s ? ({ ...s, start } as Schedule) : s;
+}
+
+/**
+ * An edit that only moved the schedule's own start back, along with the habit's start date
+ * (Started on): the same plan, begun earlier. It is not a change of plan, so no earlier
+ * schedule is kept for the past.
+ */
+export function startMovedBack(before: unknown, after: unknown, beforeStart: ISODate, afterStart: ISODate): boolean {
+	if (!before || !after || afterStart >= beforeStart) return false;
+	const a = before as Schedule;
+	const b = after as Schedule;
+	if (a.kind !== b.kind || !('start' in a) || !('start' in b) || !(b.start < a.start)) return false;
+	return sameSchedule(withStart(b, a.start), a);
 }
 
 /**

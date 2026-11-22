@@ -101,7 +101,7 @@ Edits never rewrite what you logged, with one exception you choose yourself (con
 
 - Changing the streak rule, Levels, the short-day rule or the unlogged-day rule recounts streaks from the days logged.
 - A schedule change applies **From today on** or **To past days too**. See [Changing a schedule](schedules.md#changing-a-schedule).
-- Changing targets, sets or the Task in a Slot applies from then on. Past logs keep the targets they aimed for.
+- Changing targets, sets or the Task in a Slot, or adding or removing Slots, applies from then on. Past logs keep the Slots and targets they had, in History, Stats and how they were judged.
 - Removing a Variant unlinks the days logged with it from it.
 
 If an edit can't apply to a habit that already has logs, the editor says why and refuses to save it.

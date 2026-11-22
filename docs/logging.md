@@ -36,6 +36,7 @@ A day logged short of its target reads like "Done · 5 of 6 glasses" or "Missed 
 - With Levels on, pick the level you are logging at.
 - The note box takes Markdown.
 - **Finish** saves the log. Fields marked **Required before Finish** must be filled. If some sets aren't ticked, it asks whether to tick them all or save only the ticked ones.
+- Values that start from last time or the target are suggestions until you finish: saving as you go leaves them out. If you finish with some places still showing only those values while you logged others (rounds you stopped before), it asks whether you did them: **No, save only what I logged** or **Yes, keep them and finish**. Finishing without touching anything saves the whole log as planned.
 
 The log saves as you go. It also works offline: changes wait on the device and sync when the connection is back.
 
@@ -58,6 +59,8 @@ Open a day from **Log a past day** on Today or History, a day in Today's week st
 - Arrows to the previous and next day, with how many habits were left unlogged.
 
 A late log counts like one made on the day, streaks included.
+
+A value logged for a past day, here or through a [key](integrations.md) or [quick-log link](#quick-logs), is judged at once by the habit's [rule for a day that falls short](streaks.md#a-day-that-falls-short): done when it counts, missed when it doesn't.
 
 **Settings → Logging past days** sets **How far back you can log**: **Any time** (default), a month, a week, 3 days, **Yesterday only**, or **Off: only today can be logged**. Slips can always be added for a past day. **Tell me on Today when yesterday has habits left unlogged** shows a **Log yesterday** nudge on Today. **Hide** dismisses it until tomorrow.
 

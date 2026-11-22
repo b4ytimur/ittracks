@@ -8,7 +8,7 @@
 	import FillRuleEditor from './FillRuleEditor.svelte';
 	import NoteBox from '$lib/NoteBox.svelte';
 	import { limitOn, nextDrop } from '$lib/engine/limit';
-	import { sameSchedule, scheduleStartBy } from '$lib/engine/unlogged';
+	import { sameSchedule, scheduleStartBy, startMovedBack } from '$lib/engine/unlogged';
 	import { tidyPhases, type Schedule } from '$lib/engine/schedule';
 	import ScheduleFields from '$lib/ui/ScheduleFields.svelte';
 	import EditableList from '$lib/ui/EditableList.svelte';
@@ -152,9 +152,15 @@
 				return { ...savedPlain(plain, h.variants, true), ...routineRule };
 		}
 	});
-	/** A schedule edit on a habit with a past: from today on (the default), or past days too. */
+	/**
+	 * A schedule edit on a habit with a past: from today on (the default), or past days too.
+	 * Not asked for a habit with no past days yet, or when Started on only moved the
+	 * schedule's start back with it: the server keeps no old plan for those.
+	 */
 	let scheduleApplies = $state<'today' | 'past'>('today');
-	const scheduleEdited = $derived(!data.isNew && !!s0 && !sameSchedule(s0, schedule) && savedStart < data.today);
+	const scheduleEdited = $derived(
+		!data.isNew && !!s0 && !sameSchedule(s0, schedule) && savedStart < data.today && !startMovedBack(s0, schedule, savedStart, h.startDate)
+	);
 
 	// ----- Cue, stacking, levels, streak, identity, if-then -----
 	let afterMode = $state<'none' | 'habit' | 'text'>(
