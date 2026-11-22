@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyMove, dropPosition, mergeOrder, moveBy, moveKey, rangeKeys, selectionState } from './list';
+import { applyMove, dropPosition, mergeOrder, moveBy, moveKey, rangeKeys, reorderFrom, selectionState } from './list';
 
 const keys = ['a', 'b', 'c', 'd'];
 
@@ -90,5 +90,16 @@ describe('selectionState', () => {
 		expect(selectionState(keys, new Set())).toBe('none');
 		expect(selectionState(keys, new Set(['a', 'x']))).toBe('some');
 		expect(selectionState(keys, new Set(keys))).toBe('all');
+	});
+});
+
+describe('reorderFrom', () => {
+	const order = ['a', 'b', 'c', 'd'];
+	it('changes the shared order in place when the page is sorted by it', () => {
+		expect(reorderFrom(order, ['a', 'c'], ['c', 'a'], true)).toEqual(['c', 'b', 'a', 'd']);
+	});
+	it('starts from what is shown when the page is sorted another way', () => {
+		// Shown by name: d, c, b. The user drags b to the top.
+		expect(reorderFrom(order, ['d', 'c', 'b'], ['b', 'd', 'c'], false)).toEqual(['b', 'd', 'c', 'a']);
 	});
 });

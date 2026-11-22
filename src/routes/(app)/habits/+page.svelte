@@ -9,7 +9,7 @@
 	import EditButton from '$lib/ui/EditButton.svelte';
 	import InlineText from '$lib/ui/InlineText.svelte';
 	import BulkBar from '$lib/bulk/BulkBar.svelte';
-	import { mergeOrder } from '$lib/ui/list';
+	import { reorderFrom } from '$lib/ui/list';
 	import { viewOp } from '$lib/viewclient';
 	import { runAction, showToast } from '$lib/toast.svelte';
 	import { HABIT_LINES, groupBy, manualOrder, passes, type HabitLineKey } from '$lib/views';
@@ -65,9 +65,7 @@
 	 * habits held. Dragging in another sort starts from what you see, then switches to My order.
 	 */
 	function reorder(part: string[]) {
-		const seen = shown.map((h) => h.id);
-		const base = view.sort === 'manual' ? mine(habits).map((h) => h.id) : [...seen, ...mine(habits).map((h) => h.id).filter((id) => !seen.includes(id))];
-		const order = mergeOrder(base, part);
+		const order = reorderFrom(mine(habits).map((h) => h.id), shown.map((h) => h.id), part, view.sort === 'manual');
 		views.today = { ...views.today, order };
 		viewOp({ op: 'patch', today: { order } });
 		if (view.sort !== 'manual') {
