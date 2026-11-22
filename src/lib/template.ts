@@ -215,9 +215,9 @@ export const templateFile = z.object({
 });
 export type TemplateFile = z.infer<typeof templateFile>;
 
-/** Replace every Variant id inside a Schedule using a mapping. */
-function mapSchedule<S extends ScheduleForm | PlainScheduleForm>(s: S | null, map: (id: string) => string): S | null;
-function mapSchedule(s: ScheduleForm | null, map: (id: string) => string): ScheduleForm | null {
+/** The schedule with every Variant id it names passed through `map` (phases: in each phase). */
+export function mapSchedule<S extends ScheduleForm | PlainScheduleForm>(s: S | null, map: (id: string) => string): S | null;
+export function mapSchedule(s: ScheduleForm | null, map: (id: string) => string): ScheduleForm | null {
 	if (!s) return null;
 	switch (s.kind) {
 		case 'phases':

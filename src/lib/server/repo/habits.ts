@@ -19,6 +19,7 @@ import type { StreakRule } from '$lib/engine/streak';
 import { checkHabit, checkHabitPast, removedTriggers, type HabitCheck, type HabitCtx } from '$lib/rules/habit';
 import { feelingsUsed, habitLogged, PastEditError } from '../history';
 import { activeOptions, mergeOptions } from '$lib/options';
+import { mapSchedule } from '$lib/template';
 
 /** What the habit rules need to know from the database. */
 export function habitCtx(f: HabitForm): HabitCtx {
@@ -522,24 +523,10 @@ export function setHabitArchived(accountId: string, id: string, archived: boolea
 export function copyHabitForm(f: HabitForm, newId: () => string = randomUUID): HabitForm {
 	const variantIds = new Map(f.variants.map((v) => [v.id, newId()]));
 	const map = (id: string) => variantIds.get(id) ?? id;
-	let schedule = f.schedule;
-	if (schedule) {
-		switch (schedule.kind) {
-			case 'weekly':
-				schedule = { ...schedule, days: Object.fromEntries(Object.entries(schedule.days).map(([d, v]) => [d, map(v)])) };
-				break;
-			case 'frequency':
-			case 'interval':
-				schedule = { ...schedule, variantId: map(schedule.variantId) };
-				break;
-			case 'rotation':
-				schedule = { ...schedule, order: schedule.order.map((o) => ({ ...o, variantId: map(o.variantId) })) };
-		}
-	}
 	return {
 		...structuredClone(f),
 		name: `${f.name} (copy)`.slice(0, 120),
-		schedule,
+		schedule: mapSchedule(f.schedule, map),
 		variants: f.variants.map((v) => ({
 			...structuredClone(v),
 			id: variantIds.get(v.id)!,

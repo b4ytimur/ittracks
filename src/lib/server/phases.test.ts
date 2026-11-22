@@ -10,7 +10,7 @@ import { occurrence } from './db/schema';
 import { createAccount } from './auth';
 import { saveSettings } from './settings';
 import { loadToday, settleAll, userToday } from './today';
-import { saveHabit } from './repo/habits';
+import { copyHabitForm, getHabitForm, saveHabit } from './repo/habits';
 import { saveTask } from './repo/tasks';
 import { habitForm, taskForm } from '$lib/forms';
 import { addDays } from '$lib/engine/dates';
@@ -102,6 +102,15 @@ describe('a habit in phases', () => {
 		const d = addDays(today, -3);
 		run('log_done', { habit: w.id, date: d });
 		expect(rowOn(w.id, d)).toMatchObject({ status: 'done', variantId: w.ramp });
+	});
+
+	it('copies with each phase on the copy\'s own Variants', () => {
+		const w = water(today, 7);
+		const copy = copyHabitForm(getHabitForm(me, w.id)!);
+		const [ramp, keep] = copy.variants.map((v) => v.id);
+		expect([ramp, keep]).not.toContain(w.ramp);
+		expect(copy.schedule).toMatchObject({ kind: 'phases', phases: [{ schedule: { variantId: ramp } }, { schedule: { variantId: keep } }] });
+		expect(saveHabit(me, null, copy, today)).toBeTruthy();
 	});
 });
 
