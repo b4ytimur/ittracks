@@ -3,7 +3,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { galleryItem } from '$lib/gallery';
 import { getSettings } from '$lib/server/settings';
 import { userToday } from '$lib/server/today';
-import { addTemplate, readAddForm } from '$lib/server/repo/templates';
+import { addTemplate, addedPath, readAddForm } from '$lib/server/repo/templates';
 import { db } from '$lib/server/db';
 import { task } from '$lib/server/db/schema';
 import { listHabits } from '$lib/server/repo/habits';
@@ -36,6 +36,6 @@ export const actions: Actions = {
 		const tpl = add.tpl;
 		const r = addTemplate(accountId, tpl, { today: userToday(accountId, cookies.get('tz')), ...add });
 		if ('error' in r) return fail(400, { error: r.error });
-		redirect(303, `/habits?added=${encodeURIComponent(r.name)}${tpl.view ? `&view=${encodeURIComponent(tpl.view)}` : ''}`);
+		redirect(303, addedPath(r, tpl.view));
 	}
 };
