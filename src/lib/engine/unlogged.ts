@@ -26,6 +26,15 @@ const lastOfMonth = (d: ISODate): ISODate => {
 	return `${d.slice(0, 8)}${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`;
 };
 
+/**
+ * Sessions a period asks for. A first period that began part way through asks for its share,
+ * rounded down: "4 a week" started on a Sunday owes nothing that week, on a Thursday 2.
+ */
+function owed(times: number, p: { from: ISODate; to: ISODate }, lo: ISODate): number {
+	if (lo <= p.from) return times;
+	return Math.floor((times * (daysBetween(lo, p.to) + 1)) / (daysBetween(p.from, p.to) + 1));
+}
+
 /** The week or month a date falls in. */
 function periodOf(d: ISODate, period: 'week' | 'month'): { from: ISODate; to: ISODate } {
 	if (period === 'week') return { from: weekStart(d), to: addDays(weekStart(d), 6) };
@@ -79,7 +88,7 @@ export function missedDays(
 			let open = 0;
 			for (let d = lo; d <= p.to; d = addDays(d, 1)) if (!paused(d)) open++;
 			const counted = rows.filter((r) => r.date >= p.from && r.date <= p.to && r.status !== 'due').length;
-			let missing = Math.min(schedule.times, open) - counted;
+			let missing = Math.min(owed(schedule.times, p, lo), open) - counted;
 			for (let d = p.to; missing > 0 && d >= lo; d = addDays(d, -1)) {
 				if (!free(d)) continue;
 				out.push({ date: d, variantId: schedule.variantId });
@@ -135,10 +144,93 @@ export function recountFrom(s: Schedule, date: ISODate): ISODate | null {
 export function scheduleStartBy<S extends Schedule>(s: S, date: ISODate): S {
 	if (!('start' in s) || !s.start || s.start <= date) return s;
 	const back = daysBetween(date, s.start);
-	if (s.kind === 'interval') return { ...s, start: addDays(s.start, -Math.ceil(back / s.every) * s.every) };
-	if (s.kind === 'rotation' && s.step === 'week') {
-		const cycle = 7 * Math.max(1, s.order.length);
-		return { ...s, start: addDays(s.start, -Math.ceil(back / cycle) * cycle) };
-	}
-	return { ...s, start: date };
+	const cycle = cycleOf(s);
+	return cycle ? { ...s, start: addDays(s.start, -Math.ceil(back / cycle) * cycle) } : { ...s, start: date };
 }
+
+/**
+ * Days before a schedule repeats itself, or null when it has no fixed cycle. A rotation by
+ * Variant goes round once in the sum of its Variants and their rest days (a 12-day roster).
+ */
+export function cycleOf(s: Schedule): number | null {
+	if (s.kind === 'interval') return Math.max(1, s.every);
+	if (s.kind === 'rotation' && s.step === 'week') return 7 * Math.max(1, s.order.length);
+	if (s.kind === 'rotation' && s.order.length) return s.order.reduce((n, o) => n + Math.max(0, o.restDays) + 1, 0);
+	return null;
+}
+
+/**
+ * A schedule the habit had before an edit that applies from a later day on: it still decides
+ * which days up to `until` (inclusive) were due, so history keeps the plan it had.
+ */
+export interface EarlierSchedule {
+	until: ISODate;
+	schedule: Schedule;
+}
+
+/** The schedule in force on a day: the earliest earlier one that still covers it, else the current. */
+export function scheduleOn<S extends Schedule>(current: S, earlier: EarlierSchedule[] | null | undefined, date: ISODate): S {
+	for (const e of earlier ?? []) if (date <= e.until) return e.schedule as S;
+	return current;
+}
+
+/**
+ * Stretches of days that share one schedule, from `from` to `to` (inclusive), oldest first.
+ */
+export function scheduleSpans(
+	current: Schedule,
+	earlier: EarlierSchedule[] | null | undefined,
+	from: ISODate,
+	to: ISODate
+): { from: ISODate; to: ISODate; schedule: Schedule }[] {
+	const out: { from: ISODate; to: ISODate; schedule: Schedule }[] = [];
+	let lo = from;
+	for (const e of [...(earlier ?? [])].sort((a, b) => a.until.localeCompare(b.until))) {
+		if (lo > to) break;
+		if (e.until < lo) continue;
+		const hi = e.until < to ? e.until : to;
+		out.push({ from: lo, to: hi, schedule: e.schedule });
+		lo = addDays(hi, 1);
+	}
+	if (lo <= to) out.push({ from: lo, to, schedule: current });
+	return out;
+}
+
+/** missedDays over a stretch where the schedule changed: each day is judged by the plan it had. */
+export function missedDaysOver(
+	current: Schedule,
+	earlier: EarlierSchedule[] | null | undefined,
+	rows: DayRow[],
+	start: ISODate,
+	from: ISODate,
+	to: ISODate,
+	paused: (d: ISODate) => boolean = () => false
+): Miss[] {
+	return scheduleSpans(current, earlier, from < start ? start : from, to).flatMap((s) =>
+		missedDays(s.schedule, rows, start, s.from, s.to, paused)
+	);
+}
+
+/**
+ * The earlier schedules after an edit that applies from `today` on: the old schedule keeps the
+ * days up to yesterday. Days already kept by an earlier entry stay with it.
+ */
+export function keepEarlier(
+	earlier: EarlierSchedule[] | null | undefined,
+	old: Schedule,
+	startDate: ISODate,
+	today: ISODate
+): EarlierSchedule[] | null {
+	const list = [...(earlier ?? [])];
+	const yesterday = addDays(today, -1);
+	const last = list.at(-1)?.until;
+	if (yesterday >= startDate && (!last || last < yesterday)) list.push({ until: yesterday, schedule: old });
+	return list.length ? list.slice(-50) : null;
+}
+
+/** JSON with object keys in order, so two schedules built in different ways compare equal. */
+const canon = (v: unknown): unknown =>
+	Array.isArray(v) ? v.map(canon) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)).map(([k, x]) => [k, canon(x)])) : v;
+
+/** Whether two schedules plan the same days. */
+export const sameSchedule = (a: unknown, b: unknown): boolean => JSON.stringify(canon(a ?? null)) === JSON.stringify(canon(b ?? null));

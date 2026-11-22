@@ -5,6 +5,7 @@ import { sqliteTable, text, integer, real, primaryKey, index } from 'drizzle-orm
 import type { Level, StreakRule } from '../../engine/streak';
 import type { Limit } from '../../engine/limit';
 import type { Progression } from '../../engine/progression';
+import type { EarlierSchedule } from '../../engine/unlogged';
 
 /** Temptation bundling: something you want, paired with the habit. */
 export interface Bundle {
@@ -260,7 +261,12 @@ export const habit = sqliteTable('habit', {
 	/** A due day that ends with no log: counted as missed, or ignored (a gentler habit). */
 	unlogged: text('unlogged', { enum: ['missed', 'ignore'] }).notNull().default('missed'),
 	/** Every day up to this one has been checked for due days nobody logged. Null: never yet. */
-	settledThrough: text('settled_through')
+	settledThrough: text('settled_through'),
+	/**
+	 * Schedules from before an edit that applied from a later day on, oldest first: each one
+	 * still decides which days up to its `until` were due (see engine/unlogged.ts).
+	 */
+	earlierSchedules: text('earlier_schedules', { mode: 'json' }).$type<EarlierSchedule[]>()
 });
 
 /** A pause for one Habit, or for all of them when habitId is null. Dates are inclusive. */
@@ -358,8 +364,22 @@ export const occurrence = sqliteTable('occurrence', {
 	/** Which level was reached; null means Target. */
 	level: text('level', { enum: ['minimum', 'target', 'stretch'] }).$type<Level>(),
 	/** Logged on a day the schedule had nothing due. A rotation that skips ahead keeps its plan. */
-	extra: integer('extra', { mode: 'boolean' }).notNull().default(false)
+	extra: integer('extra', { mode: 'boolean' }).notNull().default(false),
+	/**
+	 * The targets each Slot had, kept when they changed later (Raise, an edit), so a log is
+	 * always judged against what it aimed for. Null: the Slots' targets now still apply.
+	 */
+	goals: text('goals', { mode: 'json' }).$type<Record<string, SlotGoals>>()
 });
+
+/** One Slot's targets as they were: Target, Minimum and Stretch values by Metric id, and sets. */
+export interface SlotGoals {
+	taskId: string | null;
+	sets: number | null;
+	targets: Record<string, number> | null;
+	minTargets: Record<string, number> | null;
+	stretchTargets: Record<string, number> | null;
+}
 
 /** One row of Metric values for one Task, e.g. one gym set. */
 export const entry = sqliteTable('entry', {

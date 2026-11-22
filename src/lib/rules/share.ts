@@ -14,6 +14,8 @@ export const shareRules = defineRules<ShareForm, ShareCtx>({
 	includeArea: [onlyWhen((_f, c) => !!c.area, 'This habit has no Area', false)],
 	includePool: [onlyWhen((_f, c) => c.pool > 0, 'No auto-filled Slot has Tasks in your Library to pick from', false)],
 	suggestReminder: [onlyWhen((_f, c) => c.remind, 'The reminder is off for this habit', false)],
+	includeNote: [onlyWhen((_f, c) => c.note, 'This habit has no note', false)],
+	includeHowTo: [onlyWhen((_f, c) => c.howTo > 0, 'None of its Tasks has How to notes', false)],
 	askDays: [
 		onlyWhen(
 			(_f, c) => c.daysFit,

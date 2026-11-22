@@ -84,6 +84,7 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 	slips.forEach((s) => day(s.date).slips.push(s));
 
 	const views = getViews(accountId);
+	const entryCounts = Object.fromEntries(occ.map((o) => [o.id, entries.filter((c) => c.occurrenceId === o.id).length]));
 	return {
 		days,
 		today,
@@ -91,10 +92,13 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		canBackfill: getSettings(accountId).pastDays !== 0,
 		/** The Journal page sits next to History, unless the Journal feature is off. */
 		journal: !isHidden(views, 'journal'),
-		entryCounts: Object.fromEntries(occ.map((o) => [o.id, entries.filter((c) => c.occurrenceId === o.id).length])),
-		/** "3 of 6 glasses" or "2 of 4 steps" for logs that fell short, by Occurrence id. */
+		entryCounts,
+		/**
+		 * "3 of 6 glasses" or "2 of 4 steps" for logs that fell short, by Occurrence id: a done day
+		 * that counted at its Minimum, or a missed day that got part of the way.
+		 */
 		partial: Object.fromEntries(
-			[...progressForIds(occ.filter((o) => o.status === 'done').map((o) => o.id))]
+			[...progressForIds(occ.filter((o) => o.status === 'done' || (o.status === 'missed' && entryCounts[o.id])).map((o) => o.id))]
 				.filter(([, p]) => isPartial(p))
 				.map(([id, p]) => [id, progressText(p)])
 		),

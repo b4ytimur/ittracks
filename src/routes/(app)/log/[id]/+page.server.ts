@@ -5,7 +5,9 @@ import { z } from 'zod';
 import { db } from '$lib/server/db';
 import { entry, metric, occurrence, slot, task, variant } from '$lib/server/db/schema';
 import { ownedOccurrence } from '$lib/server/owned';
-import { candidates, lastEntries, recount, userToday } from '$lib/server/today';
+import { candidates, ensurePicks, lastEntries, recount, userToday } from '$lib/server/today';
+import { finishAs, goalsOf } from '$lib/server/progress';
+import { slotGroups } from '$lib/engine/groups';
 import { getSettings } from '$lib/server/settings';
 import { recapFor } from '$lib/server/stats';
 import { planOfToday, replanToday, windowFor } from '$lib/server/backfill';
@@ -109,7 +111,8 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 	const slots = v
 		? db.select().from(slot).where(eq(slot.variantId, v.id)).orderBy(asc(slot.sortOrder)).all()
 		: [];
-	const picks = o.occ.picks ?? {};
+	// An auto-filled Slot of a day written as missed gets its Task now, so it can be logged.
+	const picks = ensurePicks(o.occ.id) ?? {};
 	const entries = db
 		.select()
 		.from(entry)
@@ -117,18 +120,26 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		.orderBy(asc(entry.sortOrder))
 		.all();
 
+	// The same Task in two Slots: each Slot gets its own group of Entries, not both.
+	const nth = new Map<string, number>();
 	const items: LogTask[] = slots.map((s) => {
 		const taskId = picks[s.id] ?? s.taskId;
 		const t = taskId ? loadTask(taskId) : null;
+		const n = taskId ? (nth.get(taskId) ?? 0) : 0;
+		if (taskId) nth.set(taskId, n + 1);
+		const twice = !!taskId && slots.filter((x) => (picks[x.id] ?? x.taskId) === taskId).length > 1;
+		const mine = entries.filter((e) => e.taskId === taskId);
+		// What this log aimed for: the targets kept with it when they changed later.
+		const g = goalsOf(s, o.occ);
 		return {
 			slotId: s.id,
 			open: !!s.fillRule,
-			sets: s.sets,
-			targets: s.targets ?? {},
-			minTargets: s.minTargets ?? {},
-			stretchTargets: s.stretchTargets ?? {},
+			sets: o.occ.goals?.[s.id]?.sets ?? s.sets,
+			targets: g.targets ?? {},
+			minTargets: g.minTargets ?? {},
+			stretchTargets: g.stretchTargets ?? {},
 			task: t,
-			saved: entries.filter((e) => e.taskId === taskId).map((e) => e.values),
+			saved: (twice ? (slotGroups(mine, taskId!)[n] ?? []) : mine).map((e) => e.values).filter((v) => !(v._summary === true && Object.keys(v).length === 1)),
 			previous: taskId ? lastEntries(taskId, o.occ.id) : [],
 			previousSubs: (t?.subtasks ?? []).filter((sub) => lastEntries(sub.id, o.occ.id).length).map((sub) => sub.id)
 		};
@@ -235,10 +246,13 @@ export const actions: Actions = {
 				.where(eq(occurrence.id, o.occ.id))
 				.run();
 		});
+		// Finished: done when it counts under the habit's rule. A log that falls short stays
+		// open today, and is missed on a day that is over. Its values stay either way.
+		const status = p.finish ? finishAs(o.occ.id, today) : o.occ.status;
 		// The event log: finishing is a habit done; saving a finished log again is an edit.
 		const actor = appActor(locals.account!.id, cookies.get('tz'));
 		const ev = { habitId: o.habit.id, date: o.occ.date };
-		if (p.finish && o.occ.status !== 'done')
+		if (p.finish && status === 'done' && o.occ.status !== 'done')
 			emit(actor, 'occurrence.done', { ...ev, data: { occurrenceId: o.occ.id, level: p.level === 'target' ? null : p.level, how: 'log', entries: p.entries.length } });
 		else if (o.occ.status === 'done' && !p.stay) emit(actor, 'log.saved', { ...ev, data: { occurrenceId: o.occ.id, entries: p.entries.length } });
 		// A past log can change what is due today (a weekly target met, a rotation moved on).
@@ -251,9 +265,11 @@ export const actions: Actions = {
 				const back = safeBack(p.back) ?? `/day/${o.occ.date}`;
 				redirect(303, `${back}${back.includes('?') ? '&' : '?'}did=${o.occ.id}`);
 			}
+			// Short of what counts: back on Today it shows how far it got, and stays open.
+			if (status !== 'done') redirect(303, `/?did=${o.occ.id}&short=${o.habit.minimumCounts ? 'minimum' : 'target'}`);
 			redirect(303, `/?did=${o.occ.id}&finished=${o.habit.id}`);
 		}
-		return { saved: true };
+		return { saved: true, status };
 	},
 
 	/** Pick a different Task for an auto-filled Slot. */

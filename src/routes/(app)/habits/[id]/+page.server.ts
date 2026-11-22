@@ -28,7 +28,7 @@ import { BUILTIN_TASK_TYPES, metricsFromType } from '$lib/task-types';
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { metric, pause } from '$lib/server/db/schema';
+import { metric, occurrence, pause } from '$lib/server/db/schema';
 import type { ScheduleForm } from '$lib/forms';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -140,6 +140,14 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 					.orderBy(asc(pause.start))
 					.all(),
 		today: userToday(accountId, cookies.get('tz')),
+		/** Something was logged already: a rotation's plan has days to keep when the start moves. */
+		hasLogs:
+			!isNew &&
+			!!db
+				.select({ id: occurrence.id })
+				.from(occurrence)
+				.where(and(eq(occurrence.habitId, params.id), inArray(occurrence.status, ['done', 'skipped'])))
+				.get(),
 		types: [...BUILTIN_TASK_TYPES, ...settings.taskTypes].map(({ key, name, description }) => ({ key, name, description }))
 	};
 };
@@ -161,7 +169,9 @@ export const actions: Actions = {
 		if (conflict) return fail(400, { error: conflict.reason });
 		const linkError = checkLinks(accountId, params.id === 'new' ? null : params.id, parsed.data);
 		if (linkError) return fail(400, { error: linkError });
-		const id = saveHabit(accountId, params.id === 'new' ? null : params.id, parsed.data, userToday(accountId, cookies.get('tz')));
+		// A schedule edit applies from today on unless the editor says past days too.
+		const applies = (json as { scheduleApplies?: unknown }).scheduleApplies === 'past' ? 'past' : 'today';
+		const id = saveHabit(accountId, params.id === 'new' ? null : params.id, parsed.data, userToday(accountId, cookies.get('tz')), { scheduleApplies: applies });
 		if (!id) error(404, 'Habit not found');
 		// Home screen shortcut, kept in Settings so the manifest can list it.
 		const pin = (json as { pinned?: unknown }).pinned;

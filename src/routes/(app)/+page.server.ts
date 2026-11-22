@@ -1,3 +1,4 @@
+import { keepGoals } from '$lib/server/progress';
 import { error, fail, redirect } from '@sveltejs/kit';
 import { checkSettings } from '$lib/rules/settings';
 import { and, eq } from 'drizzle-orm';
@@ -131,6 +132,8 @@ export const actions: Actions = {
 		const today = userToday(locals.account!.id, cookies.get('tz'));
 		db.transaction((tx) => {
 			const variants = tx.select({ id: variant.id }).from(variant).where(eq(variant.habitId, h.id)).all();
+			// Logs before the raise keep the targets they aimed for.
+			keepGoals(tx, variants.map((v) => v.id));
 			for (const v of variants)
 				for (const s of tx.select().from(slot).where(eq(slot.variantId, v.id)).all())
 					tx.update(slot)

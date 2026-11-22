@@ -4,7 +4,7 @@ import { db } from '$lib/server/db';
 import { occurrence, slip } from '$lib/server/db/schema';
 import { ownedHabit } from '$lib/server/owned';
 import { pausesOf, settle, userToday } from '$lib/server/today';
-import { missedDays } from '$lib/engine/unlogged';
+import { missedDaysOver } from '$lib/engine/unlogged';
 import { pauseOn } from '$lib/engine/pause';
 import type { Schedule } from '$lib/engine/schedule';
 import type { ScheduleForm } from '$lib/forms';
@@ -58,7 +58,7 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 	const unlogged =
 		h.unlogged === 'ignore' && schedule
 			? new Set(
-					missedDays(schedule as Schedule, marks, h.startDate, from, addDays(today, -1), (d) => !!pauseOn(pauses, h.id, d)).map(
+					missedDaysOver(schedule as Schedule, h.earlierSchedules, marks, h.startDate, from, addDays(today, -1), (d) => !!pauseOn(pauses, h.id, d)).map(
 						(m) => m.date
 					)
 				)

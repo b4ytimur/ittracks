@@ -18,8 +18,8 @@
 <form method="POST" action="?/save" class="card stack" use:enhance={() => async ({ update }) => update({ reset: false })}>
 	<p class="muted small-text" style="margin: 0">
 		The journal is a habit like any other (add one from the <a href="/journal?setup">Journal</a> page or the gallery), and the
-		<a href="/journal">Journal page</a> shows everything you wrote, by day. Notes and journal entries are private: they never go into templates or
-		anything you share.
+		<a href="/journal">Journal page</a> shows everything you wrote, by day. Journal entries and the notes on your logs are private: they never go into templates or
+		anything you share. A habit's own note goes into a template only if you tick it on the Share page.
 	</p>
 	<label style="color: var(--text)"
 		><input type="checkbox" name="dayNote" checked={data.dayNote} /> A day note on Today: one free note per day, no streak</label

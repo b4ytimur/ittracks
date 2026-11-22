@@ -79,11 +79,20 @@
 		const id = page.url.searchParams.get('did');
 		if (!id) return;
 		const clear = page.url.searchParams.get('clear') === '1';
+		// Finished short of what counts for this habit: it stays open, and says why.
+		const short = page.url.searchParams.get('short');
 		const item = data.build.find((b) => b.occurrence?.id === id);
-		if (item) showToast(`Logged ${item.name}.`, () => postAction('?/undo', { occurrence: id, clear: clear ? '1' : '' }).then(() => {}));
+		if (item && short && item.occurrence?.status === 'due')
+			showToast(
+				`Saved ${item.name}${item.progress ? `: ${progressText(item.progress)}` : ''}. It counts once it reaches ${short === 'target' ? 'the full target' : 'the Minimum'}, and stays open until the day ends.`,
+				undefined,
+				7000
+			);
+		else if (item) showToast(`Logged ${item.name}.`, () => postAction('?/undo', { occurrence: id, clear: clear ? '1' : '' }).then(() => {}));
 		const u = new URL(page.url);
 		u.searchParams.delete('did');
 		u.searchParams.delete('clear');
+		u.searchParams.delete('short');
 		replaceState(u, {});
 	});
 

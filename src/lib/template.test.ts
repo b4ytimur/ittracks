@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { TEMPLATE_VERSION, applyAnswers, fromTemplate, templateFile, toTemplate, type TemplateFile } from './template';
 import { habitForm, noteDefaults, type HabitForm, type TaskForm } from './forms';
 import { shareDetails, shareForm, type ShareCtx } from './share';
-import { checkShare } from './rules/share';
+import { checkShare, shareRules } from './rules/share';
+import { normalize } from './rules/core';
 
 const T1 = '00000000-0000-4000-8000-000000000001';
 const M1 = '00000000-0000-4000-8000-000000000002';
@@ -297,7 +298,7 @@ describe('sharing without losing anything (version 5)', () => {
 	});
 
 	it('writes the description, gallery details and questions from the Share form', () => {
-		const ctx: ShareCtx = { daysFit: false, days: [], time: '07:00', range: null, area: null, pool: 0, remind: true, metricIds: [M2] };
+		const ctx: ShareCtx = { daysFit: false, days: [], time: '07:00', range: null, area: null, pool: 0, remind: true, note: false, howTo: 0, metricIds: [M2] };
 		const form = shareForm.parse({
 			name: 'Rosa strength',
 			description: 'Three days a week.',
@@ -318,8 +319,25 @@ describe('sharing without losing anything (version 5)', () => {
 		expect(JSON.stringify(tpl)).not.toContain(M2);
 	});
 
+	it("keeps the habit's own note out unless the Share form asks for it; How to notes travel unless unticked", () => {
+		const private_ = { ...gym, notes: 'Why: my knee surgery' };
+		const howTo = { ...bench, notes: 'Keep the elbows tucked.' };
+		const ctx: ShareCtx = { daysFit: false, days: [], time: null, range: null, area: null, pool: 0, remind: false, note: true, howTo: 1, metricIds: [] };
+		// The plain download and an untouched Share form both leave the note out.
+		expect(toTemplate(private_, new Map([[T1, howTo]])).habit.notes).toBe('');
+		const plain = toTemplate(private_, new Map([[T1, howTo]]), {}, shareDetails(shareForm.parse({ name: 'x' }), ctx));
+		expect(plain.habit.notes).toBe('');
+		expect(plain.tasks[0].notes).toBe('Keep the elbows tucked.');
+		const both = toTemplate(private_, new Map([[T1, howTo]]), {}, shareDetails(shareForm.parse({ name: 'x', includeNote: true, includeHowTo: false }), ctx));
+		expect(both.habit.notes).toBe('Why: my knee surgery');
+		expect(both.tasks[0].notes).toBe('');
+		// A habit with no note can't ask for one.
+		const none = normalize(shareRules, shareForm.parse({ name: 'x', includeNote: true }), { ...ctx, note: false }).form;
+		expect(none.includeNote).toBe(false);
+	});
+
 	it('share rules: a field set by two questions, or a question with no field, is refused', () => {
-		const ctx: ShareCtx = { daysFit: true, days: [0, 2], time: null, range: 'Evening', area: null, pool: 0, remind: false, metricIds: [M1, M2] };
+		const ctx: ShareCtx = { daysFit: true, days: [0, 2], time: null, range: 'Evening', area: null, pool: 0, remind: false, note: false, howTo: 0, metricIds: [M1, M2] };
 		const two = shareForm.parse({ name: 'x', numbers: [{ label: 'a', metrics: [M1], default: 1 }, { label: 'b', metrics: [M1], default: 2 }] });
 		expect(checkShare(two, ctx).map((i) => i.reason)).toContain('A field can only be set by one number question');
 		const none = shareForm.parse({ name: 'x', numbers: [{ label: 'a', metrics: [], default: 1 }] });
