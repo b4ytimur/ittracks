@@ -618,7 +618,7 @@
 				{/if}
 				{#if item.reframe && line('reframe')}<div class="reframe small-text">{item.reframe}</div>{/if}
 			</div>
-			{#if item.group?.routine && item.occurrence}
+			{#if item.group?.routine && item.occurrence && !editing}
 				{@const o = item.occurrence}
 				<!-- A routine is done or skipped as a whole: the habits inside it are marked with it. -->
 				{#if g.status === 'due'}
