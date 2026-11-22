@@ -85,6 +85,13 @@
       "when": 1795347213467,
       "tag": "0011_task_parts",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1795348584000,
+      "tag": "0012_bulk_batch",
+      "breakpoints": true
     }
   ]
 }
