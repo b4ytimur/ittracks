@@ -1,6 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import {
-	DEFAULT_TRIGGERS,
+	defaultTriggers,
 	defaultLevels,
 	emptyCue,
 	firstError,
@@ -19,7 +19,7 @@ import {
 	saveHabit,
 	setHabitArchived
 } from '$lib/server/repo/habits';
-import { habitLogged, PastEditError } from '$lib/server/history';
+import { feelingsUsed, habitLogged, PastEditError } from '$lib/server/history';
 import { identityFor, listIdentities } from '$lib/server/repo/identities';
 import { listTagNames, listTasks, saveTask } from '$lib/server/repo/tasks';
 import { listAreas } from '$lib/server/repo/areas';
@@ -83,7 +83,7 @@ const blank = (today: string): HabitForm => ({
 	remind: false,
 	identityIds: [],
 	ifThen: { when: '', then: '', habitId: null },
-	triggers: DEFAULT_TRIGGERS,
+	triggers: defaultTriggers(),
 	reframe: '',
 	bundle: { reward: '', strict: false },
 	prep: [],
@@ -167,6 +167,8 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		today: userToday(accountId, cookies.get('tz')),
 		/** Something is logged: build or break is fixed (history policies, src/lib/rules/history.ts). */
 		directionLocked: !isNew && habitLogged(params.id),
+		/** Feelings past slips were logged with: removing one archives it. */
+		usedFeelings: isNew ? [] : [...feelingsUsed(params.id)],
 		/** Something was logged already: a rotation's plan has days to keep when the start moves. */
 		hasLogs:
 			!isNew &&

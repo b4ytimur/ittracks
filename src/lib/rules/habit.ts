@@ -12,7 +12,7 @@ import {
 	requiresAny,
 	type Issue
 } from './core';
-import { definePolicies, display, locked, pastIssues, recompute, unguarded, versioned } from './history';
+import { archive, definePolicies, display, locked, pastIssues, recompute, removedItems, unguarded, versioned } from './history';
 
 export type SlotForm = HabitForm['variants'][number]['slots'][number];
 
@@ -275,7 +275,7 @@ export const habitPast = definePolicies<HabitForm>({
 	'ifThen.when': display(),
 	'ifThen.then': display(),
 	'ifThen.habitId': display(),
-	triggers: display('Past slips keep the feeling they were logged with'),
+	triggers: archive('Slips store the feeling, not its word: a renamed feeling is renamed in past slips too, and one removed after a slip used it is archived'),
 	cost: unguarded("Money saved uses today's price for every day, so a new price changes past savings"),
 	limit: versioned('A changed limit applies from today; past days keep the limit they had')
 });
@@ -289,6 +289,16 @@ export const slotPast = definePolicies<SlotForm>({
 	minTargets: versioned('Past logs keep the targets they aimed for'),
 	stretchTargets: versioned('Past logs keep the targets they aimed for')
 });
+
+/** Feelings an edit removes: archived when a slip used them, deleted otherwise. */
+export function removedTriggers(
+	before: Pick<HabitForm, 'triggers'>,
+	after: Pick<HabitForm, 'triggers'>,
+	used: ReadonlySet<string> | readonly string[]
+): { archive: string[]; drop: string[] } {
+	const usedSet = new Set(used);
+	return removedItems(habitPast, before as HabitForm, after as HabitForm, (_, id) => usedSet.has(id)).triggers;
+}
 
 /** Edits of a habit refused because of what is logged (build or break, once logged). */
 export function checkHabitPast(before: HabitForm, after: HabitForm, logged: boolean): Issue[] {

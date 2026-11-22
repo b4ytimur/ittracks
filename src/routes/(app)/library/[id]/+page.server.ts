@@ -80,8 +80,8 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		collections: listCollections(accountId).filter((c) => !c.filter),
 		types: [...BUILTIN_TASK_TYPES, ...settings.taskTypes],
 		usage: isNew ? null : (taskUsage(accountId).get(params.id) ?? { habits: [], inside: [], lastLogged: null, timesLogged: 0 }),
-		/** Fields with logged values and parts with logs under them: the history policies guard their edits. */
-		logged: isNew ? { metrics: [], parts: [] } : taskLoggedLists(params.id),
+		/** Fields with logged values, parts with logs under them and options picked: the history policies guard their edits. */
+		logged: isNew ? { metrics: [] as string[], parts: [] as string[], options: [] as string[] } : taskLoggedLists(params.id),
 		/** Library Tasks that can go inside this one, with what the part editor needs of each. */
 		library: libraryForParts(accountId, isNew ? null : params.id),
 		history: isNew ? null : taskHistory(accountId, params.id, cookies.get('tz'))

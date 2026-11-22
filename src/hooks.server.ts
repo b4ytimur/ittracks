@@ -8,9 +8,12 @@ import { readSession, SESSION_COOKIE } from '$lib/server/auth';
 import { startReminders } from '$lib/server/push';
 import { actorForKey } from '$lib/server/core/tokens';
 import { restorePartialDays } from '$lib/server/today';
+import { upgradeOptionIds } from '$lib/server/db/upgrade';
 
 // Bring the database up to date on startup, so self-hosters never run migrations by hand.
 migrate(db, { migrationsFolder: './drizzle' });
+// Rows still in a shape older code wrote (choice options as words): brought up to date.
+if (!building) db.transaction((tx) => upgradeOptionIds(tx));
 // Once: days that got part of the way and were settled as missed before the partial-day rule.
 if (!building && !db.select().from(appValue).where(eq(appValue.key, 'partial-days-restored')).get()) {
 	db.transaction(() => {

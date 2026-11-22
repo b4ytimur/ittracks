@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "557845a5-462c-4259-bfe8-5465de19c72c",
+  "id": "247cc995-2a53-4873-9799-eb5a76afddb3",
   "prevId": "cd85f2a8-564c-40e8-b2d9-f04f2cc2ea52",
   "tables": {
     "account": {
@@ -566,13 +566,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": 0
-        },
-        "path": {
-          "name": "path",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {},
@@ -1229,6 +1222,13 @@
         },
         "scores": {
           "name": "scores",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "earlier_scores": {
+          "name": "earlier_scores",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -2042,123 +2042,6 @@
             "id"
           ],
           "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "task_part": {
-      "name": "task_part",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "task_id": {
-          "name": "task_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "child_task_id": {
-          "name": "child_task_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "sets": {
-          "name": "sets",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "targets": {
-          "name": "targets",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "min_targets": {
-          "name": "min_targets",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "stretch_targets": {
-          "name": "stretch_targets",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sort_order": {
-          "name": "sort_order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "archived": {
-          "name": "archived",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        }
-      },
-      "indexes": {
-        "task_part_task_idx": {
-          "name": "task_part_task_idx",
-          "columns": [
-            "task_id"
-          ],
-          "isUnique": false
-        },
-        "task_part_child_idx": {
-          "name": "task_part_child_idx",
-          "columns": [
-            "child_task_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "task_part_task_id_task_id_fk": {
-          "name": "task_part_task_id_task_id_fk",
-          "tableFrom": "task_part",
-          "tableTo": "task",
-          "columnsFrom": [
-            "task_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "task_part_child_task_id_task_id_fk": {
-          "name": "task_part_child_task_id_task_id_fk",
-          "tableFrom": "task_part",
-          "tableTo": "task",
-          "columnsFrom": [
-            "child_task_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },

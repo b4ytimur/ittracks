@@ -6,6 +6,7 @@ import type { Level, StreakRule } from '../../engine/streak';
 import type { Limit } from '../../engine/limit';
 import type { Progression } from '../../engine/progression';
 import type { EarlierSchedule } from '../../engine/unlogged';
+import type { ChoiceOption, EarlierScores, Scores } from '../../options';
 
 /** Temptation bundling: something you want, paired with the habit. */
 export interface Bundle {
@@ -146,8 +147,8 @@ export const metric = sqliteTable('metric', {
 	type: text('type', { enum: metricTypes }).notNull(),
 	/** Free text chosen by the user: kg, lb, min, pages... */
 	unit: text('unit'),
-	/** Options for the "choice" type. */
-	choices: text('choices', { mode: 'json' }).$type<string[]>(),
+	/** Options for the "choice" type. Logs store an option's id, so a rename keeps past values. */
+	choices: text('choices', { mode: 'json' }).$type<ChoiceOption[]>(),
 	/** Repeating metrics are logged once per Entry (e.g. once per gym set). */
 	repeats: integer('repeats', { mode: 'boolean' }).notNull().default(false),
 	sortOrder: integer('sort_order').notNull().default(0),
@@ -166,8 +167,10 @@ export const metric = sqliteTable('metric', {
 	/** Long text field: one prompt shows each day and is saved with the answer. */
 	prompts: text('prompts', { mode: 'json' }).$type<string[]>(),
 	promptOrder: text('prompt_order', { enum: ['order', 'random'] }).notNull().default('order'),
-	/** Choice field: a number per option, so Stats can average it (mood 1 to 5). */
-	scores: text('scores', { mode: 'json' }).$type<Record<string, number>>(),
+	/** Choice field: a number per option id, so Stats can average it (mood 1 to 5). */
+	scores: text('scores', { mode: 'json' }).$type<Scores>(),
+	/** Numbers an edit replaced, each with the last day it applied, so past days keep theirs. */
+	earlierScores: text('earlier_scores', { mode: 'json' }).$type<EarlierScores[]>(),
 	/** Removed from its Task after it was logged: hidden from new logs, kept for History and Stats. */
 	archived: integer('archived', { mode: 'boolean' }).notNull().default(false)
 });
@@ -275,8 +278,8 @@ export const habit = sqliteTable('habit', {
 	/** Push a reminder at the cue time. */
 	remind: integer('remind', { mode: 'boolean' }).notNull().default(false),
 	ifThen: text('if_then', { mode: 'json' }).$type<IfThen>(),
-	/** Feelings offered when logging a Slip; user-editable. */
-	triggers: text('triggers', { mode: 'json' }).$type<string[]>(),
+	/** Break habit: feelings a slip can be logged with, user-editable. A slip stores the feeling's id. */
+	triggers: text('triggers', { mode: 'json' }).$type<ChoiceOption[]>(),
 	/** "I get to train today": shown on the card. */
 	reframe: text('reframe'),
 	bundle: text('bundle', { mode: 'json' }).$type<Bundle>(),
@@ -449,7 +452,7 @@ export const slip = sqliteTable('slip', {
 	count: real('count').notNull().default(1),
 	notes: text('notes'),
 	createdAt: createdAt(),
-	/** Slip context, all optional: HH:MM, where, the feeling, and who was there. */
+	/** Slip context, all optional: HH:MM, where, the feeling (its id in the habit's triggers), and who was there. */
 	time: text('time'),
 	place: text('place'),
 	feeling: text('feeling'),

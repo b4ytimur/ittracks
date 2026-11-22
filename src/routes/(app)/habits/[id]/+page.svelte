@@ -3,6 +3,7 @@
 	import { deserialize, enhance } from '$app/forms';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { HabitForm, ScheduleForm } from '$lib/forms';
+	import OptionList from '$lib/OptionList.svelte';
 	import { describeSchedule, weekdayNames } from '$lib/describe';
 	import FillRuleEditor from './FillRuleEditor.svelte';
 	import NoteBox from '$lib/NoteBox.svelte';
@@ -180,13 +181,6 @@
 		} else identityError = 'Could not add that identity.';
 	}
 
-	let newTrigger = $state('');
-	function addTrigger() {
-		const t = newTrigger.trim();
-		if (t && !h.triggers.includes(t)) h.triggers = [...h.triggers, t];
-		newTrigger = '';
-	}
-
 	function setTarget(map: Record<string, number>, metricId: string, value: string) {
 		if (value === '') delete map[metricId];
 		else map[metricId] = Number(value);
@@ -221,9 +215,6 @@
 
 	// Text typed into "add" boxes but not added yet still counts when saving.
 	const pendingPrep = $derived(newPrep.trim() && !h.prep.includes(newPrep.trim()) ? [newPrep.trim()] : []);
-	const pendingTrigger = $derived(
-		newTrigger.trim() && !h.triggers.includes(newTrigger.trim()) ? [newTrigger.trim()] : []
-	);
 	// ----- Conflict rules (src/lib/rules): what is blocked right now, and why -----
 	const ruleForm = $derived({ ...h, schedule, cue } as HabitForm);
 	const ruleCheck = $derived(checkHabit(ruleForm));
@@ -239,8 +230,7 @@
 			cue,
 			pinned,
 			scheduleApplies: scheduleEdited ? scheduleApplies : 'today',
-			prep: [...h.prep, ...pendingPrep],
-			triggers: [...h.triggers, ...pendingTrigger]
+			prep: [...h.prep, ...pendingPrep]
 		})
 	);
 
@@ -833,19 +823,14 @@
 
 	<h2>Slip triggers</h2>
 	<p class="muted">Feelings you can pick when you log a slip. Over time Today shows which ones come up most.</p>
-	<div class="chips">
-		{#each h.triggers as t, ti (t)}
-			<span class="chip on"
-				>{t}
-				<button type="button" class="link" onclick={() => h.triggers.splice(ti, 1)} aria-label="Remove {t}">×</button></span
-			>
-		{/each}
-	</div>
-	<div class="row">
-		<input class="grow" bind:value={newTrigger} placeholder="Add a feeling" aria-label="New trigger"
-			onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), addTrigger())} />
-		<button type="button" onclick={addTrigger}>Add</button>
-	</div>
+	<OptionList
+		bind:options={h.triggers}
+		used={(id) => data.usedFeelings.includes(id)}
+		label="Feeling"
+		addLabel="Add feeling"
+		placeholder="e.g. Stressed"
+		usedTitle="Past slips were logged with it: they keep it, and a rename shows there too"
+	/>
 
 	{#if !off('cost')}
 	<h2>Cost</h2>

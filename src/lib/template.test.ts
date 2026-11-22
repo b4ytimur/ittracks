@@ -192,7 +192,18 @@ describe('templates', () => {
 			parts: [],
 			metrics: [
 				{ ...bench.metrics[0], repeats: false, type: 'text', unit: '', step: null, prefill: 'blank', required: false, long: true, starter: '## Wins\n\n## Lessons', prompts: ['What went well?', 'What did you learn?'], promptOrder: 'random', scores: {} },
-				{ ...bench.metrics[1], repeats: false, type: 'choice', choices: ['Great', 'Okay', 'Bad'], prefill: 'blank', scores: { Great: 5, Okay: 3, Bad: 1 } }
+				{
+					...bench.metrics[1],
+					repeats: false,
+					type: 'choice',
+					choices: [
+						{ id: '11111111-1111-4111-8111-111111111111', name: 'Great' },
+						{ id: '22222222-2222-4222-8222-222222222222', name: 'Okay' },
+						{ id: '33333333-3333-4333-8333-333333333333', name: 'Bad' }
+					],
+					prefill: 'blank',
+					scores: { '11111111-1111-4111-8111-111111111111': 5, '22222222-2222-4222-8222-222222222222': 3, '33333333-3333-4333-8333-333333333333': 1 }
+				}
 			]
 		};
 		const one = { ...gym, variants: [{ ...gym.variants[0], slots: [{ ...gym.variants[0].slots[0], targets: {}, minTargets: {}, stretchTargets: {} }] }], schedule: { kind: 'frequency' as const, times: 7, period: 'week' as const, variantId: VA } };
@@ -201,7 +212,12 @@ describe('templates', () => {
 		const back = fromTemplate(file, '2026-12-01').tasks[0].form;
 		expect(back.notes).toBe(journal.notes);
 		expect(back.metrics[0]).toMatchObject({ long: true, starter: '## Wins\n\n## Lessons', prompts: ['What went well?', 'What did you learn?'], promptOrder: 'random' });
-		expect(back.metrics[1].scores).toEqual({ Great: 5, Okay: 3, Bad: 1 });
+		// Options travel as words with their numbers, and come back with new ids.
+		expect(file.tasks[0].metrics[1]).toMatchObject({ choices: ['Great', 'Okay', 'Bad'], scores: { Great: 5, Okay: 3, Bad: 1 } });
+		const opts = back.metrics[1].choices;
+		expect(opts.map((o) => o.name)).toEqual(['Great', 'Okay', 'Bad']);
+		expect(opts.map((o) => o.id)).not.toContain('11111111-1111-4111-8111-111111111111');
+		expect(opts.map((o) => back.metrics[1].scores[o.id])).toEqual([5, 3, 1]);
 	});
 
 	it('imports version 4 files with one-line text fields and no numbers', () => {

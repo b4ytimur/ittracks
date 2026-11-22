@@ -8,7 +8,13 @@ import { descendants } from '$lib/engine/tree';
 import { checkTaskPast, type TaskPast } from '$lib/rules/task';
 import type { UnitChoice } from '$lib/units';
 import { convertMetricValues, dropTargets, PastEditError, taskLogged } from '../history';
+import { activeOptions, keepEarlierScores, mergeOptions, type ChoiceOption, type Scores } from '$lib/options';
+import { addDays } from '$lib/engine/dates';
+import { userToday } from '../today';
 export { PastEditError };
+
+/** An empty list is stored as no list. */
+const nullIfEmpty = <T>(list: T[] | null | undefined): T[] | null => (list?.length ? list : null);
 
 export interface TaskSummary {
 	id: string;
@@ -91,7 +97,8 @@ export function getTaskForm(accountId: string, id: string): TaskForm | null {
 				type: m.type,
 				unit: m.unit ?? '',
 				repeats: m.repeats,
-				choices: m.choices ?? [],
+				// Archived options stay with past logs; the editor offers the rest.
+				choices: activeOptions(m.choices).map(({ id, name }) => ({ id, name })),
 				prefill: m.prefill,
 				step: m.step,
 				required: m.required,
@@ -100,7 +107,7 @@ export function getTaskForm(accountId: string, id: string): TaskForm | null {
 				starter: m.starter ?? '',
 				prompts: m.prompts ?? [],
 				promptOrder: m.promptOrder,
-				scores: m.scores ?? {}
+				scores: Object.fromEntries(Object.entries(m.scores ?? {}).filter(([k]) => activeOptions(m.choices).some((o) => o.id === k)))
 			})),
 		parts: partsOfTask(id),
 		areaId: t.areaId,
@@ -322,14 +329,29 @@ export function saveTask(
 						.map((r) => r.id)
 				: []
 		);
+		// Choice options: removed ones a log picked are archived. Numbers past logs used are kept
+		// with the last day they applied, when an edit changes them.
+		const saved = new Map(
+			tx
+				.select({ id: metric.id, choices: metric.choices, scores: metric.scores, earlierScores: metric.earlierScores })
+				.from(metric)
+				.where(eq(metric.taskId, taskId))
+				.all()
+				.map((r) => [r.id, r])
+		);
+		const logged = id ? taskLogged(taskId, tx) : null;
+		const yesterday = logged ? addDays(userToday(accountId), -1) : '';
 		f.metrics.forEach((m, i) => {
 			if (foreignMetrics.has(m.id)) return;
+			const was = saved.get(m.id);
+			const choices = m.type === 'choice' ? mergeOptions(was?.choices, m.choices, past?.options[m.id]?.archive ?? []) : null;
+			const scores = scoresToSave(m.scores, choices, was?.scores);
 			const values = {
 				name: m.name,
 				type: m.type,
 				unit: m.unit || null,
 				repeats: m.repeats,
-				choices: m.type === 'choice' ? m.choices : null,
+				choices,
 				sortOrder: i,
 				prefill: m.prefill,
 				step: m.step,
@@ -339,7 +361,8 @@ export function saveTask(
 				starter: m.starter || null,
 				prompts: m.prompts.length ? m.prompts : null,
 				promptOrder: m.promptOrder,
-				scores: Object.keys(m.scores).length ? m.scores : null,
+				scores: Object.keys(scores).length ? scores : null,
+				earlierScores: nullIfEmpty(was && logged?.metrics.has(m.id) ? keepEarlierScores(was.scores, was.earlierScores, scores, yesterday) : was?.earlierScores),
 				archived: false
 			};
 			tx.insert(metric)
@@ -418,6 +441,17 @@ export function saveTask(
 
 		return taskId;
 	});
+}
+
+/**
+ * The numbers to save for a Choice: the editor's, plus those of archived options, which past
+ * logs still read. Numbers off means off for every option.
+ */
+function scoresToSave(edited: Scores, choices: ChoiceOption[] | null, saved: Scores | null | undefined): Scores {
+	if (!choices || !Object.keys(edited).length) return {};
+	const archived = choices.filter((o) => o.archived && typeof saved?.[o.id] === 'number').map((o) => [o.id, saved![o.id]]);
+	const active = Object.entries(edited).filter(([k, n]) => Number.isFinite(n) && choices.some((o) => o.id === k && !o.archived));
+	return Object.fromEntries([...archived, ...active]);
 }
 
 /** Delete a Task with its own steps. Where it sat inside other Tasks, those parts go too. */

@@ -98,7 +98,7 @@ export function metricsFromType(t: TaskType, weightUnit: string, newId: () => st
 			type: m.type,
 			unit,
 			repeats: m.repeats,
-			choices: [] as string[],
+			choices: [] as { id: string; name: string }[],
 			prefill: (m.type === 'text' || m.type === 'checkbox' ? 'blank' : 'last') as 'last' | 'target' | 'blank',
 			step: m.step,
 			required: false,

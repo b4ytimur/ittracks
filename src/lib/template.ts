@@ -3,7 +3,7 @@
 import { z } from 'zod';
 import { metricTypes } from './metric-types';
 import {
-	DEFAULT_TRIGGERS,
+	defaultTriggers,
 	defaultLevels,
 	bundleForm,
 	costForm,
@@ -326,7 +326,8 @@ export function toTemplate(
 								(habit.ifThen.habitId ? (names.habits?.get(habit.ifThen.habitId) ?? '') : '')
 						}
 					: null,
-			triggers: habit.direction === 'break' ? habit.triggers : null,
+			// Words only: ids belong to one account's logs.
+			triggers: habit.direction === 'break' ? habit.triggers.map((o) => o.name) : null,
 			reframe: habit.reframe,
 			bundle: habit.bundle.reward ? habit.bundle : null,
 			prep: habit.prep,
@@ -349,7 +350,8 @@ export function toTemplate(
 				type: m.type,
 				unit: m.unit,
 				repeats: m.repeats,
-				choices: m.choices,
+				// Options travel as words, and their numbers by word.
+				choices: m.choices.map((o) => o.name),
 				prefill: m.prefill,
 				step: m.step,
 				required: m.required,
@@ -358,7 +360,7 @@ export function toTemplate(
 				starter: m.starter,
 				prompts: m.prompts,
 				promptOrder: m.promptOrder,
-				scores: m.scores
+				scores: Object.fromEntries(m.choices.filter((o) => typeof m.scores[o.id] === 'number').map((o) => [o.name, m.scores[o.id]]))
 			})),
 			subtasks: t.parts.flatMap((p) => (p.kind === 'step' ? [p.name] : [])),
 			parts: t.parts.flatMap((p): TemplateFile['tasks'][number]['parts'] =>
@@ -405,13 +407,14 @@ export function fromTemplate(
 		const metrics = t.metrics.map((m) => {
 			const id = newId();
 			metricIds.set(m.key, id);
+			const choices = m.choices.map((name) => ({ id: newId(), name }));
 			return {
 				id,
 				name: m.name,
 				type: m.type,
 				unit: m.unit,
 				repeats: m.repeats,
-				choices: m.choices,
+				choices,
 				prefill: m.prefill ?? (m.type === 'text' || m.type === 'checkbox' ? ('blank' as const) : ('last' as const)),
 				step: m.step,
 				required: m.required,
@@ -420,7 +423,7 @@ export function fromTemplate(
 				starter: m.starter,
 				prompts: m.prompts,
 				promptOrder: m.promptOrder,
-				scores: m.scores
+				scores: Object.fromEntries(choices.filter((o) => typeof m.scores[o.name] === 'number').map((o) => [o.id, m.scores[o.name]]))
 			};
 		});
 		return {
@@ -500,7 +503,7 @@ export function fromTemplate(
 		parentId: null,
 		identityIds: [],
 		ifThen: { when: tpl.habit.ifThen?.when ?? '', then: tpl.habit.ifThen?.then ?? '', habitId: null },
-		triggers: tpl.habit.triggers ?? DEFAULT_TRIGGERS,
+		triggers: tpl.habit.triggers ? tpl.habit.triggers.map((name) => ({ id: newId(), name })) : defaultTriggers(),
 		reframe: tpl.habit.reframe,
 		bundle: tpl.habit.bundle ?? { reward: '', strict: false },
 		prep: tpl.habit.prep,

@@ -1,6 +1,7 @@
 // Shapes the editors send to the server. Shared by the browser (types) and the server (validation).
 import { z } from 'zod';
 import { metricTypes } from './metric-types';
+import { optionForm, type ChoiceOption } from './options';
 
 const id = z.string().uuid();
 const name = z.string().trim().min(1, 'A name is required').max(120, 'Keep names to 120 characters or fewer');
@@ -41,7 +42,8 @@ export const taskForm = z.object({
 			type: z.enum(metricTypes),
 			unit: z.string().trim().max(20).default(''),
 			repeats: z.boolean(),
-			choices: z.array(z.string().trim().min(1).max(40)).default([]),
+			/** Choice field: its options. Logs store the option's id, so a rename keeps past values. */
+			choices: z.array(optionForm).default([]),
 			prefill: z.enum(['last', 'target', 'blank']).default('last'),
 			step: z.number().positive().max(10000).nullable().default(null),
 			required: z.boolean().default(false),
@@ -53,7 +55,7 @@ export const taskForm = z.object({
 			/** Long text field: one prompt shows each day and is saved with the answer. */
 			prompts: z.array(z.string().trim().min(1).max(200)).max(100).default([]),
 			promptOrder: z.enum(['order', 'random']).default('order'),
-			/** Choice field: a number for each option (Great = 5 ... Bad = 1), so Stats can chart it. */
+			/** Choice field: a number for each option, by its id (Great = 5 ... Bad = 1), so Stats can chart it. */
 			scores: z.record(z.string(), z.number().min(-1000).max(1000)).default({})
 		})
 	),
@@ -191,7 +193,18 @@ export const progressionForm = z.object({
 });
 export type RewardForm = z.infer<typeof rewardForm>;
 
-export const DEFAULT_TRIGGERS = ['Bored', 'Stressed', 'Tired', 'Social', 'After a meal'];
+/**
+ * The feelings a new break habit offers. Fixed ids: an option id only has to be unique within its
+ * habit's list, and a constant keeps the editor's default from changing on every render.
+ */
+export const DEFAULT_TRIGGERS: readonly ChoiceOption[] = [
+	{ id: '8ee13388-f221-491d-a043-21f42abeea8c', name: 'Bored' },
+	{ id: '429612bf-4d34-4480-b3a4-b380c57d2bfa', name: 'Stressed' },
+	{ id: '25161aa7-0837-4363-b0c3-c13b15d33c65', name: 'Tired' },
+	{ id: '883eb337-8935-47d1-84c4-8d21247fb80f', name: 'Social' },
+	{ id: 'b1ddacee-965e-4e7b-8001-55fa76a09892', name: 'After a meal' }
+];
+export const defaultTriggers = (): ChoiceOption[] => DEFAULT_TRIGGERS.map((o) => ({ ...o }));
 
 export const habitForm = z
 	.object({
@@ -225,7 +238,8 @@ export const habitForm = z
 		remind: z.boolean().default(false),
 		identityIds: z.array(id).default([]),
 		ifThen: ifThenForm.default({ when: '', then: '', habitId: null }),
-		triggers: z.array(z.string().trim().min(1).max(40)).max(20).default(DEFAULT_TRIGGERS),
+		/** Feelings a slip can be logged with. A slip stores the feeling's id, so a rename keeps past slips. */
+		triggers: z.array(optionForm).max(20).default(defaultTriggers),
 		reframe: shortText.default(''),
 		bundle: bundleForm.default({ reward: '', strict: false }),
 		prep: z.array(z.string().trim().min(1).max(120)).max(20).default([]),

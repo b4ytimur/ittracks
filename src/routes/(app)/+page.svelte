@@ -834,8 +834,8 @@
 								<span class="muted small-text">How were you feeling? (optional)</span>
 								<input type="hidden" name="feeling" value={feeling} />
 								<div class="chips">
-									{#each b.triggers as t (t)}
-										<button type="button" class="chip" class:on={feeling === t} onclick={() => (feeling = feeling === t ? '' : t)}>{t}</button>
+									{#each b.triggers as t (t.id)}
+										<button type="button" class="chip" class:on={feeling === t.id} onclick={() => (feeling = feeling === t.id ? '' : t.id)}>{t.name}</button>
 									{/each}
 								</div>
 							</div>

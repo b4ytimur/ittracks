@@ -88,7 +88,7 @@ export function loadDataset(accountId: string, tz?: string): Dataset {
 			archived: t.archived,
 			tags: tags.filter((x) => x.taskId === t.id).map((x) => ({ name: x.name, level: x.level }))
 		})),
-		metrics: metrics.map((m) => ({ id: m.id, taskId: m.taskId, name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, choices: m.choices ?? null, scores: m.scores ?? null })),
+		metrics: metrics.map((m) => ({ id: m.id, taskId: m.taskId, name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, choices: m.choices ?? null, scores: m.scores ?? null, earlierScores: m.earlierScores ?? null })),
 		variants: variants.map((v) => ({ id: v.id, habitId: v.habitId, name: v.name })),
 		slots: slots.map((x) => ({ id: x.id, variantId: x.variantId, taskId: x.taskId, sets: x.sets, targets: x.targets ?? null, minTargets: x.minTargets ?? null, stretchTargets: x.stretchTargets ?? null })),
 		occurrences: occs.map((o) => ({
@@ -281,7 +281,7 @@ export function recapFor(accountId: string, taskIds: string[], excludeOcc: strin
 		areas: [],
 		habits: habits.map((h) => ({ id: h.id, name: h.name, direction: h.direction, areaId: h.areaId, startDate: h.startDate, archived: h.archived, identities: [], cost: null, streakRule: DEFAULT_STREAK_RULE, minimumCounts: true, limit: null })),
 		tasks: tasks.map((t) => ({ id: t.id, name: t.name, areaId: t.areaId, parentTaskId: t.parentTaskId, archived: t.archived, tags: [] })),
-		metrics: metrics.map((m) => ({ id: m.id, taskId: m.taskId, name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, choices: m.choices ?? null, scores: m.scores ?? null })),
+		metrics: metrics.map((m) => ({ id: m.id, taskId: m.taskId, name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, choices: m.choices ?? null, scores: m.scores ?? null, earlierScores: m.earlierScores ?? null })),
 		variants: [],
 		slots: [],
 		occurrences: occs.map((o) => ({ id: o.id, habitId: o.habitId, variantId: null, date: o.date, status: o.status, level: o.level ?? null, picks: null, time: null })),

@@ -34,6 +34,7 @@ import { addDays, weekStart } from '$lib/engine/dates';
 import { limitOn, nextDrop, usedIn, withinStreak } from '$lib/engine/limit';
 import { hitsInARow, raise, type Progression } from '$lib/engine/progression';
 import { DEFAULT_TRIGGERS, type ScheduleForm } from '$lib/forms';
+import { activeOptions, optionName } from '$lib/options';
 import { identitiesByHabit } from './repo/identities';
 import { getSettings } from './settings';
 import { dayOrder, logicalDate } from '$lib/engine/day';
@@ -606,7 +607,8 @@ export interface BreakItem {
 	longest: number;
 	slippedToday: number;
 	ifThen: { when: string; then: string; habit: string | null } | null;
-	triggers: string[];
+	/** Feelings a slip can be logged with: the form sends the id. */
+	triggers: { id: string; name: string }[];
 	places: string[];
 	top: Trigger[];
 	resistedThisWeek: number;
@@ -687,9 +689,10 @@ export function loadToday(accountId: string, today: string) {
 							habit: habits.find((x) => x.id === h.ifThen?.habitId)?.name ?? null
 						}
 					: null,
-				triggers: h.triggers ?? DEFAULT_TRIGGERS,
+				triggers: activeOptions(h.triggers ?? DEFAULT_TRIGGERS).map(({ id, name }) => ({ id, name })),
 				places: [...new Set(slips.map((s) => s.place).filter((p): p is string => !!p))],
-				top: topTriggers(slips),
+				// Slips store the feeling's id: counted by its name now, so a renamed feeling keeps its slips.
+				top: topTriggers(slips.map((s) => ({ ...s, feeling: optionName(h.triggers ?? DEFAULT_TRIGGERS, s.feeling) }))),
 				resistedThisWeek: db
 					.select({ date: craving.date })
 					.from(craving)

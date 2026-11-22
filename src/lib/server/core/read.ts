@@ -23,6 +23,7 @@ import { isGroup, type Schedule } from '$lib/engine/schedule';
 import { ActionError, canSeeHabit, requireScope, type Actor } from './actor';
 import { dayOf, findHabit, visibleHabits } from './day';
 import { listEvents } from './events';
+import { activeOptions, optionName, scoresOn } from '$lib/options';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 type Values = Record<string, unknown>;
@@ -141,6 +142,8 @@ export function describe(actor: Actor) {
 				archived: h.archived,
 				startDate: h.startDate,
 				schedule: h.direction === 'build' ? describeSchedule(h.schedule as ScheduleForm | null) : 'Break habit: log slips',
+				// The feelings a slip can be logged with (log_slip takes one by name or id).
+				...(h.direction === 'break' ? { feelings: activeOptions(h.triggers).map((o) => ({ id: o.id, name: o.name })) } : {}),
 				// A group's days are worked out from the habits inside it; it can't be logged itself.
 				...(isGroup(h.schedule as Schedule | null) ? { group: { inside: habits.filter((x) => x.parentId === h.id).map((x) => x.name) } } : {}),
 				...(h.parentId ? { inGroup: habits.find((x) => x.id === h.parentId)?.name ?? null } : {}),
@@ -202,8 +205,19 @@ export function describe(actor: Actor) {
 					perSet: m.repeats,
 					// Removed from the Task after it was logged: its past values are still in the logs.
 					...(m.archived ? { archived: true } : {}),
-					...(m.choices?.length ? { options: m.choices } : {}),
-					...(m.scores && Object.keys(m.scores).length ? { scores: m.scores } : {})
+					// Each option with its id (logs store it) and its number, if it has one. An archived
+					// option was removed after it was logged: past values still name it.
+					...(m.type === 'choice'
+						? {
+								options: (m.choices ?? []).map((o) => ({
+									id: o.id,
+									name: o.name,
+									...(typeof m.scores?.[o.id] === 'number' ? { score: m.scores[o.id] } : {}),
+									...(o.archived ? { archived: true } : {})
+								}))
+							}
+						: {}),
+					...(m.earlierScores?.length ? { earlierScores: m.earlierScores } : {})
 				}))
 		})),
 		areas: areas.map((a) => a.name),
@@ -283,13 +297,13 @@ export function listLogs(
 	if (!input.status?.length || input.status.includes('slip')) {
 		const slips = P.ds.slips.length
 			? db
-					.select({ s: slip })
+					.select({ s: slip, triggers: habit.triggers })
 					.from(slip)
 					.innerJoin(habit, eq(slip.habitId, habit.id))
 					.where(and(eq(habit.accountId, actor.accountId), gte(slip.date, from), lte(slip.date, to)))
 					.all()
 			: [];
-		for (const { s } of slips) {
+		for (const { s, triggers } of slips) {
 			if (!canSeeHabit(actor, s.habitId) || !okHabit(s.habitId)) continue;
 			rows.push({
 				ref: `slip:${s.id}`,
@@ -300,7 +314,7 @@ export function listLogs(
 				habit: P.habits.get(s.habitId)?.name ?? '',
 				count: s.count,
 				time: s.time,
-				feeling: s.feeling,
+				feeling: optionName(triggers, s.feeling),
 				place: s.place,
 				...(notes && s.notes ? { notes: s.notes } : {})
 			});
@@ -477,8 +491,9 @@ export function listValues(
 				field: m.name,
 				type: m.type,
 				unit: metricUnit(m),
-				value: v,
-				score: typeof v === 'string' && typeof m.scores?.[v] === 'number' ? m.scores[v] : null
+				// A Choice stores its option's id: the row shows the option's name and number.
+				value: m.type === 'choice' ? (optionName(m.choices, v) ?? v) : v,
+				score: m.type === 'choice' && typeof v === 'string' ? (scoresOn(m.scores, m.earlierScores, o.date)[v] ?? null) : null
 			});
 		}
 	}
@@ -515,9 +530,9 @@ export function getRecord(actor: Actor, input: { ref: string }) {
 		return { ...t, notes: row?.notes ?? undefined };
 	}
 	if (kind === 'slip') {
-		const r = db.select({ s: slip, name: habit.name }).from(slip).innerJoin(habit, eq(slip.habitId, habit.id)).where(and(eq(slip.id, id), eq(habit.accountId, actor.accountId))).get();
+		const r = db.select({ s: slip, name: habit.name, triggers: habit.triggers }).from(slip).innerJoin(habit, eq(slip.habitId, habit.id)).where(and(eq(slip.id, id), eq(habit.accountId, actor.accountId))).get();
 		if (!r || !canSeeHabit(actor, r.s.habitId)) throw new ActionError('not_found', 'No such slip.');
-		return { ref: `slip:${r.s.id}`, habit: r.name, habitId: r.s.habitId, date: r.s.date, count: r.s.count, time: r.s.time, place: r.s.place, feeling: r.s.feeling, withWhom: r.s.withWhom, notes: notes ? r.s.notes : undefined };
+		return { ref: `slip:${r.s.id}`, habit: r.name, habitId: r.s.habitId, date: r.s.date, count: r.s.count, time: r.s.time, place: r.s.place, feeling: optionName(r.triggers, r.s.feeling), withWhom: r.s.withWhom, notes: notes ? r.s.notes : undefined };
 	}
 	if (kind === 'day') {
 		const date = dayOf(actor, id).date;

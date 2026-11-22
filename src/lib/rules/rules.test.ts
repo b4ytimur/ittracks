@@ -22,6 +22,7 @@ const base = (): HabitForm =>
 		schedule: { kind: 'frequency', times: 3, period: 'week', variantId: V }
 	});
 
+const opt = (name: string) => ({ id: crypto.randomUUID(), name });
 const task = (): TaskForm =>
 	taskForm.parse({
 		name: 'Bench',
@@ -212,7 +213,7 @@ describe('habit rules', () => {
 describe('task rules', () => {
 	it('M1, M2: options of other Metric types are cleared', () => {
 		const t = task();
-		t.metrics[0] = { ...t.metrics[0], type: 'text', unit: 'kg', step: 2, choices: ['a'], prefill: 'target' };
+		t.metrics[0] = { ...t.metrics[0], type: 'text', unit: 'kg', step: 2, choices: [opt('a')], prefill: 'target' };
 		const m = checkTask(t).form.metrics[0];
 		expect([m.unit, m.step, m.choices, m.prefill]).toEqual(['', null, [], 'last']);
 	});
@@ -241,10 +242,12 @@ describe('task rules', () => {
 		expect(checkTask(t).form.restTimerEnabled).toBe(false);
 	});
 
-	it('a Choice needs two options', () => {
+	it('a Choice needs two options, each with its own name', () => {
 		const t = task();
-		t.metrics[0] = { ...t.metrics[0], type: 'choice', choices: ['one'] };
+		t.metrics[0] = { ...t.metrics[0], type: 'choice', choices: [opt('one')] };
 		expect(checkTask(t).errors[0].path).toBe('metrics.0.choices');
+		t.metrics[0].choices = [opt('One'), opt(' one ')];
+		expect(checkTask(t).errors[0].reason).toBe('Two options have the same name');
 	});
 
 	it('N1: several lines only for Text fields, with starter text and prompts', () => {
@@ -284,12 +287,16 @@ describe('task rules', () => {
 
 	it('J5: scored choices have a number on every option or none, and drop numbers of removed options', () => {
 		const t = task();
-		t.metrics[0] = { ...t.metrics[0], type: 'choice', repeats: false, choices: ['Good', 'Bad'], scores: { Good: 5 } };
+		const [good, bad] = [opt('Good'), opt('Bad')];
+		t.metrics[0] = { ...t.metrics[0], type: 'choice', repeats: false, choices: [good, bad], scores: { [good.id]: 5 } };
 		expect(checkTask(t).errors.map((e) => e.path)).toEqual(['metrics.0.scores']);
-		t.metrics[0].scores = { Good: 5, Bad: 1, Gone: 3 };
+		t.metrics[0].scores = { [good.id]: 5, [bad.id]: 1, gone: 3 };
 		const r = checkTask(t);
 		expect(r.errors).toEqual([]);
-		expect(r.form.metrics[0].scores).toEqual({ Good: 5, Bad: 1 });
+		expect(r.form.metrics[0].scores).toEqual({ [good.id]: 5, [bad.id]: 1 });
+		// A renamed option keeps its number: numbers belong to the option, not its name.
+		t.metrics[0].choices = [{ ...good, name: 'Great' }, bad];
+		expect(checkTask(t).form.metrics[0].scores).toEqual({ [good.id]: 5, [bad.id]: 1 });
 		t.metrics[0].scores = {};
 		expect(checkTask(t).errors).toEqual([]);
 		t.metrics[0] = { ...t.metrics[0], type: 'count', scores: { Good: 5 } };
