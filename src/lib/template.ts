@@ -203,6 +203,8 @@ function mapSchedule(s: ScheduleForm | null, map: (id: string) => string): Sched
 			return { ...s, variantId: map(s.variantId) };
 		case 'rotation':
 			return { ...s, order: s.order.map((o) => ({ ...o, variantId: map(o.variantId) })) };
+		case 'group':
+			return s;
 	}
 }
 
@@ -438,6 +440,8 @@ export function fromTemplate(
 		// page offers to turn on one the template suggests (`tpl.habit.remind`).
 		remind: false,
 		unlogged: tpl.habit.unlogged,
+		// A template is one habit; it is added at the top level, outside any group.
+		parentId: null,
 		identityIds: [],
 		ifThen: { when: tpl.habit.ifThen?.when ?? '', then: tpl.habit.ifThen?.then ?? '', habitId: null },
 		triggers: tpl.habit.triggers ?? DEFAULT_TRIGGERS,

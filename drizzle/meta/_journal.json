@@ -64,6 +64,13 @@
       "when": 1795340476503,
       "tag": "0008_history_policy",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1795341354415,
+      "tag": "0009_habit_groups",
+      "breakpoints": true
     }
   ]
 }

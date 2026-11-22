@@ -11,7 +11,8 @@ import {
 } from '$lib/forms';
 import { makesLoop } from '$lib/engine/stack';
 import { keepEarlier, sameSchedule, scheduleStartBy, type EarlierSchedule } from '$lib/engine/unlogged';
-import type { Schedule } from '$lib/engine/schedule';
+import { isGroup, type Schedule } from '$lib/engine/schedule';
+import { makesCycle } from '$lib/engine/tree';
 import { keepGoals, rejudge } from '../progress';
 import type { StreakRule } from '$lib/engine/streak';
 import { checkHabit, checkHabitPast, type HabitCheck, type HabitCtx } from '$lib/rules/habit';
@@ -47,7 +48,8 @@ export function listHabits(accountId: string, opts: { archived?: boolean } = {})
 			cue: habit.cue,
 			areaId: habit.areaId,
 			archived: habit.archived,
-			createdAt: habit.createdAt
+			createdAt: habit.createdAt,
+			parentId: habit.parentId
 		})
 		.from(habit)
 		.where(and(eq(habit.accountId, accountId), opts.archived ? undefined : eq(habit.archived, false)))
@@ -118,6 +120,7 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 		limit: h.limit ? { ...h.limit, taper: h.limit.taper ? { floor: 0, ...h.limit.taper } : null } : null,
 		progression: h.progression ?? null,
 		areaId: h.areaId,
+		parentId: h.parentId && exists(h.parentId) ? h.parentId : null,
 		unlogged: h.unlogged,
 		variants: variants.map((v) => ({
 			id: v.id,
@@ -140,10 +143,17 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 /** A Habit's links to other rows must point at this account's rows, and stacking can't loop. */
 export function checkLinks(accountId: string, id: string | null, f: HabitForm): string | null {
 	const others = db
-		.select({ id: habit.id, cue: habit.cue, direction: habit.direction })
+		.select({ id: habit.id, cue: habit.cue, direction: habit.direction, schedule: habit.schedule, parentId: habit.parentId, archived: habit.archived })
 		.from(habit)
 		.where(eq(habit.accountId, accountId))
 		.all();
+	if (f.parentId) {
+		const parent = others.find((o) => o.id === f.parentId);
+		if (!parent || parent.direction !== 'build' || !isGroup(parent.schedule as Schedule | null))
+			return 'Pick a group to put this habit in';
+		if (parent.archived && others.find((o) => o.id === id)?.parentId !== f.parentId) return 'That group is archived. Pick another one';
+		if (id && makesCycle(others, id, f.parentId)) return "A group can't sit inside itself or a group inside it";
+	}
 	const after = f.cue.afterHabitId;
 	if (after) {
 		if (!others.some((o) => o.id === after && o.direction === 'build') || after === id)
@@ -248,6 +258,12 @@ function settledAfter(
 export function checkHabitEdit(accountId: string, id: string, f: HabitForm): string | null {
 	const before = getHabitForm(accountId, id);
 	if (!before) return null;
+	// A group's days are worked out from the habits inside it, so a habit's own logs can't become a group's.
+	const wasGroup = isGroup(before.schedule);
+	if (!wasGroup && isGroup(f.schedule) && habitLogged(id))
+		return 'This habit has logs, and a group gets its days from the habits inside it. Make a new habit for the group instead';
+	if (wasGroup && !isGroup(f.schedule) && db.select({ id: habit.id }).from(habit).where(eq(habit.parentId, id)).get())
+		return 'Move the habits inside this group out of it first';
 	// Guarded fields changed: only then is it worth asking whether anything is logged.
 	const issues = checkHabitPast(before, f, true);
 	return issues.length && habitLogged(id) ? issues[0].reason : null;
@@ -313,6 +329,7 @@ export function saveHabit(
 			limit: isBreak ? f.limit : null,
 			progression: isBreak ? null : f.progression,
 			areaId: f.areaId,
+			parentId: isBreak ? null : f.parentId,
 			unlogged: isBreak ? ('missed' as const) : (f.unlogged ?? 'missed')
 		};
 		if (id) {
@@ -330,7 +347,13 @@ export function saveHabit(
 				.where(and(eq(habit.id, id), eq(habit.accountId, accountId)))
 				.get();
 			if (!owned) return null;
-			const sched = scheduleAfter(tx, id, owned, values, opts.scheduleApplies ?? 'today', today);
+			// Becoming a group, or a group becoming a habit: nothing logged by hand crosses over
+			// (checkHabitEdit refuses that), so the days written for the old kind go.
+			const kindChanged = isGroup(owned.schedule as Schedule | null) !== isGroup(values.schedule as Schedule | null);
+			if (kindChanged) tx.delete(occurrence).where(eq(occurrence.habitId, id)).run();
+			const sched = kindChanged
+				? { earlierSchedules: null, settledThrough: null }
+				: scheduleAfter(tx, id, owned, values, opts.scheduleApplies ?? 'today', today);
 			const settled = settledAfter(tx, id, owned, values, sched.settledThrough === null);
 			tx.update(habit).set({ ...values, ...sched, ...settled }).where(eq(habit.id, id)).run();
 			// The rule for what counts changed: past logs are judged again by it.

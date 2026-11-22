@@ -17,6 +17,7 @@ import type { ScheduleForm } from '$lib/forms';
 import { ActionError, requireScope, type Actor } from './actor';
 import { emit } from './events';
 import { listLogs, listValues, type LogRow, type ValueRow } from './read';
+import { depthOf } from '$lib/engine/tree';
 
 export const EXPORT_FORMAT = 'ittracks-export';
 export const EXPORT_VERSION = 1;
@@ -199,7 +200,7 @@ feeling, place${notes ? ', notes' : ''}.
 
 ## habits.csv and fields.csv
 
-habits.csv: id, name, direction (build or break), area, schedule (in words), start_date, archived.
+habits.csv: id, name, direction (build or break), area, schedule (in words), start_date, archived, group_id (the group the habit sits in; a group's own days are worked out from the habits inside it).
 fields.csv: one row per field of each Task: task_id, task, field_id, field, type, unit, per_set,
 options. Ids match the JSON export and the app's links.
 `;
@@ -235,7 +236,7 @@ export function exportCsvZip(actor: Actor): { body: Uint8Array; today: string } 
 		{
 			name: 'ittracks-export/habits.csv',
 			text: csvOf(
-				['id', 'name', 'direction', 'area', 'schedule', 'start_date', 'archived'],
+				['id', 'name', 'direction', 'area', 'schedule', 'start_date', 'archived', 'group_id'],
 				habits.map((h) => ({
 					id: h.id,
 					name: h.name,
@@ -243,7 +244,8 @@ export function exportCsvZip(actor: Actor): { body: Uint8Array; today: string } 
 					area: h.areaId ? areas.get(h.areaId) : '',
 					schedule: h.direction === 'build' ? describeSchedule(h.schedule as ScheduleForm | null) : '',
 					start_date: h.startDate,
-					archived: h.archived
+					archived: h.archived,
+					group_id: h.parentId ?? ''
 				}))
 			)
 		},
@@ -325,7 +327,7 @@ const REFS: Partial<Record<TableName, Record<string, { to: TableName; loose?: bo
 	metric: { taskId: { to: 'task' } },
 	collection: { parentId: { to: 'collection', loose: true } },
 	collectionTask: { collectionId: { to: 'collection' }, taskId: { to: 'task' } },
-	habit: { areaId: { to: 'area' } },
+	habit: { areaId: { to: 'area' }, parentId: { to: 'habit', loose: true } },
 	habitIdentity: { habitId: { to: 'habit' }, identityId: { to: 'identity' } },
 	variant: { habitId: { to: 'habit' } },
 	slot: { variantId: { to: 'variant' }, taskId: { to: 'task' } },
@@ -337,6 +339,13 @@ const REFS: Partial<Record<TableName, Record<string, { to: TableName; loose?: bo
 	craving: { habitId: { to: 'habit' } },
 	event: { habitId: { to: 'habit', loose: true } }
 };
+
+/** Habit rows ordered so each group comes before the habits inside it. */
+function parentsFirst(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+	const nodes = rows.map((r) => ({ id: String(r.id ?? ''), parentId: r.parentId ? String(r.parentId) : null }));
+	const depth = new Map(nodes.map((n) => [n.id, depthOf(nodes, n.id)]));
+	return [...rows].sort((a, b) => depth.get(String(a.id ?? ''))! - depth.get(String(b.id ?? ''))!);
+}
 
 /** Check (and where loose, clear) a row's pointers against the ids the file brings. */
 function checkRefs(name: TableName, row: Record<string, unknown>, i: number, known: Map<TableName, Set<string>>) {
@@ -421,7 +430,8 @@ export function importReplace(actor: Actor, raw: unknown): { counts: Record<stri
 			WITH_ID.map((name) => [name, new Set((tables[name] ?? []).map((x) => String(x.id ?? '')).filter(Boolean).map((id) => (renumbered ? (ids.get(id) ?? id) : id)))])
 		);
 		for (const [name, table] of Object.entries(TABLES) as [TableName, SQLiteTable][]) {
-			const rows = tables[name] ?? [];
+			// A group goes in before the habits inside it, so their link to it holds.
+			const rows = name === 'habit' ? parentsFirst(tables[name] ?? []) : (tables[name] ?? []);
 			counts[name] = rows.length;
 			for (let i = 0; i < rows.length; i++) {
 				const row = rowFor(table, (renumbered ? remap(rows[i], ids) : rows[i]) as Record<string, unknown>, accountId);

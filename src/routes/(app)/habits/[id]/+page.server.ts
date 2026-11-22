@@ -32,6 +32,8 @@ import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { metric, occurrence, pause } from '$lib/server/db/schema';
 import type { ScheduleForm } from '$lib/forms';
+import { isGroup } from '$lib/engine/schedule';
+import { descendants } from '$lib/engine/tree';
 import type { Actions, PageServerLoad } from './$types';
 
 /** Numeric Metrics per Task, so Slots can set targets for each level. */
@@ -72,6 +74,7 @@ const blank = (today: string): HabitForm => ({
 	startDate: today,
 	variants: [],
 	schedule: null,
+	parentId: null,
 	cue: emptyCue(),
 	streakRule: DEFAULT_STREAK_RULE,
 	minimumCounts: true,
@@ -113,6 +116,13 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		!isNew || source ? 'full' : asked === 'guided' || asked === 'full' ? asked : settings.guidedSetup ? 'choose' : 'full';
 	const tasks = listTasks(accountId).map(({ id, name }) => ({ id, name }));
 	const allHabits = listHabits(accountId);
+	// Groups this habit can sit in: not itself, nor a group inside it. Its current group stays
+	// listed even when archived, so the form shows where it is.
+	const withArchived = listHabits(accountId, { archived: true });
+	const below = isNew ? new Set<string>() : descendants(withArchived, params.id);
+	const groups = withArchived
+		.filter((x) => x.direction === 'build' && isGroup(x.schedule) && x.id !== params.id && !below.has(x.id) && (!x.archived || x.id === form.parentId))
+		.map(({ id, name, archived }) => ({ id, name, archived }));
 	return {
 		id: params.id,
 		isNew,
@@ -126,6 +136,11 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		repeating: repeatingTasks(tasks.map((t) => t.id)),
 		tags: listTagNames(accountId),
 		habits: allHabits.filter((x) => x.id !== params.id).map(({ id, name, direction }) => ({ id, name, direction })),
+		groups,
+		/** For a group: the habits inside it. */
+		inside: isNew ? [] : withArchived.filter((x) => x.parentId === params.id).map(({ id, name, archived }) => ({ id, name, archived })),
+		/** A habit with its own logs can't become a group: a group's days come from the habits inside it. */
+		ownLogs: !isNew && !isGroup(loaded.schedule) && habitLogged(params.id),
 		identities: listIdentities(accountId),
 		areas: listAreas(accountId),
 		ranges: settings.ranges,

@@ -38,6 +38,8 @@ export interface DsHabit {
 	minimumCounts: boolean;
 	/** Reduce mode: slips are allowed up to a daily or weekly limit. */
 	limit: Limit | null;
+	/** A group: its days are worked out from the habits inside it, so they'd count twice in a total. */
+	group?: boolean;
 }
 export interface DsTask {
 	id: string;
@@ -85,6 +87,8 @@ export interface DsOcc {
 	time: string | null;
 	/** The targets each Slot had, kept when they changed later. */
 	goals?: Record<string, { sets: number | null; targets: Record<string, number> | null }> | null;
+	/** A group's day: how many habits inside were done, of how many that counted. */
+	rollup?: { done: number; total: number } | null;
 }
 export interface DsEntry {
 	occurrenceId: string;
@@ -446,7 +450,9 @@ export function scope(card: StatCard, P: Prepared, ctx: Ctx) {
 	const cf = card.filter;
 	const areas = [bf.areas, cf.areas].filter((a) => a.length);
 	const tags = [...new Set([...bf.tags, ...cf.tags])].map((t) => t.toLowerCase());
+	// A group is only counted when it is picked: in "all habits" its days would count twice.
 	const habitOk = (h: DsHabit) =>
+		(!h.group || bf.habit === h.id || cf.habits.includes(h.id)) &&
 		(!bf.habit || h.id === bf.habit) &&
 		(!cf.habits.length || cf.habits.includes(h.id)) &&
 		(!bf.identity || h.identities.includes(bf.identity)) &&

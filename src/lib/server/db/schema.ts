@@ -1,7 +1,7 @@
 // Database schema. Terms follow the vocabulary doc:
 // Habit > Variant > Slot > Task (from the Library) > Metric,
 // Schedule -> Occurrence -> Log -> Entry, and Slips for break habits.
-import { sqliteTable, text, integer, real, primaryKey, index } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, primaryKey, index, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type { Level, StreakRule } from '../../engine/streak';
 import type { Limit } from '../../engine/limit';
 import type { Progression } from '../../engine/progression';
@@ -268,7 +268,12 @@ export const habit = sqliteTable('habit', {
 	 * Schedules from before an edit that applied from a later day on, oldest first: each one
 	 * still decides which days up to its `until` were due (see engine/unlogged.ts).
 	 */
-	earlierSchedules: text('earlier_schedules', { mode: 'json' }).$type<EarlierSchedule[]>()
+	earlierSchedules: text('earlier_schedules', { mode: 'json' }).$type<EarlierSchedule[]>(),
+	/**
+	 * The group this habit sits in: another build habit whose Schedule is a group. Groups can
+	 * sit in groups. Deleting a group moves what was inside it to the top level.
+	 */
+	parentId: text('parent_id').references((): AnySQLiteColumn => habit.id, { onDelete: 'set null' })
 });
 
 /** A pause for one Habit, or for all of them when habitId is null. Dates are inclusive. */
@@ -371,7 +376,9 @@ export const occurrence = sqliteTable('occurrence', {
 	 * The targets each Slot had, kept when they changed later (Raise, an edit), so a log is
 	 * always judged against what it aimed for. Null: the Slots' targets now still apply.
 	 */
-	goals: text('goals', { mode: 'json' }).$type<Record<string, SlotGoals>>()
+	goals: text('goals', { mode: 'json' }).$type<Record<string, SlotGoals>>(),
+	/** A group's day: how many habits inside it were done, of how many that counted. */
+	rollup: text('rollup', { mode: 'json' }).$type<{ done: number; total: number }>()
 });
 
 /** One Slot's targets as they were: Target, Minimum and Stretch values by Metric id, and sets. */

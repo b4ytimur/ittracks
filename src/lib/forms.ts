@@ -83,6 +83,12 @@ const schedule = z.discriminatedUnion('kind', [
 		onMiss: z.enum(['wait', 'skip']),
 		weekdays: z.array(z.number().int().min(0).max(6)),
 		start: z.string().date()
+	}),
+	// A group of habits: due when one inside is due; done when all (target null) or `target` are done.
+	z.object({
+		kind: z.literal('group'),
+		target: z.number().int().min(1).max(100).nullable(),
+		minimum: z.number().int().min(1).max(100).nullable()
 	})
 ]);
 export type ScheduleForm = z.infer<typeof schedule>;
@@ -206,11 +212,13 @@ export const habitForm = z
 		limit: limitForm.nullable().default(null),
 		progression: progressionForm.nullable().default(null),
 		areaId: id.nullable().default(null),
+		/** The group this habit sits in (a habit whose Schedule is a group), or null. */
+		parentId: id.nullable().default(null),
 		/** A due day that ends with no log: counted as missed (the default), or ignored. */
 		unlogged: z.enum(['missed', 'ignore']).optional()
 	})
 	.superRefine((h, ctx) => {
-		if (h.direction === 'build' && h.variants.length === 0)
+		if (h.direction === 'build' && h.variants.length === 0 && h.schedule?.kind !== 'group')
 			ctx.addIssue({ code: 'custom', message: 'A build habit needs at least one Variant' });
 		if (h.direction === 'build' && !h.schedule)
 			ctx.addIssue({ code: 'custom', message: 'A build habit needs a Schedule' });

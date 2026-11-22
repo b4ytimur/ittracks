@@ -12,11 +12,13 @@ import { ensureToday, settleAll, userToday } from '../today';
 import { prepare, describeLog, type Dataset, type Prepared } from '$lib/stats/engine';
 import { describeSchedule } from '$lib/describe';
 import { progressText } from '$lib/engine/progress';
+import { rollupText } from '$lib/engine/rollup';
 import { progressForIds } from '../progress';
 import { streak, type StreakRule } from '$lib/engine/streak';
 import { addDays, weekday } from '$lib/engine/dates';
 import { excerpt } from '$lib/markdown';
 import type { ScheduleForm } from '$lib/forms';
+import { isGroup, type Schedule } from '$lib/engine/schedule';
 import { ActionError, canSeeHabit, requireScope, type Actor } from './actor';
 import { dayOf, findHabit, visibleHabits } from './day';
 import { listEvents } from './events';
@@ -122,6 +124,9 @@ export function describe(actor: Actor) {
 				archived: h.archived,
 				startDate: h.startDate,
 				schedule: h.direction === 'build' ? describeSchedule(h.schedule as ScheduleForm | null) : 'Break habit: log slips',
+				// A group's days are worked out from the habits inside it; it can't be logged itself.
+				...(isGroup(h.schedule as Schedule | null) ? { group: { inside: habits.filter((x) => x.parentId === h.id).map((x) => x.name) } } : {}),
+				...(h.parentId ? { inGroup: habits.find((x) => x.id === h.parentId)?.name ?? null } : {}),
 				streakRule: (h.streakRule as StreakRule).kind,
 				variants: variants
 					.filter((v) => v.habitId === h.id)
@@ -236,7 +241,7 @@ export function listLogs(
 			status: o.status,
 			variant: o.variantId ? (P.variants.get(o.variantId)?.name ?? null) : null,
 			level: o.level ?? (o.status === 'done' ? 'target' : null),
-			progress: p ? progressText(p) : null,
+			progress: p ? progressText(p) : o.rollup ? rollupText(o.rollup) : null,
 			summary: logs.map((l) => `${l.task.name}: ${describeLog(l, P)}`).join(' | ') || undefined,
 			time: o.time,
 			...(notes && occNotes.get(o.id) ? { notes: occNotes.get(o.id) } : {})
@@ -485,7 +490,11 @@ export function today(actor: Actor) {
 	requireScope(actor, 'read');
 	const date = userToday(actor.accountId, actor.tz);
 	// As opening Today does: create today's logs for habits due today.
-	for (const h of visibleHabits(actor)) if (h.direction === 'build' && h.schedule) ensureToday(actor.accountId, h.id, h.schedule as ScheduleForm, date);
+	// Groups last: one of them counts every group's day from the habits inside.
+	const build = visibleHabits(actor).filter((h) => h.direction === 'build' && h.schedule);
+	for (const h of build) if (!isGroup(h.schedule as Schedule)) ensureToday(actor.accountId, h.id, h.schedule as ScheduleForm, date);
+	const group = build.find((h) => isGroup(h.schedule as Schedule));
+	if (group) ensureToday(actor.accountId, group.id, group.schedule as ScheduleForm, date);
 	return dayView(actor, date);
 }
 

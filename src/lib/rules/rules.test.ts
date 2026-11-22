@@ -180,6 +180,33 @@ describe('habit rules', () => {
 		expect(checkHabit(h, { taskRepeats: () => false }).form.variants[0].slots[0].sets).toBeNull();
 		expect(checkHabit(h, { taskRepeats: () => true }).form.variants[0].slots[0].sets).toBe(3);
 	});
+
+	it('G1-G4: a group drops what only a habit with its own logs uses; break habits sit in no group', () => {
+		const g: HabitForm = {
+			...base(),
+			schedule: { kind: 'group', target: null, minimum: null },
+			quickDone: true,
+			remind: true,
+			cue: { ...base().cue, time: '07:00' },
+			levels: { enabled: true, minimum: 'a', target: 'b', stretch: 'c' },
+			progression: { after: 5, by: 5, unit: 'percent' },
+			unlogged: 'ignore'
+		};
+		const r = checkHabit(g);
+		expect(r.errors).toEqual([]);
+		expect(r.form).toMatchObject({ variants: [], quickDone: false, remind: false, progression: null, unlogged: 'missed' });
+		expect(r.form.levels.enabled).toBe(false);
+		expect(habitForm.safeParse({ ...g, variants: [] }).success).toBe(true);
+		expect(checkHabit({ ...base(), direction: 'break', parentId: H }).form.parentId).toBeNull();
+		expect(checkHabit({ ...base(), parentId: H }).form.parentId).toBe(H);
+	});
+
+	it('G3: a group Minimum must be fewer habits than its target', () => {
+		const g = (target: number | null, minimum: number | null): HabitForm => ({ ...base(), variants: [], schedule: { kind: 'group', target, minimum } });
+		expect(checkHabit(g(2, 2)).errors[0]?.reason).toMatch(/fewer habits than the target/);
+		expect(checkHabit(g(3, 1)).errors).toEqual([]);
+		expect(checkHabit(g(null, 2)).errors).toEqual([]);
+	});
 });
 
 describe('task rules', () => {
