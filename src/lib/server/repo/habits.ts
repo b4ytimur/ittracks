@@ -15,8 +15,9 @@ import { isGroup, type Schedule } from '$lib/engine/schedule';
 import { makesCycle } from '$lib/engine/tree';
 import { keepGoals, rejudge } from '../progress';
 import type { StreakRule } from '$lib/engine/streak';
-import { checkHabit, checkHabitPast, type HabitCheck, type HabitCtx } from '$lib/rules/habit';
-import { habitLogged, PastEditError } from '../history';
+import { checkHabit, checkHabitPast, removedTriggers, type HabitCheck, type HabitCtx } from '$lib/rules/habit';
+import { feelingsUsed, habitLogged, PastEditError } from '../history';
+import { activeOptions, mergeOptions } from '$lib/options';
 
 /** What the habit rules need to know from the database. */
 export function habitCtx(f: HabitForm): HabitCtx {
@@ -111,7 +112,8 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 			.all()
 			.map((r) => r.id),
 		ifThen,
-		triggers: h.triggers ?? DEFAULT_TRIGGERS,
+		// Archived feelings stay with past slips; the editor offers the rest.
+		triggers: activeOptions(h.triggers ?? DEFAULT_TRIGGERS).map(({ id, name }) => ({ id, name })),
 		reframe: h.reframe ?? '',
 		bundle: h.bundle ?? { reward: '', strict: false },
 		prep: h.prep ?? [],
@@ -341,12 +343,18 @@ export function saveHabit(
 					schedule: habit.schedule,
 					earlierSchedules: habit.earlierSchedules,
 					minimumCounts: habit.minimumCounts,
-					levels: habit.levels
+					levels: habit.levels,
+					triggers: habit.triggers
 				})
 				.from(habit)
 				.where(and(eq(habit.id, id), eq(habit.accountId, accountId)))
 				.get();
 			if (!owned) return null;
+			// A feeling removed after a slip used it is archived, so that slip keeps its word.
+			if (isBreak) {
+				const gone = removedTriggers({ triggers: activeOptions(owned.triggers) }, f, feelingsUsed(id, tx));
+				values.triggers = mergeOptions(owned.triggers, f.triggers, gone.archive);
+			}
 			// Becoming a group, or a group becoming a habit: nothing logged by hand crosses over
 			// (checkHabitEdit refuses that), so the days written for the old kind go.
 			const kindChanged = isGroup(owned.schedule as Schedule | null) !== isGroup(values.schedule as Schedule | null);

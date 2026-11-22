@@ -10,6 +10,7 @@ import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { z } from 'zod';
 import { db } from '../db';
 import * as s from '../db/schema';
+import { upgradeOptionIds } from '../db/upgrade';
 import { getSettings } from '../settings';
 import { zip } from '../zip';
 import { describeSchedule } from '$lib/describe';
@@ -18,6 +19,7 @@ import { ActionError, requireScope, type Actor } from './actor';
 import { emit } from './events';
 import { listLogs, listValues, type LogRow, type ValueRow } from './read';
 import { depthOf } from '$lib/engine/tree';
+import { activeOptions } from '$lib/options';
 
 export const EXPORT_FORMAT = 'ittracks-export';
 export const EXPORT_VERSION = 1;
@@ -261,7 +263,7 @@ export function exportCsvZip(actor: Actor): { body: Uint8Array; today: string } 
 					type: m.type,
 					unit: m.unit || (m.type === 'duration' ? 'min' : ''),
 					per_set: m.repeats,
-					options: (m.choices ?? []).join(' | ')
+					options: activeOptions(m.choices).map((o) => o.name).join(' | ')
 				}))
 			)
 		}
@@ -443,6 +445,8 @@ export function importReplace(actor: Actor, raw: unknown): { counts: Record<stri
 				}
 			}
 		}
+		// An export from an older version brings older shapes (choice options as words).
+		upgradeOptionIds(tx);
 	});
 	emit(actor, 'data.imported', { data: { counts, renumbered } });
 	return { counts, renumbered };

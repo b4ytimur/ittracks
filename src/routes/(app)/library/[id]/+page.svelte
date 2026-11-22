@@ -5,6 +5,7 @@
 	import { enhance } from '$app/forms';
 	import { noteDefaults, type MetricForm, type TaskForm } from '$lib/forms';
 	import NoteBox from '$lib/NoteBox.svelte';
+	import OptionList from '$lib/OptionList.svelte';
 	import { defaultStep, metricsFromType, type TaskType } from '$lib/task-types';
 	import { blocked } from '$lib/rules/core';
 	import { checkTask, checkTaskPast, metricPast, metricRules, taskRules } from '$lib/rules/task';
@@ -51,8 +52,9 @@
 	const scored = (m: MetricForm) => Object.keys(m.scores).length > 0;
 	function toggleScores(m: MetricForm, on: boolean) {
 		// A falling scale by default: the first option is the best (Great = 5 ... Bad = 1).
-		m.scores = on ? Object.fromEntries(m.choices.map((c, i) => [c, m.choices.length - i])) : {};
+		m.scores = on ? Object.fromEntries(m.choices.map((c, i) => [c.id, m.choices.length - i])) : {};
 	}
+	/** Set or clear the number of option `c` (its id). */
 	function setScore(m: MetricForm, c: string, v: string) {
 		const n = Number(v);
 		const next = { ...m.scores };
@@ -282,29 +284,26 @@
 				</fieldset>
 			{/if}
 			{#if m.type === 'choice'}
-				<label
-					>Options, separated by commas
-					<input
-						value={m.choices.join(', ')}
-						oninput={(e) =>
-							(m.choices = e.currentTarget.value
-								.split(',')
-								.map((s) => s.trim())
-								.filter(Boolean))}
-						placeholder="wide, narrow"
-					/>
-				</label>
+				<span class="small-text muted">Options</span>
+				<OptionList
+					bind:options={m.choices}
+					used={(id) => data.logged.options.includes(id)}
+					label="Option"
+					addLabel="Add option"
+					placeholder="e.g. Great"
+					usedTitle="Picked in past logs: they keep it, and a rename shows there too"
+				>
+					{#snippet after(o: { id: string; name: string })}
+						{#if scored(m)}
+							<input class="score" type="number" step="any" value={m.scores[o.id] ?? ''} oninput={(e) => setScore(m, o.id, e.currentTarget.value)} aria-label="Number for {o.name || 'this option'}" />
+						{/if}
+					{/snippet}
+				</OptionList>
 				{#if m.choices.length >= 2}
 					<label style="color: var(--text)"
 						><input type="checkbox" checked={scored(m)} onchange={(e) => toggleScores(m, e.currentTarget.checked)} /> Give each option a number, so Stats can chart it (mood 5 to 1)</label
 					>
-					{#if scored(m)}
-						<div class="scores">
-							{#each m.choices as c (c)}
-								<label class="score">{c} <input type="number" step="any" value={m.scores[c] ?? ''} oninput={(e) => setScore(m, c, e.currentTarget.value)} aria-label="Number for {c}" /></label>
-							{/each}
-						</div>
-					{/if}
+					{#if scored(m) && isLogged(m.id)}<p class="muted small-text" style="margin: 0">A changed number counts from today on: past days keep the numbers they had.</p>{/if}
 				{/if}
 			{/if}
 			{#if m.type === 'text'}
@@ -459,13 +458,8 @@
 {/if}
 
 <style>
-	.scores {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-	}
 	.score {
-		width: 6.5rem;
+		width: 4rem;
 	}
 	.log-settings summary {
 		cursor: pointer;

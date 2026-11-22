@@ -6,6 +6,7 @@ import { db } from './db';
 import { dayNote, entry, habit, metric, occurrence, slip, task } from './db/schema';
 import { NOTE_MAX } from '$lib/forms';
 import type { JournalDay, JournalItem } from '$lib/journal';
+import { optionName, scoresOn, type ChoiceOption, type EarlierScores, type Scores } from '$lib/options';
 
 export function getDayNote(accountId: string, date: string): string {
 	return db.select({ text: dayNote.text }).from(dayNote).where(and(eq(dayNote.accountId, accountId), eq(dayNote.date, date))).get()?.text ?? '';
@@ -79,10 +80,22 @@ export function loadJournal(accountId: string, range: JournalRange, opts: { toda
 		}
 	}
 	const taskIds = [...new Set([...byOcc.values()].flat().map((e) => e.taskId))];
-	const byTask = new Map<string, { id: string; name: string; type: string; scores: Record<string, number> | null }[]>();
+	const byTask = new Map<
+		string,
+		{ id: string; name: string; type: string; choices: ChoiceOption[] | null; scores: Scores | null; earlierScores: EarlierScores[] | null }[]
+	>();
 	if (taskIds.length) {
 		for (const m of db
-			.select({ id: metric.id, taskId: metric.taskId, name: metric.name, type: metric.type, repeats: metric.repeats, scores: metric.scores })
+			.select({
+				id: metric.id,
+				taskId: metric.taskId,
+				name: metric.name,
+				type: metric.type,
+				repeats: metric.repeats,
+				choices: metric.choices,
+				scores: metric.scores,
+				earlierScores: metric.earlierScores
+			})
 			.from(metric)
 			.innerJoin(task, eq(metric.taskId, task.id))
 			.where(eq(task.accountId, accountId))
@@ -105,7 +118,8 @@ export function loadJournal(accountId: string, range: JournalRange, opts: { toda
 				const v = e.values[m.id];
 				if (typeof v !== 'string' || !v.trim()) continue;
 				if (m.type === 'text') wrote.push({ kind: 'field', title: `${o.habit} · ${m.name}`, habitId: o.habitId, habit: o.habit, text: v, href });
-				else answers.push({ field: m.name, value: v, score: typeof m.scores?.[v] === 'number' ? m.scores[v] : null });
+				// A Choice holds its option's id: the answer is the option's name and that day's number.
+				else answers.push({ field: m.name, value: optionName(m.choices, v) ?? v, score: scoresOn(m.scores, m.earlierScores, o.date)[v] ?? null });
 			}
 		}
 		if (o.notes?.trim()) wrote.push({ kind: 'log', title: `${o.habit} · Notes`, habitId: o.habitId, habit: o.habit, text: o.notes, href });

@@ -535,7 +535,7 @@
 										{:else if m.type === 'choice'}
 											<select value={num(set.values[m.id])} onchange={(e) => setValue(i, j, m.id, e.currentTarget.value)}>
 												<option value=""></option>
-												{#each m.choices ?? [] as c (c)}<option>{c}</option>{/each}
+												{#each m.choices ?? [] as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
 											</select>
 										{:else if m.type === 'text'}
 											<input value={num(set.values[m.id])} oninput={(e) => setValue(i, j, m.id, e.currentTarget.value)} />
@@ -576,7 +576,7 @@
 						<label>{m.name}{m.required ? ' *' : ''}
 							<select value={num(log[i].summary[m.id])} onchange={(e) => (log[i].summary[m.id] = e.currentTarget.value)}>
 								<option value=""></option>
-								{#each m.choices ?? [] as c (c)}<option>{c}</option>{/each}
+								{#each m.choices ?? [] as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
 							</select>
 						</label>
 					{:else if m.type === 'text' && isLong(m)}

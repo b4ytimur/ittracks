@@ -1,6 +1,7 @@
 import { and, desc, eq, gte, inArray, ne } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { entry, habit, metric, occurrence, slip, task, variant } from '$lib/server/db/schema';
+import { optionName, type ChoiceOption } from '$lib/options';
 import { getSettings, getViews } from '$lib/server/settings';
 import { listAreas } from '$lib/server/repo/areas';
 import { initialState } from '$lib/views';
@@ -52,7 +53,7 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		: [];
 	const metrics = entries.length
 		? db
-				.select({ id: metric.id, taskId: metric.taskId, name: metric.name, type: metric.type, unit: metric.unit })
+				.select({ id: metric.id, taskId: metric.taskId, name: metric.name, type: metric.type, unit: metric.unit, choices: metric.choices })
 				.from(metric)
 				.where(inArray(metric.taskId, [...new Set(entries.map((e) => e.taskId))]))
 				.orderBy(metric.sortOrder)
@@ -121,7 +122,7 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 	};
 };
 
-type Metric = { id: string; taskId: string; name: string; type: string; unit: string | null };
+type Metric = { id: string; taskId: string; name: string; type: string; unit: string | null; choices: ChoiceOption[] | null };
 
 /** "Bench press: 80 kg × 8, 80 kg × 8" — one line per Task, sets in order. */
 function summarize(entries: { taskId: string; task: string; values: Record<string, unknown> }[], metrics: Metric[]): string[] {
@@ -135,6 +136,7 @@ function summarize(entries: { taskId: string; task: string; values: Record<strin
 				if (v === true) return m.name;
 				// Text can be a whole journal entry: the start of it is enough here.
 				if (m.type === 'text' && typeof v === 'string') return `${m.name}: ${excerpt(v, 60)}`;
+				if (m.type === 'choice') return optionName(m.choices, v);
 				return `${v}${m.unit ? ` ${m.unit}` : ''}`;
 			})
 			.filter(Boolean);

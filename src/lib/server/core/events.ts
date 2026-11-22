@@ -13,7 +13,7 @@ export const EVENT_TYPES = {
 	'occurrence.reopened': { v: 1, about: 'A done or skipped day was put back to due (Undo). data: occurrenceId, cleared' },
 	'occurrence.cleared': { v: 1, about: "A past day's log was taken away. data: occurrenceId" },
 	'occurrence.restored': { v: 1, about: 'Undo on the Day page put a day back as it was before the last change. data: none' },
-	'value.logged': { v: 1, about: 'A value was logged for a field. data: occurrenceId, taskId, metricId, value, total' },
+	'value.logged': { v: 2, about: "A value was logged for a field. A Choice's value is its option's id (describe lists the options). data: occurrenceId, taskId, metricId, value, total" },
 	'sets.logged': { v: 1, about: 'Sets or values were logged for a Task. data: occurrenceId, taskId, sets, replaced' },
 	'log.saved': { v: 1, about: 'The full log screen saved a finished log. data: occurrenceId, entries' },
 	'slip.logged': { v: 1, about: 'A slip of a break habit. data: slipId, count' },
