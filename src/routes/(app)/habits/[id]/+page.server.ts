@@ -72,6 +72,7 @@ const blank = (today: string): HabitForm => ({
 	startDate: today,
 	variants: [],
 	schedule: null,
+	parentId: null,
 	cue: emptyCue(),
 	streakRule: DEFAULT_STREAK_RULE,
 	minimumCounts: true,

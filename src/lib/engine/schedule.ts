@@ -7,7 +7,21 @@ export type Schedule =
 	| { kind: 'weekly'; days: Partial<Record<string, string>> }
 	| { kind: 'frequency'; times: number; period: 'week' | 'month'; variantId: string }
 	| Rotation
-	| { kind: 'interval'; every: number; start: ISODate; variantId: string };
+	| { kind: 'interval'; every: number; start: ISODate; variantId: string }
+	| GroupRule;
+
+/**
+ * A group of habits has no days of its own: it is due when a habit inside it is due, and done
+ * when enough of them are done (see engine/rollup.ts). `target` null means all of them;
+ * `minimum` is how many make a day done at the Minimum, or null for no Minimum.
+ */
+export interface GroupRule {
+	kind: 'group';
+	target: number | null;
+	minimum: number | null;
+}
+
+export const isGroup = (s: { kind: string } | null | undefined): s is GroupRule => s?.kind === 'group';
 
 /**
  * Rotation by Variant: Variants in order, each followed by its rest days.
@@ -55,6 +69,10 @@ export function dueOn(schedule: Schedule, history: Done[], date: ISODate): strin
 			return schedule.step === 'week'
 				? weekRotationDue(schedule, date)
 				: variantRotationDue(schedule, history, date);
+
+		case 'group':
+			// Its days come from the habits inside it, never from the schedule.
+			return null;
 	}
 }
 

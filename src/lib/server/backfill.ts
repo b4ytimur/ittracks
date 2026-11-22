@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { db } from './db';
 import { entry, habit, occurrence, slip, slot, task, variant } from './db/schema';
-import { dueOn, type Schedule } from '$lib/engine/schedule';
+import { dueOn, isGroup, type Schedule } from '$lib/engine/schedule';
 import { carriesOver, dependsOnHistory, isRealDate, logWindow, variantFor, type LogWindow } from '$lib/engine/backfill';
 import { scheduleStartBy } from '$lib/engine/unlogged';
 import { pauseOn } from '$lib/engine/pause';
@@ -103,7 +103,8 @@ export function loadDay(accountId: string, date: string, today: string) {
 			continue;
 		}
 		const schedule = h.schedule as ScheduleForm | null;
-		if (!schedule) continue;
+		// A group's day comes from the habits inside it, so it isn't logged here.
+		if (!schedule || isGroup(schedule)) continue;
 		// Leftovers from earlier visits settle first, as Today would.
 		settle(accountId, h.id, schedule, today);
 		const occ = rowOn(h.id, date);

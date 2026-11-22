@@ -23,13 +23,18 @@ export interface HabitCtx {
 
 const build = (h: HabitForm) => h.direction === 'build';
 const brk = (h: HabitForm) => h.direction === 'break';
+/** A group: a build habit whose days come from the habits inside it (G rules). */
+const isGroupForm = (h: HabitForm) => h.schedule?.kind === 'group';
+const notGroup = (h: HabitForm) => !isGroupForm(h);
 const BUILD_ONLY = 'Only build habits use this';
 const BREAK_ONLY = 'Only break habits use this';
+const NOT_GROUP = "A group's days come from the habits inside it, so it doesn't use this";
 
 /** Times a habit comes up per week or month, when the Schedule says. */
 function timesPer(h: HabitForm, period: 'week' | 'month'): number | null {
 	const s = h.schedule;
 	if (!s) return null;
+	if (s.kind === 'group') return null;
 	const perWeek =
 		s.kind === 'weekly'
 			? Object.keys(s.days).length
@@ -56,11 +61,18 @@ export const habitRules = defineRules<HabitForm, HabitCtx>({
 	areaId: independent,
 	identityIds: independent,
 	reframe: independent,
+	// G1: only build habits sit in groups for now (break habits log slips, not days).
+	parentId: [onlyWhen(build, BUILD_ONLY, null)],
 
-	// B1: a break habit has no Schedule or Variants.
-	variants: [onlyWhen(build, BUILD_ONLY, [])],
+	// B1: a break habit has no Schedule or Variants. G2: nor does a group; the habits inside it do.
+	variants: [onlyWhen(build, BUILD_ONLY, []), onlyWhen(notGroup, 'A group has no Tasks of its own; the habits inside it do', [])],
 	schedule: [
 		onlyWhen(build, BUILD_ONLY, null),
+		// G3: the Minimum is fewer habits than the target.
+		check(
+			(h) => h.schedule?.kind === 'group' && h.schedule.minimum !== null && h.schedule.target !== null && h.schedule.minimum >= h.schedule.target,
+			'The Minimum must be fewer habits than the target'
+		),
 		// S3: rotation weekdays only apply to a rotation by week, and it needs some.
 		check(
 			(h) => h.schedule?.kind === 'rotation' && h.schedule.step === 'week' && h.schedule.weekdays.length === 0,
@@ -93,7 +105,7 @@ export const habitRules = defineRules<HabitForm, HabitCtx>({
 		})
 	],
 	// H3: a reminder needs a moment to fire.
-	remind: [onlyWhen(build, BUILD_ONLY, false), requiresAny(['cue.time', 'cue.range'], 'Set a time or a part of the day first', false)],
+	remind: [onlyWhen(build, BUILD_ONLY, false), onlyWhen(notGroup, NOT_GROUP, false), requiresAny(['cue.time', 'cue.range'], 'Set a time or a part of the day first', false)],
 
 	// L1 is the streakRule type itself. S5: grace that can never run out.
 	streakRule: [
@@ -105,18 +117,20 @@ export const habitRules = defineRules<HabitForm, HabitCtx>({
 		}, 'With this many grace misses the streak can never break. Lower the misses or use Consistency.', 'warn')
 	],
 	// L2, L3: Levels.
-	'levels.enabled': [onlyWhen(build, BUILD_ONLY, false)],
+	// G4: a group's Minimum is a number of habits, set on its schedule.
+	'levels.enabled': [onlyWhen(build, BUILD_ONLY, false), onlyWhen(notGroup, NOT_GROUP, false)],
 	'levels.minimum': [onlyWhen((h) => build(h) && h.levels.enabled, 'Turn on Levels first', '')],
 	'levels.target': [onlyWhen((h) => build(h) && h.levels.enabled, 'Turn on Levels first', '')],
 	'levels.stretch': [onlyWhen((h) => build(h) && h.levels.enabled, 'Turn on Levels first', '')],
 	// A day short of its target: counts at the Minimum (any log without Levels), or only in full.
 	minimumCounts: [onlyWhen(build, BUILD_ONLY, true)],
 	// Days nobody logged: break habits count slips, not days, so only build habits choose.
-	unlogged: [onlyWhen(build, BUILD_ONLY, 'missed')],
-	quickDone: [onlyWhen(build, BUILD_ONLY, false)],
+	unlogged: [onlyWhen(build, BUILD_ONLY, 'missed'), onlyWhen(notGroup, NOT_GROUP, 'missed')],
+	quickDone: [onlyWhen(build, BUILD_ONLY, false), onlyWhen(notGroup, NOT_GROUP, false)],
 	// L4: progression raises targets, so it needs some.
 	progression: [
 		onlyWhen(build, BUILD_ONLY, null),
+		onlyWhen(notGroup, NOT_GROUP, null),
 		check((h) => !!h.progression && build(h) && !hasNumberTarget(h), 'Progression needs a number target on at least one Slot')
 	],
 	'bundle.reward': [onlyWhen(build, BUILD_ONLY, '')],
@@ -230,6 +244,7 @@ export const habitPast = definePolicies<HabitForm>({
 	notes: display(),
 	startDate: recompute('Days before a later start stop counting; an earlier start counts the days in between'),
 	areaId: display(),
+	parentId: recompute("A group's past days are counted again from the habits inside it now"),
 	identityIds: recompute('Identity votes are counted again from the days done'),
 	reframe: display(),
 	variants: unguarded('Removing a Variant unlinks the days logged with it from it'),

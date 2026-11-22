@@ -17,6 +17,7 @@ import { streak, type StreakRule } from '$lib/engine/streak';
 import { addDays, weekday } from '$lib/engine/dates';
 import { excerpt } from '$lib/markdown';
 import type { ScheduleForm } from '$lib/forms';
+import { isGroup, type Schedule } from '$lib/engine/schedule';
 import { ActionError, canSeeHabit, requireScope, type Actor } from './actor';
 import { dayOf, findHabit, visibleHabits } from './day';
 import { listEvents } from './events';
@@ -485,7 +486,11 @@ export function today(actor: Actor) {
 	requireScope(actor, 'read');
 	const date = userToday(actor.accountId, actor.tz);
 	// As opening Today does: create today's logs for habits due today.
-	for (const h of visibleHabits(actor)) if (h.direction === 'build' && h.schedule) ensureToday(actor.accountId, h.id, h.schedule as ScheduleForm, date);
+	// Groups last: one of them counts every group's day from the habits inside.
+	const build = visibleHabits(actor).filter((h) => h.direction === 'build' && h.schedule);
+	for (const h of build) if (!isGroup(h.schedule as Schedule)) ensureToday(actor.accountId, h.id, h.schedule as ScheduleForm, date);
+	const group = build.find((h) => isGroup(h.schedule as Schedule));
+	if (group) ensureToday(actor.accountId, group.id, group.schedule as ScheduleForm, date);
 	return dayView(actor, date);
 }
 
