@@ -218,9 +218,10 @@ describe('habit outcomes', () => {
 	});
 
 	it('counts target met from the targets, not just from done (swarm finding)', () => {
-		// 80×8, 80×8, 80×6 reaches 8 reps in 2 of 3 sets: partly. 85×8 three times: met.
+		// 80×8, 80×8, 80×6 reaches 8 reps in 2 of 3 sets: not met. 85×8 three times: met.
+		// A day either met its target or not (round 3: half credit nobody could explain).
 		const r = run({ what: { source: 'outcomes' }, perLog: 'targetMet', overTime: 'avg', filter: { habits: ['gym'] } });
-		expect(r.total).toBe(75);
+		expect(r.total).toBe(50);
 	});
 
 	it('splits by level, with no level counting as Target', () => {

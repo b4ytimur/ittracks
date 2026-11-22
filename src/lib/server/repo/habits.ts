@@ -10,6 +10,9 @@ import {
 	type ScheduleForm
 } from '$lib/forms';
 import { makesLoop } from '$lib/engine/stack';
+import { keepEarlier, sameSchedule, scheduleStartBy, type EarlierSchedule } from '$lib/engine/unlogged';
+import type { Schedule } from '$lib/engine/schedule';
+import { keepGoals, rejudge } from '../progress';
 import type { StreakRule } from '$lib/engine/streak';
 import { checkHabit, type HabitCheck, type HabitCtx } from '$lib/rules/habit';
 
@@ -164,16 +167,60 @@ export function checkLinks(accountId: string, id: string | null, f: HabitForm): 
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+/** Which days a schedule edit applies to: from today on (the past keeps its plan), or past days too. */
+export type ScheduleApplies = 'today' | 'past';
+
+interface Before {
+	startDate: string;
+	unlogged: 'missed' | 'ignore';
+	schedule: unknown;
+	earlierSchedules: EarlierSchedule[] | null;
+}
+
+/**
+ * A schedule edit that applies from today on: the old schedule keeps the days up to yesterday,
+ * so they stay as they were, whatever is logged later. One that applies to past days too (a
+ * plan that was wrong from the start) counts every past day again with the new schedule.
+ * Today's log is planned again either way while nothing is logged in it.
+ */
+function scheduleAfter(
+	tx: Tx,
+	id: string,
+	before: Before,
+	after: { startDate: string; schedule: unknown },
+	applies: ScheduleApplies,
+	today: string
+): { earlierSchedules?: EarlierSchedule[] | null; settledThrough?: null } {
+	if (!before.schedule || !after.schedule || sameSchedule(before.schedule, after.schedule)) {
+		// Starting earlier: the earliest schedule covers the new days, from a start in time.
+		const first = before.earlierSchedules?.[0];
+		if (first && after.startDate < before.startDate)
+			return { earlierSchedules: [{ ...first, schedule: scheduleStartBy(first.schedule, after.startDate) }, ...before.earlierSchedules!.slice(1)] };
+		return {};
+	}
+	const untouched = tx
+		.select({ id: occurrence.id, notes: occurrence.notes })
+		.from(occurrence)
+		.where(and(eq(occurrence.habitId, id), eq(occurrence.date, today), eq(occurrence.status, 'due')))
+		.all()
+		.filter((o) => !o.notes && !tx.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, o.id)).get());
+	if (untouched.length) tx.delete(occurrence).where(inArray(occurrence.id, untouched.map((o) => o.id))).run();
+	if (applies === 'past') return { earlierSchedules: null, settledThrough: null };
+	return { earlierSchedules: keepEarlier(before.earlierSchedules, before.schedule as Schedule, after.startDate, today) };
+}
+
 /**
  * Misses written for days nobody logged follow the habit's settings. Switching to ignore them
  * takes them away; switching back, or starting earlier, counts them again from the start
- * (on the next settle). Starting later drops misses before the new start.
+ * (on the next settle). Starting later drops misses before the new start. A schedule edit
+ * that applies to past days too counts them all again.
  */
 function settledAfter(
 	tx: Tx,
 	id: string,
 	before: { startDate: string; unlogged: 'missed' | 'ignore' },
-	after: { startDate: string; unlogged: 'missed' | 'ignore' }
+	after: { startDate: string; unlogged: 'missed' | 'ignore' },
+	recountAll = false
 ): { settledThrough?: null } {
 	// A miss with nothing logged and no note in it is one the app wrote for an unlogged day.
 	const unloggedMisses = (where: ReturnType<typeof and>) =>
@@ -187,11 +234,11 @@ function settledAfter(
 	const drop = (ids: string[]) => {
 		if (ids.length) tx.delete(occurrence).where(inArray(occurrence.id, ids)).run();
 	};
-	if (after.unlogged === 'ignore' && before.unlogged !== 'ignore')
+	if ((after.unlogged === 'ignore' && before.unlogged !== 'ignore') || recountAll)
 		drop(unloggedMisses(and(eq(occurrence.habitId, id), eq(occurrence.status, 'missed'), isNull(occurrence.notes))));
 	else if (after.startDate > before.startDate)
 		drop(unloggedMisses(and(eq(occurrence.habitId, id), eq(occurrence.status, 'missed'), isNull(occurrence.notes), lt(occurrence.date, after.startDate))));
-	return after.unlogged === 'missed' && (before.unlogged !== 'missed' || after.startDate < before.startDate)
+	return after.unlogged === 'missed' && (before.unlogged !== 'missed' || after.startDate < before.startDate || recountAll)
 		? { settledThrough: null }
 		: {};
 }
@@ -201,11 +248,13 @@ export function saveHabit(
 	accountId: string,
 	id: string | null,
 	f: HabitForm,
-	today: string = new Date().toISOString().slice(0, 10)
+	today: string = new Date().toISOString().slice(0, 10),
+	opts: { scheduleApplies?: ScheduleApplies } = {}
 ): string | null {
 	// Values that can't apply (Levels on a break habit, a reminder with no time) are cleared.
 	f = checkHabitForm(f).form;
-	return db.transaction((tx) => {
+	let judgeAgain = false;
+	const saved = db.transaction((tx) => {
 		// A changed limit or taper applies from today, so past days keep the limit they had.
 		if (f.limit) {
 			const before = id
@@ -253,12 +302,24 @@ export function saveHabit(
 		};
 		if (id) {
 			const owned = tx
-				.select({ id: habit.id, startDate: habit.startDate, unlogged: habit.unlogged })
+				.select({
+					id: habit.id,
+					startDate: habit.startDate,
+					unlogged: habit.unlogged,
+					schedule: habit.schedule,
+					earlierSchedules: habit.earlierSchedules,
+					minimumCounts: habit.minimumCounts,
+					levels: habit.levels
+				})
 				.from(habit)
 				.where(and(eq(habit.id, id), eq(habit.accountId, accountId)))
 				.get();
 			if (!owned) return null;
-			tx.update(habit).set({ ...values, ...settledAfter(tx, id, owned, values) }).where(eq(habit.id, id)).run();
+			const sched = scheduleAfter(tx, id, owned, values, opts.scheduleApplies ?? 'today', today);
+			const settled = settledAfter(tx, id, owned, values, sched.settledThrough === null);
+			tx.update(habit).set({ ...values, ...sched, ...settled }).where(eq(habit.id, id)).run();
+			// The rule for what counts changed: past logs are judged again by it.
+			judgeAgain = owned.minimumCounts !== values.minimumCounts || !!owned.levels?.enabled !== !!values.levels?.enabled;
 		} else {
 			tx.insert(habit)
 				.values({ id: habitId, accountId, ...values })
@@ -285,6 +346,15 @@ export function saveHabit(
 				.onConflictDoUpdate({ target: variant.id, set: { name: v.name, sortOrder: i } })
 				.run();
 			const slotIds = v.slots.map((s) => s.id);
+			// Logs made against targets that change keep the ones they aimed for.
+			const was = tx.select().from(slot).where(eq(slot.variantId, v.id)).all();
+			const goal = (x: { taskId: string | null; sets: number | null; targets: unknown; minTargets: unknown; stretchTargets: unknown }) =>
+				JSON.stringify([x.taskId, x.sets, x.targets ?? {}, x.minTargets ?? {}, x.stretchTargets ?? {}]);
+			const changed = was.some((old) => {
+				const now = v.slots.find((x) => x.id === old.id);
+				return !now || goal(old) !== goal({ ...now, taskId: now.fillRule ? null : now.taskId, minTargets: now.minTargets, stretchTargets: now.stretchTargets });
+			});
+			if (changed) keepGoals(tx, [v.id]);
 			tx.delete(slot)
 				.where(
 					slotIds.length
@@ -293,14 +363,21 @@ export function saveHabit(
 				)
 				.run();
 			v.slots.forEach((s, j) => {
+				const taskId = s.fillRule ? null : s.taskId;
+				// Targets only for fields of the Slot's Task: a Task swapped out leaves none behind.
+				const own = taskId ? new Set(tx.select({ id: metric.id }).from(metric).where(eq(metric.taskId, taskId)).all().map((m) => m.id)) : null;
+				const keep = (t: Record<string, number>) => (own ? Object.fromEntries(Object.entries(t ?? {}).filter(([k]) => own.has(k))) : (t ?? {}));
+				const targets = keep(s.targets);
+				const minTargets = keep(s.minTargets);
+				const stretchTargets = keep(s.stretchTargets);
 				const sv = {
 					variantId: v.id,
-					taskId: s.fillRule ? null : s.taskId,
+					taskId,
 					fillRule: s.fillRule,
 					sets: s.sets,
-					targets: s.targets,
-					minTargets: Object.keys(s.minTargets).length ? s.minTargets : null,
-					stretchTargets: Object.keys(s.stretchTargets).length ? s.stretchTargets : null,
+					targets,
+					minTargets: Object.keys(minTargets).length ? minTargets : null,
+					stretchTargets: Object.keys(stretchTargets).length ? stretchTargets : null,
 					sortOrder: j
 				};
 				tx.insert(slot)
@@ -311,6 +388,8 @@ export function saveHabit(
 		});
 		return habitId;
 	});
+	if (saved && judgeAgain) rejudge(saved, today);
+	return saved;
 }
 
 export function deleteHabit(accountId: string, id: string) {

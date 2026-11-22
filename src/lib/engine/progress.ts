@@ -108,3 +108,20 @@ export function progressText(p: Progress): string {
 /** Whether a log fell short: worth showing next to "Done". */
 export const isPartial = (p: Progress | null | undefined): boolean =>
 	!!p && (p.kind === 'steps' ? p.done < p.total : p.value < p.target);
+
+/**
+ * How a log counts for its day under the habit's rule:
+ * - `full`: it reached the target (every step done), or there is nothing to measure it by.
+ * - `counts`: it fell short, but reached the Minimum (any log, when the habit has no Minimum),
+ *   and the habit lets that count.
+ * - `short`: it doesn't count: below the Minimum, or the habit counts only the full target.
+ * `atMinimum` is the progress against the Minimum, given only when the habit has one.
+ */
+export type Verdict = 'full' | 'counts' | 'short';
+
+export function verdict(atTarget: Progress | null, atMinimum: Progress | null | undefined, minimumCounts: boolean): Verdict {
+	if (!atTarget || !isPartial(atTarget)) return 'full';
+	if (!minimumCounts) return 'short';
+	if (atMinimum) return isPartial(atMinimum) ? 'short' : 'counts';
+	return (atTarget.kind === 'steps' ? atTarget.done : atTarget.value) > 0 ? 'counts' : 'short';
+}

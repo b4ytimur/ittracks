@@ -219,7 +219,7 @@ export function listLogs(
 		: new Map<string, string | null>();
 	const logsByOcc = new Map<string, typeof P.logs>();
 	for (const l of P.logs) logsByOcc.set(l.occ.id, [...(logsByOcc.get(l.occ.id) ?? []), l]);
-	const progress = progressForIds(occRows.filter((o) => o.status === 'due' || o.status === 'done').map((o) => o.id));
+	const progress = progressForIds(occRows.filter((o) => o.status !== 'skipped').map((o) => o.id));
 	const rows: LogRow[] = occRows.map((o) => {
 		const h = P.habits.get(o.habitId)!;
 		const logs = logsByOcc.get(o.id) ?? [];

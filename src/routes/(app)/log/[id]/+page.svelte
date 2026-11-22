@@ -26,6 +26,8 @@
 	type Metric = NonNullable<Item['task']>['metrics'][number];
 
 	const isSummary = (v: Values) => v._summary === true;
+	/** A Yes or no tick: an Entry that only says it was done. */
+	const isTick = (v: Values) => v.done === true && Object.keys(v).length === 1;
 	/** A Yes or no Task: nothing to fill in, so it gets one tick box. */
 	const isYesNo = (t: Item['task']) => !!t && !t.metrics.length && !t.subtasks.length;
 	/** Quick log (from a shortcut or link): only the fields marked for quick logs. */
@@ -92,11 +94,15 @@
 		return data.items.map((it) => {
 			const t = it.task;
 			if (!t) return { sets: [], summary: {}, subs: {} };
-			const savedSets = it.saved.filter((v) => !isSummary(v));
+			// Sets are Entries with per-set fields; a Yes or no tick is not a set.
+			const perSet = t.metrics.some((m) => m.repeats);
+			const savedSets = perSet ? it.saved.filter((v) => !isSummary(v) && !isTick(v)) : [];
 			const savedSummary = it.saved.find(isSummary) ?? {};
 			// Not finished: due today, or a past day that was missed, skipped or never logged.
 			const due = data.occurrence.status !== 'done';
-			if (due && !it.saved.length) return planned(it);
+			// Sub-task ticks are Entries of the sub-tasks, so a checklist ticked half way counts as started.
+			const subsTicked = t.subtasks.some((sub) => data.subDone[sub.id]);
+			if (due && !it.saved.length && !subsTicked) return planned(it);
 			const sets = savedSets.map((values) => ({ done: true, values: { ...values } }));
 			if (due) sets.push(...planned(it).sets.slice(sets.length));
 			return {
@@ -249,7 +255,8 @@
 			const s = log[i];
 			const repeatingIds = t.metrics.filter((m) => m.repeats).map((m) => m.id);
 			const counts = (set: { done: boolean; values: Values }) => set.done || (quickMode && finish);
-			for (const set of s.sets.filter(counts)) {
+			const sets = repeatingIds.length ? s.sets.filter(counts) : [];
+			for (const set of sets) {
 				entries.push({
 					taskId: t.id,
 					values: Object.fromEntries(repeatingIds.map((id) => [id, set.values[id] ?? null]))
@@ -261,9 +268,13 @@
 				([k, v]) => v !== '' && v !== null && v !== undefined && !(longs.has(k) && untouched(longs.get(k)!, v, data.occurrence.date))
 			);
 			if (filled.length) entries.push({ taskId: t.id, values: { ...Object.fromEntries(filled), _summary: true } });
-			for (const [subId, done] of Object.entries(s.subs)) {
-				if (done) entries.push({ taskId: subId, values: { done: true } });
-			}
+			// The same Task in another Slot too: close this Slot's sets, so each Slot gets its own back.
+			else if (sets.length && data.items.some((x, j) => j !== i && x.task?.id === t.id)) entries.push({ taskId: t.id, values: { _summary: true } });
+			// Sub-task ticks are the Task's own, once, even when two Slots use it.
+			if (data.items.findIndex((x) => x.task?.id === t.id) === i)
+				for (const [subId, done] of Object.entries(s.subs)) {
+					if (done) entries.push({ taskId: subId, values: { done: true } });
+				}
 			if (s.tick && isYesNo(t)) entries.push({ taskId: t.id, values: { done: true } });
 		});
 		return JSON.stringify({ finish, stay, notes, entries, level, back: data.back });

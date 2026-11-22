@@ -2,14 +2,22 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { eq } from 'drizzle-orm';
 import type { Handle } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
-import { account } from '$lib/server/db/schema';
+import { account, appValue } from '$lib/server/db/schema';
 import { building } from '$app/environment';
 import { readSession, SESSION_COOKIE } from '$lib/server/auth';
 import { startReminders } from '$lib/server/push';
 import { actorForKey } from '$lib/server/core/tokens';
+import { restorePartialDays } from '$lib/server/today';
 
 // Bring the database up to date on startup, so self-hosters never run migrations by hand.
 migrate(db, { migrationsFolder: './drizzle' });
+// Once: days that got part of the way and were settled as missed before the partial-day rule.
+if (!building && !db.select().from(appValue).where(eq(appValue.key, 'partial-days-restored')).get()) {
+	db.transaction(() => {
+		const n = restorePartialDays();
+		db.insert(appValue).values({ key: 'partial-days-restored', value: String(n) }).run();
+	});
+}
 if (!building) startReminders();
 
 export const handle: Handle = async ({ event, resolve }) => {

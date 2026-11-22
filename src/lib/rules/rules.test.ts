@@ -121,13 +121,16 @@ describe('habit rules', () => {
 		expect(built.form.ifThen).toEqual({ when: '', then: '', habitId: null });
 	});
 
-	it('L2, L3: Minimum counts and level targets reset when Levels are off', () => {
+	it('L3: level targets reset when Levels are off; "only the full target counts" stays (round 3)', () => {
 		const h = base();
 		h.minimumCounts = false;
 		h.variants[0].slots[0].minTargets = { [M]: 1 };
 		const r = checkHabit(h);
-		expect(r.form.minimumCounts).toBe(true);
+		// Without Levels it means a partial day (5 of 6 glasses) doesn't count.
+		expect(r.form.minimumCounts).toBe(false);
 		expect(r.form.variants[0].slots[0].minTargets).toEqual({});
+		// A break habit has no target, so it goes back to the default.
+		expect(checkHabit({ ...h, direction: 'break' }).form.minimumCounts).toBe(true);
 	});
 
 	it('L4: progression needs a number target', () => {

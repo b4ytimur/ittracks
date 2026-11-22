@@ -10,7 +10,7 @@ import { missingRequired, quickDone, reopen, sameAsLast, timeIn, userToday } fro
 import { clearDay } from '../backfill';
 import { getSettings } from '../settings';
 import { getDayNote, saveDayNote } from '../journal';
-import { plusOne, progressForIds } from '../progress';
+import { finishAs, plusOne, progressForIds } from '../progress';
 import { progressText } from '$lib/engine/progress';
 import { NOTE_MAX } from '$lib/forms';
 import type { Level } from '$lib/engine/streak';
@@ -79,6 +79,8 @@ export function doneOcc(actor: Actor, occ: OccRow, how: DoneHow, level: Level | 
 	} else if (how === 'targets') r = quickDone(occ.id, level);
 	else if (how === 'same') r = sameAsLast(occ.id);
 	else r = hasSlots(occ) ? sameAsLast(occ.id) : quickDone(occ.id, level);
+	// A log that falls short of the habit's rule stays open today (missed on a past day).
+	if (r === 'done' && finishAs(occ.id, userToday(actor.accountId, actor.tz)) !== 'done') return 'done';
 	if (r === 'done') {
 		const now = db.select({ level: occurrence.level }).from(occurrence).where(eq(occurrence.id, occ.id)).get();
 		emit(actor, 'occurrence.done', { habitId: occ.habitId, date: occ.date, data: { occurrenceId: occ.id, level: now?.level ?? null, how } });
@@ -253,6 +255,7 @@ function finishIf(actor: Actor, occ: OccRow, finish: 'auto' | 'yes' | 'no', how:
 	if (!now || now.status === 'done' || finish === 'no') return;
 	if (finish === 'yes' || reached(occ.id)) {
 		db.update(occurrence).set({ status: 'done', finishedAt: new Date() }).where(eq(occurrence.id, occ.id)).run();
+		if (finishAs(occ.id, userToday(actor.accountId, actor.tz)) !== 'done') return;
 		emit(actor, 'occurrence.done', { habitId: occ.habitId, date: occ.date, data: { occurrenceId: occ.id, level: occ.level ?? null, how } });
 	}
 }

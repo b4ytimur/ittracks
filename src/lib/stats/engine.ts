@@ -82,6 +82,8 @@ export interface DsOcc {
 	picks: Record<string, string> | null;
 	/** HH:MM it was finished, in the user's time zone. */
 	time: string | null;
+	/** The targets each Slot had, kept when they changed later. */
+	goals?: Record<string, { sets: number | null; targets: Record<string, number> | null }> | null;
 }
 export interface DsEntry {
 	occurrenceId: string;
@@ -227,7 +229,8 @@ export function prepare(ds: Dataset): Prepared {
 	for (const e of [...ds.entries].sort((a, b) => a.sortOrder - b.sortOrder)) {
 		const o = occs.get(e.occurrenceId);
 		const t = tasks.get(e.taskId);
-		if (!o || !t || o.status !== 'done' || !habits.has(o.habitId)) continue;
+		// Every log's values count, done or not: a partial day's minutes are still minutes.
+		if (!o || !t || o.status === 'skipped' || !habits.has(o.habitId)) continue;
 		if (t.parentTaskId) {
 			const parent = tasks.get(t.parentTaskId);
 			if (parent) logFor(o, parent, nth.get(`${o.id}|${parent.id}`) ?? 0).subsDone++;
@@ -572,24 +575,31 @@ function splitTags(card: StatCard, P: Prepared, ctx: Ctx, l: { habit: DsHabit; t
 	}
 }
 
-/** The targets for the level reached, and how many sets were planned. */
-function targetsFor(l: Log): { targets: Record<string, number>; sets: number | null } | null {
+/**
+ * The Target a log aimed for and how many sets were planned: the targets kept with the log
+ * when they changed later (Raise, an edit), else the Slot's own. Always the Target level, so a
+ * Minimum day is not a target met. Only fields of the Task logged count: a target left behind
+ * by a Task the Slot no longer uses is ignored.
+ */
+function targetsFor(l: Log, P: Prepared): { targets: Record<string, number>; sets: number | null } | null {
 	if (!l.slot) return null;
-	const lv = l.occ.level ?? 'target';
-	const t =
-		lv === 'minimum' && l.slot.minTargets && Object.keys(l.slot.minTargets).length
-			? l.slot.minTargets
-			: lv === 'stretch' && l.slot.stretchTargets && Object.keys(l.slot.stretchTargets).length
-				? l.slot.stretchTargets
-				: l.slot.targets;
-	if (!t || !Object.keys(t).length) return null;
-	return { targets: t, sets: l.slot.sets };
+	const kept = l.occ.goals?.[l.slot.id];
+	const all = (kept ?? l.slot).targets;
+	if (!all) return null;
+	const targets = Object.fromEntries(Object.entries(all).filter(([mid]) => P.metrics.get(mid)?.taskId === l.task.id));
+	if (!Object.keys(targets).length) return null;
+	return { targets, sets: kept ? kept.sets : l.slot.sets };
 }
 
-/** 1 when every target was reached (and every sub-task ticked), 0.5 when some were, 0 when none. Null with nothing to compare. */
+/**
+ * 1 when every target was reached (and every sub-task ticked), 0.5 when some were, 0 when none.
+ * Null with nothing to compare. Cards average `metOf` of it: a day either met its target or not.
+ */
 export function targetMetOfLog(l: Log, P: Prepared): number | null {
+	// A Yes or no Task's tick is its whole target.
+	if (isYesNo(P, l.task.id)) return l.single.done === true ? 1 : null;
 	const results: number[] = [];
-	const t = targetsFor(l);
+	const t = targetsFor(l, P);
 	if (t) {
 		for (const [mid, goal] of Object.entries(t.targets)) {
 			const m = P.metrics.get(mid);
@@ -609,6 +619,16 @@ export function targetMetOfLog(l: Log, P: Prepared): number | null {
 	return results.every((r) => r === 1) ? 1 : results.every((r) => r === 0) ? 0 : 0.5;
 }
 
+/** Met or not, for averaging: only a full hit counts. */
+const metOf = (r: number | null): number | null => (r === null ? null : r === 1 ? 1 : 0);
+
+/** A Yes or no Task: nothing to fill in and no steps, so a tick is its whole target. */
+const isYesNo = (P: Prepared, taskId: string) => !(P.metricsByTask.get(taskId)?.length) && !P.ds.tasks.some((t) => t.parentTaskId === taskId);
+
+/**
+ * Whether a day met its target: 1 when every Slot reached its Target (every number and set,
+ * every sub-task, every Yes or no tick), 0 when not, null when it had nothing to aim for.
+ */
 export function targetMetOfOcc(o: DsOcc, P: Prepared): number | null {
 	const logs = (P.logs as Log[]).filter((l) => l.occ.id === o.id);
 	const slots = o.variantId ? (P.slotsByVariant.get(o.variantId) ?? []) : [];
@@ -617,14 +637,27 @@ export function targetMetOfOcc(o: DsOcc, P: Prepared): number | null {
 		const r = targetMetOfLog(l, P);
 		if (r !== null) rs.push(r);
 	}
-	// A Slot with targets that has nothing logged at all counts as not reached.
+	const nth = new Map<string, number>();
 	for (const s of slots) {
 		const taskId = o.picks?.[s.id] ?? s.taskId;
-		const hasTargets = !!s.targets && Object.keys(s.targets).length > 0;
-		if (hasTargets && !logs.some((l) => l.task.id === taskId)) rs.push(0);
+		if (!taskId) continue;
+		const n = nth.get(taskId) ?? 0;
+		nth.set(taskId, n + 1);
+		const mine = logs.filter((l) => l.task.id === taskId);
+		// A Yes or no Task is met by its tick.
+		if (isYesNo(P, taskId)) {
+			rs.push(mine.length > n ? 1 : 0);
+			continue;
+		}
+		// A Slot with targets (for its own Task's fields) that has nothing logged counts as not reached.
+		const kept = o.goals?.[s.id];
+		const targets = (kept ?? s).targets ?? {};
+		const hasTargets = Object.keys(targets).some((mid) => P.metrics.get(mid)?.taskId === taskId);
+		const hasSubs = P.ds.tasks.some((t) => t.parentTaskId === taskId);
+		if ((hasTargets || hasSubs) && mine.length <= n) rs.push(0);
 	}
 	if (!rs.length) return null;
-	return rs.every((r) => r === 1) ? 1 : rs.every((r) => r === 0) ? 0 : 0.5;
+	return rs.every((r) => r === 1) ? 1 : 0;
 }
 
 function measureOf(id: string, ms: CustomMeasure[]) {
@@ -703,7 +736,7 @@ export function taskValue(perLog: string, l: Log, P: Prepared, ctx: Ctx): number
 			return t !== null && d ? convert(t, r.time.unit || 'min', 'min') / d : null;
 		}
 		case 'pctTarget': {
-			const t = targetsFor(l);
+			const t = targetsFor(l, P);
 			if (!t) return null;
 			const parts: number[] = [];
 			for (const [mid, goal] of Object.entries(t.targets)) {
@@ -718,7 +751,8 @@ export function taskValue(perLog: string, l: Log, P: Prepared, ctx: Ctx): number
 			return parts.length ? (parts.reduce((a, b) => a + b, 0) / parts.length) * 100 : null;
 		}
 		case 'targetMet':
-			return targetMetOfLog(l, P);
+			// A log still open today isn't judged yet.
+			return l.occ.status === 'due' ? null : metOf(targetMetOfLog(l, P));
 		default: {
 			if (!isCustom(perLog)) return null;
 			const m = measureOf(customId(perLog), ctx.settings.measures);

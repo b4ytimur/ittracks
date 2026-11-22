@@ -7,7 +7,7 @@
 	import FillRuleEditor from './FillRuleEditor.svelte';
 	import NoteBox from '$lib/NoteBox.svelte';
 	import { limitOn, nextDrop } from '$lib/engine/limit';
-	import { scheduleStartBy } from '$lib/engine/unlogged';
+	import { sameSchedule, scheduleStartBy } from '$lib/engine/unlogged';
 	import { blocked } from '$lib/rules/core';
 	import { checkHabit, habitRules } from '$lib/rules/habit';
 
@@ -51,17 +51,17 @@
 	const firstVariant = $derived(h.variants[0]?.id ?? '');
 
 	/**
-	 * A new start date for the habit. The schedule's own start follows: back far enough to
-	 * cover it (by whole cycles, so planned days keep their Variant), or along with it when
-	 * the two were the same day.
+	 * A new start date for the habit. The schedule's own start follows: along with it when the
+	 * two were the same day and nothing is logged yet (a new plan begins on the day you give),
+	 * else back far enough to cover it, by whole cycles, so planned days keep their Variant.
 	 */
 	function setStart(v: string) {
 		if (!v) return;
 		const old = h.startDate;
 		h.startDate = v;
 		if (kind !== 'interval' && kind !== 'rotation') return;
-		if (v < start && schedule) start = (scheduleStartBy(schedule, v) as { start: string }).start;
-		else if (start === old) start = v;
+		if (start === old && !data.hasLogs) start = v;
+		else if (v < start && schedule) start = (scheduleStartBy(schedule, v) as { start: string }).start;
 	}
 
 	/** The Schedule as it will be saved. Rotations follow the Variant order. */
@@ -90,6 +90,10 @@
 				};
 		}
 	});
+	/** A schedule edit on a habit with a past: from today on (the default), or past days too. */
+	let scheduleApplies = $state<'today' | 'past'>('today');
+	const scheduleEdited = $derived(!data.isNew && !!s0 && !sameSchedule(s0, schedule) && savedStart < data.today);
+
 	// ----- Cue, stacking, levels, streak, identity, if-then -----
 	let afterMode = $state<'none' | 'habit' | 'text'>(
 		untrack(() => (h.cue.afterHabitId ? 'habit' : h.cue.afterText ? 'text' : 'none'))
@@ -207,6 +211,7 @@
 			schedule,
 			cue,
 			pinned,
+			scheduleApplies: scheduleEdited ? scheduleApplies : 'today',
 			prep: [...h.prep, ...pendingPrep],
 			triggers: [...h.triggers, ...pendingTrigger]
 		})
@@ -254,7 +259,7 @@
 	const has = untrack(() => ({
 		when: !!(data.habit.cue.time || data.habit.cue.place || data.habit.cue.afterHabitId || data.habit.cue.afterText || data.habit.cue.range),
 		levels: data.habit.levels.enabled,
-		streak: (!data.isNew && data.habit.streakRule.kind !== 'neverTwice') || data.habit.unlogged === 'ignore',
+		streak: (!data.isNew && data.habit.streakRule.kind !== 'neverTwice') || data.habit.unlogged === 'ignore' || !data.habit.minimumCounts,
 		identity: data.habit.identityIds.length > 0,
 		notes: !!data.habit.notes
 	}));
@@ -675,6 +680,22 @@
 {/snippet}
 
 {#snippet startPart()}
+	{#if scheduleEdited}
+		<fieldset class="card">
+			<legend class="muted">This schedule change applies</legend>
+			<label style="color: var(--text)"
+				><input type="radio" bind:group={scheduleApplies} value="today" /> From today on: earlier days keep the plan they had</label
+			>
+			<label style="color: var(--text)"
+				><input type="radio" bind:group={scheduleApplies} value="past" /> To past days too: the plan was wrong from the start</label
+			>
+			<p class="muted small-text" style="margin: 0.25rem 0 0">
+				{scheduleApplies === 'past'
+					? 'Missed days are counted again with the new schedule, from Started on. Everything you logged stays.'
+					: 'Misses already counted stay, and logging a past day later judges it by the schedule it had then.'}
+			</p>
+		</fieldset>
+	{/if}
 	<label
 		>Started on
 		<input type="date" value={h.startDate} onchange={(e) => setStart(e.currentTarget.value)} required />
@@ -945,10 +966,7 @@
 				<label>Minimum <input bind:value={h.levels.minimum} placeholder="Put on running shoes" /></label>
 				<label>Target <input bind:value={h.levels.target} placeholder="Run 5 km" /></label>
 				<label>Stretch <input bind:value={h.levels.stretch} placeholder="Run 10 km" /></label>
-				<label style="color: var(--text)"
-					><input type="checkbox" bind:checked={h.minimumCounts} /> Doing the Minimum keeps the streak alive</label
-				>
-				<p class="muted small-text">Set numbers for each level per Task in the Slots above.</p>
+				<p class="muted small-text">Set numbers for each level per Task in the Slots above. Whether a Minimum day counts is under Streak.</p>
 			{/if}
 		{/if}
 		{#if h.variants.some((v) => v.slots.length)}
@@ -981,6 +999,26 @@
 				</div>
 			{:else if h.streakRule.kind === 'consistency'}
 				<label style="width: 10rem">Over the last N days <input type="number" min="7" max="365" bind:value={h.streakRule.days} /></label>
+			{/if}
+			{#if h.direction === 'build'}
+				<fieldset class="card">
+					<legend class="muted">A day that falls short of the target</legend>
+					<label style="color: var(--text)"
+						><input type="radio" bind:group={h.minimumCounts} value={true} />
+						{h.levels.enabled ? 'Counts once it reaches the Minimum' : 'Counts once anything is logged'}</label
+					>
+					<label style="color: var(--text)"
+						><input type="radio" bind:group={h.minimumCounts} value={false} /> Only the full target counts</label
+					>
+					<p class="muted small-text" style="margin: 0.25rem 0 0">
+						{h.minimumCounts
+							? h.levels.enabled
+								? 'Doing the Minimum keeps the streak alive. Less than that is a miss once the day is over.'
+								: '5 of 6 glasses is a done day, shown as "Done · 5 of 6 glasses".'
+							: 'Good for medication: 1 of 2 doses is a miss once the day is over, shown as "Missed · 1 of 2 steps".'}
+						What you logged always stays in History and Stats.
+					</p>
+				</fieldset>
 			{/if}
 			<fieldset class="card">
 				<legend class="muted">Days you don't log</legend>
