@@ -16,22 +16,21 @@ import {
 	deleteHabit,
 	getHabitForm,
 	listHabits,
-	saveHabit,
-	setHabitArchived
+	saveHabit
 } from '$lib/server/repo/habits';
 import { feelingsUsed, habitLogged, PastEditError } from '$lib/server/history';
 import { identityFor, listIdentities } from '$lib/server/repo/identities';
 import { listTagNames, listTasks, saveTask } from '$lib/server/repo/tasks';
 import { listAreas } from '$lib/server/repo/areas';
 import { getViews, getSettings, saveSettings } from '$lib/server/settings';
-import { repaused, settle, unarchived, userToday } from '$lib/server/today';
+import { repaused, userToday } from '$lib/server/today';
 import { ownedHabit } from '$lib/server/owned';
+import { archiveHabit, unarchiveHabit } from '$lib/server/habit-actions';
 import { BUILTIN_TASK_TYPES, defaultStep, metricsFromType } from '$lib/task-types';
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { metric, occurrence, pause, taskPart } from '$lib/server/db/schema';
-import type { ScheduleForm } from '$lib/forms';
 import { isGroup } from '$lib/engine/schedule';
 import { descendants } from '$lib/engine/tree';
 import type { Actions, PageServerLoad } from './$types';
@@ -282,16 +281,11 @@ export const actions: Actions = {
 		repaused(locals.account!.id, p.habitId, p.start, p.end, userToday(locals.account!.id, cookies.get('tz')));
 	},
 	archive: ({ locals, params, cookies }) => {
-		// Count its misses up to now first: days in the archive are not counted.
-		const h = ownedHabit(locals.account!.id, params.id);
-		if (h?.direction === 'build' && h.schedule)
-			settle(locals.account!.id, h.id, h.schedule as ScheduleForm, userToday(locals.account!.id, cookies.get('tz')));
-		setHabitArchived(locals.account!.id, params.id, true);
+		archiveHabit(locals.account!.id, params.id, userToday(locals.account!.id, cookies.get('tz')));
 		redirect(303, '/habits');
 	},
 	unarchive: ({ locals, params, cookies }) => {
-		setHabitArchived(locals.account!.id, params.id, false);
-		if (ownedHabit(locals.account!.id, params.id)) unarchived(params.id, userToday(locals.account!.id, cookies.get('tz')));
+		unarchiveHabit(locals.account!.id, params.id, userToday(locals.account!.id, cookies.get('tz')));
 		return { unarchived: true };
 	},
 	delete: ({ locals, params }) => {

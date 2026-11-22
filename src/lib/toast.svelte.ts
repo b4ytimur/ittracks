@@ -1,5 +1,6 @@
 // One short message at a time at the bottom of the screen, with an optional Undo.
 // Quick actions happen at once and offer Undo, instead of asking "Are you sure?".
+import { deserialize } from '$app/forms';
 
 export interface Toast {
 	id: number;
@@ -32,4 +33,20 @@ export async function postAction(action: string, fields: Record<string, string>)
 	const body = new FormData();
 	for (const [k, v] of Object.entries(fields)) body.set(k, v);
 	return fetch(action, { method: 'POST', body, headers: { 'x-sveltekit-action': 'true' } });
+}
+
+/** Post a form action from code and say whether it worked, with what it returned. Offline counts as not. */
+export async function runAction<T = Record<string, unknown>>(
+	action: string,
+	fields: Record<string, string>
+): Promise<{ ok: boolean; data?: T; error?: string }> {
+	try {
+		const r = await postAction(action, fields);
+		const result = deserialize(await r.text());
+		if (result.type === 'success') return { ok: true, data: result.data as T };
+		const data = result.type === 'failure' ? (result.data as { error?: string } | undefined) : undefined;
+		return { ok: false, error: data?.error };
+	} catch {
+		return { ok: false };
+	}
 }

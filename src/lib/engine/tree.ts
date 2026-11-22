@@ -72,3 +72,35 @@ export function flatten<T extends Node>(nodes: T[]): { node: T; depth: number }[
 	for (const n of nodes) walk(n, 0);
 	return out;
 }
+
+/**
+ * A list as a tree: the top-level habits, and what sits directly inside each one, in the order
+ * given. For views that nest one list inside another. A habit whose parent isn't in the list
+ * sits at the top level, and a loop in old data is cut where it closes, so every habit shows once.
+ */
+export function forest<T extends Node>(nodes: T[]): { roots: T[]; kids: Map<string, T[]> } {
+	const ids = new Set(nodes.map((n) => n.id));
+	const all = childrenOf(nodes.filter((n) => n.parentId && ids.has(n.parentId)));
+	const roots: T[] = [];
+	const kids = new Map<string, T[]>();
+	const seen = new Set<string>();
+	const place = (n: T) => {
+		const mine = (all.get(n.id) ?? []).filter((k) => !seen.has(k.id));
+		for (const k of mine) seen.add(k.id);
+		if (mine.length) kids.set(n.id, mine);
+		for (const k of mine) place(k);
+	};
+	for (const n of nodes)
+		if (!n.parentId || !ids.has(n.parentId)) {
+			seen.add(n.id);
+			roots.push(n);
+		}
+	for (const r of [...roots]) place(r);
+	for (const n of nodes)
+		if (!seen.has(n.id)) {
+			seen.add(n.id);
+			roots.push(n);
+			place(n);
+		}
+	return { roots, kids };
+}
