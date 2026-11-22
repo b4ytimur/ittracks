@@ -4,6 +4,8 @@ A fully customizable, self-hostable habit tracker. Build a habit out of your own
 
 Status: MVP in progress. You can set up habits, log them day to day, track slips, and share habits as template files.
 
+The user guide is in [docs/](docs/README.md): habits, schedules, Tasks, logging, streaks, units, bulk editing, views, templates, notes, stats and integrations.
+
 ## Concepts
 
 | Term | Meaning |
@@ -83,7 +85,7 @@ To install it on your phone, open it in the browser and choose "Add to Home Scre
 
 ## Templates
 
-Any habit can be exported from its editor as a `.ittracks.json` file and imported on any ittracks server from the Habits tab. A template holds the habit, its Variants, schedule and Fill rules, and the Tasks it uses. It never contains your logs. The format is defined in `src/lib/template.ts` (version 3; versions 1 and 2 still import). A template can ask questions when it is added (which days, a starting weight, a time) and carries gallery details (category, days per week, minutes, equipment, Area). When a template's Task has the same name as one in your Library, your Task is used unless you choose "separate".
+Any habit can be exported from its editor as a `.ittracks.json` file and imported on any ittracks server from the Habits tab. A template holds the habit, its Variants, schedule and Fill rules, and the Tasks it uses. It never contains your logs. The format is defined in `src/lib/template.ts` (version 6; versions 1 to 5 still import). A template can ask questions when it is added (which days, a starting weight, a time) and carries gallery details (category, days per week, minutes, equipment, Area). When a template's Task has the same name as one in your Library, your Task is used unless you choose "separate".
 
 The Gallery (`/gallery`) ships ready-made templates from `src/lib/gallery/*.ittracks.json`. In those files, `{weight}` stands for the user's weight unit.
 
