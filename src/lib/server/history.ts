@@ -1,8 +1,8 @@
 // What is logged against a Task or a habit, for the history policies (src/lib/rules/history.ts),
 // and the one migration they can ask for: converting a field's past values to a new unit.
-import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db } from './db';
-import { craving, entry, habit, metric, occurrence, slip, slot, task, variant } from './db/schema';
+import { craving, entry, habit, metric, occurrence, slip, slot, task, taskPart, variant } from './db/schema';
 import type { TaskLogged } from '$lib/rules/task';
 import { roundConverted } from '$lib/units';
 import { keepGoals } from './progress';
@@ -15,8 +15,12 @@ export class PastEditError extends Error {}
 
 const filled = (v: unknown) => v !== undefined && v !== null && v !== '';
 
-/** The Task's Metrics that have a value in any log, its sub-tasks ticked in any log, and the Choice options picked. */
-export function taskLogged(taskId: string, q: Db = db): { metrics: Set<string>; subtasks: Set<string>; options: Set<string> } {
+/**
+ * The Task's Metrics that have a value in any log, the Choice options picked, and its parts
+ * with anything logged under them: a step ticked (its own Entries, from before paths too), or
+ * a value at a path through the part.
+ */
+export function taskLogged(taskId: string, q: Db = db): { metrics: Set<string>; parts: Set<string>; options: Set<string> } {
 	const types = new Map(q.select({ id: metric.id, type: metric.type }).from(metric).where(eq(metric.taskId, taskId)).all().map((m) => [m.id, m.type]));
 	const metrics = new Set<string>();
 	const options = new Set<string>();
@@ -26,24 +30,23 @@ export function taskLogged(taskId: string, q: Db = db): { metrics: Set<string>; 
 			metrics.add(k);
 			if (types.get(k) === 'choice' && typeof v === 'string') options.add(v);
 		}
-	const subIds = q.select({ id: task.id }).from(task).where(eq(task.parentTaskId, taskId)).all().map((s) => s.id);
-	const subtasks = new Set(
-		subIds.length
-			? q
-					.selectDistinct({ id: entry.taskId })
-					.from(entry)
-					.where(inArray(entry.taskId, subIds))
-					.all()
-					.map((r) => r.id)
-			: []
-	);
-	return { metrics, subtasks, options };
+	const parts = new Set<string>();
+	for (const p of q.select({ id: taskPart.id, childTaskId: taskPart.childTaskId }).from(taskPart).where(eq(taskPart.taskId, taskId)).all()) {
+		const step = p.id === p.childTaskId && q.select({ id: entry.id }).from(entry).where(eq(entry.taskId, p.childTaskId)).get();
+		const under = q
+			.select({ id: entry.id })
+			.from(entry)
+			.where(sql`instr(${entry.path}, ${'/' + p.id}) > 0`)
+			.get();
+		if (step || under) parts.add(p.id);
+	}
+	return { metrics, parts, options };
 }
 
 /** For the editor: the same, as lists. */
-export const taskLoggedLists = (taskId: string): TaskLogged & { metrics: string[]; subtasks: string[]; options: string[] } => {
+export const taskLoggedLists = (taskId: string): TaskLogged & { metrics: string[]; parts: string[]; options: string[] } => {
 	const l = taskLogged(taskId);
-	return { metrics: [...l.metrics], subtasks: [...l.subtasks], options: [...l.options] };
+	return { metrics: [...l.metrics], parts: [...l.parts], options: [...l.options] };
 };
 
 /** The feelings (ids) the habit's slips were logged with. */
@@ -108,6 +111,12 @@ export function convertMetricValues(tx: Tx, accountId: string, taskId: string, m
 			.where(eq(slot.id, s.id))
 			.run();
 	}
+	// Parts that aim for the field inside another Task.
+	for (const p of partsAiming(tx, accountId, [metricId]))
+		tx.update(taskPart)
+			.set({ targets: scale(p.targets, metricId, factor), minTargets: scale(p.minTargets, metricId, factor), stretchTargets: scale(p.stretchTargets, metricId, factor) })
+			.where(eq(taskPart.id, p.id))
+			.run();
 	const kept = tx
 		.select({ id: occurrence.id, goals: occurrence.goals })
 		.from(occurrence)
@@ -150,4 +159,22 @@ export function dropTargets(tx: Tx, accountId: string, metricIds: string[]) {
 			.set({ targets: without(s.targets), minTargets: without(s.minTargets), stretchTargets: without(s.stretchTargets) })
 			.where(eq(slot.id, s.id))
 			.run();
+	for (const p of partsAiming(tx, accountId, metricIds))
+		tx.update(taskPart)
+			.set({ targets: without(p.targets), minTargets: without(p.minTargets), stretchTargets: without(p.stretchTargets) })
+			.where(eq(taskPart.id, p.id))
+			.run();
+}
+
+/** Parts of this account's Tasks with a target for any of these fields. */
+function partsAiming(tx: Tx, accountId: string, metricIds: string[]) {
+	const ids = new Set(metricIds);
+	return tx
+		.select({ p: taskPart })
+		.from(taskPart)
+		.innerJoin(task, eq(taskPart.taskId, task.id))
+		.where(eq(task.accountId, accountId))
+		.all()
+		.map((r) => r.p)
+		.filter((p) => [p.targets, p.minTargets, p.stretchTargets].some((r) => r && Object.keys(r).some((k) => ids.has(k))));
 }

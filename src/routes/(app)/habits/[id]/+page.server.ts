@@ -30,7 +30,7 @@ import { BUILTIN_TASK_TYPES, defaultStep, metricsFromType } from '$lib/task-type
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { metric, occurrence, pause } from '$lib/server/db/schema';
+import { metric, occurrence, pause, taskPart } from '$lib/server/db/schema';
 import type { ScheduleForm } from '$lib/forms';
 import { isGroup } from '$lib/engine/schedule';
 import { descendants } from '$lib/engine/tree';
@@ -134,6 +134,14 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		metrics: numericMetrics(tasks.map((t) => t.id)),
 		/** Tasks that log something per set: only their Slots can have Target sets. */
 		repeating: repeatingTasks(tasks.map((t) => t.id)),
+		/** Tasks with parts inside: their Slots can have rounds (when they log nothing per set). */
+		withParts: [
+			...new Set(
+				tasks.length
+					? db.select({ taskId: taskPart.taskId }).from(taskPart).where(and(inArray(taskPart.taskId, tasks.map((t) => t.id)), eq(taskPart.archived, false))).all().map((r) => r.taskId)
+					: []
+			)
+		],
 		tags: listTagNames(accountId),
 		habits: allHabits.filter((x) => x.id !== params.id).map(({ id, name, direction }) => ({ id, name, direction })),
 		groups,
@@ -230,7 +238,7 @@ export const actions: Actions = {
 			restTimerSeconds: 90,
 			tags: [],
 			metrics,
-			subtasks: [],
+			parts: [],
 			areaId: listAreas(accountId).some((a) => a.id === areaId) ? areaId : null,
 			collectionIds: []
 		});

@@ -4,7 +4,9 @@ import { firstError, taskForm, type TaskForm } from '$lib/forms';
 import { checkTask } from '$lib/rules/task';
 import {
 	checkTaskEdit,
+	checkTaskLinks,
 	deleteTask,
+	libraryForParts,
 	duplicateTask,
 	getTaskForm,
 	listTagNames,
@@ -37,7 +39,7 @@ const blank = (): TaskForm => ({
 	restTimerSeconds: 90,
 	tags: [],
 	metrics: [],
-	subtasks: [],
+	parts: [],
 	areaId: null,
 	collectionIds: []
 });
@@ -77,9 +79,11 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		areas: listAreas(accountId),
 		collections: listCollections(accountId).filter((c) => !c.filter),
 		types: [...BUILTIN_TASK_TYPES, ...settings.taskTypes],
-		usage: isNew ? null : (taskUsage(accountId).get(params.id) ?? { habits: [], lastLogged: null, timesLogged: 0 }),
-		/** Fields with logged values, sub-tasks with ticks and options picked: the history policies guard their edits. */
-		logged: isNew ? { metrics: [] as string[], subtasks: [] as string[], options: [] as string[] } : taskLoggedLists(params.id),
+		usage: isNew ? null : (taskUsage(accountId).get(params.id) ?? { habits: [], inside: [], lastLogged: null, timesLogged: 0 }),
+		/** Fields with logged values, parts with logs under them and options picked: the history policies guard their edits. */
+		logged: isNew ? { metrics: [] as string[], parts: [] as string[], options: [] as string[] } : taskLoggedLists(params.id),
+		/** Library Tasks that can go inside this one, with what the part editor needs of each. */
+		library: libraryForParts(accountId, isNew ? null : params.id),
 		history: isNew ? null : taskHistory(accountId, params.id, cookies.get('tz'))
 	};
 };
@@ -122,6 +126,8 @@ export const actions: Actions = {
 		const accountId = locals.account!.id;
 		if (parsed.data.areaId && !listAreas(accountId).some((a) => a.id === parsed.data.areaId)) parsed.data.areaId = null;
 		const editing = params.id === 'new' ? null : params.id;
+		const links = checkTaskLinks(accountId, editing, parsed.data);
+		if (links) return fail(400, { error: links });
 		// History policies: edits that would change what is already logged are refused or ask first.
 		const past = editing ? checkTaskEdit(accountId, editing, parsed.data, unitChoices) : null;
 		if (editing && !past) error(404, 'Task not found');

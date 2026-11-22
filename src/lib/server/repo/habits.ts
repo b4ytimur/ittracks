@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray, isNull, lt, notInArray } from 'drizzle-orm';
 import { db } from '../db';
-import { area, entry, habit, habitIdentity, identity, metric, occurrence, slot, variant } from '../db/schema';
+import { area, entry, habit, habitIdentity, identity, metric, occurrence, slot, taskPart, variant } from '../db/schema';
 import {
 	DEFAULT_TRIGGERS,
 	defaultLevels,
@@ -32,7 +32,20 @@ export function habitCtx(f: HabitForm): HabitCtx {
 					.map((r) => r.taskId)
 			: []
 	);
-	return { taskRepeats: (id) => (ids.includes(id) ? repeating.has(id) : undefined) };
+	const withParts = new Set(
+		ids.length
+			? db
+					.select({ taskId: taskPart.taskId })
+					.from(taskPart)
+					.where(and(inArray(taskPart.taskId, ids), eq(taskPart.archived, false)))
+					.all()
+					.map((r) => r.taskId)
+			: []
+	);
+	return {
+		taskRepeats: (id) => (ids.includes(id) ? repeating.has(id) : undefined),
+		taskHasParts: (id) => (ids.includes(id) ? withParts.has(id) : undefined)
+	};
 }
 
 /** Clean and check a habit against the conflict rules (src/lib/rules). */

@@ -71,7 +71,7 @@ function moodHabit(opts: { scores?: boolean } = { scores: true }) {
 					scores: opts.scores ? { [ids.great]: 5, [ids.okay]: 3, [ids.bad]: 1 } : {}
 				}
 			],
-			subtasks: []
+			parts: []
 		})
 	)!;
 	const habitId = saveHabit(

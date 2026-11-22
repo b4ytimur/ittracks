@@ -15,11 +15,11 @@
 	let { data, form } = $props();
 
 	type Values = Record<string, unknown>;
+	/** One place in the log: a Slot's Task, or a Task inside it (see engine/parts.ts). */
 	interface ItemState {
 		sets: { done: boolean; values: Values }[];
 		summary: Values;
-		subs: Record<string, boolean>;
-		/** The tick of a Yes or no Task (no fields and no sub-tasks). */
+		/** The tick of a Yes or no Task, or of a step (no fields and nothing inside). */
 		tick?: boolean;
 	}
 	type Item = (typeof data.items)[number];
@@ -28,8 +28,8 @@
 	const isSummary = (v: Values) => v._summary === true;
 	/** A Yes or no tick: an Entry that only says it was done. */
 	const isTick = (v: Values) => v.done === true && Object.keys(v).length === 1;
-	/** A Yes or no Task: nothing to fill in, so it gets one tick box. */
-	const isYesNo = (t: Item['task']) => !!t && !t.metrics.length && !t.subtasks.length;
+	/** A Yes or no Task or a step: nothing to fill in and nothing inside, so it gets one tick box. */
+	const isYesNo = (it: Item) => !!it.task && !it.task.metrics.length && it.kids === 0;
 	/** Quick log (from a shortcut or link): only the fields marked for quick logs. */
 	const quickMode = $derived(page.url.searchParams.has('quick'));
 	/** Not finished yet: due today, or a past day that was missed, skipped or never logged. */
@@ -62,7 +62,7 @@
 	/** The planned sets and values for a Slot, before anything is logged: a prefill from last time. */
 	function planned(it: Item): ItemState {
 		const t = it.task;
-		if (!t) return { sets: [], summary: {}, subs: {} };
+		if (!t) return { sets: [], summary: {} };
 		const repeating = t.metrics.filter((m) => m.repeats);
 		const single = t.metrics.filter((m) => !m.repeats);
 		const prev = it.previous.filter((v) => !isSummary(v));
@@ -79,37 +79,32 @@
 		const summary = Object.fromEntries(
 			single.map((m) => [m.id, prefillValue(m, it, prevSummary[m.id])] as const).filter(([, v]) => v !== undefined)
 		) as Values;
-		// Sub-tasks start unticked too: you tick the ones you did.
-		const subs = Object.fromEntries(t.subtasks.map((s) => [s.id, false]));
-		// A Yes or no Task starts unticked like any tick box.
-		return { sets, summary: withStarters(summary, t), subs, tick: false };
+		// A Yes or no Task or a step starts unticked like any tick box: you tick the ones you did.
+		return { sets, summary: withStarters(summary, t), tick: false };
 	}
 
 	/**
-	 * Build the editable state for each Slot. A finished log shows what was saved. A log
+	 * Build the editable state for each place. A finished log shows what was saved. A log
 	 * that is still due shows the saved (ticked) sets first, then the planned sets not
 	 * logged yet, so leaving half way through a workout loses nothing.
 	 */
 	function initial(): ItemState[] {
 		return data.items.map((it) => {
 			const t = it.task;
-			if (!t) return { sets: [], summary: {}, subs: {} };
+			if (!t) return { sets: [], summary: {} };
 			// Sets are Entries with per-set fields; a Yes or no tick is not a set.
 			const perSet = t.metrics.some((m) => m.repeats);
 			const savedSets = perSet ? it.saved.filter((v) => !isSummary(v) && !isTick(v)) : [];
 			const savedSummary = it.saved.find(isSummary) ?? {};
 			// Not finished: due today, or a past day that was missed, skipped or never logged.
 			const due = data.occurrence.status !== 'done';
-			// Sub-task ticks are Entries of the sub-tasks, so a checklist ticked half way counts as started.
-			const subsTicked = t.subtasks.some((sub) => data.subDone[sub.id]);
-			if (due && !it.saved.length && !subsTicked) return planned(it);
+			if (due && !it.saved.length) return planned(it);
 			const sets = savedSets.map((values) => ({ done: true, values: { ...values } }));
 			if (due) sets.push(...planned(it).sets.slice(sets.length));
 			return {
 				sets,
 				summary: due ? withStarters({ ...savedSummary }, t) : { ...savedSummary },
-				subs: Object.fromEntries(t.subtasks.map((s) => [s.id, !!data.subDone[s.id]])),
-				tick: isYesNo(t) && it.saved.some((v) => v.done === true)
+				tick: isYesNo(it) && it.saved.some((v) => v.done === true)
 			};
 		});
 	}
@@ -248,8 +243,10 @@
 	 * fields are shown there.
 	 */
 	function payload(finish: boolean, stay = false) {
-		const entries: { taskId: string; values: Values }[] = [];
+		// Each value says where it sits, so the same Task in two places keeps its own.
+		const entries: { taskId: string; path: string | null; values: Values }[] = [];
 		data.items.forEach((it, i) => {
+			const path = it.path;
 			const t = it.task;
 			if (!t) return;
 			const s = log[i];
@@ -259,6 +256,7 @@
 			for (const set of sets) {
 				entries.push({
 					taskId: t.id,
+					path,
 					values: Object.fromEntries(repeatingIds.map((id) => [id, set.values[id] ?? null]))
 				});
 			}
@@ -267,16 +265,11 @@
 			const filled = Object.entries(s.summary).filter(
 				([k, v]) => v !== '' && v !== null && v !== undefined && !(longs.has(k) && untouched(longs.get(k)!, v, data.occurrence.date))
 			);
-			if (filled.length) entries.push({ taskId: t.id, values: { ...Object.fromEntries(filled), _summary: true } });
-			// The same Task in another Slot too: close this Slot's sets, so each Slot gets its own back.
-			else if (sets.length && data.items.some((x, j) => j !== i && x.task?.id === t.id)) entries.push({ taskId: t.id, values: { _summary: true } });
-			// Sub-task ticks are the Task's own, once, even when two Slots use it.
-			if (data.items.findIndex((x) => x.task?.id === t.id) === i)
-				for (const [subId, done] of Object.entries(s.subs)) {
-					if (done) entries.push({ taskId: subId, values: { done: true } });
-				}
-			if (s.tick && isYesNo(t)) entries.push({ taskId: t.id, values: { done: true } });
+			if (filled.length) entries.push({ taskId: t.id, path, values: { ...Object.fromEntries(filled), _summary: true } });
+			if (s.tick && isYesNo(it)) entries.push({ taskId: t.id, path, values: { done: true } });
 		});
+		// Values for places this log no longer shows go back as they were.
+		entries.push(...data.orphans.map((e) => ({ taskId: e.taskId, path: e.path ?? null, values: e.values })));
 		return JSON.stringify({ finish, stay, notes, entries, level, back: data.back });
 	}
 
@@ -367,9 +360,7 @@
 		isOpen && prefills[i]?.[id] != null && (log[i].summary[id] ?? null) === prefills[i][id];
 
 	/** Something is logged already: Same as last fills in only the rest. */
-	const started = $derived(
-		data.items.some((it, i) => it.saved.length || log[i]?.sets.some((x) => x.done) || Object.values(log[i]?.subs ?? {}).some(Boolean))
-	);
+	const started = $derived(data.items.some((it, i) => it.saved.length || log[i]?.sets.some((x) => x.done) || log[i]?.tick));
 
 	async function sameAsLast() {
 		// What is ticked here is saved first, so it is kept.
@@ -470,19 +461,31 @@
 	</fieldset>
 {/if}
 
-{#each data.items as it, i (it.slotId)}
+{#each data.items as it, i (it.path)}
 	{@const t = it.task}
-	{#if !quickMode || (t && shownMetrics(t.metrics).length)}
-	<section class="card stack">
+	{#if it.roundHead && !quickMode}
+		<h3 class="round" style:margin-left="{it.depth - 1}rem">{it.roundHead}</h3>
+	{/if}
+	{#if t && isYesNo(it) && it.depth > 0}
+		<!-- A step inside a Task: one tick box under it. -->
+		{#if !quickMode}
+			<label class="step" style:margin-left="{it.depth}rem"><input type="checkbox" class="tick" bind:checked={log[i].tick} /> {t.name}</label>
+		{/if}
+	{:else if !quickMode || (t && shownMetrics(t.metrics).length)}
+	<section class="card stack" class:nested={it.depth > 0} style:margin-left="{it.depth}rem">
 		<div class="row">
-			<h2 class="grow" style="margin: 0">{t?.name ?? 'No matching Task'}</h2>
+			{#if it.depth > 0}
+				<h3 class="grow" style="margin: 0">{t?.name ?? 'No matching Task'}</h3>
+			{:else}
+				<h2 class="grow" style="margin: 0">{t?.name ?? 'No matching Task'}</h2>
+			{/if}
 			{#if it.open && !quickMode}
 				<form method="POST" action="?/reroll" use:enhance={() => async ({ update }) => { await update(); resetItem(i); }}>
 					<input type="hidden" name="slot" value={it.slotId} />
 					<button class="small" title="Pick another Task">Reroll</button>
 				</form>
 			{/if}
-			{#if !quickMode}
+			{#if !quickMode && it.depth === 0}
 				<details class="swap">
 					<summary class="small-text">Swap</summary>
 					<form method="POST" action="?/swap" class="row" use:enhance={() => async ({ update }) => { await update(); resetItem(i); }}>
@@ -608,14 +611,7 @@
 				</div>
 			{/each}
 
-			{#if t.subtasks.length && !quickMode}
-				<div>
-					{#each t.subtasks as s (s.id)}
-						<label style="color: var(--text)"><input type="checkbox" class="tick" bind:checked={log[i].subs[s.id]} /> {s.name}</label>
-					{/each}
-				</div>
-			{/if}
-			{#if isYesNo(t) && !quickMode}
+			{#if isYesNo(it) && !quickMode}
 				<label style="color: var(--text)"><input type="checkbox" class="tick" bind:checked={log[i].tick} aria-label="{t.name} done" /> Done</label>
 			{/if}
 		{/if}
@@ -625,6 +621,9 @@
 
 {#if data.items.length === 0}
 	<p class="muted">This habit has nothing to log. Add Tasks to it in the Habit editor, or mark it done from Today.</p>
+{/if}
+{#if data.orphanNames.length && !quickMode}
+	<p class="muted small-text">This log also has values for {data.orphanNames.join(', ')}, which {data.orphanNames.length === 1 ? 'is' : 'are'} no longer in this habit. They are kept.</p>
 {/if}
 
 {#if quickMode}
@@ -713,6 +712,24 @@
 <style>
 	.past {
 		margin: -0.5rem 0 0.75rem;
+	}
+	.nested {
+		border-left: 3px solid var(--border);
+	}
+	.round {
+		margin: 0.75rem 0 0.35rem;
+		font-size: 0.9rem;
+		color: var(--muted);
+		font-weight: 600;
+	}
+	label.step {
+		display: flex;
+		gap: 0.5rem;
+		align-items: center;
+		color: var(--text);
+		padding: 0.3rem 0 0.3rem 0.6rem;
+		margin-bottom: 0.25rem;
+		border-left: 3px solid var(--border);
 	}
 	.levels {
 		border: 1px solid var(--border);

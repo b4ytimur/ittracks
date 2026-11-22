@@ -12,6 +12,23 @@ export const NOTE_MAX = 20000;
 /** How a long text field picks the day's prompt. */
 export const PROMPT_ORDERS = { order: 'In order, one a day', random: 'Random each day' } as const;
 
+const goals = z.record(z.string(), z.number()).default({});
+
+/** One part of a Task: a private step, or a Library Task inside it. */
+export const partForm = z.discriminatedUnion('kind', [
+	z.object({ kind: z.literal('step'), id, name }),
+	z.object({
+		kind: z.literal('task'),
+		id,
+		taskId: id,
+		sets: z.number().int().min(0).max(50).nullable().default(null),
+		targets: goals,
+		minTargets: goals,
+		stretchTargets: goals
+	})
+]);
+export type PartForm = z.infer<typeof partForm>;
+
 export const taskForm = z.object({
 	name,
 	notes: z.string().max(NOTE_MAX).default(''),
@@ -42,7 +59,12 @@ export const taskForm = z.object({
 			scores: z.record(z.string(), z.number().min(-1000).max(1000)).default({})
 		})
 	),
-	subtasks: z.array(z.object({ id, name })),
+	/**
+	 * What sits inside this Task, in order: private steps (a tick box, hidden from the
+	 * Library; the id is the step's own) and Library Tasks with their own sets and targets.
+	 * Sets on a Task with parts and no per-set fields are rounds. See engine/parts.ts.
+	 */
+	parts: z.array(partForm).max(50).default([]),
 	areaId: id.nullable().default(null),
 	/** Hand-picked Collections this Task is in. */
 	collectionIds: z.array(id).default([])

@@ -8,6 +8,7 @@ import { withinOn, withinStreak, usedIn, limitOn, type Limit } from '../engine/l
 import { compile, evaluate, FormulaError } from './formula';
 import { excerpt } from '../markdown';
 import { convert, convertible, effectiveUnit, findUnit } from '../units';
+import { parentPath, parsePath, withoutRounds } from '../engine/parts';
 import { optionName, scoresOn, type ChoiceOption, type EarlierScores, type Scores } from '../options';
 import {
 	ADDS_UP,
@@ -99,6 +100,19 @@ export interface DsEntry {
 	taskId: string;
 	values: Values;
 	sortOrder: number;
+	/** Where it sits in the log (engine/parts.ts); null from before paths. */
+	path?: string | null;
+}
+/** A Task inside a Task (engine/parts.ts). */
+export interface DsPart {
+	id: string;
+	taskId: string;
+	childTaskId: string;
+	sets: number | null;
+	targets: Record<string, number> | null;
+	minTargets: Record<string, number> | null;
+	stretchTargets: Record<string, number> | null;
+	archived: boolean;
 }
 export interface DsSlip {
 	habitId: string;
@@ -125,9 +139,15 @@ export interface Dataset {
 	entries: DsEntry[];
 	slips: DsSlip[];
 	cravings: DsCraving[];
+	/** Tasks inside Tasks. */
+	parts?: DsPart[];
 }
 
-/** One Task inside one finished Occurrence: its sets, its once-per-log values and its sub-task ticks. */
+/**
+ * One Task in one place of one log: its sets, its once-per-log values, and how many of the
+ * parts inside it have anything logged. A Task inside another gets its own Log too (a private
+ * step only counts in its parent), with its part as its `slot`, so its targets are judged.
+ */
 export interface Log {
 	occ: DsOcc;
 	habit: DsHabit;
@@ -158,6 +178,8 @@ export interface Prepared {
 	logs: Log[];
 	logsByTask: Map<string, Log[]>;
 	roles: Map<string, Roles>;
+	/** The parts inside each Task (archived ones left out). */
+	partsOf: Map<string, DsPart[]>;
 	/** First date anything was logged. */
 	earliest: ISODate;
 }
@@ -205,41 +227,76 @@ export function prepare(ds: Dataset): Prepared {
 		(o) => o.habitId
 	);
 	const occs = new Map(ds.occurrences.map((o) => [o.id, o]));
-	const subsOf = group(
-		ds.tasks.filter((t) => t.parentTaskId && !t.archived),
-		(t) => t.parentTaskId!
+	const partsOf = group(
+		(ds.parts ?? []).filter((p) => !p.archived),
+		(p) => p.taskId
 	);
+	const partById = new Map((ds.parts ?? []).map((p) => [p.id, p]));
+	const slotById = new Map(ds.slots.map((s) => [s.id, s]));
 
-	// One Log per Slot: a Variant can use the same Task twice (reading in the morning and at
-	// night). Entries come in Slot order, each Slot's sets before its once-per-log values, so
-	// once a Log has those values the next entry of the same Task starts the next Slot's Log.
+	// One Log per place. An Entry with a path says where it sits; rounds of a Circuit share
+	// one Log per Task. Before paths, a Variant could use the same Task twice (reading in the
+	// morning and at night): Entries came in Slot order, each Slot's sets before its
+	// once-per-log values, so once a Log has those values the next entry starts the next Slot's.
 	const logsByKey = new Map<string, Log>();
 	const nth = new Map<string, number>();
 	const sealed = new Set<string>();
-	const logFor = (o: DsOcc, t: DsTask, n: number) => {
-		const k = `${o.id}|${t.id}|${n}`;
+	const mkLog = (o: DsOcc, t: DsTask, k: string, slot: DsSlot | null) => {
 		let l = logsByKey.get(k);
 		if (!l) {
-			const slots = (o.variantId ? (slotsByVariant.get(o.variantId) ?? []) : []).filter((s) => (o.picks?.[s.id] ?? s.taskId) === t.id);
-			l = {
-				occ: o,
-				habit: habits.get(o.habitId)!,
-				task: t,
-				sets: [],
-				single: {},
-				subsTotal: subsOf.get(t.id)?.length ?? 0,
-				subsDone: 0,
-				slot: slots[n] ?? slots[0] ?? null
-			};
+			l = { occ: o, habit: habits.get(o.habitId)!, task: t, sets: [], single: {}, subsTotal: partsOf.get(t.id)?.length ?? 0, subsDone: 0, slot };
 			logsByKey.set(k, l);
 		}
 		return l;
 	};
+	const logFor = (o: DsOcc, t: DsTask, n: number) => {
+		const slots = (o.variantId ? (slotsByVariant.get(o.variantId) ?? []) : []).filter((s) => (o.picks?.[s.id] ?? s.taskId) === t.id);
+		return mkLog(o, t, `${o.id}|${t.id}|${n}`, slots[n] ?? slots[0] ?? null);
+	};
+	/** The Task at a place in a log, and what it aims for there: its Slot, or its part as one. */
+	const placeOf = (o: DsOcc, path: string): { task: DsTask; slot: DsSlot | null } | null => {
+		const segs = parsePath(path);
+		const top = slotById.get(segs[0].id);
+		let taskId = top ? (o.picks?.[top.id] ?? top.taskId) : null;
+		let slot: DsSlot | null = top ?? null;
+		for (const seg of segs.slice(1)) {
+			const p = partById.get(seg.id);
+			if (!p) return null;
+			taskId = p.childTaskId;
+			slot = { id: p.id, variantId: '', taskId: p.childTaskId, sets: p.sets, targets: p.targets, minTargets: p.minTargets, stretchTargets: p.stretchTargets };
+		}
+		const task = taskId ? tasks.get(taskId) : undefined;
+		return task ? { task, slot } : null;
+	};
+	const partsDone = new Map<string, Set<string>>();
 	for (const e of [...ds.entries].sort((a, b) => a.sortOrder - b.sortOrder)) {
 		const o = occs.get(e.occurrenceId);
 		const t = tasks.get(e.taskId);
 		// Every log's values count, done or not: a partial day's minutes are still minutes.
 		if (!o || !t || o.status === 'skipped' || !habits.has(o.habitId)) continue;
+		if (e.path) {
+			// Each Task it sits inside has one more part with something logged.
+			for (let at = e.path, up = parentPath(at); up; at = up, up = parentPath(at)) {
+				const outer = placeOf(o, up);
+				if (!outer) break;
+				const k = `${o.id}|@${withoutRounds(up)}`;
+				const done = partsDone.get(k) ?? new Set<string>();
+				const part = parsePath(at).at(-1)!.id;
+				if (!done.has(part)) {
+					done.add(part);
+					mkLog(o, outer.task, k, outer.slot).subsDone++;
+				}
+				partsDone.set(k, done);
+			}
+			// A private step only counts in its parent.
+			if (t.parentTaskId) continue;
+			const here = placeOf(o, e.path);
+			const l = mkLog(o, t, `${o.id}|@${withoutRounds(e.path)}`, here?.task.id === t.id ? here.slot : null);
+			const isSet = !e.values._summary && Object.keys(e.values).some((k) => (metrics.get(k)?.repeats ?? false));
+			if (isSet) l.sets.push(e.values);
+			else Object.assign(l.single, e.values);
+			continue;
+		}
 		if (t.parentTaskId) {
 			const parent = tasks.get(t.parentTaskId);
 			if (parent) logFor(o, parent, nth.get(`${o.id}|${parent.id}`) ?? 0).subsDone++;
@@ -276,6 +333,7 @@ export function prepare(ds: Dataset): Prepared {
 		logs,
 		logsByTask: group(logs, (l) => l.task.id),
 		roles,
+		partsOf,
 		earliest: dates[0] ?? addDays(ds.today, -29)
 	};
 }
@@ -595,7 +653,7 @@ export function targetMetOfLog(l: Log, P: Prepared): number | null {
 const metOf = (r: number | null): number | null => (r === null ? null : r === 1 ? 1 : 0);
 
 /** A Yes or no Task: nothing to fill in and no steps, so a tick is its whole target. */
-const isYesNo = (P: Prepared, taskId: string) => !(P.metricsByTask.get(taskId)?.length) && !P.ds.tasks.some((t) => t.parentTaskId === taskId);
+const isYesNo = (P: Prepared, taskId: string) => !(P.metricsByTask.get(taskId)?.length) && !P.partsOf.has(taskId);
 
 /**
  * Whether a day met its target: 1 when every Slot reached its Target (every number and set,
@@ -625,7 +683,7 @@ export function targetMetOfOcc(o: DsOcc, P: Prepared): number | null {
 		const kept = o.goals?.[s.id];
 		const targets = (kept ?? s).targets ?? {};
 		const hasTargets = Object.keys(targets).some((mid) => P.metrics.get(mid)?.taskId === taskId);
-		const hasSubs = P.ds.tasks.some((t) => t.parentTaskId === taskId);
+		const hasSubs = P.partsOf.has(taskId);
 		if ((hasTargets || hasSubs) && mine.length <= n) rs.push(0);
 	}
 	if (!rs.length) return null;
@@ -1434,7 +1492,7 @@ export function describeLog(l: Log, P: Prepared): string {
 	}
 	const singles = single.map((m) => fmt(m, l.single[m.id])).filter(Boolean);
 	if (singles.length) parts.push(singles.join(' · '));
-	if (l.subsTotal) parts.push(`${l.subsDone} of ${l.subsTotal} ${l.subsTotal === 1 ? 'step' : 'steps'}`);
+	if (l.subsTotal) parts.push(`${Math.min(l.subsDone, l.subsTotal)} of ${l.subsTotal} ${l.subsTotal === 1 ? 'step' : 'steps'}`);
 	return parts.join(' · ') || 'Done';
 }
 

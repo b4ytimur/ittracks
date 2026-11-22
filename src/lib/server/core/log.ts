@@ -10,7 +10,10 @@ import { missingRequired, quickDone, reopen, sameAsLast, timeIn, userToday } fro
 import { clearDay } from '../backfill';
 import { getSettings } from '../settings';
 import { getDayNote, saveDayNote } from '../journal';
-import { finishAs, plusOne, progressForIds } from '../progress';
+import { finishAs, plusOne, progressForIds, targetsAt } from '../progress';
+import { positionsOf } from '../positions';
+import { place } from '$lib/engine/parts';
+import { isTick } from '$lib/engine/groups';
 import { progressText } from '$lib/engine/progress';
 import { NOTE_MAX } from '$lib/forms';
 import { activeOptions, findOption, optionName } from '$lib/options';
@@ -170,48 +173,56 @@ export function logUndo(actor: Actor, input: { habit: string; date?: string | nu
 
 // ---------- fields ----------
 
+/** One place in a day's log (see engine/parts.ts): a Slot's Task, or a Task inside it. */
 interface TaskInLog {
 	taskId: string;
+	path: string;
 	name: string;
+	/** "Circuit › Push-ups" for a Task inside another; its name at the top. */
+	label: string;
+	/** The place it is inside, and its round there when that place repeats. */
+	parent: string | null;
+	round: number | null;
+	kids: number;
 	metrics: (typeof metric.$inferSelect)[];
-	subtasks: { id: string; name: string }[];
 	/** Targets at the log's level, falling back to Target. */
 	targets: Record<string, number>;
 }
 
-/** The Tasks a day's log holds, in Slot order, with the Task auto-filled Slots picked that day. */
+/** Every place in a day's log, top down, with the Task auto-filled Slots picked that day. */
 function tasksOf(occ: OccRow): TaskInLog[] {
-	if (!occ.variantId) return [];
-	const slots = db.select().from(slot).where(eq(slot.variantId, occ.variantId)).orderBy(asc(slot.sortOrder)).all();
 	const out: TaskInLog[] = [];
-	for (const s of slots) {
-		const taskId = occ.picks?.[s.id] ?? s.taskId;
-		if (!taskId || out.some((t) => t.taskId === taskId)) continue;
-		const t = db.select({ name: task.name }).from(task).where(eq(task.id, taskId)).get();
+	const byPath = new Map<string, TaskInLog>();
+	for (const p of positionsOf(occ)) {
+		const t = db.select({ name: task.name }).from(task).where(eq(task.id, p.taskId)).get();
 		if (!t) continue;
-		out.push({
-			taskId,
+		const up = p.parent ? byPath.get(p.parent) : undefined;
+		const it: TaskInLog = {
+			taskId: p.taskId,
+			path: p.path,
 			name: t.name,
-			metrics: db.select().from(metric).where(and(eq(metric.taskId, taskId), eq(metric.archived, false))).orderBy(asc(metric.sortOrder)).all(),
-			subtasks: db
-				.select({ id: task.id, name: task.name, archived: task.archived })
-				.from(task)
-				.where(eq(task.parentTaskId, taskId))
-				.orderBy(asc(task.sortOrder))
-				.all()
-				.filter((x) => !x.archived),
-			targets: {
-				...(s.targets ?? {}),
-				...((occ.level === 'minimum' ? s.minTargets : occ.level === 'stretch' ? s.stretchTargets : null) ?? {})
-			}
-		});
+			label: up ? `${up.label} › ${t.name}` : t.name,
+			parent: p.parent,
+			round: p.round?.n ?? null,
+			kids: p.kids,
+			metrics: db.select().from(metric).where(and(eq(metric.taskId, p.taskId), eq(metric.archived, false))).orderBy(asc(metric.sortOrder)).all(),
+			targets: targetsAt(p, occ.level)
+		};
+		byPath.set(p.path, it);
+		out.push(it);
 	}
 	return out;
 }
 
-const norm = (s: string) => s.trim().toLowerCase();
-const byRef = <T extends { id: string; name: string }>(xs: T[], ref: string): T | undefined =>
-	xs.find((x) => x.id === ref) ?? xs.find((x) => norm(x.name) === norm(ref));
+const norm = (s: string) => s.trim().toLowerCase().replace(/\s*(›|>|\/)\s*/g, ' › ');
+/** The places a Task reference names: by Task id, its path, "Circuit › Push-ups", or its name. */
+const placesOf = (tasks: TaskInLog[], ref: string): TaskInLog[] => {
+	for (const test of [(t: TaskInLog) => t.taskId === ref || t.path === ref, (t: TaskInLog) => norm(t.label) === norm(ref), (t: TaskInLog) => norm(t.name) === norm(ref)]) {
+		const hit = tasks.filter(test);
+		if (hit.length) return hit;
+	}
+	return [];
+};
 
 const numeric = (type: string) => type === 'number' || type === 'count' || type === 'duration';
 
@@ -242,7 +253,7 @@ function checkValue(actor: Actor, m: typeof metric.$inferSelect, v: unknown): un
 }
 
 function fieldList(tasks: TaskInLog[], repeats: boolean) {
-	return tasks.flatMap((t) => t.metrics.filter((m) => m.repeats === repeats).map((m) => `${t.name}: ${m.name}${m.unit ? ` (${m.unit})` : ''}`));
+	return [...new Set(tasks.flatMap((t) => t.metrics.filter((m) => m.repeats === repeats).map((m) => `${t.label}: ${m.name}${m.unit ? ` (${m.unit})` : ''}`)))];
 }
 
 /** Finish when it reached its target, or every step is done; a one-step log is done once something is in it. */
@@ -284,9 +295,10 @@ export function logValue(
 	const day = buildDay(actor, input.habit, input.date);
 	return change(actor, day, () => {
 		const occ = act(day, actor, input);
-		let tasks = tasksOf(occ);
+		// One place per Task: the first, as a single value is logged once.
+		let tasks = tasksOf(occ).filter((t, i, all) => all.findIndex((x) => x.taskId === t.taskId) === i);
 		if (input.task) {
-			const t = byRef(tasks.map((x) => ({ ...x, id: x.taskId })), input.task);
+			const t = placesOf(tasks, input.task)[0];
 			if (!t) throw new ActionError('not_found', `${day.habit.name} has no Task called “${input.task}” on ${day.date}.`);
 			tasks = [t];
 		}
@@ -310,15 +322,15 @@ export function logValue(
 		const given = checkValue(actor, m, input.value);
 		let value = given;
 		const mine = db.select().from(entry).where(eq(entry.occurrenceId, occ.id)).orderBy(asc(entry.sortOrder)).all();
-		const summary = mine.find((e) => e.taskId === t.taskId && (e.values as Values)._summary);
+		const summary = (place(positionsOf(occ), mine).at.get(t.path) ?? []).find((e) => (e.values as Values)._summary);
 		const before = summary ? (summary.values as Values)[m.id] : undefined;
 		if (numeric(m.type) && (input.mode ?? 'add') === 'add' && typeof before === 'number')
 			value = Math.round((before + (value as number)) * 1000) / 1000;
 		db.transaction((tx) => {
-			if (summary) tx.update(entry).set({ values: { ...(summary.values as Values), [m.id]: value } }).where(eq(entry.id, summary.id)).run();
+			if (summary) tx.update(entry).set({ values: { ...(summary.values as Values), [m.id]: value }, path: t.path }).where(eq(entry.id, summary.id)).run();
 			else
 				tx.insert(entry)
-					.values({ id: randomUUID(), occurrenceId: occ.id, taskId: t.taskId, values: { [m.id]: value, _summary: true }, sortOrder: mine.length })
+					.values({ id: randomUUID(), occurrenceId: occ.id, taskId: t.taskId, path: t.path, values: { [m.id]: value, _summary: true }, sortOrder: mine.length })
 					.run();
 		});
 		emit(actor, 'value.logged', {
@@ -328,14 +340,16 @@ export function logValue(
 		});
 		finishIf(actor, occ, input.finish ?? 'auto', 'value');
 		const target = t.targets[m.id] ?? null;
-		return { ...resultOf(occ.id), field: `${t.name}: ${m.name}`, value: m.type === 'text' ? '(saved)' : m.type === 'choice' ? optionName(m.choices, value) : value, target };
+		return { ...resultOf(occ.id), field: `${t.label}: ${m.name}`, value: m.type === 'text' ? '(saved)' : m.type === 'choice' ? optionName(m.choices, value) : value, target };
 	});
 }
 
 /**
- * Log a Task in a day's log: its sets ("3 × 8 at 80 kg"), its once-per-log values and its
- * sub-task ticks. Replaces what was logged for that Task unless `replace` is false, which adds
- * the sets after the ones already there. Fields are named by id or name.
+ * Log a Task in a day's log: its sets ("3 × 8 at 80 kg"), its once-per-log values and ticks
+ * of the steps inside it. A Task inside another is named "Circuit › Push-ups"; in a Circuit
+ * that repeats, `round` says which round (by default the first with nothing logged yet).
+ * Replaces what was logged at that place unless `replace` is false, which adds the sets after
+ * the ones already there. Fields are named by id or name.
  */
 export function logTask(
 	actor: Actor,
@@ -343,6 +357,7 @@ export function logTask(
 		habit: string;
 		date?: string | null;
 		task: string;
+		round?: number | null;
 		sets?: Values[];
 		values?: Values;
 		ticks?: string[];
@@ -356,9 +371,18 @@ export function logTask(
 	return change(actor, day, () => {
 		const occ = act(day, actor, input);
 		const tasks = tasksOf(occ);
-		const t = byRef(tasks.map((x) => ({ ...x, id: x.taskId })), input.task);
-		if (!t)
-			throw new ActionError('not_found', `${day.habit.name} has no Task called “${input.task}” on ${day.date}. Tasks: ${tasks.map((x) => x.name).join(', ') || 'none'}.`);
+		const all = db.select().from(entry).where(eq(entry.occurrenceId, occ.id)).orderBy(asc(entry.sortOrder)).all();
+		const { at } = place(positionsOf(occ), all);
+		let places = placesOf(tasks, input.task);
+		if (!places.length) {
+			const names = [...new Set(tasks.map((x) => x.label))];
+			throw new ActionError('not_found', `${day.habit.name} has no Task called “${input.task}” on ${day.date}. Tasks: ${names.join(', ') || 'none'}.`);
+		}
+		if (input.round != null) {
+			places = places.filter((x) => x.round === input.round);
+			if (!places.length) throw new ActionError('not_found', `${input.task} has no round ${input.round} on ${day.date}.`);
+		}
+		const t = places.find((x) => !at.get(x.path)?.length) ?? places[0];
 		const fieldOf = (k: string, repeats: boolean) => {
 			const m = t.metrics.find((x) => x.id === k) ?? t.metrics.find((x) => norm(x.name) === norm(k));
 			if (!m) throw new ActionError('not_found', `${t.name} has no field “${k}”. Fields: ${t.metrics.map((x) => x.name).join(', ') || 'none'}.`);
@@ -373,25 +397,23 @@ export function logTask(
 			}));
 		const sets = (input.sets ?? []).slice(0, 100).map((s) => toValues(s, true)).filter((s) => Object.keys(s).length);
 		const single = toValues(input.values ?? {}, false);
+		// Steps: the tick-only places right inside this one. A tick goes to the first one not ticked yet.
+		const steps = tasks.filter((x) => x.parent === t.path && !x.kids && !x.metrics.length);
+		const ticked = new Set(steps.filter((x) => at.get(x.path)?.length).map((x) => x.path));
 		const ticks = (input.ticks ?? []).map((ref) => {
-			const s = byRef(t.subtasks, ref);
-			if (!s) throw new ActionError('not_found', `${t.name} has no step called “${ref}”. Steps: ${t.subtasks.map((x) => x.name).join(', ') || 'none'}.`);
-			return s.id;
+			const named = steps.filter((x) => x.taskId === ref || norm(x.name) === norm(ref));
+			if (!named.length) throw new ActionError('not_found', `${t.name} has no step called “${ref}”. Steps: ${[...new Set(steps.map((x) => x.name))].join(', ') || 'none'}.`);
+			const s = named.find((x) => !ticked.has(x.path)) ?? named[0];
+			ticked.add(s.path);
+			return s;
 		});
-		// A plain Yes or no Task (no fields, no steps) is ticked by logging it at all.
-		const yesNo = !t.metrics.length && !t.subtasks.length;
+		// A plain Yes or no Task (no fields, nothing inside) is ticked by logging it at all.
+		const yesNo = !t.metrics.length && !t.kids;
 		if (!sets.length && !Object.keys(single).length && !ticks.length && !yesNo)
-			throw new ActionError('invalid', `Send sets, values or ticks for ${t.name}.`);
+			throw new ActionError('invalid', `Send sets, values or ticks for ${t.label}.`);
 
-		const all = db.select().from(entry).where(eq(entry.occurrenceId, occ.id)).orderBy(asc(entry.sortOrder)).all();
-		// This Task's first Slot: its sets, then its once-per-log values, which close the group.
-		const group: typeof all = [];
-		for (const e of all) {
-			if (e.taskId !== t.taskId) continue;
-			group.push(e);
-			if ((e.values as Values)._summary) break;
-		}
-		const oldSets = group.filter((e) => !(e.values as Values)._summary).map((e) => e.values as Values);
+		const group = at.get(t.path) ?? [];
+		const oldSets = group.filter((e) => !(e.values as Values)._summary && !isTick(e.values as Values)).map((e) => e.values as Values);
 		const oldSingle = (group.find((e) => (e.values as Values)._summary)?.values ?? {}) as Values;
 		const replace = input.replace ?? true;
 		const nextSets = replace ? sets : [...oldSets, ...sets];
@@ -399,30 +421,30 @@ export function logTask(
 		const nextSingle = replace && Object.keys(single).length ? single : { ...keptSingle, ...single };
 		const newGroup: Values[] = [...nextSets, ...(Object.keys(nextSingle).length ? [{ ...nextSingle, _summary: true }] : [])];
 		if (yesNo) newGroup.splice(0, newGroup.length, { done: true });
-		const subIds = new Set(t.subtasks.map((s) => s.id));
-		const ticked = new Set(all.filter((e) => subIds.has(e.taskId)).map((e) => e.taskId));
-		const at = group.length ? all.indexOf(group[0]) : all.length;
+		const newTicks = ticks.filter((s) => !at.get(s.path)?.length);
+		const first = group.length ? all.indexOf(group[0]) : all.length;
 		const rest = all.filter((e) => !group.includes(e));
-		const order: ({ id: string } | { taskId: string; values: Values })[] = [
-			...rest.slice(0, at),
-			...newGroup.map((values) => ({ taskId: t.taskId, values })),
-			...ticks.filter((id) => !ticked.has(id)).map((id) => ({ taskId: id, values: { done: true } })),
-			...rest.slice(at)
+		const cut = rest.filter((e) => all.indexOf(e) < first).length;
+		const order: ({ id: string } | { taskId: string; path: string; values: Values })[] = [
+			...rest.slice(0, cut),
+			...newGroup.map((values) => ({ taskId: t.taskId, path: t.path, values })),
+			...newTicks.map((s) => ({ taskId: s.taskId, path: s.path, values: { done: true } })),
+			...rest.slice(cut)
 		];
 		db.transaction((tx) => {
 			if (group.length) tx.delete(entry).where(inArray(entry.id, group.map((e) => e.id))).run();
 			order.forEach((e, i) => {
 				if ('id' in e) tx.update(entry).set({ sortOrder: i }).where(eq(entry.id, e.id)).run();
-				else tx.insert(entry).values({ id: randomUUID(), occurrenceId: occ.id, taskId: e.taskId, values: e.values, sortOrder: i }).run();
+				else tx.insert(entry).values({ id: randomUUID(), occurrenceId: occ.id, taskId: e.taskId, path: e.path, values: e.values, sortOrder: i }).run();
 			});
 		});
 		emit(actor, 'sets.logged', {
 			habitId: occ.habitId,
 			date: occ.date,
-			data: { occurrenceId: occ.id, taskId: t.taskId, sets: nextSets.length, replaced: replace, ticks: ticks.length }
+			data: { occurrenceId: occ.id, taskId: t.taskId, path: t.path, sets: nextSets.length, replaced: replace, ticks: ticks.length }
 		});
 		finishIf(actor, occ, input.finish ?? 'auto', 'task');
-		return { ...resultOf(occ.id), task: t.name, sets: nextSets.length };
+		return { ...resultOf(occ.id), task: t.label, sets: nextSets.length };
 	});
 }
 

@@ -44,7 +44,9 @@ import { missedDaysOver, recountFrom, scheduleOn, type EarlierSchedule, type Unl
 import { habitStats, type HabitStats } from '$lib/engine/stats';
 import type { Progress } from '$lib/engine/progress';
 import { finishAs, progressFor, stepsOf, verdictsFor } from './progress';
-import { isTick, slotGroups as groupsOf } from '$lib/engine/groups';
+import { isTick } from '$lib/engine/groups';
+import { place, slotOfPath, type Position } from '$lib/engine/parts';
+import { partIdsIn, positionsOf } from './positions';
 
 /**
  * Today's date in the user's time zone, as YYYY-MM-DD. Before `dayStart` (HH:MM)
@@ -876,7 +878,7 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 /** Entries that log a Slot's targets at a level (falling back to Target). */
 function targetEntries(
 	tx: Tx,
-	s: typeof slot.$inferSelect,
+	s: Pick<Position, 'sets' | 'targets' | 'minTargets' | 'stretchTargets'>,
 	taskId: string,
 	level: Level | null
 ): Record<string, unknown>[] {
@@ -995,23 +997,24 @@ export function missingRequired(occurrenceId: string): string[] {
 	const entries = db.select().from(entry).where(eq(entry.occurrenceId, occ.id)).all();
 	const empty = (v: unknown) => v === undefined || v === null || v === '' || v === false;
 	const out: string[] = [];
-	for (const { taskId } of slotsOf(occ)) {
-		if (!taskId) continue;
+	const positions = positionsOf(occ);
+	const { at } = place(positions, entries);
+	for (const p of positions) {
 		const required = db
 			.select()
 			.from(metric)
-			.where(and(eq(metric.taskId, taskId), eq(metric.required, true), eq(metric.archived, false)))
+			.where(and(eq(metric.taskId, p.taskId), eq(metric.required, true), eq(metric.archived, false)))
 			.all();
 		if (!required.length) continue;
-		const name = db.select({ name: task.name }).from(task).where(eq(task.id, taskId)).get()?.name ?? '';
-		const mine = entries.filter((e) => e.taskId === taskId);
+		const name = db.select({ name: task.name }).from(task).where(eq(task.id, p.taskId)).get()?.name ?? '';
+		const mine = at.get(p.path) ?? [];
 		const sets = mine.filter((e) => !(e.values as Record<string, unknown>)._summary);
 		const summary = (mine.find((e) => (e.values as Record<string, unknown>)._summary)?.values ?? {}) as Record<string, unknown>;
 		for (const m of required) {
 			const bad = m.repeats
 				? !sets.length || sets.some((e) => empty((e.values as Record<string, unknown>)[m.id]))
 				: empty(summary[m.id]) && !sets.some((e) => !empty((e.values as Record<string, unknown>)[m.id]));
-			if (bad) out.push(`${name}: ${m.name}`);
+			if (bad && !out.includes(`${name}: ${m.name}`)) out.push(`${name}: ${m.name}`);
 		}
 	}
 	return out;
@@ -1024,14 +1027,9 @@ function needsInput(occurrenceId: string): boolean {
 	return true;
 }
 
-/**
- * What a one-tap Done ticks for a Task: its sub-tasks, or the Task itself when it is a plain
- * Yes or no (no fields and no sub-tasks). Ticks are Entries with `{ done: true }`.
- */
-function ticksFor(tx: Tx, taskId: string): string[] {
-	const subs = tx.select({ id: task.id, archived: task.archived }).from(task).where(eq(task.parentTaskId, taskId)).all().filter((t) => !t.archived);
-	if (subs.length) return subs.map((t) => t.id);
-	return tx.select({ id: metric.id }).from(metric).where(and(eq(metric.taskId, taskId), eq(metric.archived, false))).get() ? [] : [taskId];
+/** A Yes or no Task or a step: no fields and nothing inside, so logging it is a tick. */
+function isTickOnly(tx: Tx, p: Pick<Position, 'taskId' | 'kids'>): boolean {
+	return !p.kids && !tx.select({ id: metric.id }).from(metric).where(and(eq(metric.taskId, p.taskId), eq(metric.archived, false))).get();
 }
 
 /** One tap: done at a level with its targets. Returns 'needsInput' when a required field is still empty. */
@@ -1042,16 +1040,14 @@ export function quickDone(occurrenceId: string, level: Level | null): 'done' | '
 	db.transaction((tx) => {
 		// One tap logs that level's targets, replacing anything an earlier tap or log left behind.
 		tx.delete(entry).where(eq(entry.occurrenceId, occ.id)).run();
-		{
-			let order = 0;
-			for (const { slot: s, taskId } of slotsOf(occ)) {
-				if (!taskId) continue;
-				for (const values of targetEntries(tx, s, taskId, level))
-					tx.insert(entry).values({ id: randomUUID(), occurrenceId: occ.id, taskId, values, sortOrder: order++ }).run();
-				// "Done" means every step: tick a Yes or no Task, and each sub-task.
-				for (const id of ticksFor(tx, taskId))
-					tx.insert(entry).values({ id: randomUUID(), occurrenceId: occ.id, taskId: id, values: { done: true }, sortOrder: order++ }).run();
-			}
+		let order = 0;
+		// Every place in the log, parts and rounds included. "Done" means every step: a Yes or
+		// no Task and each step inside a Task is ticked.
+		for (const p of positionsOf(occ, { q: tx })) {
+			const add = (values: Record<string, unknown>) =>
+				tx.insert(entry).values({ id: randomUUID(), occurrenceId: occ.id, taskId: p.taskId, path: p.path, values, sortOrder: order++ }).run();
+			for (const values of targetEntries(tx, p, p.taskId, level)) add(values);
+			if (isTickOnly(tx, p)) add({ done: true });
 		}
 		tx.update(occurrence)
 			.set({ status: 'done', finishedAt: new Date(), level: level === 'target' ? null : level })
@@ -1079,17 +1075,14 @@ function blankMetricIds(tx: Tx, taskId: string): Set<string> {
 
 type Values = Record<string, unknown>;
 
-/** A log's Entries of one Task, one group per Slot (see engine/groups.ts), as values. */
-const slotGroups = (entries: { taskId: string; values: Values }[], taskId: string): Values[][] =>
-	groupsOf(entries, taskId).map((g) => g.map((e) => e.values));
-
 /**
  * "Same as last time": copy the last finished log (of the same Variant when there is one, and
  * from before this day) and finish. Everything comes from that one log, so values from
- * different days never mix: sets, single values, tick boxes, sub-task ticks, and the Task an
- * auto-filled Slot used. A Task that log didn't have takes its own last log, then the targets.
- * Fields set to start blank are never copied. Tasks already logged here are kept as they are,
- * so a half-done workout only gets the rest filled in.
+ * different days never mix: sets, single values, tick boxes, ticked steps, and the Task an
+ * auto-filled Slot used. Places are matched by Task and how many times it came before, so
+ * round 2 of a Circuit copies round 2. A place that log didn't have takes its Task's own last
+ * log, then the targets. Fields set to start blank are never copied. Places already logged
+ * here are kept as they are, so a half-done workout only gets the rest filled in.
  * Returns 'needsInput', with the Occurrence back to due, when a required field is still empty
  * or a Task got nothing to log, so the quick log can ask for it.
  */
@@ -1111,7 +1104,7 @@ export function sameAsLast(occurrenceId: string): 'done' | 'needsInput' | 'gone'
 	const lastLevel = source?.level ?? null;
 	const from = source
 		? db
-				.select({ taskId: entry.taskId, values: entry.values })
+				.select({ taskId: entry.taskId, path: entry.path, values: entry.values })
 				.from(entry)
 				.where(eq(entry.occurrenceId, source.id))
 				.orderBy(asc(entry.sortOrder))
@@ -1138,58 +1131,48 @@ export function sameAsLast(occurrenceId: string): 'done' | 'needsInput' | 'gone'
 	let empty = false;
 	db.transaction((tx) => {
 		const have = tx
-			.select({ taskId: entry.taskId, values: entry.values, sortOrder: entry.sortOrder })
+			.select({ taskId: entry.taskId, path: entry.path, values: entry.values, sortOrder: entry.sortOrder })
 			.from(entry)
 			.where(eq(entry.occurrenceId, occ!.id))
 			.orderBy(asc(entry.sortOrder))
 			.all();
-		// Slots already logged, per Task: with the same Task twice, only the first may be done.
-		const logged = (taskId: string) => slotGroups(have, taskId).length;
+		const positions = positionsOf(occ!, { q: tx });
+		const here = place(positions, have).at;
+		// The places of that log, by Task and how many times the Task came before.
+		const keyed = (ps: Position[]) => {
+			const n = new Map<string, number>();
+			return ps.map((p) => {
+				const k = n.get(p.taskId) ?? 0;
+				n.set(p.taskId, k + 1);
+				return { p, key: `${p.taskId}|${k}` };
+			});
+		};
+		const srcPositions = source ? positionsOf(source, { q: tx, keep: partIdsIn(from) }) : [];
+		const srcAt = place(srcPositions, from).at;
+		const inSource = new Map(keyed(srcPositions).map(({ p, key }) => [key, (srcAt.get(p.path) ?? []).map((e) => e.values)]));
 		let order = have.reduce((n, e) => Math.max(n, e.sortOrder + 1), 0);
-		const add = (taskId: string, values: Values) =>
-			tx.insert(entry).values({ id: randomUUID(), occurrenceId: occ!.id, taskId, values, sortOrder: order++ }).run();
-		const nth = new Map<string, number>();
-		const slots = slotsOf(occ!);
-		// Sub-tasks already ticked here: they are kept, never ticked a second time.
-		const ticked = new Set(have.map((e) => e.taskId));
-		for (const { slot: s, taskId } of slots) {
-			if (!taskId) continue;
-			const n = nth.get(taskId) ?? 0;
-			nth.set(taskId, n + 1);
-			const subs = tx.select({ id: task.id }).from(task).where(and(eq(task.parentTaskId, taskId), eq(task.archived, false))).all();
-			const inSource = from.some((e) => e.taskId === taskId);
-			// A Task made only of sub-tasks is in that log when any of its steps is.
-			const subsInSource = inSource || from.some((e) => subs.some((x) => x.id === e.taskId));
+		for (const { p, key } of keyed(positions)) {
+			// Logged here already: kept, never filled a second time.
+			if (here.get(p.path)?.length) continue;
+			const add = (values: Values) =>
+				tx.insert(entry).values({ id: randomUUID(), occurrenceId: occ!.id, taskId: p.taskId, path: p.path, values, sortOrder: order++ }).run();
+			// From the one log above; a place it didn't have falls back to its Task's own last log.
+			const prev = inSource.get(key) ?? lastEntries(p.taskId, occ!.id, p.path);
+			if (isTickOnly(tx, p)) {
+				if (prev.some(isTick)) add({ done: true });
+				continue;
+			}
+			const blank = blankMetricIds(tx, p.taskId);
 			let wrote = 0;
-			if (n === 0)
-				for (const sub of subs) {
-					if (ticked.has(sub.id)) continue;
-					const ticks = subsInSource ? from.filter((e) => e.taskId === sub.id).map((e) => e.values) : lastEntries(sub.id, occ!.id);
-					for (const values of ticks.slice(0, 1)) {
-						add(sub.id, values);
-						wrote++;
-					}
-				}
-			if (n < logged(taskId)) continue;
-			// From the one log above; a Task it didn't have falls back to its own last log.
-			const prevAll = inSource ? from : lastEntries(taskId, occ!.id).map((values) => ({ taskId, values }));
-			const prev = slotGroups(prevAll, taskId)[n] ?? [];
-			const blank = blankMetricIds(tx, taskId);
-			// The same Task in two Slots: each Slot's sets are closed by its own group end.
-			const twice = slots.filter((x) => x.taskId === taskId).length > 1;
-			let sets = 0;
-			for (const values of prev.length ? prev : targetEntries(tx, s, taskId, lastLevel)) {
+			for (const values of prev.length ? prev : targetEntries(tx, p, p.taskId, lastLevel)) {
 				const kept = Object.fromEntries(Object.entries(values).filter(([k]) => !blank.has(k)));
 				if (Object.keys(kept).some((k) => k !== '_summary')) {
-					add(taskId, kept);
+					add(kept);
 					wrote++;
-					if (kept._summary) sets = 0;
-					else if (!isTick(kept)) sets++;
 				}
 			}
-			if (twice && sets) add(taskId, { _summary: true });
 			// Nothing to copy: ask on the quick log, if it has a field to ask with.
-			if (!wrote && tx.select({ id: metric.id }).from(metric).where(and(eq(metric.taskId, taskId), eq(metric.archived, false), or(eq(metric.quick, true), eq(metric.required, true)))).get())
+			if (!wrote && tx.select({ id: metric.id }).from(metric).where(and(eq(metric.taskId, p.taskId), eq(metric.archived, false), or(eq(metric.quick, true), eq(metric.required, true)))).get())
 				empty = true;
 		}
 		tx.update(occurrence)
@@ -1215,8 +1198,12 @@ export function reopen(occurrenceId: string, clear: boolean) {
 	});
 }
 
-/** The most recent Entries of a Task before a given Occurrence, used to prefill. */
-export function lastEntries(taskId: string, beforeOccurrenceId: string) {
+/**
+ * The most recent Entries of a Task before a given Occurrence, used to prefill. With a `path`,
+ * the ones from the same place last time (round 2 of a Circuit prefills round 2), else the
+ * first place it had there, so rounds and Slots don't run together.
+ */
+export function lastEntries(taskId: string, beforeOccurrenceId: string, path?: string) {
 	const occ = db
 		.select({ id: occurrence.id, date: occurrence.date })
 		.from(occurrence)
@@ -1233,11 +1220,16 @@ export function lastEntries(taskId: string, beforeOccurrenceId: string) {
 		occ
 	);
 	if (!prev) return [];
-	return db
-		.select({ values: entry.values })
+	const rows = db
+		.select({ values: entry.values, path: entry.path })
 		.from(entry)
 		.where(and(eq(entry.occurrenceId, prev.id), eq(entry.taskId, taskId)))
 		.orderBy(asc(entry.sortOrder))
-		.all()
-		.map((e) => e.values);
+		.all();
+	const placed = rows.filter((r) => r.path);
+	if (!path || !placed.length) return rows.map((e) => e.values);
+	// The place below the Slot: Slots differ between Variants, the parts and rounds don't.
+	const tail = (p: string) => p.slice(slotOfPath(p).length);
+	const same = placed.filter((r) => tail(r.path!) === tail(path));
+	return (same.length ? same : placed.filter((r) => r.path === placed[0].path)).map((e) => e.values);
 }

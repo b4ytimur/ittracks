@@ -203,7 +203,7 @@ describe('reading and analysis', () => {
 		expect(v.total).toBe(31);
 		expect(v.rows[0].ref).toMatch(/^log:/);
 		const csv = run(app, 'values', { habits: ['water'], days: 40, format: 'csv' }) as { csv: string };
-		expect(csv.csv.split('\n')[0]).toBe('ref,date,weekday,habit,status,variant,level,task,set,field,type,unit,value,score');
+		expect(csv.csv.split('\n')[0]).toBe('ref,date,weekday,habit,status,variant,level,task,set,round,field,type,unit,value,score');
 		run(app, 'log_value', { habit: 'Read', field: 'Book', value: 'Dune', finish: 'no' });
 		const k = createKey(me, { name: 'Values', scopes: ['read'], habitIds: null });
 		if ('error' in k) throw new Error(k.error);
@@ -380,7 +380,7 @@ describe('export and import', () => {
 		const z = exportCsvZip(app);
 		const text = new TextDecoder().decode(z.body);
 		expect(text).toContain('ittracks-export/values.csv');
-		expect(text).toContain('ref,date,weekday,habit,status,variant,level,task,set,field,type,unit,value,score');
+		expect(text).toContain('ref,date,weekday,habit,status,variant,level,task,set,round,field,type,unit,value,score');
 	});
 
 	it("refuses a file that points at another account's rows", async () => {

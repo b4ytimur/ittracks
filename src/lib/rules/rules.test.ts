@@ -30,7 +30,7 @@ const task = (): TaskForm =>
 		restTimerSeconds: 90,
 		tags: [],
 		metrics: [{ id: M, name: 'Reps', type: 'count', repeats: true }],
-		subtasks: []
+		parts: []
 	});
 
 /**

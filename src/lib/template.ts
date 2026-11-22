@@ -27,9 +27,11 @@ export const TEMPLATE_FORMAT = 'ittracks-template';
  * number questions that keep other numbers in proportion, long text fields (several lines
  * of Markdown, starter text, prompts) and scored choices, and allows 20,000 characters of
  * Markdown in Task and habit notes.
+ * Version 6 adds Tasks inside Tasks: a Task's parts, in order, are its steps and other Tasks
+ * of the file with their own sets and targets (`subtasks` still lists the steps by name).
  * Older files still import; the new fields take their defaults.
  */
-export const TEMPLATE_VERSION = 5;
+export const TEMPLATE_VERSION = 6;
 
 const key = z.string().min(1).max(64);
 
@@ -65,7 +67,24 @@ const templateTask = z.object({
 			})
 		)
 		.default([]),
-	subtasks: z.array(z.string().min(1).max(120)).default([])
+	/** Steps by name. Read when `parts` is empty (files before version 6). */
+	subtasks: z.array(z.string().min(1).max(120)).default([]),
+	/** Version 6: what sits inside this Task, in order: a step, or another Task of this file. */
+	parts: z
+		.array(
+			z.union([
+				z.object({ step: z.string().min(1).max(120) }),
+				z.object({
+					task: key,
+					sets: z.number().int().min(0).max(50).nullable().default(null),
+					targets: z.record(key, z.number()).default({}),
+					minTargets: z.record(key, z.number()).default({}),
+					stretchTargets: z.record(key, z.number()).default({})
+				})
+			])
+		)
+		.max(50)
+		.default([])
 });
 
 const weekdayList = z.array(z.number().int().min(0).max(6)).max(7);
@@ -113,7 +132,7 @@ export type TemplateMeta = z.infer<typeof templateMeta>;
 
 export const templateFile = z.object({
 	format: z.literal(TEMPLATE_FORMAT),
-	version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
+	version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)]),
 	name: z.string().min(1).max(120),
 	/** Version 4: a view template this habit works well with (e.g. "gym"). Only ever offered, never applied by itself. */
 	view: z.string().max(32).nullable().default(null),
@@ -343,7 +362,22 @@ export function toTemplate(
 				promptOrder: m.promptOrder,
 				scores: Object.fromEntries(m.choices.filter((o) => typeof m.scores[o.id] === 'number').map((o) => [o.name, m.scores[o.id]]))
 			})),
-			subtasks: t.subtasks.map((s) => s.name)
+			subtasks: t.parts.flatMap((p) => (p.kind === 'step' ? [p.name] : [])),
+			parts: t.parts.flatMap((p): TemplateFile['tasks'][number]['parts'] =>
+				p.kind === 'step'
+					? [{ step: p.name }]
+					: taskKey.has(p.taskId)
+						? [
+								{
+									task: taskKey.get(p.taskId)!,
+									sets: p.sets,
+									targets: rekey(p.targets, metricKey),
+									minTargets: rekey(p.minTargets, metricKey),
+									stretchTargets: rekey(p.stretchTargets, metricKey)
+								}
+							]
+						: []
+			)
 		}))
 	};
 }
@@ -401,11 +435,33 @@ export function fromTemplate(
 				restTimerSeconds: t.restTimerSeconds,
 				tags: t.tags,
 				metrics,
-				subtasks: t.subtasks.map((name) => ({ id: newId(), name })),
+				parts: [] as TaskForm['parts'],
 				areaId: null,
 				collectionIds: []
 			}
 		};
+	});
+	// Parts point at other Tasks of the file, so they are filled in once every Task has its id.
+	tpl.tasks.forEach((t, i) => {
+		const parts: TaskForm['parts'] = t.parts.length
+			? t.parts.flatMap((p): TaskForm['parts'] => {
+					if ('step' in p) return [{ kind: 'step', id: newId(), name: p.step }];
+					const taskId = taskIds.get(p.task);
+					if (!taskId) return [];
+					return [
+						{
+							kind: 'task',
+							id: newId(),
+							taskId,
+							sets: p.sets,
+							targets: rekey(p.targets, metricIds),
+							minTargets: rekey(p.minTargets, metricIds),
+							stretchTargets: rekey(p.stretchTargets, metricIds)
+						}
+					];
+				})
+			: t.subtasks.map((name) => ({ kind: 'step' as const, id: newId(), name }));
+		tasks[i].form.parts = parts;
 	});
 	const variantIds = new Map(tpl.habit.variants.map((v) => [v.key, newId()]));
 	const habit: HabitForm = {

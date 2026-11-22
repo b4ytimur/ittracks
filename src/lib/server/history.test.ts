@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { eq, sql } from 'drizzle-orm';
 import { db } from './db';
-import { entry, habit, metric, occurrence, slot, task } from './db/schema';
+import { entry, habit, metric, occurrence, slot, task, taskPart } from './db/schema';
 import { createAccount } from './auth';
 import { saveSettings } from './settings';
 import { userToday } from './today';
@@ -44,7 +44,7 @@ function gym(opts: { log?: boolean } = { log: true }) {
 				{ id: ids.weight, name: 'Weight', type: 'number', unit: 'kg', repeats: true },
 				{ id: ids.reps, name: 'Reps', type: 'count', repeats: true }
 			],
-			subtasks: [{ id: ids.sub, name: 'Warm-up' }]
+			parts: [{ kind: 'step', id: ids.sub, name: 'Warm-up' }]
 		})
 	)!;
 	const habitId = saveHabit(
@@ -87,11 +87,11 @@ const slotRow = (id: string) => db.select().from(slot).where(eq(slot.id, id)).ge
 const occRow = (id: string) => db.select().from(occurrence).where(eq(occurrence.id, id)).get()!;
 
 describe('what is logged', () => {
-	it('knows which fields have values and which sub-tasks were ticked', () => {
+	it('knows which fields have values and which steps were ticked', () => {
 		const g = gym();
 		const l = taskLogged(g.taskId);
 		expect([...l.metrics].sort()).toEqual([g.weight, g.reps].sort());
-		expect([...l.subtasks]).toEqual([g.sub]);
+		expect([...l.parts]).toEqual([g.sub]);
 		expect(habitLogged(g.habitId)).toBe(true);
 		expect(habitLogged(gym({ log: false }).habitId)).toBe(false);
 	});
@@ -195,15 +195,17 @@ describe('removing a field or sub-task with logs archives it', () => {
 		expect(db.select().from(metric).where(eq(metric.id, g.weight)).get()).toBeUndefined();
 	});
 
-	it('a ticked sub-task is archived with its ticks; an unticked one is deleted', () => {
+	it('a ticked step is archived with its ticks; an unticked one is deleted', () => {
 		const g = gym();
-		saveTask(me, g.taskId, { ...form(g.taskId), subtasks: [] });
+		saveTask(me, g.taskId, { ...form(g.taskId), parts: [] });
 		expect(db.select().from(task).where(eq(task.id, g.sub)).get()!.archived).toBe(true);
+		expect(db.select().from(taskPart).where(eq(taskPart.id, g.sub)).get()!.archived).toBe(true);
 		expect(valuesOf(g.sub)).toEqual([{ done: true }]);
-		expect(form(g.taskId).subtasks).toEqual([]);
+		expect(form(g.taskId).parts).toEqual([]);
 		const fresh = gym({ log: false });
-		saveTask(me, fresh.taskId, { ...form(fresh.taskId), subtasks: [] });
+		saveTask(me, fresh.taskId, { ...form(fresh.taskId), parts: [] });
 		expect(db.select().from(task).where(eq(task.id, fresh.sub)).get()).toBeUndefined();
+		expect(db.select().from(taskPart).where(eq(taskPart.id, fresh.sub)).get()).toBeUndefined();
 	});
 });
 
