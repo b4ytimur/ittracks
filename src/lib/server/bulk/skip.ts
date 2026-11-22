@@ -64,7 +64,8 @@ export const skipDays: Run<'skip_days'> = ({ actor, today, undo, report }, habit
 				already++;
 				continue;
 			}
-			if (!occ && (pauseOn(pauses, h.id, d) || !dueOn(scheduleAt(h, d), history(h.id, d), d, followDue(h.id, scheduleAt(h, d), today)))) continue;
+			// A day whose phase carries over has no fixed day to skip, like the whole habit above.
+			if (!occ && (pauseOn(pauses, h.id, d) || carriesOver(scheduleAt(h, d), d) || !dueOn(scheduleAt(h, d), history(h.id, d), d, followDue(h.id, scheduleAt(h, d), today)))) continue;
 			const before = snapshot(h.id, d);
 			try {
 				logSkip(actor, { habit: h.id, date: d });

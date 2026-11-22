@@ -60,7 +60,7 @@
 				weeks.push(week);
 			}
 		}
-		return { filled, made, weeks, schedule: describeSchedule(made.habit.schedule) };
+		return { filled, made, weeks, schedule: describeSchedule(made.habit.schedule, undefined, made.habit.variants) };
 	});
 
 	const taskByKey = $derived(new Map(preview.filled.tasks.map((t) => [t.key, t])));

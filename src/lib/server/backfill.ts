@@ -188,7 +188,7 @@ export function unloggedOn(accountId: string, date: string): string[] {
 		.filter((h) => {
 			if (h.direction !== 'build' || !h.schedule) return false;
 			const schedule = scheduleAt(h, date);
-			if (carriesOver(schedule) || pauseOn(pauses, h.id, date)) return false;
+			if (carriesOver(schedule, date) || pauseOn(pauses, h.id, date)) return false;
 			const occ = rowOn(h.id, date);
 			if (occ) return occ.status === 'missed' || occ.status === 'due';
 			return !!dueOn(schedule, history(h.id, date), date, followDue(h.id, schedule, date));
@@ -238,7 +238,7 @@ export function kidsDueOn(accountId: string, parentId: string, date: string) {
 
 /** What today's Occurrence was planned as, for schedules a past log can change. */
 export function planOfToday(habitId: string, schedule: ScheduleForm, today: string): string | null {
-	return dependsOnHistory(schedule as Schedule) ? dueOn(schedule as Schedule, history(habitId, today), today) : null;
+	return dependsOnHistory(schedule as Schedule, today) ? dueOn(schedule as Schedule, history(habitId, today), today) : null;
 }
 
 /**
@@ -248,7 +248,7 @@ export function planOfToday(habitId: string, schedule: ScheduleForm, today: stri
  * plan really changed. A rotation started early by hand is left alone.
  */
 export function replanToday(accountId: string, habitId: string, schedule: ScheduleForm, today: string, before: string | null) {
-	if (!before || !dependsOnHistory(schedule as Schedule)) return;
+	if (!before || !dependsOnHistory(schedule as Schedule, today)) return;
 	const occ = rowOn(habitId, today);
 	if (!occ || occ.status !== 'due' || occ.variantId !== before || entryCount(occ.id)) return;
 	const after = dueOn(schedule as Schedule, history(habitId, today), today);

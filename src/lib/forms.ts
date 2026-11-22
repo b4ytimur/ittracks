@@ -95,31 +95,46 @@ const rollupRule = z.object({
 /** A routine's rule, on any schedule of its own (absent: all of them, no Minimum). */
 const routine = { rollup: rollupRule.optional() };
 
+// Schedules with days of their own. A phase runs one of these; a habit can use one directly.
+const weeklySchedule = z.object({ kind: z.literal('weekly'), days: z.record(z.string(), id) });
+const frequencySchedule = z.object({
+	kind: z.literal('frequency'),
+	times: z.number().int().min(1).max(31),
+	period: z.enum(['week', 'month']),
+	variantId: id
+});
+const intervalSchedule = z.object({
+	kind: z.literal('interval'),
+	every: z.number().int().min(1).max(365),
+	start: z.string().date(),
+	variantId: id
+});
+const rotationSchedule = z.object({
+	kind: z.literal('rotation'),
+	step: z.enum(['variant', 'week']),
+	order: z.array(z.object({ variantId: id, restDays: z.number().int().min(0).max(30) })).min(1),
+	onMiss: z.enum(['wait', 'skip']),
+	weekdays: z.array(z.number().int().min(0).max(6)),
+	start: z.string().date()
+});
+export const plainSchedule = z.discriminatedUnion('kind', [weeklySchedule, frequencySchedule, intervalSchedule, rotationSchedule]);
+export type PlainScheduleForm = z.infer<typeof plainSchedule>;
+
+/** One phase: a schedule that runs for `length` days or weeks, or with no end (null, last only). */
+export const phaseForm = z.object({
+	length: z.number().int().min(1).max(520).nullable(),
+	unit: z.enum(['day', 'week']),
+	schedule: plainSchedule
+});
+export type PhaseForm = z.infer<typeof phaseForm>;
+
 const schedule = z.discriminatedUnion('kind', [
-	z.object({ kind: z.literal('weekly'), days: z.record(z.string(), id), ...routine }),
-	z.object({
-		kind: z.literal('frequency'),
-		times: z.number().int().min(1).max(31),
-		period: z.enum(['week', 'month']),
-		variantId: id,
-		...routine
-	}),
-	z.object({
-		kind: z.literal('interval'),
-		every: z.number().int().min(1).max(365),
-		start: z.string().date(),
-		variantId: id,
-		...routine
-	}),
-	z.object({
-		kind: z.literal('rotation'),
-		step: z.enum(['variant', 'week']),
-		order: z.array(z.object({ variantId: id, restDays: z.number().int().min(0).max(30) })).min(1),
-		onMiss: z.enum(['wait', 'skip']),
-		weekdays: z.array(z.number().int().min(0).max(6)),
-		start: z.string().date(),
-		...routine
-	}),
+	weeklySchedule.extend(routine),
+	frequencySchedule.extend(routine),
+	intervalSchedule.extend(routine),
+	rotationSchedule.extend(routine),
+	// Schedules one after another from `start` (see engine/schedule.ts).
+	z.object({ kind: z.literal('phases'), start: z.string().date(), phases: z.array(phaseForm).min(1).max(20), ...routine }),
 	// A group of habits: due when one inside is due; done when all (target null) or `target` are done.
 	z.object({ kind: z.literal('group'), ...rollupRule.shape }),
 	// Inside a routine: due whenever the routine is (only on its Variants in `on`, when set).

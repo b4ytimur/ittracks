@@ -14,9 +14,11 @@ import {
 	streakRuleForm,
 	NOTE_MAX,
 	type HabitForm,
+	type PlainScheduleForm,
 	type ScheduleForm,
 	type TaskForm
 } from './forms';
+import { tidyPhases } from './engine/schedule';
 
 export const TEMPLATE_FORMAT = 'ittracks-template';
 /**
@@ -29,9 +31,11 @@ export const TEMPLATE_FORMAT = 'ittracks-template';
  * Markdown in Task and habit notes.
  * Version 6 adds Tasks inside Tasks: a Task's parts, in order, are its steps and other Tasks
  * of the file with their own sets and targets (`subtasks` still lists the steps by name).
+ * Version 7 adds phases: a schedule that runs other schedules one after another ("every day
+ * with Ramp-up for 1 week, then every day with Maintain"). Phases start on the day of import.
  * Older files still import; the new fields take their defaults.
  */
-export const TEMPLATE_VERSION = 6;
+export const TEMPLATE_VERSION = 7;
 
 const key = z.string().min(1).max(64);
 
@@ -132,7 +136,7 @@ export type TemplateMeta = z.infer<typeof templateMeta>;
 
 export const templateFile = z.object({
 	format: z.literal(TEMPLATE_FORMAT),
-	version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)]),
+	version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6), z.literal(7)]),
 	name: z.string().min(1).max(120),
 	/** Version 4: a view template this habit works well with (e.g. "gym"). Only ever offered, never applied by itself. */
 	view: z.string().max(32).nullable().default(null),
@@ -212,9 +216,12 @@ export const templateFile = z.object({
 export type TemplateFile = z.infer<typeof templateFile>;
 
 /** Replace every Variant id inside a Schedule using a mapping. */
+function mapSchedule<S extends ScheduleForm | PlainScheduleForm>(s: S | null, map: (id: string) => string): S | null;
 function mapSchedule(s: ScheduleForm | null, map: (id: string) => string): ScheduleForm | null {
 	if (!s) return null;
 	switch (s.kind) {
+		case 'phases':
+			return { ...s, phases: s.phases.map((p) => ({ ...p, schedule: mapSchedule(p.schedule, map)! })) };
 		case 'weekly':
 			return { ...s, days: Object.fromEntries(Object.entries(s.days).map(([d, v]) => [d, map(v)])) };
 		case 'frequency':
@@ -516,8 +523,9 @@ export function fromTemplate(
 		progression: tpl.habit.progression,
 		areaId: null
 	};
-	// Rotations and intervals start from the day of import.
+	// Rotations, intervals and phases start from the day of import.
 	if (habit.schedule && 'start' in habit.schedule) habit.schedule = { ...habit.schedule, start: startDate };
+	if (habit.schedule?.kind === 'phases') habit.schedule = tidyPhases(habit.schedule);
 	return { tasks, habit, identities: tpl.habit.identities };
 }
 
@@ -525,6 +533,26 @@ export function fromTemplate(
 function roundTo(x: number, step: number): number {
 	const r = Math.round(x / step) * step;
 	return Math.round(r * 1000) / 1000;
+}
+
+/**
+ * A schedule on the weekdays someone picked: fixed weekdays deal the Variants out over them,
+ * in the order the template had; a weekly rotation trains on them; N times a week becomes
+ * that many. Other schedules keep their days.
+ */
+function onDays(s: PlainScheduleForm, days: number[], variantKeys: string[]): PlainScheduleForm {
+	if (s.kind === 'weekly') {
+		const order = Object.keys(s.days)
+			.map(Number)
+			.sort()
+			.map((d) => s.days[d])
+			.filter((v, i, all) => all.indexOf(v) === i);
+		const variants = order.length ? order : variantKeys;
+		return { ...s, days: Object.fromEntries(days.map((d, i) => [String(d), variants[i % variants.length]])) };
+	}
+	if (s.kind === 'rotation' && s.step === 'week') return { ...s, weekdays: days };
+	if (s.kind === 'frequency' && s.period === 'week') return { ...s, times: days.length };
+	return s;
 }
 
 /** Fill a template from the answers to its questions. Unanswered questions take their default. */
@@ -536,23 +564,14 @@ export function applyAnswers(tpl: TemplateFile, answers: TemplateAnswers): Templ
 			const days = [...new Set((Array.isArray(a) ? a : q.default).filter((d) => d >= 0 && d <= 6))].sort();
 			if (!days.length) continue;
 			const s = out.habit.schedule as ScheduleForm | null;
-			if (s?.kind === 'weekly') {
-				// Keep the Variants' order as the template had it, then deal them out over the chosen days.
-				const order = Object.keys(s.days)
-					.map(Number)
-					.sort()
-					.map((d) => s.days[d])
-					.filter((v, i, all) => all.indexOf(v) === i);
-				const variants = order.length ? order : out.habit.variants.map((v) => v.key);
-				out.habit.schedule = {
-					...s,
-					days: Object.fromEntries(days.map((d, i) => [String(d), variants[i % variants.length]]))
-				};
-			} else if (s?.kind === 'rotation' && s.step === 'week') {
-				out.habit.schedule = { ...s, weekdays: days };
-			} else if (s?.kind === 'frequency' && s.period === 'week') {
-				out.habit.schedule = { ...s, times: days.length };
-			}
+			const variantKeys = out.habit.variants.map((v) => v.key);
+			// Phases take the days in each phase.
+			out.habit.schedule =
+				s?.kind === 'phases'
+					? { ...s, phases: s.phases.map((p) => ({ ...p, schedule: onDays(p.schedule, days, variantKeys) })) }
+					: s && s.kind !== 'group' && s.kind !== 'follow'
+						? onDays(s, days, variantKeys)
+						: s;
 		} else if (q.kind === 'number') {
 			const n = typeof a === 'number' && Number.isFinite(a) ? a : q.default;
 			const ratio = q.scale && q.default > 0 ? n / q.default : null;

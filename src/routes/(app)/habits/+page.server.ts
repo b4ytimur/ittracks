@@ -5,7 +5,7 @@ import { identitiesByHabit } from '$lib/server/repo/identities';
 import { habitStats } from '$lib/engine/stats';
 import { db } from '$lib/server/db';
 import { habit, occurrence, slot, variant } from '$lib/server/db/schema';
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { userToday } from '$lib/server/today';
 import { initialState, templateById } from '$lib/views';
 import { fail } from '@sveltejs/kit';
@@ -37,6 +37,16 @@ export const load: PageServerLoad = ({ locals, url, cookies }) => {
 			.all()
 			.map((r) => r.id)
 	);
+	// Variant names, so phases and habits that follow a routine read with them.
+	const variantsOf = new Map<string, { id: string; name: string }[]>();
+	for (const v of db
+		.select({ id: variant.id, name: variant.name, habitId: variant.habitId })
+		.from(variant)
+		.innerJoin(habit, eq(variant.habitId, habit.id))
+		.where(eq(habit.accountId, accountId))
+		.orderBy(asc(variant.sortOrder))
+		.all())
+		variantsOf.set(v.habitId, [...(variantsOf.get(v.habitId) ?? []), { id: v.id, name: v.name }]);
 	const views = getViews(accountId);
 	// The old ?archived link still works: it turns the archived filter on.
 	const initial = initialState(views, 'habits');
@@ -48,6 +58,7 @@ export const load: PageServerLoad = ({ locals, url, cookies }) => {
 				...h,
 				createdAt: h.createdAt.getTime(),
 				identities: idents.get(h.id) ?? [],
+				variants: variantsOf.get(h.id) ?? [],
 				/** Can hold habits: a group, or a build habit with a schedule and no Tasks of its own (a routine). */
 				holds: h.direction === 'build' && !!h.schedule && (isGroup(h.schedule) || !slotted.has(h.id)),
 				consistency: h.direction === 'break' ? null : st.consistency,

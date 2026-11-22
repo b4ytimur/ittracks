@@ -1,6 +1,7 @@
 // Conflict rules for the habit editor. Ids (H1, B2...) name each rule.
 import { z } from 'zod';
 import { DEFAULT_TRIGGERS, type HabitForm } from '../forms';
+import { variantsIn, type Schedule } from '../engine/schedule';
 import type { FieldEditor } from '../bulk/fields';
 import {
 	check,
@@ -39,7 +40,7 @@ const NOT_GROUP = "A group's days come from the habits inside it, so it doesn't 
 function timesPer(h: HabitForm, period: 'week' | 'month'): number | null {
 	const s = h.schedule;
 	if (!s) return null;
-	if (s.kind === 'group' || s.kind === 'follow') return null;
+	if (s.kind === 'group' || s.kind === 'follow' || s.kind === 'phases') return null;
 	const perWeek =
 		s.kind === 'weekly'
 			? Object.keys(s.days).length
@@ -89,6 +90,26 @@ export const habitRules = defineRules<HabitForm, HabitCtx>({
 		check(
 			(h) => (h.schedule?.kind === 'frequency' || h.schedule?.kind === 'interval') && h.variants.length > 1,
 			'This schedule uses one Variant; the others never come up. Use a rotation to take turns.',
+			'warn'
+		),
+		// P1: phases after one with no end never come.
+		check(
+			(h) => h.schedule?.kind === 'phases' && h.schedule.phases.slice(0, -1).some((p) => p.length === null),
+			'Only the last phase can run on with no end; the phases after it would never come'
+		),
+		// P2 (S3 inside a phase): a weekly rotation in a phase needs weekdays.
+		check(
+			(h) => h.schedule?.kind === 'phases' && h.schedule.phases.some((p) => p.schedule.kind === 'rotation' && p.schedule.step === 'week' && p.schedule.weekdays.length === 0),
+			'Pick at least one weekday for each weekly rotation'
+		),
+		// P3 (S4 for phases): a Variant no phase uses never comes up.
+		check(
+			(h) => {
+				if (h.schedule?.kind !== 'phases') return false;
+				const used = new Set(variantsIn(h.schedule as Schedule));
+				return h.variants.some((v) => !used.has(v.id));
+			},
+			'A Variant isn\'t in any phase, so it never comes up',
 			'warn'
 		)
 	],
