@@ -96,9 +96,10 @@ export const actions: Actions = {
 		return { archived: id };
 	},
 	/** Edit mode's nest and outdent drops: `parent` empty means the top level. */
-	move: async ({ request, locals }) => {
+	move: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
-		const r = moveHabit(locals.account!.id, String(f.get('id') ?? ''), String(f.get('parent') ?? '') || null);
+		const accountId = locals.account!.id;
+		const r = moveHabit(accountId, String(f.get('id') ?? ''), String(f.get('parent') ?? '') || null, userToday(accountId, cookies.get('tz')));
 		if ('error' in r) return fail(400, { error: r.error });
 		return { moved: r.parentId };
 	},

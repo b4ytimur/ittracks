@@ -14,6 +14,7 @@ import { finishAs, plusOne, progressForIds, targetsAt } from '../progress';
 import { positionsOf } from '../positions';
 import { place } from '$lib/engine/parts';
 import { isTick } from '$lib/engine/groups';
+import { parentOn } from '$lib/engine/tree';
 import { progressText } from '$lib/engine/progress';
 import { NOTE_MAX } from '$lib/forms';
 import { activeOptions, findOption, optionName } from '$lib/options';
@@ -21,8 +22,8 @@ import type { Level } from '$lib/engine/streak';
 import { ActionError, canSeeHabit, requireScope, type Actor } from './actor';
 import { emit } from './events';
 import { buildDay, change, dayOf, findHabit, occurrenceFor, type Day, type HabitRow, type OccRow } from './day';
-import { isRoutine, kidsOn, syncParents } from '../rollup';
-import { pausesOf } from '../today';
+import { isRoutine, kidsOn } from '../rollup';
+import { syncTree } from '../today';
 
 export type DoneHow = 'auto' | 'targets' | 'same' | 'mark';
 type Values = Record<string, unknown>;
@@ -138,7 +139,7 @@ export function reopenOcc(actor: Actor, occ: OccRow, clear: boolean) {
 
 /** For a routine's day: the habits inside it that have a log that day. Null for any other habit, or a day none of them is due. */
 function routineKids(occ: OccRow, actor?: Actor) {
-	if (!isRoutine(occ.habitId)) return null;
+	if (!isRoutine(occ.habitId, occ.date)) return null;
 	// A past day: habits inside that were due and never logged are marked with it too.
 	if (actor && occ.date < userToday(actor.accountId, actor.tz)) kidsDueOn(actor.accountId, occ.habitId, occ.date);
 	const kids = kidsOn(occ.habitId, occ.date).filter((k) => !k.occ.extra);
@@ -168,16 +169,16 @@ function inside(run: () => void) {
 	}
 }
 
-/** A habit inside a group or a routine changed: the days it counts toward are judged again. */
+/** A habit inside a group or a routine (now, or on days it kept) changed: the days it counts toward are judged again. */
 function syncAbove(actor: Actor, occ: OccRow) {
 	if (marking) return;
-	const h = db.select({ parentId: habit.parentId }).from(habit).where(eq(habit.id, occ.habitId)).get();
-	if (h?.parentId) syncParents(actor.accountId, userToday(actor.accountId, actor.tz), pausesOf(actor.accountId));
+	const h = db.select({ parentId: habit.parentId, earlierParents: habit.earlierParents }).from(habit).where(eq(habit.id, occ.habitId)).get();
+	if (h && parentOn(h.parentId, h.earlierParents, occ.date)) syncTree(actor.accountId, userToday(actor.accountId, actor.tz));
 }
 
 /** The routine's day counted again from the habits inside it. */
 function recountRoutine(actor: Actor, occ: OccRow) {
-	syncParents(actor.accountId, userToday(actor.accountId, actor.tz), pausesOf(actor.accountId));
+	syncTree(actor.accountId, userToday(actor.accountId, actor.tz));
 	return db.select({ status: occurrence.status, level: occurrence.level }).from(occurrence).where(eq(occurrence.id, occ.id)).get();
 }
 
@@ -334,19 +335,32 @@ function fieldList(tasks: TaskInLog[], repeats: boolean) {
 	return [...new Set(tasks.flatMap((t) => t.metrics.filter((m) => m.repeats === repeats).map((m) => `${t.label}: ${m.name}${m.unit ? ` (${m.unit})` : ''}`)))];
 }
 
-/** Finish when it reached its target, or every step is done; a one-step log is done once something is in it. */
+/**
+ * Finish when it reached its target, or every step is done; a one-step log is done once
+ * something is in it. Never while a required field is still empty.
+ */
 function reached(occId: string): boolean {
+	if (missingRequired(occId).length) return false;
 	const p = progressForIds([occId]).get(occId);
 	if (!p) return true;
 	return p.kind === 'amount' ? p.value >= p.target : p.done >= p.total;
 }
 
+/**
+ * After a value or a Task is logged: finish the log when asked to, or when it reached its
+ * target. A day that is over is judged by the habit's rule, as Finish on the log page and
+ * settling judge it: done when what is logged counts (it reached the Minimum, or anything is
+ * logged with no Minimum), missed when it falls short. A required field still empty keeps it
+ * open either way, unless `finish` is 'yes'.
+ */
 function finishIf(actor: Actor, occ: OccRow, finish: 'auto' | 'yes' | 'no', how: string) {
 	const now = db.select({ status: occurrence.status }).from(occurrence).where(eq(occurrence.id, occ.id)).get();
 	if (!now || now.status === 'done' || finish === 'no') return;
-	if (finish === 'yes' || reached(occ.id)) {
+	const today = userToday(actor.accountId, actor.tz);
+	const over = occ.date < today && (now.status === 'due' || now.status === 'missed');
+	if (finish === 'yes' || reached(occ.id) || (over && !missingRequired(occ.id).length)) {
 		db.update(occurrence).set({ status: 'done', finishedAt: new Date() }).where(eq(occurrence.id, occ.id)).run();
-		if (finishAs(occ.id, userToday(actor.accountId, actor.tz)) !== 'done') return;
+		if (finishAs(occ.id, today) !== 'done') return;
 		emit(actor, 'occurrence.done', { habitId: occ.habitId, date: occ.date, data: { occurrenceId: occ.id, level: occ.level ?? null, how } });
 	}
 }

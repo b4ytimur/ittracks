@@ -8,7 +8,7 @@ import { groupOfOccurrence, ownedOccurrence } from '$lib/server/owned';
 import { candidates, ensurePicks, lastEntries, recount, userToday } from '$lib/server/today';
 import { finishAs } from '$lib/server/progress';
 import { PATH_RE, place, startsRound } from '$lib/engine/parts';
-import { partIdsIn, positionsOf } from '$lib/server/positions';
+import { partIdsIn, plannedSlots, positionsOf } from '$lib/server/positions';
 import { getSettings } from '$lib/server/settings';
 import { recapFor } from '$lib/server/stats';
 import { planOfToday, replanToday, windowFor } from '$lib/server/backfill';
@@ -117,7 +117,7 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		error(404, 'Not found');
 	}
 	// A routine's day with habits inside it is run from its own page.
-	if (isRoutine(o.habit.id) && kidsOn(o.habit.id, o.occ.date).some((k) => !k.occ.extra)) redirect(303, `/routine/${o.occ.id}`);
+	if (isRoutine(o.habit.id, o.occ.date) && kidsOn(o.habit.id, o.occ.date).some((k) => !k.occ.extra)) redirect(303, `/routine/${o.occ.id}`);
 	const today = userToday(accountId, cookies.get('tz'));
 	const past = o.occ.date < today;
 	const win = windowFor(accountId, o.occ.date, today);
@@ -163,11 +163,13 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 			previous: lastEntries(p.taskId, o.occ.id, p.path)
 		};
 	});
-	// An auto-filled Slot with no Task to match: shown, so it can be swapped.
-	for (const s of slots)
-		if (!(picks[s.id] ?? s.taskId)) {
-			const at = items.findIndex((it) => slots.findIndex((x) => x.id === it.slotId) > slots.indexOf(s));
-			const empty: LogTask = { path: s.id, slotId: s.id, depth: 0, kids: 0, roundHead: null, open: !!s.fillRule, sets: s.sets, targets: {}, minTargets: {}, stretchTargets: {}, task: null, saved: [], previous: [] };
+	// An auto-filled Slot with no Task to match: shown, so it can be swapped. Only Slots of the
+	// plan this log has (a log kept from before the Slots changed keeps its own).
+	const plan = plannedSlots({ ...o.occ, picks }, slots);
+	for (const s of plan)
+		if (!s.taskId) {
+			const at = items.findIndex((it) => plan.findIndex((x) => x.slotId === it.slotId) > plan.indexOf(s));
+			const empty: LogTask = { path: s.slotId, slotId: s.slotId, depth: 0, kids: 0, roundHead: null, open: !!slots.find((x) => x.id === s.slotId)?.fillRule, sets: s.sets, targets: {}, minTargets: {}, stretchTargets: {}, task: null, saved: [], previous: [] };
 			if (at < 0) items.push(empty);
 			else items.splice(at, 0, empty);
 		}

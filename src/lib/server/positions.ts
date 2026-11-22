@@ -48,42 +48,55 @@ export function perSetTasks(taskIds: string[], q: Q = db): Set<string> {
 	return out;
 }
 
+/** One Slot of a log's plan: its id, Task (the pick for an auto-filled one) and what it aims for. */
+export interface PlannedSlot {
+	slotId: string;
+	taskId: string | null;
+	sets: number | null;
+	targets: Record<string, number> | null;
+	minTargets: Record<string, number> | null;
+	stretchTargets: Record<string, number> | null;
+}
+
 /**
- * The places in each Occurrence's log, by Occurrence id. A Slot aims for the targets kept
- * with the log (when they changed later), else its own; parts aim for their own. `keep`
+ * The Slots a log was planned with: the ones kept with it when its Variant's Slots changed
+ * later (see keepGoals), in their order then, else the Variant's Slots now.
+ */
+export function plannedSlots(o: OccLike, current: (typeof slot.$inferSelect)[]): PlannedSlot[] {
+	if (o.goals)
+		return Object.entries(o.goals)
+			.map(([slotId, g], i) => ({ slotId, g, at: g.sortOrder ?? i }))
+			.sort((a, b) => a.at - b.at)
+			.map(({ slotId, g }) => ({
+				slotId,
+				taskId: o.picks?.[slotId] ?? g.taskId,
+				sets: g.sets,
+				targets: g.targets,
+				minTargets: g.minTargets,
+				stretchTargets: g.stretchTargets
+			}));
+	return current
+		.filter((s) => s.variantId === o.variantId)
+		.map((s) => ({ slotId: s.id, taskId: o.picks?.[s.id] ?? s.taskId, sets: s.sets, targets: s.targets, minTargets: s.minTargets, stretchTargets: s.stretchTargets }));
+}
+
+/**
+ * The places in each Occurrence's log, by Occurrence id: the Slots it was planned with (see
+ * plannedSlots), each with the parts inside its Task; parts aim for their own targets. `keep`
  * names archived parts that still show in one log, because it has values under them.
  */
 export function positionsFor(occs: OccLike[], opts: { keep?: (occId: string) => Set<string>; q?: Q } = {}): Map<string, Position[]> {
 	const q = opts.q ?? db;
 	const out = new Map<string, Position[]>();
-	const variantIds = [...new Set(occs.map((o) => o.variantId).filter((v): v is string => !!v))];
+	const variantIds = [...new Set(occs.filter((o) => !o.goals).map((o) => o.variantId).filter((v): v is string => !!v))];
 	const slots = variantIds.length ? q.select().from(slot).where(inArray(slot.variantId, variantIds)).orderBy(asc(slot.sortOrder)).all() : [];
-	const tops = new Map<string, string[]>();
-	for (const o of occs) tops.set(o.id, slots.filter((s) => s.variantId === o.variantId).map((s) => o.picks?.[s.id] ?? s.taskId).filter((t): t is string => !!t));
-	const topIds = [...new Set([...tops.values()].flat())];
+	const planned = new Map(occs.map((o) => [o.id, o.variantId ? plannedSlots(o, slots) : []]));
+	const topIds = [...new Set([...planned.values()].flat().map((s) => s.taskId).filter((t): t is string => !!t))];
 	const parts = partsBelow(topIds, q);
 	const perSet = perSetTasks([...topIds, ...[...parts.values()].flat().map((p) => p.childTaskId)], q);
 	for (const o of occs) {
 		const keep = opts.keep?.(o.id);
-		out.set(
-			o.id,
-			expand(
-				slots
-					.filter((s) => s.variantId === o.variantId)
-					.map((s) => {
-						const g = o.goals?.[s.id];
-						return {
-							slotId: s.id,
-							taskId: o.picks?.[s.id] ?? s.taskId,
-							sets: g ? g.sets : s.sets,
-							targets: g ? g.targets : s.targets,
-							minTargets: g ? g.minTargets : s.minTargets,
-							stretchTargets: g ? g.stretchTargets : s.stretchTargets
-						};
-					}),
-				{ partsOf: (t) => parts.get(t) ?? [], perSet: (t) => perSet.has(t), keep: keep ? (id) => keep.has(id) : undefined }
-			)
-		);
+		out.set(o.id, expand(planned.get(o.id)!, { partsOf: (t) => parts.get(t) ?? [], perSet: (t) => perSet.has(t), keep: keep ? (id) => keep.has(id) : undefined }));
 	}
 	return out;
 }

@@ -100,16 +100,20 @@ describe('a group gets its days from the habits inside it', () => {
 		expect(rowOn(outer, addDays(today, -1))).toMatchObject({ status: 'done', rollup: { done: 2, total: 2 } });
 	});
 
-	it('moving a habit out counts the group again from what is inside now', () => {
+	it('moving a habit out applies from today on: past group days keep the habits they had', () => {
 		const g = group('Mind', 2);
 		const a = daily('Breathe', 2, g);
 		const b = daily('Gratitude', 2, g);
 		run('log_done', { habit: a, date: addDays(today, -1) });
 		settleAll(me, today);
-		expect(rowOn(g, addDays(today, -1))?.status).toBe('missed');
+		expect(rowOn(g, addDays(today, -1))).toMatchObject({ status: 'missed', rollup: { done: 1, total: 2 } });
 		saveHabit(me, b, { ...getHabitForm(me, b)!, parentId: null }, today);
-		settleAll(me, today);
-		expect(rowOn(g, addDays(today, -1))).toMatchObject({ status: 'done', rollup: { done: 1, total: 1 } });
+		loadToday(me, today);
+		expect(rowOn(g, addDays(today, -1))).toMatchObject({ status: 'missed', rollup: { done: 1, total: 2 } });
+		// From today on it counts only what is inside now.
+		expect(rowOn(g, today)).toMatchObject({ rollup: { done: 0, total: 1 } });
+		run('log_done', { habit: a });
+		expect(rowOn(g, today)).toMatchObject({ status: 'done', rollup: { done: 1, total: 1 } });
 	});
 });
 

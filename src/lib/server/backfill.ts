@@ -8,7 +8,8 @@ import { db } from './db';
 import { entry, habit, occurrence, slip, slot, task, variant } from './db/schema';
 import { PATH_RE } from '$lib/engine/parts';
 import { dueOn, isGroup, type Schedule } from '$lib/engine/schedule';
-import { followDue, isRoutine } from './rollup';
+import { followDue, insideAt, isRoutine } from './rollup';
+import { parentOn } from '$lib/engine/tree';
 import { carriesOver, dependsOnHistory, isRealDate, logWindow, variantFor, type LogWindow } from '$lib/engine/backfill';
 import { scheduleStartBy } from '$lib/engine/unlogged';
 import { pauseOn } from '$lib/engine/pause';
@@ -229,7 +230,7 @@ export function occurrenceOn(accountId: string, h: HabitRow, date: string, chose
 export function kidsDueOn(accountId: string, parentId: string, date: string) {
 	const pauses = pausesOf(accountId);
 	for (const h of activeHabits(accountId, date)) {
-		if (h.parentId !== parentId || h.direction !== 'build' || !h.schedule || isGroup(h.schedule as Schedule)) continue;
+		if (parentOn(h.parentId, h.earlierParents, date) !== parentId || h.direction !== 'build' || !h.schedule || isGroup(h.schedule as Schedule)) continue;
 		if (rowOn(h.id, date) || pauseOn(pauses, h.id, date)) continue;
 		const schedule = scheduleAt(h, date);
 		if (dueOn(schedule, history(h.id, date), date, followDue(h.id, schedule, date))) occurrenceOn(accountId, h, date, null);
@@ -295,16 +296,17 @@ type DaySnapshot = z.infer<typeof daySchema>;
 
 /** A copy of one habit's day: its Occurrence and Entries, or null when there is none. */
 export function snapshot(habitId: string, date: string): Snapshot {
-	const below = insideRoutine(habitId).map((id) => daySnapshot(id, date));
+	const below = insideRoutine(habitId, date).map((id) => daySnapshot(id, date));
 	return below.length ? { ...daySnapshot(habitId, date), below } : daySnapshot(habitId, date);
 }
 
-/** The habits inside a routine, at any depth (none for any other habit). */
-function insideRoutine(habitId: string): string[] {
-	if (!isRoutine(habitId)) return [];
+/** The habits inside a routine on a day, at any depth (none for any other habit). */
+function insideRoutine(habitId: string, date: string): string[] {
+	if (!isRoutine(habitId, date)) return [];
 	const out: string[] = [];
 	const walk = (id: string, depth: number) => {
-		for (const k of db.select({ id: habit.id }).from(habit).where(and(eq(habit.parentId, id), eq(habit.direction, 'build'))).all()) {
+		for (const k of insideAt(id, date, { archived: true })) {
+			if (out.includes(k.id)) continue;
 			out.push(k.id);
 			if (depth < 20 && out.length < 200) walk(k.id, depth + 1);
 		}

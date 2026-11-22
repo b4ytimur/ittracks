@@ -90,8 +90,11 @@ export interface DsOcc {
 	picks: Record<string, string> | null;
 	/** HH:MM it was finished, in the user's time zone. */
 	time: string | null;
-	/** The targets each Slot had, kept when they changed later. */
-	goals?: Record<string, { sets: number | null; targets: Record<string, number> | null }> | null;
+	/** Every Slot the log was planned with, kept when the Variant's Slots changed later. */
+	goals?: Record<
+		string,
+		{ sortOrder?: number; taskId?: string | null; sets: number | null; targets: Record<string, number> | null; minTargets?: Record<string, number> | null; stretchTargets?: Record<string, number> | null }
+	> | null;
 	/** A group's day: how many habits inside were done, of how many that counted. */
 	rollup?: { done: number; total: number } | null;
 }
@@ -153,7 +156,10 @@ export interface Log {
 	habit: DsHabit;
 	task: DsTask;
 	sets: Values[];
+	/** Once-per-log values; for a Task in a Circuit that repeats, the last round's (see `rounds`). */
 	single: Values;
+	/** Each round's once-per-log values, in order, for a Task inside a Circuit that repeats; else empty. */
+	rounds: Values[];
 	subsTotal: number;
 	subsDone: number;
 	slot: DsSlot | null;
@@ -174,6 +180,8 @@ export interface Prepared {
 	metricsByTask: Map<string, DsMetric[]>;
 	variants: Map<string, DsVariant>;
 	slotsByVariant: Map<string, DsSlot[]>;
+	/** The Slots a log was planned with: kept with it when its Variant's Slots changed later, else its Variant's now. */
+	slotsOf: (o: DsOcc) => DsSlot[];
 	occsByHabit: Map<string, DsOcc[]>;
 	logs: Log[];
 	logsByTask: Map<string, Log[]>;
@@ -194,6 +202,9 @@ const group = <T, K>(xs: T[], key: (x: T) => K) => {
 	}
 	return m;
 };
+
+/** A log's once-per-log values as rows: one per round for a Task in a Circuit that repeats, else the one. */
+export const singleRows = (l: Pick<Log, 'single' | 'rounds'>): Values[] => (l.rounds.length ? l.rounds : [l.single]);
 
 export function num(v: unknown): number | null {
 	if (typeof v === 'number') return Number.isFinite(v) ? v : null;
@@ -232,7 +243,30 @@ export function prepare(ds: Dataset): Prepared {
 		(p) => p.taskId
 	);
 	const partById = new Map((ds.parts ?? []).map((p) => [p.id, p]));
-	const slotById = new Map(ds.slots.map((s) => [s.id, s]));
+	const planned = new Map<string, DsSlot[]>();
+	const slotsOf = (o: DsOcc): DsSlot[] => {
+		let out = planned.get(o.id);
+		if (out) return out;
+		out = o.goals
+			? Object.entries(o.goals)
+					.map(([id, g], i) => ({ id, g, at: g.sortOrder ?? i }))
+					.sort((a, b) => a.at - b.at)
+					.map(({ id, g }) => ({
+						id,
+						variantId: o.variantId ?? '',
+						// Older kept targets have no Task: the Slot's own, when it is still there.
+						taskId: g.taskId !== undefined ? g.taskId : (slotsByVariant.get(o.variantId ?? '')?.find((s) => s.id === id)?.taskId ?? null),
+						sets: g.sets,
+						targets: g.targets,
+						minTargets: g.minTargets ?? null,
+						stretchTargets: g.stretchTargets ?? null
+					}))
+			: o.variantId
+				? (slotsByVariant.get(o.variantId) ?? [])
+				: [];
+		planned.set(o.id, out);
+		return out;
+	};
 
 	// One Log per place. An Entry with a path says where it sits; rounds of a Circuit share
 	// one Log per Task. Before paths, a Variant could use the same Task twice (reading in the
@@ -244,19 +278,19 @@ export function prepare(ds: Dataset): Prepared {
 	const mkLog = (o: DsOcc, t: DsTask, k: string, slot: DsSlot | null) => {
 		let l = logsByKey.get(k);
 		if (!l) {
-			l = { occ: o, habit: habits.get(o.habitId)!, task: t, sets: [], single: {}, subsTotal: partsOf.get(t.id)?.length ?? 0, subsDone: 0, slot };
+			l = { occ: o, habit: habits.get(o.habitId)!, task: t, sets: [], single: {}, rounds: [], subsTotal: partsOf.get(t.id)?.length ?? 0, subsDone: 0, slot };
 			logsByKey.set(k, l);
 		}
 		return l;
 	};
 	const logFor = (o: DsOcc, t: DsTask, n: number) => {
-		const slots = (o.variantId ? (slotsByVariant.get(o.variantId) ?? []) : []).filter((s) => (o.picks?.[s.id] ?? s.taskId) === t.id);
+		const slots = slotsOf(o).filter((s) => (o.picks?.[s.id] ?? s.taskId) === t.id);
 		return mkLog(o, t, `${o.id}|${t.id}|${n}`, slots[n] ?? slots[0] ?? null);
 	};
 	/** The Task at a place in a log, and what it aims for there: its Slot, or its part as one. */
 	const placeOf = (o: DsOcc, path: string): { task: DsTask; slot: DsSlot | null } | null => {
 		const segs = parsePath(path);
-		const top = slotById.get(segs[0].id);
+		const top = slotsOf(o).find((s) => s.id === segs[0].id);
 		let taskId = top ? (o.picks?.[top.id] ?? top.taskId) : null;
 		let slot: DsSlot | null = top ?? null;
 		for (const seg of segs.slice(1)) {
@@ -269,6 +303,8 @@ export function prepare(ds: Dataset): Prepared {
 		return task ? { task, slot } : null;
 	};
 	const partsDone = new Map<string, Set<string>>();
+	/** Once-per-log values by round, for Tasks inside a Circuit that repeats: each round is its own row. */
+	const roundRows = new Map<Log, Map<string, Values>>();
 	for (const e of [...ds.entries].sort((a, b) => a.sortOrder - b.sortOrder)) {
 		const o = occs.get(e.occurrenceId);
 		const t = tasks.get(e.taskId);
@@ -294,7 +330,14 @@ export function prepare(ds: Dataset): Prepared {
 			const l = mkLog(o, t, `${o.id}|@${withoutRounds(e.path)}`, here?.task.id === t.id ? here.slot : null);
 			const isSet = !e.values._summary && Object.keys(e.values).some((k) => (metrics.get(k)?.repeats ?? false));
 			if (isSet) l.sets.push(e.values);
-			else Object.assign(l.single, e.values);
+			else {
+				Object.assign(l.single, e.values);
+				if (withoutRounds(e.path) !== e.path) {
+					const byRound = roundRows.get(l) ?? new Map<string, Values>();
+					byRound.set(e.path, { ...(byRound.get(e.path) ?? {}), ...e.values });
+					roundRows.set(l, byRound);
+				}
+			}
 			continue;
 		}
 		if (t.parentTaskId) {
@@ -313,6 +356,7 @@ export function prepare(ds: Dataset): Prepared {
 			sealed.add(`${base}|${n}`);
 		}
 	}
+	for (const [l, byRound] of roundRows) l.rounds = [...byRound.values()];
 	const logs = [...logsByKey.values()].sort((a, b) => a.occ.date.localeCompare(b.occ.date));
 	const roles = new Map([...metricsByTask.entries()].map(([k, ms]) => [k, rolesOf(ms)]));
 	const dates = [
@@ -329,6 +373,7 @@ export function prepare(ds: Dataset): Prepared {
 		metricsByTask,
 		variants,
 		slotsByVariant,
+		slotsOf,
 		occsByHabit,
 		logs,
 		logsByTask: group(logs, (l) => l.task.id),
@@ -639,8 +684,11 @@ export function targetMetOfLog(l: Log, P: Prepared): number | null {
 				const hits = l.sets.filter((s) => (num(s[mid]) ?? -Infinity) >= goal).length;
 				results.push(hits >= need ? 1 : hits > 0 ? 0.5 : 0);
 			} else {
-				const v = num(l.single[mid]);
-				results.push(v !== null && v >= goal ? 1 : v !== null && v > 0 ? 0.5 : 0);
+				// Each round of a Circuit aims for the target on its own.
+				for (const row of singleRows(l)) {
+					const v = num(row[mid]);
+					results.push(v !== null && v >= goal ? 1 : v !== null && v > 0 ? 0.5 : 0);
+				}
 			}
 		}
 	}
@@ -661,7 +709,7 @@ const isYesNo = (P: Prepared, taskId: string) => !(P.metricsByTask.get(taskId)?.
  */
 export function targetMetOfOcc(o: DsOcc, P: Prepared): number | null {
 	const logs = (P.logs as Log[]).filter((l) => l.occ.id === o.id);
-	const slots = o.variantId ? (P.slotsByVariant.get(o.variantId) ?? []) : [];
+	const slots = P.slotsOf(o);
 	const rs: number[] = [];
 	for (const l of logs) {
 		const r = targetMetOfLog(l, P);
@@ -836,7 +884,7 @@ export function pointsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range): 
 				for (const o of P.ds.occurrences) {
 					const habit = P.habits.get(o.habitId);
 					if (!task || !habit || o.status !== 'done' || !inRange(o.date) || !sc.logOk({ habit, task })) continue;
-					const slots = o.variantId ? (P.slotsByVariant.get(o.variantId) ?? []) : [];
+					const slots = P.slotsOf(o);
 					const left = slots.filter((x) => (o.picks?.[x.id] ?? x.taskId) === m.taskId).length - (logged.get(o.id) ?? 0);
 					const series =
 						card.split === 'field'
@@ -873,31 +921,34 @@ export function pointsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range): 
 										: nums.reduce((a, b) => a + b, 0);
 					push(card.perLog === 'sets' || card.perLog === 'ticked' ? v : conv(v), series);
 				} else {
-					const raw = l.single[m.id];
-					if (card.perLog === 'ticked') {
-						push(raw === true ? 1 : 0, series);
-					} else if (card.perLog === 'option') {
-						// Grouped by the option's name now: a renamed option keeps its past logs, and an
-						// archived option and a new one of the same name count together.
-						const name = optionName(m.choices, raw)?.toLowerCase();
-						// Shown as the option offered now, when one has that name.
-						const at = name ? (m.choices ?? []).findIndex((o) => !o.archived && o.name.toLowerCase() === name) : -1;
-						const label = at >= 0 ? m.choices![at].name : optionName(m.choices, raw);
-						if (name && label)
-							push(
-								1,
-								card.split === 'option' || card.split === 'none'
-									? [{ key: `o:${name}`, label, w: 1, order: at >= 0 ? at : (m.choices ?? []).findIndex((o) => o.id === raw) }]
-									: tagsFor(base)
-							);
-					} else if (card.perLog === 'score') {
-						const sc = typeof raw === 'string' ? scoresOn(m.scores, m.earlierScores, l.occ.date)[raw] : undefined;
-						if (typeof sc === 'number') push(sc, series);
-					} else if (card.perLog === 'present') {
-						if (filled(raw)) push(1, series);
-					} else {
-						const v = m.type === 'checkbox' ? (raw === true ? 1 : raw === false ? 0 : null) : num(raw);
-						if (v !== null) push(m.type === 'checkbox' ? v : conv(v), series);
+					// Each round of a Circuit is a value of its own (6 rep times, not the last one).
+					for (const row of singleRows(l)) {
+						const raw = row[m.id];
+						if (card.perLog === 'ticked') {
+							push(raw === true ? 1 : 0, series);
+						} else if (card.perLog === 'option') {
+							// Grouped by the option's name now: a renamed option keeps its past logs, and an
+							// archived option and a new one of the same name count together.
+							const name = optionName(m.choices, raw)?.toLowerCase();
+							// Shown as the option offered now, when one has that name.
+							const at = name ? (m.choices ?? []).findIndex((o) => !o.archived && o.name.toLowerCase() === name) : -1;
+							const label = at >= 0 ? m.choices![at].name : optionName(m.choices, raw);
+							if (name && label)
+								push(
+									1,
+									card.split === 'option' || card.split === 'none'
+										? [{ key: `o:${name}`, label, w: 1, order: at >= 0 ? at : (m.choices ?? []).findIndex((o) => o.id === raw) }]
+										: tagsFor(base)
+								);
+						} else if (card.perLog === 'score') {
+							const sc = typeof raw === 'string' ? scoresOn(m.scores, m.earlierScores, l.occ.date)[raw] : undefined;
+							if (typeof sc === 'number') push(sc, series);
+						} else if (card.perLog === 'present') {
+							if (filled(raw)) push(1, series);
+						} else {
+							const v = m.type === 'checkbox' ? (raw === true ? 1 : raw === false ? 0 : null) : num(raw);
+							if (v !== null) push(m.type === 'checkbox' ? v : conv(v), series);
+						}
 					}
 				}
 			}

@@ -10,10 +10,10 @@ import {
 	type ScheduleForm
 } from '$lib/forms';
 import { makesLoop } from '$lib/engine/stack';
-import { keepEarlier, sameSchedule, scheduleStartBy, type EarlierSchedule } from '$lib/engine/unlogged';
+import { keepEarlier, sameSchedule, scheduleStartBy, startMovedBack, type EarlierSchedule } from '$lib/engine/unlogged';
 import { isFollow, isGroup, type Schedule } from '$lib/engine/schedule';
 import { standaloneSchedule } from '$lib/engine/follow';
-import { makesCycle } from '$lib/engine/tree';
+import { keepParent, makesCycle } from '$lib/engine/tree';
 import { keepGoals, rejudge } from '../progress';
 import type { StreakRule } from '$lib/engine/streak';
 import { checkHabit, checkHabitPast, removedTriggers, type HabitCheck, type HabitCtx } from '$lib/rules/habit';
@@ -222,6 +222,8 @@ interface Before {
  * A schedule edit that applies from today on: the old schedule keeps the days up to yesterday,
  * so they stay as they were, whatever is logged later. One that applies to past days too (a
  * plan that was wrong from the start) counts every past day again with the new schedule.
+ * A habit with no past days yet (it starts today or later) has no old plan to keep, and a
+ * schedule whose start only moved back with Started on is the same plan begun earlier.
  * Today's log is planned again either way while nothing is logged in it.
  */
 function scheduleAfter(
@@ -232,22 +234,29 @@ function scheduleAfter(
 	applies: ScheduleApplies,
 	today: string
 ): { earlierSchedules?: EarlierSchedule[] | null; settledThrough?: null } {
-	if (!before.schedule || !after.schedule || sameSchedule(before.schedule, after.schedule)) {
-		// Starting earlier: the earliest schedule covers the new days, from a start in time.
-		const first = before.earlierSchedules?.[0];
-		if (first && after.startDate < before.startDate)
-			return { earlierSchedules: [{ ...first, schedule: scheduleStartBy(first.schedule, after.startDate) }, ...before.earlierSchedules!.slice(1)] };
-		return {};
+	const changed = !!before.schedule && !!after.schedule && !sameSchedule(before.schedule, after.schedule);
+	const movedBack = changed && startMovedBack(before.schedule, after.schedule, before.startDate, after.startDate);
+	if (changed) {
+		const untouched = tx
+			.select({ id: occurrence.id, notes: occurrence.notes })
+			.from(occurrence)
+			.where(and(eq(occurrence.habitId, id), eq(occurrence.date, today), eq(occurrence.status, 'due')))
+			.all()
+			.filter((o) => !o.notes && !tx.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, o.id)).get());
+		if (untouched.length) tx.delete(occurrence).where(inArray(occurrence.id, untouched.map((o) => o.id))).run();
 	}
-	const untouched = tx
-		.select({ id: occurrence.id, notes: occurrence.notes })
-		.from(occurrence)
-		.where(and(eq(occurrence.habitId, id), eq(occurrence.date, today), eq(occurrence.status, 'due')))
-		.all()
-		.filter((o) => !o.notes && !tx.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, o.id)).get());
-	if (untouched.length) tx.delete(occurrence).where(inArray(occurrence.id, untouched.map((o) => o.id))).run();
-	if (applies === 'past') return { earlierSchedules: null, settledThrough: null };
-	return { earlierSchedules: keepEarlier(before.earlierSchedules, before.schedule as Schedule, after.startDate, today) };
+	// Starting earlier: the earliest schedule covers the new days, from a start in time.
+	const earliest = (list: EarlierSchedule[] | null) =>
+		list?.length && after.startDate < before.startDate
+			? [{ ...list[0], schedule: scheduleStartBy(list[0].schedule, after.startDate) }, ...list.slice(1)]
+			: list;
+	if (!changed || movedBack) {
+		const list = earliest(before.earlierSchedules);
+		return list !== before.earlierSchedules ? { earlierSchedules: list } : {};
+	}
+	if (applies === 'past' || before.startDate >= today) return { earlierSchedules: null, settledThrough: null };
+	const old = before.earlierSchedules?.length ? (before.schedule as Schedule) : scheduleStartBy(before.schedule as Schedule, after.startDate);
+	return { earlierSchedules: keepEarlier(earliest(before.earlierSchedules), old, after.startDate, today) };
 }
 
 /**
@@ -375,7 +384,9 @@ export function saveHabit(
 					earlierSchedules: habit.earlierSchedules,
 					minimumCounts: habit.minimumCounts,
 					levels: habit.levels,
-					triggers: habit.triggers
+					triggers: habit.triggers,
+					parentId: habit.parentId,
+					earlierParents: habit.earlierParents
 				})
 				.from(habit)
 				.where(and(eq(habit.id, id), eq(habit.accountId, accountId)))
@@ -394,7 +405,9 @@ export function saveHabit(
 				? { earlierSchedules: null, settledThrough: null }
 				: scheduleAfter(tx, id, owned, values, opts.scheduleApplies ?? 'today', today);
 			const settled = settledAfter(tx, id, owned, values, sched.settledThrough === null);
-			tx.update(habit).set({ ...values, ...sched, ...settled }).where(eq(habit.id, id)).run();
+			// Moving into or out of a group or routine applies from today on, like a move on the Habits list.
+			const earlierParents = keepParent(owned.earlierParents, owned.parentId, values.parentId, owned.startDate, today);
+			tx.update(habit).set({ ...values, ...sched, ...settled, earlierParents }).where(eq(habit.id, id)).run();
 			// The rule for what counts changed: past logs are judged again by it.
 			judgeAgain = owned.minimumCounts !== values.minimumCounts || !!owned.levels?.enabled !== !!values.levels?.enabled;
 		} else {
@@ -427,10 +440,13 @@ export function saveHabit(
 			const was = tx.select().from(slot).where(eq(slot.variantId, v.id)).all();
 			const goal = (x: { taskId: string | null; sets: number | null; targets: unknown; minTargets: unknown; stretchTargets: unknown }) =>
 				JSON.stringify([x.taskId, x.sets, x.targets ?? {}, x.minTargets ?? {}, x.stretchTargets ?? {}]);
-			const changed = was.some((old) => {
-				const now = v.slots.find((x) => x.id === old.id);
-				return !now || goal(old) !== goal({ ...now, taskId: now.fillRule ? null : now.taskId, minTargets: now.minTargets, stretchTargets: now.stretchTargets });
-			});
+			// A Slot added or taken away changes the plan too: past logs keep the one they had.
+			const changed =
+				v.slots.some((x) => !was.some((old) => old.id === x.id)) ||
+				was.some((old) => {
+					const now = v.slots.find((x) => x.id === old.id);
+					return !now || goal(old) !== goal({ ...now, taskId: now.fillRule ? null : now.taskId, minTargets: now.minTargets, stretchTargets: now.stretchTargets });
+				});
 			if (changed) keepGoals(tx, [v.id]);
 			tx.delete(slot)
 				.where(

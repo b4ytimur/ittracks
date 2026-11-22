@@ -27,7 +27,7 @@ Choose when a day is done:
 
 On Today, a group shows a progress bar of the habits inside it. You can't log a group or set a reminder on it; do those on the habits inside. Sharing a group or a routine as a template takes the habits inside it along (see [Templates](templates.md#share-a-habit)).
 
-Groups can sit inside other groups, but not inside routines. Moving a habit into or out of a group recounts the group's past days from the habits inside it now.
+Groups can sit inside other groups, but not inside routines. Moving a habit into or out of a group or routine applies from that day on: past days keep the habits they had, so the holder's past days and streak don't change. Logging a day from before the move counts for the holder the habit was in that day.
 
 ## Routines
 
@@ -39,7 +39,9 @@ A habit inside a routine can keep its own schedule, or set **How often** to **Wh
 
 ### How a routine's day counts
 
-On its days, a routine is judged from the habits inside it that are due, with the same **Done when** and Minimum choices as a group (under **On its days, judged from the habits inside**). A day when none of them is due, you tick the routine off like any habit.
+On its days, a routine is judged from the habits inside it that are due, with the same **Done when** and Minimum choices as a group (under **On its days, judged from the habits inside**). A habit that follows the routine and wasn't logged on one of its days counts as missed. A day when none of them is due, you tick the routine off like any habit.
+
+When the routine's days change (a schedule change to past days too, a past log that moves its rotation on), the habits that follow it count their days again from the routine's new days.
 
 ### Doing a routine
 

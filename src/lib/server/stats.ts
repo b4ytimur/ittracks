@@ -7,7 +7,7 @@ import { getSettings, getViews, saveSettings } from './settings';
 import { settleAll, timeIn, userToday } from './today';
 import { listAreas } from './repo/areas';
 import { listIdentities } from './repo/identities';
-import { computeCard, describeLog, prepare, type CardResult, type Ctx, type Dataset, type DsPart, type Prepared } from '$lib/stats/engine';
+import { computeCard, describeLog, prepare, singleRows, type CardResult, type Ctx, type Dataset, type DsPart, type Prepared } from '$lib/stats/engine';
 import { readStats, statsSettings, type Board, type StatCard, type StatsSettings } from '$lib/stats/model';
 import { startingBoards } from '$lib/stats/auto';
 import { catalogOf, statCtx, type Catalog } from '$lib/stats/catalog';
@@ -318,7 +318,7 @@ function bestOf(P: Prepared, taskId: string): string | null {
 	}
 	const m = (P.metricsByTask.get(taskId) ?? []).find((x) => !x.repeats && ['number', 'duration', 'count'].includes(x.type));
 	if (!m) return null;
-	const vs = logs.map((l) => Number(l.single[m.id])).filter((v) => Number.isFinite(v) && v > 0);
+	const vs = logs.flatMap((l) => singleRows(l).map((row) => Number(row[m.id]))).filter((v) => Number.isFinite(v) && v > 0);
 	if (!vs.length) return null;
 	const best = Math.max(...vs);
 	return `${formatValue(best, m.type === 'duration' ? (m.unit || 'min') : (m.unit ?? ''), m.type === 'duration' && (!m.unit || m.unit === 'min') ? 'duration' : 'number')} ${m.name.toLowerCase()}`;
