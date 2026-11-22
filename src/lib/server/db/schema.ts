@@ -601,3 +601,22 @@ export const bulkBatch = sqliteTable(
 	},
 	(t) => [index('bulk_batch_account_idx').on(t.accountId, t.createdAt)]
 );
+
+/**
+ * A template someone saved to their own Gallery from the Share page: the same file a download
+ * gives (src/lib/template.ts), kept here so it can be added again, or by another account on
+ * this server later. It holds keys, never ids of this account's rows.
+ */
+export const savedTemplate = sqliteTable(
+	'saved_template',
+	{
+		id: id(),
+		accountId: text('account_id')
+			.notNull()
+			.references(() => account.id, { onDelete: 'cascade' }),
+		name: text('name').notNull(),
+		file: text('file', { mode: 'json' }).notNull().$type<unknown>(),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull()
+	},
+	(t) => [index('saved_template_account_idx').on(t.accountId, t.createdAt)]
+);

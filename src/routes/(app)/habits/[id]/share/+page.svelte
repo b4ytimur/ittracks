@@ -5,7 +5,7 @@
 	import { blocked, normalize } from '$lib/rules/core';
 	import { checkShare, shareRules } from '$lib/rules/share';
 
-	let { data } = $props();
+	let { data, form } = $props();
 	const ctx = untrack(() => data.ctx);
 
 	let f = $state<ShareForm>(
@@ -203,8 +203,14 @@
 			{#each issues as i (i.reason)}<li class={i.severity === 'block' ? 'error' : 'muted'}>{i.reason}</li>{/each}
 		</ul>
 	{/if}
-	<button class="primary" disabled={blocking.length > 0}>Download the template</button>
-	<p class="muted small-text">To share it, send the file. It imports from Habits, Import a template file.</p>
+	{#if form?.error}<p class="error">{form.error}</p>{/if}
+	<div class="row actions">
+		<button class="primary" disabled={blocking.length > 0}>Download the template</button>
+		<button formaction="?/save" disabled={blocking.length > 0}>Save to my Gallery</button>
+	</div>
+	<p class="muted small-text">
+		To share it, send the file. It imports from Habits, Import a template file. Saved to your Gallery, it stays here to add again whenever you like.
+	</p>
 </form>
 
 <style>
@@ -233,6 +239,9 @@
 	}
 	.small-text {
 		font-size: 0.85rem;
+	}
+	.actions {
+		flex-wrap: wrap;
 	}
 	.inside {
 		margin: 0.2rem 0 0;

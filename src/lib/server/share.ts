@@ -7,8 +7,10 @@ import { getTaskForm } from './repo/tasks';
 import { listAreas } from './repo/areas';
 import { candidates } from './today';
 import { matches, type FillRule } from '$lib/engine/fill';
-import { toTemplate, type InsideHabit, type ShareDetails, type TemplateFile } from '$lib/template';
-import { scheduleDays, type ShareCtx } from '$lib/share';
+import { templateFile, toTemplate, type InsideHabit, type ShareDetails, type TemplateFile } from '$lib/template';
+import { scheduleDays, shareDetails, shareForm, type ShareCtx } from '$lib/share';
+import { checkShare, shareRules } from '$lib/rules/share';
+import { normalize } from '$lib/rules/core';
 import type { HabitForm, TaskForm } from '$lib/forms';
 import { isFollow, isGroup } from '$lib/engine/schedule';
 import { standaloneSchedule } from '$lib/engine/follow';
@@ -89,6 +91,33 @@ export function shareFile(accountId: string, habitId: string, opts: ShareOptions
 		opts,
 		inside
 	);
+}
+
+/** The Share page's form, as it posts it (JSON in one field), or undefined when it can't be read. */
+export function shareField(f: FormData): unknown {
+	try {
+		return JSON.parse(String(f.get('share') ?? ''));
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * The file the Share page asks for, to download or to keep in your Gallery: its form read and
+ * checked on the server as on the page, and the file checked to import again.
+ */
+export function sharedFile(accountId: string, habitId: string, raw: unknown): { file: TemplateFile } | { status: 400 | 404 | 500; error: string } {
+	const sc = shareContext(accountId, habitId);
+	if (!sc) return { status: 404, error: 'Not found' };
+	const parsed = shareForm.safeParse(raw);
+	if (!parsed.success) return { status: 400, error: 'Could not read the share form.' };
+	const form = normalize(shareRules, parsed.data, sc.ctx).form;
+	const block = checkShare(form, sc.ctx).find((i) => i.severity === 'block');
+	if (block) return { status: 400, error: block.reason };
+	const file = shareFile(accountId, habitId, shareDetails(form, sc.ctx));
+	// What goes out must import again.
+	if (!file || !templateFile.safeParse(file).success) return { status: 500, error: 'Could not build the template.' };
+	return { file };
 }
 
 /** A file name for a template: "push-pull-legs.ittracks.json". */

@@ -14,10 +14,15 @@
 			(a, b) => (CATEGORY_ORDER.indexOf(a) + 1 || 99) - (CATEGORY_ORDER.indexOf(b) + 1 || 99)
 		)
 	);
+	type Item = (typeof data.items)[number];
+	const matches = (i: Item) => {
+		const text = q.trim().toLowerCase();
+		return !text || `${i.name} ${i.description} ${i.category}`.toLowerCase().includes(text);
+	};
+	const yours = $derived(data.yours.filter(matches));
 	const shown = $derived(
 		data.items.filter((i) => {
-			const text = q.trim().toLowerCase();
-			if (text && !`${i.name} ${i.description} ${i.category}`.toLowerCase().includes(text)) return false;
+			if (!matches(i)) return false;
 			if (category && i.category !== category) return false;
 			if (days === 'few' && !(i.daysPerWeek !== null && i.daysPerWeek <= 3)) return false;
 			if (days === 'most' && !(i.daysPerWeek !== null && i.daysPerWeek >= 4)) return false;
@@ -38,6 +43,22 @@
 </header>
 
 <p class="muted">Ready-made habits with their Tasks. Pick one, answer a question or two, and change anything after.</p>
+
+{#snippet card(i: Item)}
+	<li>
+		<a class="card item" href="/gallery/{i.slug}">
+			<strong>{i.name}</strong>
+			{#if i.description}<div class="muted small-text">{i.description}</div>{/if}
+			<div class="chips">
+				{#if i.inside}<span class="chip">{i.inside + 1} habits</span>{/if}
+				{#if i.direction === 'break'}<span class="chip">Break a habit</span>{/if}
+				{#if i.daysPerWeek}<span class="chip">{i.daysPerWeek === 7 ? 'Daily' : `${i.daysPerWeek} days a week`}</span>{/if}
+				{#if i.minutesPerDay}<span class="chip">{i.minutesPerDay} min</span>{/if}
+				{#each i.equipment as e (e)}<span class="chip">{e}</span>{/each}
+			</div>
+		</a>
+	</li>
+{/snippet}
 
 <div class="stack">
 	<input type="search" bind:value={q} placeholder="Search: running, reading, quit…" aria-label="Search the gallery" />
@@ -62,23 +83,17 @@
 	</div>
 </div>
 
+{#if yours.length}
+	<h2>Yours</h2>
+	<ul class="list">
+		{#each yours as i (i.slug)}{@render card(i)}{/each}
+	</ul>
+{/if}
+
 {#each grouped as g (g.c)}
 	<h2>{g.c}</h2>
 	<ul class="list">
-		{#each g.items as i (i.slug)}
-			<li>
-				<a class="card item" href="/gallery/{i.slug}">
-					<strong>{i.name}</strong>
-					<div class="muted small-text">{i.description}</div>
-					<div class="chips">
-						{#if i.direction === 'break'}<span class="chip">Break a habit</span>{/if}
-						{#if i.daysPerWeek}<span class="chip">{i.daysPerWeek === 7 ? 'Daily' : `${i.daysPerWeek} days a week`}</span>{/if}
-						{#if i.minutesPerDay}<span class="chip">{i.minutesPerDay} min</span>{/if}
-						{#each i.equipment as e (e)}<span class="chip">{e}</span>{/each}
-					</div>
-				</a>
-			</li>
-		{/each}
+		{#each g.items as i (i.slug)}{@render card(i)}{/each}
 	</ul>
 {:else}
 	<p class="muted">Nothing matches. Try fewer filters, or <a href="/habits/new" data-sveltekit-reload>create your own habit</a>.</p>
