@@ -11,6 +11,11 @@
 	//
 	// The list knows nothing about what a row is: the page renders it with `row` and gets moves
 	// back as keys (see list.ts). Drops inside a row only happen where `canDrop` allows them.
+	//
+	// Nesting, the outliner way: a row's `children` can hold another EditableList. Indent drops a
+	// row inside the row it is over (or the right arrow puts it inside the row above); outdent
+	// (`onoutdent`, in a nested list) takes it out to just after the row holding the list, by a
+	// drag left past the list's edge or the left arrow.
 	import { tick, type Snippet } from 'svelte';
 	import { applyMove, dropPosition, gridDrop, rangeKeys, type Move, type Position, type RowContext } from './list';
 
@@ -23,6 +28,7 @@
 		selected,
 		canDrop,
 		onmove,
+		onoutdent,
 		onremove,
 		removeLabel = 'Remove',
 		onadd,
@@ -50,6 +56,8 @@
 		canDrop?: (move: Move) => boolean;
 		/** A row was moved. `order` is this list's keys afterwards (without the key, for a move inside a row). */
 		onmove?: (move: Move, order: string[]) => void;
+		/** In a list nested inside a row: the row with this key moves out, to just after the row holding the list. */
+		onoutdent?: (key: string) => void;
 		/** Shows a remove button on each row while editing. */
 		onremove?: (item: T) => void;
 		/** The remove button's word: Remove, Archive, Hide... or one per item. */
@@ -107,10 +115,21 @@
 			m.position === 'inside'
 				? `${nameOf(item)} moved inside ${target ? nameOf(target) : 'the row'}.`
 				: `${nameOf(item)} moved to position ${order.indexOf(m.key) + 1} of ${order.length}.`;
-		if (!refocus) return;
-		// Moving a row in the page can take the focus off its handle: put it back.
+		if (refocus) await focusHandle(m.key);
+	}
+
+	async function outdent(k: string, refocus: boolean) {
+		const item = items[keys.indexOf(k)];
+		onoutdent?.(k);
+		announce = `${nameOf(item)} moved out, after the row that held it.`;
+		if (refocus) await focusHandle(k);
+	}
+
+	/** Moving a row can take the focus off its handle, or the row to another list: put it back. */
+	async function focusHandle(k: string) {
 		await tick();
-		list?.querySelector<HTMLElement>(`:scope > li[data-key="${CSS.escape(m.key)}"] > .head > .handle`)?.focus();
+		const sel = `li[data-key="${CSS.escape(k)}"] > .head > .handle`;
+		(list?.querySelector<HTMLElement>(`:scope > ${sel}`) ?? document.querySelector<HTMLElement>(sel))?.focus();
 	}
 
 	// ----- Dragging -----
@@ -126,7 +145,11 @@
 		dy: number;
 		over: string | null;
 		pos: Position | null;
+		/** Held far enough left of a nested list to outdent. */
+		out: boolean;
 	} | null>(null);
+	/** How far left of the list's edge the pointer goes to outdent. */
+	const OUTDENT_PX = 16;
 	let raf = 0;
 
 	const rows = () => (list ? Array.from(list.querySelectorAll<HTMLElement>(':scope > li[data-row]')) : []);
@@ -135,7 +158,7 @@
 		if (e.button !== 0 || !onmove) return;
 		e.preventDefault();
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-		drag = { key: k, startX: e.clientX, startY: e.clientY, startScroll: window.scrollY, x: e.clientX, y: e.clientY, dx: 0, dy: 0, over: null, pos: null };
+		drag = { key: k, startX: e.clientX, startY: e.clientY, startScroll: window.scrollY, x: e.clientX, y: e.clientY, dx: 0, dy: 0, over: null, pos: null, out: false };
 		// No text gets selected while a row is held.
 		window.getSelection()?.removeAllRanges();
 		document.documentElement.classList.add('el-dragging');
@@ -155,7 +178,13 @@
 		if (!drag) return;
 		const d = drag;
 		d.dy = d.y - d.startY + (window.scrollY - d.startScroll);
-		d.dx = axis === 'grid' ? d.x - d.startX : 0;
+		// A nested row follows the pointer left, toward the level it would outdent to.
+		d.dx = axis === 'grid' ? d.x - d.startX : onoutdent ? Math.min(0, d.x - d.startX) : 0;
+		d.out = !!onoutdent && axis === 'y' && !!list && d.x < list.getBoundingClientRect().left - OUTDENT_PX;
+		if (d.out) {
+			d.over = d.pos = null;
+			return;
+		}
 		const others = rows().filter((r) => r.dataset.key !== d.key);
 		let over: string | null = null;
 		let pos: Position | null = null;
@@ -205,16 +234,22 @@
 		if (!drag) return;
 		const d = drag;
 		stop();
-		if (d.over && d.pos) commit({ key: d.key, target: d.over, position: d.pos }, false);
+		if (d.out) outdent(d.key, false);
+		else if (d.over && d.pos) commit({ key: d.key, target: d.over, position: d.pos }, false);
 	}
 
 	function cancel() {
 		stop();
 	}
 
-	/** The keyboard way: arrows move one place, right arrow moves into the row above where allowed. */
+	/** The keyboard way: arrows move one place; right arrow indents into the row above where allowed, left arrow outdents. */
 	function keydown(e: KeyboardEvent, k: string) {
 		const i = keys.indexOf(k);
+		if (axis !== 'grid' && e.key === 'ArrowLeft' && onoutdent) {
+			e.preventDefault();
+			outdent(k, true);
+			return;
+		}
 		let m: Move | null = null;
 		const earlier = e.key === 'ArrowUp' || (axis === 'grid' && e.key === 'ArrowLeft');
 		const later = e.key === 'ArrowDown' || (axis === 'grid' && e.key === 'ArrowRight');
@@ -260,7 +295,16 @@
 	}}
 />
 
-<ul class="list elist {klass}" class:grid={axis === 'grid'} class:block={layout === 'block'} class:editing class:selecting bind:this={list} aria-label={ariaLabel}>
+<ul
+	class="list elist {klass}"
+	class:grid={axis === 'grid'}
+	class:block={layout === 'block'}
+	class:editing
+	class:selecting
+	class:drop-out={drag?.out}
+	bind:this={list}
+	aria-label={ariaLabel}
+>
 	{#each items as item, index (key(item))}
 		{@const k = key(item)}
 		{@const on = !!selected?.has(k)}
@@ -334,7 +378,11 @@
 	<button type="button" class="small add" onclick={onadd}>+ {addLabel}</button>
 {/if}
 {#if editing && onmove}
-	<span id="{uid}-hint" class="sr-only">Drag, or use the up and down arrow keys, to move.</span>
+	<span id="{uid}-hint" class="sr-only"
+		>Drag, or use the {axis === 'grid' ? '' : 'up and down '}arrow keys, to move.{canDrop && axis !== 'grid' ? ' The right arrow puts it inside the row above, where it fits.' : ''}{onoutdent
+			? ' The left arrow takes it out of this list.'
+			: ''}</span
+	>
 	<span class="sr-only" aria-live="polite">{announce}</span>
 {/if}
 
@@ -416,6 +464,21 @@
 	.grid > .drop-after::after {
 		left: auto;
 		right: -0.45rem;
+	}
+	/* Outdent: the line stands under the whole nested list, out at the level of the row holding it. */
+	.elist.drop-out {
+		position: relative;
+	}
+	.elist.drop-out::after {
+		content: '';
+		position: absolute;
+		left: calc(-1 * var(--outdent, 1.25rem));
+		right: 0;
+		bottom: -0.32rem;
+		height: 3px;
+		border-radius: 2px;
+		background: var(--accent);
+		pointer-events: none;
 	}
 	.drop-inside > .head > .body {
 		outline: 2px dashed var(--accent);
