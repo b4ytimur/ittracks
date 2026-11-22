@@ -1,7 +1,12 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { untrack } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import ViewBar from '$lib/ViewBar.svelte';
+	import EditableList from '$lib/ui/EditableList.svelte';
+	import EditButton from '$lib/ui/EditButton.svelte';
+	import BulkBar from '$lib/bulk/BulkBar.svelte';
+	import { unitOptions } from '$lib/bulk/catalog';
 	import { groupBy } from '$lib/views';
 
 	let { data } = $props();
@@ -49,6 +54,27 @@
 	const area = (id: string | null) => data.areas.find((a) => a.id === id);
 	const filtering = $derived(!!(view.query || view.tags.length || areaId || view.collection));
 	const clear = () => (view = { ...view, query: '', tags: [], areas: [], collection: null });
+
+	/** Selecting is a flag on the same list: tick Tasks, then change them together from the bulk bar. */
+	let selecting = $state(false);
+	const selected = new SvelteSet<string>();
+	/** The number fields in the ticked Tasks, by name: what "Change a unit" can pick. */
+	function fieldsIn(ids: string[]) {
+		const picked = new Set(ids);
+		const byName = new Map<string, { name: string; tasks: Set<string>; units: Set<string> }>();
+		for (const f of data.numberFields) {
+			if (!picked.has(f.taskId)) continue;
+			const k = f.name.trim().toLowerCase();
+			const g = byName.get(k) ?? byName.set(k, { name: f.name.trim(), tasks: new Set(), units: new Set() }).get(k)!;
+			g.tasks.add(f.taskId);
+			g.units.add(f.unit || 'no unit');
+		}
+		return [...byName.values()]
+			// Fields with a unit first: those are the ones a unit change is for.
+			.sort((a, b) => Number(a.units.has('no unit')) - Number(b.units.has('no unit')) || b.tasks.size - a.tasks.size || a.name.localeCompare(b.name))
+			.map((g) => ({ value: g.name, label: `${g.name} · ${g.tasks.size} ${g.tasks.size === 1 ? 'Task' : 'Tasks'} · ${[...g.units].join(', ')}` }));
+	}
+	const sources = (ids: string[]) => ({ fields: fieldsIn(ids), units: unitOptions() });
 </script>
 
 <svelte:head><title>Library · ittracks</title></svelte:head>
@@ -58,7 +84,9 @@
 	<a class="button primary" href="/library/new{areaId ? `?area=${areaId}` : view.collection ? `?collection=${view.collection}` : ''}">New task</a>
 </header>
 
-<ViewBar page="library" bind:views bind:current={view} />
+<ViewBar page="library" bind:views bind:current={view}>
+	{#snippet end()}<EditButton bind:editing={selecting} label="Select" look="chip" />{/snippet}
+</ViewBar>
 
 <input type="search" bind:value={view.query} placeholder="Search Tasks and tags" aria-label="Search" />
 
@@ -108,29 +136,31 @@
 	<p class="muted">Nothing matches. {#if filtering}<button class="link" onclick={clear}>Clear filters</button>{/if}</p>
 {/if}
 
+{#if selecting}
+	<BulkBar kind="task" {selected} visible={shown.map((t) => t.id)} today={data.today} {sources} />
+{/if}
+
 {#each groups as g (g.key)}
 	{#if g.label}
 		<h2 class="area" style="--c: {g.color ?? 'var(--border)'}">{g.label}</h2>
 	{/if}
-	<ul class="list" style="margin-top: 0.75rem">
-		{#each g.items as t (t.id)}
+	<EditableList items={g.items} key={(t) => t.id} label={(t) => t.name} {selecting} {selected} ariaLabel={g.label || 'Tasks'} class="tasks">
+		{#snippet row(t)}
 			{@const a = area(t.areaId)}
-			<li>
-				<a class="card task" href="/library/{t.id}" style="--c: {a?.color ?? 'transparent'}">
-					<div class="row" style="align-items: center">
-						<strong class="grow">{t.name}</strong>
-						{#if t.archived}<span class="chip">Archived</span>{:else if !t.usedIn.length && !t.timesLogged}<span class="chip">Unused</span>{/if}
+			<a class="card task" href="/library/{t.id}" style="--c: {a?.color ?? 'transparent'}">
+				<div class="row" style="align-items: center">
+					<strong class="grow">{t.name}</strong>
+					{#if t.archived}<span class="chip">Archived</span>{:else if !t.usedIn.length && !t.timesLogged}<span class="chip">Unused</span>{/if}
+				</div>
+				{#if t.usedIn.length}<div class="muted small-text">In {t.usedIn.join(', ')}</div>{/if}
+				{#if t.tags.length}
+					<div class="chips">
+						{#each t.tags as tg (tg.name)}<span class="chip">{tg.name}: {levelWord[tg.level]}</span>{/each}
 					</div>
-					{#if t.usedIn.length}<div class="muted small-text">In {t.usedIn.join(', ')}</div>{/if}
-					{#if t.tags.length}
-						<div class="chips">
-							{#each t.tags as tg (tg.name)}<span class="chip">{tg.name}: {levelWord[tg.level]}</span>{/each}
-						</div>
-					{/if}
-				</a>
-			</li>
-		{/each}
-	</ul>
+				{/if}
+			</a>
+		{/snippet}
+	</EditableList>
 {/each}
 
 <style>
@@ -151,6 +181,9 @@
 	}
 	.task {
 		border-left: 4px solid var(--c);
+	}
+	:global(ul.tasks) {
+		margin-top: 0.75rem;
 	}
 	h2.area {
 		border-left: 4px solid var(--c);
