@@ -39,7 +39,11 @@
 			return `Done${it.levels && o.level ? ` at ${levelName[o.level]}` : ''}${detail}`;
 		}
 		if (o?.status === 'skipped') return 'Skipped';
-		if (o?.status === 'missed') return 'Missed';
+		if (o?.status === 'missed') {
+			// A day that got part of the way says how far.
+			const p = o.entries ? data.progress[o.id] : null;
+			return `Missed${p && isPartial(p) ? ` · ${progressText(p)}` : ''}`;
+		}
 		if (it.paused) return 'Paused that day';
 		return it.wasDue ? 'Not logged' : 'Not due that day';
 	}

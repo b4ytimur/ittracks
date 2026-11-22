@@ -224,6 +224,10 @@ export interface ShareDetails {
 	noArea?: boolean;
 	/** Leave out the suggestion to turn the reminder on. */
 	noRemind?: boolean;
+	/** Send the habit's own note. Left out unless asked for: notes are private. */
+	withNote?: boolean;
+	/** Leave out the Tasks' How to notes (default: they travel, they explain the Task). */
+	noHowTo?: boolean;
 }
 
 /** Build a template from a Habit and the Tasks its Slots use (keyed by Task id). */
@@ -257,7 +261,7 @@ export function toTemplate(
 		habit: {
 			name: habit.name,
 			direction: habit.direction,
-			notes: habit.notes,
+			notes: share.withNote ? habit.notes : '',
 			schedule: mapSchedule(habit.schedule, (id) => variantKey.get(id) ?? id),
 			variants: habit.variants.map((v) => ({
 				key: variantKey.get(v.id)!,
@@ -313,7 +317,7 @@ export function toTemplate(
 		tasks: [...tasks].map(([id, t]) => ({
 			key: taskKey.get(id)!,
 			name: t.name,
-			notes: t.notes,
+			notes: share.noHowTo ? '' : t.notes,
 			restTimerEnabled: t.restTimerEnabled,
 			restTimerSeconds: t.restTimerSeconds,
 			tags: t.tags,

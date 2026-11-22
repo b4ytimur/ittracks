@@ -1,10 +1,10 @@
-import { randomUUID } from 'node:crypto';
+import { keepGoals } from '$lib/server/progress';
 import { error, fail, redirect } from '@sveltejs/kit';
 import { checkSettings } from '$lib/rules/settings';
 import { and, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { craving, entry, habit, occurrence, prepTick, slip, slot, variant } from '$lib/server/db/schema';
-import { createOccurrence, loadPrep, loadToday, quickDone, reopen, sameAsLast, timeIn, userToday } from '$lib/server/today';
+import { entry, habit, occurrence, prepTick, slot, variant } from '$lib/server/db/schema';
+import { createOccurrence, loadPrep, loadToday, timeIn, userToday } from '$lib/server/today';
 import { raise } from '$lib/engine/progression';
 import { addDays } from '$lib/engine/dates';
 import { getSettings, getViews, saveSettings } from '$lib/server/settings';
@@ -15,10 +15,22 @@ import { DEFAULT_RANGES, duplicateRange, readRanges } from '$lib/engine/day';
 import type { Level } from '$lib/engine/streak';
 import { ownedHabit, ownedOccurrence } from '$lib/server/owned';
 import { headlineTexts } from '$lib/server/stats';
-import { plusOne } from '$lib/server/progress';
 import { unloggedOn } from '$lib/server/backfill';
 import { logWindow } from '$lib/engine/backfill';
+import { ActionError, appActor } from '$lib/server/core/actor';
+import { addSlip, doneOcc, plusOcc, removeCraving, removeSlip, reopenOcc, resistCraving, skipOcc } from '$lib/server/core/log';
 import type { Actions, PageServerLoad } from './$types';
+
+/** The signed-in person, as the core's actions and the event log see them. */
+const actorOf = (locals: App.Locals, cookies: { get: (k: string) => string | undefined }) => appActor(locals.account!.id, cookies.get('tz'));
+/** Taking back something already gone is not an error worth showing. */
+const quietly = (run: () => unknown) => {
+	try {
+		run();
+	} catch (e) {
+		if (!(e instanceof ActionError)) throw e;
+	}
+};
 
 export const load: PageServerLoad = ({ locals, cookies, url, request }) => {
 	const accountId = locals.account!.id;
@@ -70,34 +82,40 @@ const levelOf = (f: FormData): Level | null => {
 };
 const clip = (v: string, n = 120) => v.trim().slice(0, n) || null;
 
+/**
+ * What a Done from Today ended as. A log that falls short of the habit's rule stays open, and
+ * the toast says why instead of celebrating.
+ */
+function ended(o: { occ: { id: string }; habit: { id: string; name: string; minimumCounts: boolean } }, clear: boolean) {
+	const status = db.select({ status: occurrence.status }).from(occurrence).where(eq(occurrence.id, o.occ.id)).get()?.status;
+	const short = status === 'due' ? (o.habit.minimumCounts ? 'minimum' : 'target') : undefined;
+	return { finished: status === 'done' ? o.habit.id : null, did: { occurrence: o.occ.id, habit: o.habit.name, clear, short } };
+}
+
 export const actions: Actions = {
 	/** Mark a habit with nothing to log as done, straight from Today. */
-	done: async ({ request, locals }) => {
+	done: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
 		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
 		if (!o) error(404);
-		const level = levelOf(f);
-		db.update(occurrence)
-			.set({ status: 'done', finishedAt: new Date(), level: level === 'target' ? null : level })
-			.where(eq(occurrence.id, o.occ.id))
-			.run();
-		return { finished: o.habit.id, did: { occurrence: o.occ.id, habit: o.habit.name, clear: false } };
+		doneOcc(actorOf(locals, cookies), o.occ, 'mark', levelOf(f));
+		return ended(o, false);
 	},
 	/** One tap: done at a level, logging that level's Slot targets. */
-	quick: async ({ request, locals }) => {
+	quick: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
 		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
 		if (!o) error(404);
-		if (quickDone(o.occ.id, levelOf(f)) === 'needsInput') redirect(303, `/log/${o.occ.id}?quick`);
-		return { finished: o.habit.id, did: { occurrence: o.occ.id, habit: o.habit.name, clear: true } };
+		if (doneOcc(actorOf(locals, cookies), o.occ, 'targets', levelOf(f)) === 'needsInput') redirect(303, `/log/${o.occ.id}?quick`);
+		return ended(o, true);
 	},
 	/** +1 toward a habit's one target ("3 of 6 glasses"), or by=-1 to take a tap back. Reaching the target finishes it. */
-	plus: async ({ request, locals }) => {
+	plus: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
 		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
 		if (!o) error(404);
 		const by = field(f, 'by') === '-1' ? -1 : 1;
-		const r = plusOne(o.occ.id, by);
+		const r = plusOcc(actorOf(locals, cookies), o.occ, by);
 		if (!r) return fail(400, { error: `${o.habit.name} has no single number to count.` });
 		return {
 			plus: { occurrence: o.occ.id, habit: o.habit.name, by, ...r },
@@ -124,6 +142,8 @@ export const actions: Actions = {
 		const today = userToday(locals.account!.id, cookies.get('tz'));
 		db.transaction((tx) => {
 			const variants = tx.select({ id: variant.id }).from(variant).where(eq(variant.habitId, h.id)).all();
+			// Logs before the raise keep the targets they aimed for.
+			keepGoals(tx, variants.map((v) => v.id));
 			for (const v of variants)
 				for (const s of tx.select().from(slot).where(eq(slot.variantId, v.id)).all())
 					tx.update(slot)
@@ -145,28 +165,28 @@ export const actions: Actions = {
 		db.update(habit).set({ progressionFrom: userToday(locals.account!.id, cookies.get('tz')) }).where(eq(habit.id, h.id)).run();
 	},
 	/** Same as last time: copy the last log and finish. */
-	same: async ({ request, locals }) => {
+	same: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
 		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
 		if (!o) error(404);
 		// Same as last keeps what was already logged, so Undo must not clear it.
 		const started = !!db.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, o.occ.id)).get();
-		if (o.occ.status === 'due' && sameAsLast(o.occ.id) === 'needsInput') redirect(303, `/log/${o.occ.id}?quick`);
-		return { finished: o.habit.id, did: { occurrence: o.occ.id, habit: o.habit.name, clear: !started } };
+		if (o.occ.status === 'due' && doneOcc(actorOf(locals, cookies), o.occ, 'same', null) === 'needsInput') redirect(303, `/log/${o.occ.id}?quick`);
+		return ended(o, !started);
 	},
-	skip: async ({ request, locals }) => {
+	skip: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
 		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
 		if (!o) error(404);
-		db.update(occurrence).set({ status: 'skipped' }).where(eq(occurrence.id, o.occ.id)).run();
+		skipOcc(actorOf(locals, cookies), o.occ);
 		return { did: { occurrence: o.occ.id, habit: o.habit.name, clear: false, skipped: true } };
 	},
 	/** Back to due. `clear` also removes what a one-tap log wrote. */
-	undo: async ({ request, locals }) => {
+	undo: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
 		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
 		if (!o) error(404);
-		reopen(o.occ.id, field(f, 'clear') === '1');
+		reopenOcc(actorOf(locals, cookies), o.occ, field(f, 'clear') === '1');
 	},
 	/** Answer the one-time question: when does your day start, and what are its parts? */
 	day: async ({ request, locals }) => {
@@ -208,11 +228,10 @@ export const actions: Actions = {
 		if (!Number.isInteger(count) || count < 1 || count > 1000)
 			return fail(400, { habit: h.id, error: 'Count must be a whole number from 1 to 1000.' });
 		const clockTime = field(f, 'time');
-		const id = randomUUID();
-		db.insert(slip)
-			.values({
-				id,
-				habitId: h.id,
+		const { slipId: id } = addSlip(
+			actorOf(locals, cookies),
+			{
+				habit: h.id,
 				date,
 				count,
 				notes: field(f, 'notes') || null,
@@ -220,39 +239,25 @@ export const actions: Actions = {
 				place: clip(field(f, 'place')),
 				feeling: clip(field(f, 'feeling'), 40),
 				withWhom: clip(field(f, 'withWhom'))
-			})
-			.run();
+			},
+			{ stampNow: false }
+		);
 		return { slipped: { id, habit: h.name } };
 	},
-	unslip: async ({ request, locals }) => {
+	unslip: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
-		const row = db
-			.select({ id: slip.id })
-			.from(slip)
-			.innerJoin(habit, eq(slip.habitId, habit.id))
-			.where(and(eq(slip.id, field(f, 'id')), eq(habit.accountId, locals.account!.id)))
-			.get();
-		if (row) db.delete(slip).where(eq(slip.id, row.id)).run();
+		quietly(() => removeSlip(actorOf(locals, cookies), field(f, 'id')));
 	},
-	uncraving: async ({ request, locals }) => {
+	uncraving: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
-		const row = db
-			.select({ id: craving.id })
-			.from(craving)
-			.innerJoin(habit, eq(craving.habitId, habit.id))
-			.where(and(eq(craving.id, field(f, 'id')), eq(habit.accountId, locals.account!.id)))
-			.get();
-		if (row) db.delete(craving).where(eq(craving.id, row.id)).run();
+		quietly(() => removeCraving(actorOf(locals, cookies), field(f, 'id')));
 	},
 	/** A craving resisted, usually by doing the if-then replacement. */
 	craving: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
 		const h = ownedHabit(locals.account!.id, field(f, 'habit'));
 		if (!h || h.direction !== 'break') error(404);
-		const id = randomUUID();
-		db.insert(craving)
-			.values({ id, habitId: h.id, date: userToday(locals.account!.id, cookies.get('tz')), time: timeIn(cookies.get('tz')) })
-			.run();
+		const { cravingId: id } = resistCraving(actorOf(locals, cookies), { habit: h.id, time: timeIn(cookies.get('tz')) });
 		return { resisted: h.id, cravingId: id };
 	}
 };

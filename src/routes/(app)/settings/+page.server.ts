@@ -7,6 +7,7 @@ import { userToday } from '$lib/server/today';
 import { FEATURES, PAGE_LABEL, TEMPLATES } from '$lib/views';
 import { getStats } from '$lib/server/stats';
 import { E1RM_PRESETS } from '$lib/stats/model';
+import { listKeys } from '$lib/server/core/tokens';
 import type { PageServerLoad } from './$types';
 
 /** The Settings home: one row per section, each with a line on how it's set now. */
@@ -38,6 +39,7 @@ export const load: PageServerLoad = ({ locals, cookies }) => {
 		showAllSections: settings.showAllSections,
 		weightUnit: settings.weightUnit,
 		devices: subscriptionCount(accountId),
+		keys: listKeys(accountId).length,
 		stats: (() => {
 			const s = getStats(accountId);
 			const preset = Object.values(E1RM_PRESETS).find((p) => p.formula === s.e1rm);

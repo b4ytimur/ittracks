@@ -13,7 +13,7 @@ import { pauseOn } from '$lib/engine/pause';
 import { limitOn, usedIn } from '$lib/engine/limit';
 import type { Level } from '$lib/engine/streak';
 import type { ScheduleForm } from '$lib/forms';
-import { createOccurrence, history, pausesOf, pickForVariant, recount, reopen, settle } from './today';
+import { createOccurrence, history, pausesOf, pickForVariant, recount, reopen, scheduleAt, settle } from './today';
 import { getSettings } from './settings';
 
 type HabitRow = typeof habit.$inferSelect;
@@ -109,7 +109,9 @@ export function loadDay(accountId: string, date: string, today: string) {
 		const occ = rowOn(h.id, date);
 		const past = history(h.id, date);
 		const paused = !!pauseOn(pauses, h.id, date);
-		const wasDue = !paused && !!dueOn(schedule as Schedule, past, date);
+		// The day is judged by the plan it had, even if the schedule changed since.
+		const sAt = scheduleAt(h, date);
+		const wasDue = !paused && !!dueOn(sAt, past, date);
 		const variants = db
 			.select({ id: variant.id, name: variant.name })
 			.from(variant)
@@ -117,7 +119,7 @@ export function loadDay(accountId: string, date: string, today: string) {
 			.orderBy(asc(variant.sortOrder))
 			.all();
 		const variantId =
-			occ?.variantId ?? variantFor(schedule as Schedule, past, date, variants.map((v) => v.id));
+			occ?.variantId ?? variantFor(sAt, past, date, variants.map((v) => v.id));
 		const item: PastItem = {
 			habitId: h.id,
 			name: h.name,
@@ -143,11 +145,15 @@ export function loadDay(accountId: string, date: string, today: string) {
  */
 export function startFrom(h: HabitRow, date: string) {
 	if (date >= h.startDate) return;
-	const schedule = h.schedule ? scheduleStartBy(h.schedule as Schedule, date) : null;
+	const earlier = h.earlierSchedules?.length ? [...h.earlierSchedules] : null;
+	// The oldest plan covers the new days; with no history that is the schedule itself.
+	if (earlier) earlier[0] = { ...earlier[0], schedule: scheduleStartBy(earlier[0].schedule, date) };
+	const schedule = h.schedule && !earlier ? scheduleStartBy(h.schedule as Schedule, date) : h.schedule;
 	db.update(habit)
 		.set({
 			startDate: date,
 			schedule,
+			earlierSchedules: earlier,
 			// Count the days before the old start too.
 			settledThrough: null,
 			limit: h.limit && h.limit.start > date ? { ...h.limit, start: date } : h.limit
@@ -175,8 +181,9 @@ export function unloggedOn(accountId: string, date: string): string[] {
 	const pauses = pausesOf(accountId);
 	return activeHabits(accountId, date)
 		.filter((h) => {
-			const schedule = h.schedule as Schedule | null;
-			if (h.direction !== 'build' || !schedule || carriesOver(schedule) || pauseOn(pauses, h.id, date)) return false;
+			if (h.direction !== 'build' || !h.schedule) return false;
+			const schedule = scheduleAt(h, date);
+			if (carriesOver(schedule) || pauseOn(pauses, h.id, date)) return false;
 			const occ = rowOn(h.id, date);
 			if (occ) return occ.status === 'missed' || occ.status === 'due';
 			return !!dueOn(schedule, history(h.id, date), date);
@@ -189,7 +196,7 @@ export function unloggedOn(accountId: string, date: string): string[] {
  * Variant replaces the planned one while nothing is logged yet.
  */
 export function occurrenceOn(accountId: string, h: HabitRow, date: string, chosen: string | null) {
-	const schedule = h.schedule as Schedule;
+	const schedule = scheduleAt(h, date);
 	const ids = db.select({ id: variant.id }).from(variant).where(eq(variant.habitId, h.id)).orderBy(asc(variant.sortOrder)).all().map((v) => v.id);
 	const pick = chosen && ids.includes(chosen) ? chosen : null;
 	const existing = rowOn(h.id, date);

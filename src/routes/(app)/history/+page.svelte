@@ -72,7 +72,7 @@
 							{statusWord[o.status]}{data.partial[o.id]
 								? ` · ${data.partial[o.id]}`
 								: !views.history.values && data.entryCounts[o.id]
-									? ` · ${data.entryCounts[o.id]} entries`
+									? ` · ${data.entryCounts[o.id]} ${data.entryCounts[o.id] === 1 ? 'entry' : 'entries'}`
 									: ''}
 						</span>
 					</div>

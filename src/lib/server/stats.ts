@@ -50,7 +50,8 @@ export function loadDataset(accountId: string, tz?: string): Dataset {
 				.all()
 		: [];
 	const occs = habitIds.length ? db.select().from(occurrence).where(inArray(occurrence.habitId, habitIds)).all() : [];
-	const done = occs.filter((o) => o.status === 'done').map((o) => o.id);
+	// Values of every log count, finished or not: a day left at 5 of 6 glasses still drank 5.
+	const done = occs.filter((o) => o.status !== 'skipped').map((o) => o.id);
 	// Large accounts: read entries in chunks so the IN list stays within SQLite's limit.
 	const entries: (typeof entry.$inferSelect)[] = [];
 	for (let i = 0; i < done.length; i += 900)
@@ -96,6 +97,7 @@ export function loadDataset(accountId: string, tz?: string): Dataset {
 			status: o.status,
 			level: o.level ?? null,
 			picks: o.picks ?? null,
+			goals: o.goals ?? null,
 			// Logged for another day (past-day logging): the finish time says nothing about when it happened.
 			time: o.finishedAt && timeIn(zone, o.finishedAt) && sameDay(o.finishedAt, o.date, zone, s.dayStart) ? timeIn(zone, o.finishedAt) : null
 		})),

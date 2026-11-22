@@ -12,9 +12,9 @@
 		untrack(() =>
 			shareForm.parse({
 				name: data.name,
-				description: data.notes,
 				includeArea: !!data.ctx.area,
 				includePool: data.ctx.pool > 0,
+				includeHowTo: data.ctx.howTo > 0,
 				suggestReminder: data.ctx.remind
 			})
 		)
@@ -103,6 +103,23 @@
 				>{ctx.pool === 1 ? 'The Task' : ctx.pool ? `The ${ctx.pool} Tasks` : 'Tasks'} the auto-filled slots pick from{#if data.poolNames.length}<br /><span class="muted small-text"
 						>{data.poolNames.slice(0, 6).join(', ')}{data.poolNames.length > 6 ? ` and ${data.poolNames.length - 6} more` : ''}</span
 					>{:else if why('includePool')}<br /><span class="muted small-text">{why('includePool')}</span>{/if}</span
+			></label
+		>
+		<label class="opt" title={why('includeNote') ?? ''}
+			><input type="checkbox" bind:checked={f.includeNote} disabled={!!why('includeNote')} />
+			<span
+				>The habit's own note<br /><span class="muted small-text"
+					>{why('includeNote') ?? 'Off unless you tick it: notes are private, and yours may say why the habit matters to you.'}</span
+				></span
+			></label
+		>
+		<label class="opt" title={why('includeHowTo') ?? ''}
+			><input type="checkbox" bind:checked={f.includeHowTo} disabled={!!why('includeHowTo')} />
+			<span
+				>How to notes of its Tasks<br /><span class="muted small-text"
+					>{why('includeHowTo') ??
+						`${ctx.howTo === 1 ? '1 Task has' : `${ctx.howTo} Tasks have`} notes on how to do it. They help whoever adds the template.`}</span
+				></span
 			></label
 		>
 		<label class="opt"

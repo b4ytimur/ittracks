@@ -1,10 +1,11 @@
 // Database schema. Terms follow the vocabulary doc:
 // Habit > Variant > Slot > Task (from the Library) > Metric,
 // Schedule -> Occurrence -> Log -> Entry, and Slips for break habits.
-import { sqliteTable, text, integer, real, primaryKey } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, primaryKey, index } from 'drizzle-orm/sqlite-core';
 import type { Level, StreakRule } from '../../engine/streak';
 import type { Limit } from '../../engine/limit';
 import type { Progression } from '../../engine/progression';
+import type { EarlierSchedule } from '../../engine/unlogged';
 
 /** Temptation bundling: something you want, paired with the habit. */
 export interface Bundle {
@@ -260,7 +261,12 @@ export const habit = sqliteTable('habit', {
 	/** A due day that ends with no log: counted as missed, or ignored (a gentler habit). */
 	unlogged: text('unlogged', { enum: ['missed', 'ignore'] }).notNull().default('missed'),
 	/** Every day up to this one has been checked for due days nobody logged. Null: never yet. */
-	settledThrough: text('settled_through')
+	settledThrough: text('settled_through'),
+	/**
+	 * Schedules from before an edit that applied from a later day on, oldest first: each one
+	 * still decides which days up to its `until` were due (see engine/unlogged.ts).
+	 */
+	earlierSchedules: text('earlier_schedules', { mode: 'json' }).$type<EarlierSchedule[]>()
 });
 
 /** A pause for one Habit, or for all of them when habitId is null. Dates are inclusive. */
@@ -358,8 +364,22 @@ export const occurrence = sqliteTable('occurrence', {
 	/** Which level was reached; null means Target. */
 	level: text('level', { enum: ['minimum', 'target', 'stretch'] }).$type<Level>(),
 	/** Logged on a day the schedule had nothing due. A rotation that skips ahead keeps its plan. */
-	extra: integer('extra', { mode: 'boolean' }).notNull().default(false)
+	extra: integer('extra', { mode: 'boolean' }).notNull().default(false),
+	/**
+	 * The targets each Slot had, kept when they changed later (Raise, an edit), so a log is
+	 * always judged against what it aimed for. Null: the Slots' targets now still apply.
+	 */
+	goals: text('goals', { mode: 'json' }).$type<Record<string, SlotGoals>>()
 });
+
+/** One Slot's targets as they were: Target, Minimum and Stretch values by Metric id, and sets. */
+export interface SlotGoals {
+	taskId: string | null;
+	sets: number | null;
+	targets: Record<string, number> | null;
+	minTargets: Record<string, number> | null;
+	stretchTargets: Record<string, number> | null;
+}
 
 /** One row of Metric values for one Task, e.g. one gym set. */
 export const entry = sqliteTable('entry', {
@@ -455,3 +475,54 @@ export const appValue = sqliteTable('app_value', {
 	key: text('key').primaryKey(),
 	value: text('value').notNull()
 });
+
+// ---------- Integrations ----------
+
+/**
+ * A key for Shortcuts, quick-log links, the MCP server and scripts. Only a hash of the secret
+ * is kept, so a key is shown once. Scopes and habits limit what it can do
+ * (src/lib/server/core/tokens.ts).
+ */
+export const apiToken = sqliteTable('api_token', {
+	id: id(),
+	accountId: text('account_id')
+		.notNull()
+		.references(() => account.id, { onDelete: 'cascade' }),
+	name: text('name').notNull(),
+	/** sha256 of the secret. */
+	hash: text('hash').notNull().unique(),
+	/** The first characters of the secret, so keys can be told apart. */
+	hint: text('hint').notNull(),
+	scopes: text('scopes', { mode: 'json' }).notNull().$type<string[]>(),
+	/** Only these habits; null means every habit. */
+	habitIds: text('habit_ids', { mode: 'json' }).$type<string[]>(),
+	createdAt: createdAt(),
+	lastUsedAt: integer('last_used_at', { mode: 'timestamp' })
+});
+
+/**
+ * Append-only log of what happened (a habit done, a value logged, a slip), whoever did it:
+ * the app, a key, a quick-log link or the MCP server. Webhooks and feeds will read from it.
+ * habitId has no foreign key on purpose: history outlives a deleted habit.
+ */
+export const event = sqliteTable(
+	'event',
+	{
+		seq: integer('seq').primaryKey({ autoIncrement: true }),
+		accountId: text('account_id')
+			.notNull()
+			.references(() => account.id, { onDelete: 'cascade' }),
+		at: integer('at', { mode: 'timestamp_ms' }).notNull(),
+		type: text('type').notNull(),
+		/** Version of this event type's data. */
+		v: integer('v').notNull().default(1),
+		habitId: text('habit_id'),
+		/** The day it is about, YYYY-MM-DD. */
+		date: text('date'),
+		/** app, key, link, mcp, reminder or import. */
+		source: text('source').notNull(),
+		tokenId: text('token_id'),
+		data: text('data', { mode: 'json' }).notNull().$type<Record<string, unknown>>()
+	},
+	(t) => [index('event_account_seq').on(t.accountId, t.seq)]
+);

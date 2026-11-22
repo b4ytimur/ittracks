@@ -17,6 +17,10 @@ export const shareForm = z.object({
 	includePool: z.boolean().default(true),
 	/** Suggest turning on the reminder (the person adding it decides). */
 	suggestReminder: z.boolean().default(true),
+	/** Send the habit's own note along. Off unless ticked: notes are private. */
+	includeNote: z.boolean().default(false),
+	/** Send the Tasks' How to notes along. */
+	includeHowTo: z.boolean().default(true),
 	/** Ask which weekdays. */
 	askDays: z.boolean().default(false),
 	daysLabel: z.string().max(200).default('Which days?'),
@@ -55,6 +59,10 @@ export interface ShareCtx {
 	/** Library Tasks the auto-filled Slots can pick. */
 	pool: number;
 	remind: boolean;
+	/** The habit has a note of its own. */
+	note: boolean;
+	/** Tasks it would send that have How to notes. */
+	howTo: number;
 	/** Fields a number question can set. */
 	metricIds: string[];
 }
@@ -90,6 +98,8 @@ export function shareDetails(f: ShareForm, c: ShareCtx): ShareDetails & { noPool
 		questions,
 		noArea: !f.includeArea,
 		noRemind: !f.suggestReminder,
+		withNote: f.includeNote,
+		noHowTo: !f.includeHowTo,
 		noPool: !f.includePool
 	};
 }

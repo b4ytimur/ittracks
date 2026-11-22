@@ -6,9 +6,8 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { habit, occurrence, slip } from '$lib/server/db/schema';
 import { ownedHabit } from '$lib/server/owned';
-import { quickDone, recount, sameAsLast, userToday } from '$lib/server/today';
+import { recount, userToday } from '$lib/server/today';
 import {
-	clearDay,
 	loadDay,
 	occurrenceOn,
 	planOfToday,
@@ -27,7 +26,12 @@ import { addDays } from '$lib/engine/dates';
 import { earliestLoggable, isRealDate } from '$lib/engine/backfill';
 import type { Level } from '$lib/engine/streak';
 import type { ScheduleForm } from '$lib/forms';
+import { ActionError, appActor } from '$lib/server/core/actor';
+import { addSlip, clearOcc, doneOcc, removeSlip, skipOcc } from '$lib/server/core/log';
+import { emit } from '$lib/server/core/events';
 import type { Actions, PageServerLoad } from './$types';
+
+const actorOf = (event: Parameters<Actions[string]>[0]) => appActor(event.locals.account!.id, event.cookies.get('tz'));
 
 export const load: PageServerLoad = ({ locals, params, cookies }) => {
 	const accountId = locals.account!.id;
@@ -128,25 +132,19 @@ export const actions: Actions = {
 		change(event, 'Logged', ({ h, f }) => {
 			const occ = occOf(event, h, f);
 			if (!occ) return 'gone';
-			const level = levelOf(f);
-			if (field(f, 'slots') !== '0') return quickDone(occ.id, level);
-			db.update(occurrence)
-				.set({ status: 'done', finishedAt: new Date(), level: level === 'target' ? null : level })
-				.where(eq(occurrence.id, occ.id))
-				.run();
-			return 'done';
+			return doneOcc(actorOf(event), occ, field(f, 'slots') !== '0' ? 'targets' : 'mark', levelOf(f));
 		}),
 	/** Copy the last log from before this day and finish. */
 	same: (event) =>
 		change(event, 'Logged', ({ h, f }) => {
 			const occ = occOf(event, h, f);
-			return occ ? sameAsLast(occ.id) : 'gone';
+			return occ ? doneOcc(actorOf(event), occ, 'same', null) : 'gone';
 		}),
 	skip: (event) =>
 		change(event, 'Skipped', ({ h, f }) => {
 			const occ = occOf(event, h, f);
 			if (!occ) return 'gone';
-			db.update(occurrence).set({ status: 'skipped', finishedAt: null, level: null }).where(eq(occurrence.id, occ.id)).run();
+			skipOcc(actorOf(event), occ);
 		}),
 	/** Open the full log for this day. */
 	open: (event) =>
@@ -157,9 +155,7 @@ export const actions: Actions = {
 		}),
 	/** Take the log away: back to missed if it was due that day. */
 	clear: (event) =>
-		change(event, 'Cleared', ({ h, today, schedule }) =>
-			clearDay(event.locals.account!.id, h.id, schedule, event.params.date!, today)
-		),
+		change(event, 'Cleared', ({ h, today, schedule }) => clearOcc(actorOf(event), { habit: h, schedule, date: event.params.date!, today })),
 	/** Undo: put the day back as it was. */
 	restore: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
@@ -179,6 +175,7 @@ export const actions: Actions = {
 		replanToday(accountId, h.id, h.schedule as ScheduleForm, today, before);
 		const date = (snap as { date?: unknown }).date;
 		if (typeof date === 'string') recount(accountId, h.id, h.schedule as ScheduleForm, date, today);
+		emit(appActor(accountId, cookies.get('tz')), 'occurrence.restored', { habitId: h.id, date: typeof date === 'string' ? date : null });
 	},
 	/** Start a habit from this day, for one that was set up later than it really began. */
 	start: async ({ request, locals, params, cookies }) => {
@@ -194,7 +191,7 @@ export const actions: Actions = {
 		return { started: { habit: h.name } };
 	},
 	/** A slip on this day. Slips can always be added for a past day. */
-	slip: async ({ request, locals, params }) => {
+	slip: async ({ request, locals, params, cookies }) => {
 		const f = await request.formData();
 		const h = ownedHabit(locals.account!.id, field(f, 'habit'));
 		if (!h || h.direction !== 'break' || !isRealDate(params.date)) error(404);
@@ -203,37 +200,27 @@ export const actions: Actions = {
 		if (!Number.isInteger(count) || count < 1 || count > 1000)
 			return fail(400, { habit: h.id, error: 'Count must be a whole number from 1 to 1000.' });
 		const time = field(f, 'time');
-		const id = randomUUID();
-		db.insert(slip)
-			.values({
-				id,
-				habitId: h.id,
-				date: params.date,
-				count,
-				notes: null,
-				time: /^([01]\d|2[0-3]):[0-5]\d$/.test(time) ? time : null,
-				place: null,
-				feeling: field(f, 'feeling').trim().slice(0, 40) || null,
-				withWhom: null
-			})
-			.run();
+		const { slipId: id } = addSlip(
+			appActor(locals.account!.id, cookies.get('tz')),
+			{ habit: h.id, date: params.date, count, time: /^([01]\d|2[0-3]):[0-5]\d$/.test(time) ? time : null, feeling: field(f, 'feeling').trim().slice(0, 40) || null },
+			{ stampNow: false }
+		);
 		return { slipped: { id, habit: h.name, limit: !!h.limit } };
 	},
-	unslip: async ({ request, locals }) => {
+	unslip: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
-		const row = db
-			.select({ s: slip })
-			.from(slip)
-			.innerJoin(habit, eq(slip.habitId, habit.id))
-			.where(and(eq(slip.id, field(f, 'id')), eq(habit.accountId, locals.account!.id)))
-			.get();
-		if (!row) return;
-		db.delete(slip).where(eq(slip.id, row.s.id)).run();
+		let row;
+		try {
+			row = removeSlip(appActor(locals.account!.id, cookies.get('tz')), field(f, 'id'));
+		} catch (e) {
+			if (e instanceof ActionError) return;
+			throw e;
+		}
 		// Sent back so Undo can put it back exactly.
-		return { unslipped: { ...row.s, createdAt: row.s.createdAt.getTime() } };
+		return { unslipped: { ...row, createdAt: row.createdAt.getTime() } };
 	},
 	/** Undo removing a slip. */
-	reslip: async ({ request, locals }) => {
+	reslip: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
 		let s: Record<string, unknown>;
 		try {
@@ -245,9 +232,10 @@ export const actions: Actions = {
 		const str = (v: unknown, n: number) => (typeof v === 'string' && v ? v.slice(0, n) : null);
 		if (!h || h.direction !== 'break' || typeof s.date !== 'string' || !isRealDate(s.date) || typeof s.count !== 'number')
 			return fail(400, { error: 'Could not undo.' });
+		const id = randomUUID();
 		db.insert(slip)
 			.values({
-				id: randomUUID(),
+				id,
 				habitId: h.id,
 				date: s.date,
 				count: Math.max(1, Math.min(1000, Math.round(s.count))),
@@ -259,5 +247,6 @@ export const actions: Actions = {
 				createdAt: typeof s.createdAt === 'number' ? new Date(s.createdAt) : new Date()
 			})
 			.run();
+		emit(appActor(locals.account!.id, cookies.get('tz')), 'slip.logged', { habitId: h.id, date: s.date, data: { slipId: id, count: s.count, undo: true } });
 	}
 };

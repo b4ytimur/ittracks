@@ -9,7 +9,6 @@ export const load: PageServerLoad = ({ locals, params }) => {
 	return {
 		id: params.id,
 		name: sc.habit.name,
-		notes: sc.habit.notes,
 		direction: sc.habit.direction,
 		schedule: describeSchedule(sc.habit.schedule),
 		ctx: sc.ctx,

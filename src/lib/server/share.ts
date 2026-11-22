@@ -69,11 +69,13 @@ export function shareContext(accountId: string, habitId: string) {
 	if (!habit) return null;
 	const metrics: ShareMetric[] = [];
 	const seen = new Set<string>();
+	const withHowTo = new Set<string>();
 	for (const v of habit.variants)
 		for (const s of v.slots) {
 			if (!s.taskId) continue;
 			const t = getTaskForm(accountId, s.taskId);
 			if (!t) continue;
+			if (t.notes.trim()) withHowTo.add(s.taskId);
 			for (const m of t.metrics) {
 				if (!['number', 'count', 'duration'].includes(m.type)) continue;
 				const target = s.targets[m.id] ?? null;
@@ -88,6 +90,11 @@ export function shareContext(accountId: string, habitId: string) {
 			}
 		}
 	const pool = poolTaskIds(accountId, habit);
+	const poolTasks = pool.flatMap((id) => {
+		const t = getTaskForm(accountId, id);
+		return t ? [{ id, ...t }] : [];
+	});
+	for (const t of poolTasks) if (t.notes.trim()) withHowTo.add(t.id);
 	const area = habit.areaId ? (listAreas(accountId).find((a) => a.id === habit.areaId)?.name ?? null) : null;
 	const days = scheduleDays(habit.schedule);
 	const ctx: ShareCtx = {
@@ -98,8 +105,10 @@ export function shareContext(accountId: string, habitId: string) {
 		area,
 		pool: pool.length,
 		remind: habit.remind,
+		note: !!habit.notes.trim(),
+		howTo: withHowTo.size,
 		metricIds: metrics.map((m) => m.id)
 	};
-	const poolNames = pool.map((id) => getTaskForm(accountId, id)?.name).filter((n): n is string => !!n);
+	const poolNames = poolTasks.map((t) => t.name);
 	return { habit, ctx, metrics, poolNames };
 }

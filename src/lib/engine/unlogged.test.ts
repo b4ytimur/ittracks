@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { missedDays, recountFrom, scheduleStartBy, type DayRow } from './unlogged';
+import { keepEarlier, missedDays, missedDaysOver, recountFrom, scheduleOn, scheduleStartBy, type DayRow } from './unlogged';
 import { dueOn, nextInRotation, type Rotation, type Schedule } from './schedule';
 import { chainCells } from './chain';
 import { streak } from './streak';
 import { duplicateRange } from './day';
+import { addDays } from './dates';
 
 // 2026-11-16 is a Monday.
 const dates = (ms: { date: string }[]) => ms.map((m) => m.date);
@@ -57,10 +58,17 @@ describe('due days nobody logged', () => {
 		expect(again).toEqual([]);
 	});
 
-	it('asks a first week that started late for no more sessions than it had days', () => {
+	it('asks a first week that started late for its share of the sessions, rounded down', () => {
 		const s: Schedule = { kind: 'frequency', times: 3, period: 'week', variantId: 'a' };
-		// Started on Saturday: two days left in the week, so two misses at most.
-		expect(dates(missedDays(s, [], '2026-11-21', '2026-11-21', '2026-11-22'))).toEqual(['2026-11-21', '2026-11-22']);
+		// Started on Saturday: 3 × 2/7 rounds down to nothing owed.
+		expect(missedDays(s, [], '2026-11-21', '2026-11-21', '2026-11-22')).toEqual([]);
+		// "4 a week" started on a Sunday owes nothing for that one day.
+		expect(missedDays({ ...s, times: 4 }, [], '2026-11-22', '2026-11-22', '2026-11-22')).toEqual([]);
+		// Started on a Thursday: 4 days left, 3 × 4/7 is 1 session, done on Friday.
+		expect(missedDays(s, [row('2026-11-20')], '2026-11-19', '2026-11-19', '2026-11-22')).toEqual([]);
+		expect(dates(missedDays(s, [], '2026-11-19', '2026-11-19', '2026-11-22'))).toEqual(['2026-11-22']);
+		// The next full week asks for all 3 again.
+		expect(dates(missedDays(s, [], '2026-11-19', '2026-11-23', '2026-11-29'))).toEqual(['2026-11-27', '2026-11-28', '2026-11-29']);
 	});
 
 	it('counts a month target when the month is over', () => {
@@ -152,6 +160,23 @@ describe('starting a habit earlier', () => {
 		expect(dueOn(moved, [], '2026-11-09')).toBe('b');
 	});
 
+	it('moves a roster (a rotation by Variant) back by whole cycles, so every planned day keeps its Variant', () => {
+		// Off 1..Off 7 with rests 0/0/0/2/0/0/3: a 12-day cycle, anchored on Nov 5.
+		const rests = [0, 0, 0, 2, 0, 0, 3];
+		const s: Rotation = {
+			kind: 'rotation',
+			step: 'variant',
+			order: rests.map((r, i) => ({ variantId: `off${i + 1}`, restDays: r })),
+			onMiss: 'skip',
+			weekdays: [],
+			start: '2026-11-05'
+		};
+		const moved = scheduleStartBy(s, '2026-11-02');
+		expect(moved.start).toBe('2026-10-24');
+		for (let d = '2026-11-05'; d <= '2026-11-30'; d = addDays(d, 1)) expect(dueOn(moved, [], d)).toBe(dueOn(s, [], d));
+		expect(dueOn(moved, [], '2026-11-02')).toBeNull();
+	});
+
 	it('leaves a schedule alone when it already starts in time', () => {
 		const s: Schedule = { kind: 'interval', every: 2, start: '2026-11-01', variantId: 'a' };
 		expect(scheduleStartBy(s, '2026-11-10')).toBe(s);
@@ -210,5 +235,28 @@ describe('parts of the day', () => {
 		const ok = new FormData();
 		for (const n of ['Morning', 'Evening', '']) ok.append('rangeName', n);
 		expect(duplicateRange(ok)).toBeNull();
+	});
+});
+
+describe('a schedule edit that applies from today on', () => {
+	const weekdays: Schedule = { kind: 'weekly', days: { '0': 'a', '1': 'a', '2': 'a', '3': 'a', '4': 'a' } };
+	const everyDay: Schedule = { kind: 'weekly', days: { '0': 'a', '1': 'a', '2': 'a', '3': 'a', '4': 'a', '5': 'a', '6': 'a' } };
+
+	it('keeps the old plan for the days before the edit', () => {
+		const earlier = keepEarlier(null, weekdays, '2026-11-02', '2026-11-21');
+		expect(earlier).toEqual([{ until: '2026-11-20', schedule: weekdays }]);
+		expect(scheduleOn(everyDay, earlier, '2026-11-14')).toBe(weekdays);
+		expect(scheduleOn(everyDay, earlier, '2026-11-21')).toBe(everyDay);
+		// Weekends before the edit were never due, so recounting them writes no misses.
+		const misses = missedDaysOver(everyDay, earlier, [], '2026-11-02', '2026-11-09', '2026-11-22');
+		expect(dates(misses).filter((d) => d < '2026-11-21')).toEqual(['2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20']);
+		expect(dates(misses).filter((d) => d >= '2026-11-21')).toEqual(['2026-11-21', '2026-11-22']);
+	});
+
+	it('records a day once: a second edit on the same day keeps the plan yesterday had', () => {
+		const once = keepEarlier(null, weekdays, '2026-11-02', '2026-11-21');
+		expect(keepEarlier(once, everyDay, '2026-11-02', '2026-11-21')).toEqual(once);
+		// A habit that starts today has no past to keep.
+		expect(keepEarlier(null, weekdays, '2026-11-21', '2026-11-21')).toBeNull();
 	});
 });

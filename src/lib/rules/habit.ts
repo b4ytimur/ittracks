@@ -108,7 +108,8 @@ export const habitRules = defineRules<HabitForm, HabitCtx>({
 	'levels.minimum': [onlyWhen((h) => build(h) && h.levels.enabled, 'Turn on Levels first', '')],
 	'levels.target': [onlyWhen((h) => build(h) && h.levels.enabled, 'Turn on Levels first', '')],
 	'levels.stretch': [onlyWhen((h) => build(h) && h.levels.enabled, 'Turn on Levels first', '')],
-	minimumCounts: [onlyWhen((h) => build(h) && h.levels.enabled, 'Turn on Levels first', true)],
+	// A day short of its target: counts at the Minimum (any log without Levels), or only in full.
+	minimumCounts: [onlyWhen(build, BUILD_ONLY, true)],
 	// Days nobody logged: break habits count slips, not days, so only build habits choose.
 	unlogged: [onlyWhen(build, BUILD_ONLY, 'missed')],
 	quickDone: [onlyWhen(build, BUILD_ONLY, false)],
