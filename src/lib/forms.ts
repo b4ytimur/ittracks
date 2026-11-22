@@ -86,19 +86,29 @@ export const fillRule = z.object({
 	prefer: z.array(z.string()).default([])
 });
 
+/** How a habit judges its day from the habits inside it: all of them (target null) or `target`. */
+const rollupRule = z.object({
+	target: z.number().int().min(1).max(100).nullable(),
+	minimum: z.number().int().min(1).max(100).nullable()
+});
+/** A routine's rule, on any schedule of its own (absent: all of them, no Minimum). */
+const routine = { rollup: rollupRule.optional() };
+
 const schedule = z.discriminatedUnion('kind', [
-	z.object({ kind: z.literal('weekly'), days: z.record(z.string(), id) }),
+	z.object({ kind: z.literal('weekly'), days: z.record(z.string(), id), ...routine }),
 	z.object({
 		kind: z.literal('frequency'),
 		times: z.number().int().min(1).max(31),
 		period: z.enum(['week', 'month']),
-		variantId: id
+		variantId: id,
+		...routine
 	}),
 	z.object({
 		kind: z.literal('interval'),
 		every: z.number().int().min(1).max(365),
 		start: z.string().date(),
-		variantId: id
+		variantId: id,
+		...routine
 	}),
 	z.object({
 		kind: z.literal('rotation'),
@@ -106,14 +116,13 @@ const schedule = z.discriminatedUnion('kind', [
 		order: z.array(z.object({ variantId: id, restDays: z.number().int().min(0).max(30) })).min(1),
 		onMiss: z.enum(['wait', 'skip']),
 		weekdays: z.array(z.number().int().min(0).max(6)),
-		start: z.string().date()
+		start: z.string().date(),
+		...routine
 	}),
 	// A group of habits: due when one inside is due; done when all (target null) or `target` are done.
-	z.object({
-		kind: z.literal('group'),
-		target: z.number().int().min(1).max(100).nullable(),
-		minimum: z.number().int().min(1).max(100).nullable()
-	})
+	z.object({ kind: z.literal('group'), ...rollupRule.shape }),
+	// Inside a routine: due whenever the routine is (only on its Variants in `on`, when set).
+	z.object({ kind: z.literal('follow'), variantId: id, on: z.array(id).max(50).nullable() })
 ]);
 export type ScheduleForm = z.infer<typeof schedule>;
 
@@ -248,7 +257,7 @@ export const habitForm = z
 		limit: limitForm.nullable().default(null),
 		progression: progressionForm.nullable().default(null),
 		areaId: id.nullable().default(null),
-		/** The group this habit sits in (a habit whose Schedule is a group), or null. */
+		/** The group or routine this habit sits in, or null. */
 		parentId: id.nullable().default(null),
 		/** A due day that ends with no log: counted as missed (the default), or ignored. */
 		unlogged: z.enum(['missed', 'ignore']).optional()

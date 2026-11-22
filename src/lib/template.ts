@@ -224,6 +224,9 @@ function mapSchedule(s: ScheduleForm | null, map: (id: string) => string): Sched
 			return { ...s, order: s.order.map((o) => ({ ...o, variantId: map(o.variantId) })) };
 		case 'group':
 			return s;
+		case 'follow':
+			// The routine's Variants don't travel with one habit, so `on` stays as it is.
+			return { ...s, variantId: map(s.variantId) };
 	}
 }
 

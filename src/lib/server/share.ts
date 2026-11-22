@@ -9,7 +9,8 @@ import { matches, type FillRule } from '$lib/engine/fill';
 import { toTemplate, type ShareDetails, type TemplateFile } from '$lib/template';
 import { scheduleDays, type ShareCtx } from '$lib/share';
 import type { HabitForm, TaskForm } from '$lib/forms';
-import { isGroup } from '$lib/engine/schedule';
+import { isFollow, isGroup } from '$lib/engine/schedule';
+import { standaloneSchedule } from '$lib/engine/follow';
 
 /** Library Tasks an auto-filled Slot of this habit can pick, by id (Tasks already in a fixed Slot left out). */
 export function poolTaskIds(accountId: string, habit: HabitForm): string[] {
@@ -31,6 +32,12 @@ export function shareFile(accountId: string, habitId: string, opts: ShareOptions
 	const habit = getHabitForm(accountId, habitId);
 	// A template is one habit; a group's days come from other habits, so it can't travel alone.
 	if (!habit || isGroup(habit.schedule)) return null;
+	// One that follows its routine travels with the routine's days as its own.
+	if (isFollow(habit.schedule)) {
+		const parent = habit.parentId ? getHabitForm(accountId, habit.parentId) : null;
+		habit.schedule = standaloneSchedule(parent?.schedule ?? null, habit.schedule, habit.startDate) as typeof habit.schedule;
+	}
+	habit.parentId = null;
 	const tasks = new Map<string, TaskForm>();
 	// A Task travels with the Library Tasks inside it.
 	const add = (id: string) => {

@@ -11,7 +11,7 @@ import { getSettings } from '../settings';
 import { getStats, loadDataset } from '../stats';
 import { ensureToday, settleAll, userToday } from '../today';
 import { prepare, describeLog, type Dataset, type Prepared } from '$lib/stats/engine';
-import { describeSchedule } from '$lib/describe';
+import { describeSchedule, groupRuleText } from '$lib/describe';
 import { progressText } from '$lib/engine/progress';
 import { rollupText } from '$lib/engine/rollup';
 import { progressForIds } from '../progress';
@@ -19,7 +19,7 @@ import { streak, type StreakRule } from '$lib/engine/streak';
 import { addDays, weekday } from '$lib/engine/dates';
 import { excerpt } from '$lib/markdown';
 import type { ScheduleForm } from '$lib/forms';
-import { isGroup, type Schedule } from '$lib/engine/schedule';
+import { isGroup, rollupRuleOf, type Schedule } from '$lib/engine/schedule';
 import { ActionError, canSeeHabit, requireScope, type Actor } from './actor';
 import { dayOf, findHabit, visibleHabits } from './day';
 import { listEvents } from './events';
@@ -82,6 +82,11 @@ export function describe(actor: Actor) {
 	const slotRows = variants.length
 		? db.select().from(slot).where(inArray(slot.variantId, variants.map((v) => v.id))).orderBy(asc(slot.sortOrder)).all()
 		: [];
+	/** The habit a habit sits in, with its Variants, so "follows its routine" reads with names. */
+	const parentFor = (id: string | null) => {
+		const p = id ? habits.find((x) => x.id === id) : undefined;
+		return p ? { name: p.name, variants: variants.filter((v) => v.habitId === p.id).map((v) => ({ id: v.id, name: v.name })) } : undefined;
+	};
 	const allTasks = db.select().from(task).where(eq(task.accountId, actor.accountId)).orderBy(asc(task.sortOrder), asc(task.name)).all();
 	const allParts = db
 		.select({ p: taskPart })
@@ -141,11 +146,19 @@ export function describe(actor: Actor) {
 				area: h.areaId ? (areaName.get(h.areaId) ?? null) : null,
 				archived: h.archived,
 				startDate: h.startDate,
-				schedule: h.direction === 'build' ? describeSchedule(h.schedule as ScheduleForm | null) : 'Break habit: log slips',
+				schedule:
+					h.direction === 'build'
+						? describeSchedule(h.schedule as ScheduleForm | null, parentFor(h.parentId))
+						: 'Break habit: log slips',
 				// The feelings a slip can be logged with (log_slip takes one by name or id).
 				...(h.direction === 'break' ? { feelings: activeOptions(h.triggers).map((o) => ({ id: o.id, name: o.name })) } : {}),
 				// A group's days are worked out from the habits inside it; it can't be logged itself.
 				...(isGroup(h.schedule as Schedule | null) ? { group: { inside: habits.filter((x) => x.parentId === h.id).map((x) => x.name) } } : {}),
+				// A routine has days of its own; on them it is judged from the habits inside, and log_done
+				// or skip on it marks them.
+				...(!isGroup(h.schedule as Schedule | null) && habits.some((x) => x.parentId === h.id && x.direction === 'build')
+					? { routine: { inside: habits.filter((x) => x.parentId === h.id).map((x) => x.name), rule: groupRuleText(rollupRuleOf(h.schedule as Schedule)) } }
+					: {}),
 				...(h.parentId ? { inGroup: habits.find((x) => x.id === h.parentId)?.name ?? null } : {}),
 				streakRule: (h.streakRule as StreakRule).kind,
 				variants: variants
@@ -572,6 +585,7 @@ export function today(actor: Actor) {
 	for (const h of build) if (!isGroup(h.schedule as Schedule)) ensureToday(actor.accountId, h.id, h.schedule as ScheduleForm, date);
 	const group = build.find((h) => isGroup(h.schedule as Schedule));
 	if (group) ensureToday(actor.accountId, group.id, group.schedule as ScheduleForm, date);
+	// ensureToday counts parents again for habits in a tree; a group alone does it for all.
 	return dayView(actor, date);
 }
 

@@ -208,6 +208,8 @@
 	/** A group's count today, live: habits done offline count at once. */
 	const groupNow = (item: Item) => {
 		const g = item.group!;
+		// A routine marked Done or Skip offline: it shows as marked until it syncs.
+		if (g.routine && statusOf(item.occurrence!) !== item.occurrence!.status) return { done: g.done, total: g.total, status: statusOf(item.occurrence!) };
 		const kids = data.build.filter((b) => b.parentId === item.habitId && b.occurrence);
 		if (!kids.length) return { done: g.done, total: g.total, status: statusOf(item.occurrence!) };
 		const day = rollupDay(kids.map((k) => ({ status: statusOf(k.occurrence!) as 'due' | 'done' | 'skipped' | 'missed' })), g, { past: false });
@@ -599,6 +601,27 @@
 				{/if}
 				{#if item.reframe && line('reframe')}<div class="reframe small-text">{item.reframe}</div>{/if}
 			</div>
+			{#if item.group?.routine && item.occurrence}
+				{@const o = item.occurrence}
+				<!-- A routine is done or skipped as a whole: the habits inside it are marked with it. -->
+				{#if g.status === 'due'}
+					<a class="button primary" href="/routine/{o.id}" aria-label="Start {item.name}">Start</a>
+					<form method="POST" action="?/done" use:enhance={quick(o.id, item.name)}>
+						<input type="hidden" name="occurrence" value={o.id} />
+						<button title="Mark every habit inside done" aria-label="Done: {item.name}">Done</button>
+					</form>
+					<form method="POST" action="?/skip" use:enhance={quick(o.id, item.name, 'skipped')}>
+						<input type="hidden" name="occurrence" value={o.id} />
+						<button aria-label="Skip {item.name}">Skip</button>
+					</form>
+				{:else if !pending[o.id]}
+					<a class="button" href="/routine/{o.id}">View</a>
+					<form method="POST" action="?/undo" use:enhance>
+						<input type="hidden" name="occurrence" value={o.id} />
+						<button class="link" aria-label="Undo {item.name}">Undo</button>
+					</form>
+				{/if}
+			{/if}
 		</div>
 		{#if kids.length}
 			<ul class="list inside" aria-label="Inside {item.name}">

@@ -128,7 +128,7 @@ describe('what a group refuses', () => {
 		const plain = daily('Plain', 1);
 		const f = (id: string) => getHabitForm(me, id)!;
 		expect(checkLinks(me, g, { ...f(g), parentId: inner })).toMatch(/inside itself/);
-		expect(checkLinks(me, g, { ...f(g), parentId: plain })).toMatch(/Pick a group/);
+		expect(checkLinks(me, g, { ...f(g), parentId: plain })).toMatch(/inside another group/);
 		run('log_done', { habit: plain });
 		const asGroup: HabitForm = { ...f(plain), variants: [], schedule: { kind: 'group', target: null, minimum: null } };
 		expect(checkHabitEdit(me, plain, asGroup)).toMatch(/has logs/);

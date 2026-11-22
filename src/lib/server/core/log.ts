@@ -7,7 +7,7 @@ import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '../db';
 import { craving, entry, habit, metric, occurrence, slip, slot, task } from '../db/schema';
 import { missingRequired, quickDone, reopen, sameAsLast, timeIn, userToday } from '../today';
-import { clearDay } from '../backfill';
+import { clearDay, kidsDueOn } from '../backfill';
 import { getSettings } from '../settings';
 import { getDayNote, saveDayNote } from '../journal';
 import { finishAs, plusOne, progressForIds, targetsAt } from '../progress';
@@ -21,6 +21,8 @@ import type { Level } from '$lib/engine/streak';
 import { ActionError, canSeeHabit, requireScope, type Actor } from './actor';
 import { emit } from './events';
 import { buildDay, change, dayOf, findHabit, occurrenceFor, type Day, type HabitRow, type OccRow } from './day';
+import { isRoutine, kidsOn, syncParents } from '../rollup';
+import { pausesOf } from '../today';
 
 export type DoneHow = 'auto' | 'targets' | 'same' | 'mark';
 type Values = Record<string, unknown>;
@@ -73,6 +75,15 @@ const hasSlots = (occ: Pick<OccRow, 'variantId'>) =>
  * when the habit has Tasks, else a plain done.
  */
 export function doneOcc(actor: Actor, occ: OccRow, how: DoneHow, level: Level | null): 'done' | 'needsInput' | 'gone' {
+	const kids = routineKids(occ, actor);
+	if (kids) {
+		// A routine is done through the habits inside it: each one still open gets its one tap.
+		for (const k of kids) if (k.occ.status !== 'done' && k.occ.status !== 'skipped') doneOcc(actor, k.occ, oneTap(k.occ), level);
+		const now = recountRoutine(actor, occ);
+		if (now?.status !== 'done') return 'needsInput';
+		emit(actor, 'occurrence.done', { habitId: occ.habitId, date: occ.date, data: { occurrenceId: occ.id, level: now.level ?? null, how } });
+		return 'done';
+	}
 	let r: 'done' | 'needsInput' | 'gone';
 	if (how === 'mark') {
 		db.update(occurrence)
@@ -93,14 +104,49 @@ export function doneOcc(actor: Actor, occ: OccRow, how: DoneHow, level: Level | 
 }
 
 export function skipOcc(actor: Actor, occ: OccRow) {
+	const kids = routineKids(occ, actor);
+	// Skipping a routine skips the habits inside it that are still open; done ones stay done.
+	for (const k of kids ?? []) if (k.occ.status !== 'done' && k.occ.status !== 'skipped') skipOcc(actor, k.occ);
 	db.update(occurrence).set({ status: 'skipped', finishedAt: null, level: null }).where(eq(occurrence.id, occ.id)).run();
+	if (kids) recountRoutine(actor, occ);
 	emit(actor, 'occurrence.skipped', { habitId: occ.habitId, date: occ.date, data: { occurrenceId: occ.id } });
 }
 
 /** Back to due; `clear` also removes what was logged (undoing a one-tap log). */
 export function reopenOcc(actor: Actor, occ: OccRow, clear: boolean) {
+	const kids = routineKids(occ);
+	// Undo on a routine opens the habits inside it again. What they logged stays.
+	for (const k of kids ?? []) if (k.occ.status === 'done' || k.occ.status === 'skipped') reopenOcc(actor, k.occ, false);
 	reopen(occ.id, clear);
+	if (kids) recountRoutine(actor, occ);
 	emit(actor, 'occurrence.reopened', { habitId: occ.habitId, date: occ.date, data: { occurrenceId: occ.id, cleared: clear } });
+}
+
+/** For a routine's day: the habits inside it that have a log that day. Null for any other habit, or a day none of them is due. */
+function routineKids(occ: OccRow, actor?: Actor) {
+	if (!isRoutine(occ.habitId)) return null;
+	// A past day: habits inside that were due and never logged are marked with it too.
+	if (actor && occ.date < userToday(actor.accountId, actor.tz)) kidsDueOn(actor.accountId, occ.habitId, occ.date);
+	const kids = kidsOn(occ.habitId, occ.date).filter((k) => !k.occ.extra);
+	return kids.length ? kids : null;
+}
+
+/** A habit inside a routine done with the routine: its last log copied when it has one, else its targets. */
+function oneTap(occ: OccRow): DoneHow {
+	if (!hasSlots(occ)) return 'mark';
+	const before = db
+		.select({ id: occurrence.id })
+		.from(occurrence)
+		.innerJoin(entry, eq(entry.occurrenceId, occurrence.id))
+		.where(and(eq(occurrence.habitId, occ.habitId), eq(occurrence.status, 'done')))
+		.get();
+	return before ? 'same' : 'targets';
+}
+
+/** The routine's day counted again from the habits inside it. */
+function recountRoutine(actor: Actor, occ: OccRow) {
+	syncParents(actor.accountId, userToday(actor.accountId, actor.tz), pausesOf(actor.accountId));
+	return db.select({ status: occurrence.status, level: occurrence.level }).from(occurrence).where(eq(occurrence.id, occ.id)).get();
 }
 
 /** A past day's log taken away: back to missed if it was due, else gone. */

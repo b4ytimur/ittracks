@@ -17,8 +17,9 @@ import {
 	taskTag,
 	variant
 } from './db/schema';
-import { dueOn, isGroup, nextInRotation, type Done, type Schedule } from '$lib/engine/schedule';
-import { syncGroups } from './rollup';
+import { dueOn, isFollow, isGroup, nextInRotation, rollupRuleOf, type Done, type ParentDue, type Schedule } from '$lib/engine/schedule';
+import { followDue, parentDueFor, syncParents } from './rollup';
+import { depthOf } from '$lib/engine/tree';
 import { pickTask, type Candidate, type FillRule } from '$lib/engine/fill';
 import {
 	daysSinceSlip,
@@ -186,6 +187,12 @@ export const scheduleAt = (h: { schedule: unknown; earlierSchedules: EarlierSche
 
 const hasEntries = (id: string) => !!db.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, id)).get();
 
+/** For a habit that follows its parent now or did before: what the parent had due each day. */
+function followsAt(h: Pick<Settling, 'id' | 'earlierSchedules'>, schedule: unknown, today: string): ParentDue | undefined {
+	const follows = isFollow(schedule as Schedule) || !!h.earlierSchedules?.some((e) => isFollow(e.schedule));
+	return follows ? parentDueFor(h.id, today) : undefined;
+}
+
 /**
  * Past logs with something in them are judged by the habit's rule once their day is over: a
  * log left open is done when it counts and missed when it falls short, and so is a finished
@@ -228,6 +235,7 @@ function settlePast(h: Settling, schedule: ScheduleForm, today: string, pauses: 
 	// A group's days are written from the habits inside it (see rollup.ts), never settled here.
 	if (isGroup(schedule)) return;
 	const habitId = h.id;
+	const pd = followsAt(h, schedule, today);
 	judgeEnded(h, today, (d) => !!pauseOn(pauses, habitId, d));
 	// Due days that fell in a pause simply go away: they were never due.
 	if (pauses.length) {
@@ -259,19 +267,19 @@ function settlePast(h: Settling, schedule: ScheduleForm, today: string, pauses: 
 			.filter(
 				(o) =>
 					!hasEntries(o.id) &&
-					(h.unlogged === 'ignore' ? !o.notes : !dueOn(scheduleOn(schedule as Schedule, h.earlierSchedules, o.date), history(habitId, o.date), o.date))
+					(h.unlogged === 'ignore' ? !o.notes : !dueOn(scheduleOn(schedule as Schedule, h.earlierSchedules, o.date), history(habitId, o.date), o.date, pd))
 			);
 		if (gone.length) db.delete(occurrence).where(inArray(occurrence.id, gone.map((o) => o.id))).run();
 		db.update(occurrence).set({ status: 'missed' }).where(stale).run();
 	}
 	const yesterday = addDays(today, -1);
-	if (h.unlogged === 'missed') fillMisses(h, schedule, yesterday, pauses);
+	if (h.unlogged === 'missed') fillMisses(h, schedule, yesterday, pauses, pd);
 	if (!h.settledThrough || h.settledThrough < yesterday)
 		db.update(habit).set({ settledThrough: yesterday }).where(eq(habit.id, habitId)).run();
 }
 
 /** Write a miss for every due day nobody logged since the habit was last settled. */
-function fillMisses(h: Settling, schedule: ScheduleForm, yesterday: string, pauses: Pause[]) {
+function fillMisses(h: Settling, schedule: ScheduleForm, yesterday: string, pauses: Pause[], pd?: ParentDue) {
 	const from = h.settledThrough ? addDays(h.settledThrough, 1) : h.startDate;
 	if (from > yesterday) return;
 	const rows = db
@@ -279,7 +287,7 @@ function fillMisses(h: Settling, schedule: ScheduleForm, yesterday: string, paus
 		.from(occurrence)
 		.where(eq(occurrence.habitId, h.id))
 		.all();
-	const misses = missedDaysOver(schedule as Schedule, h.earlierSchedules, rows, h.startDate, from, yesterday, (d) => !!pauseOn(pauses, h.id, d));
+	const misses = missedDaysOver(schedule as Schedule, h.earlierSchedules, rows, h.startDate, from, yesterday, (d) => !!pauseOn(pauses, h.id, d), pd);
 	if (!misses.length) return;
 	const variants = new Set(db.select({ id: variant.id }).from(variant).where(eq(variant.habitId, h.id)).all().map((v) => v.id));
 	// Auto-filled Slots get their Tasks, so a missed day can be opened and logged like any other.
@@ -338,10 +346,19 @@ export function ensurePicks(occurrenceId: string): Record<string, string> | null
 
 /** Settle a habit's past days without creating today's Occurrence. */
 export function settle(accountId: string, habitId: string, schedule: ScheduleForm, today: string) {
-	if (isGroup(schedule)) return settleGroups(accountId, today, false);
+	if (isGroup(schedule)) return settleTree(accountId, today, false);
 	const h = settlingOf(habitId);
 	if (h) settlePast(h, schedule, today, pausesForHabit(accountId, habitId));
+	if (inTree(habitId)) settleTree(accountId, today, false);
 }
+
+/** Does this habit sit inside another, or hold habits inside it? Then its parents are counted again. */
+const inTree = (habitId: string) =>
+	!!db
+		.select({ id: habit.id })
+		.from(habit)
+		.where(or(and(eq(habit.id, habitId), isNotNull(habit.parentId)), eq(habit.parentId, habitId)))
+		.get();
 
 /**
  * A past day changed: count the misses of a schedule that carries over again from where they
@@ -349,7 +366,7 @@ export function settle(accountId: string, habitId: string, schedule: ScheduleFor
  * in them are the counted ones; anything else stays.
  */
 export function recount(accountId: string, habitId: string, schedule: ScheduleForm, date: string, today: string) {
-	if (isGroup(schedule)) return settleGroups(accountId, today, false);
+	if (isGroup(schedule)) return settleTree(accountId, today, false);
 	const h = settlingOf(habitId);
 	if (!h) return;
 	const from = recountFrom(scheduleOn(schedule as Schedule, h.earlierSchedules, date), date);
@@ -369,6 +386,7 @@ export function recount(accountId: string, habitId: string, schedule: ScheduleFo
 		h.settledThrough = back;
 	}
 	settlePast(h, schedule, today, pausesForHabit(accountId, habitId));
+	if (inTree(habitId)) settleTree(accountId, today, false);
 }
 
 /**
@@ -425,11 +443,19 @@ export function unarchived(habitId: string, today: string) {
  * something logged or a note in them stay.
  */
 export function repaused(accountId: string, habitId: string | null, start: string, end: string, today: string) {
-	const rows = db
-		.select({ id: habit.id, schedule: habit.schedule })
+	// A habit that follows the paused one (or follows one that does) has no days while it is
+	// paused either. The paused habit is counted first, then those following it, level by level.
+	const all = db
+		.select({ id: habit.id, schedule: habit.schedule, parentId: habit.parentId })
 		.from(habit)
-		.where(and(eq(habit.accountId, accountId), eq(habit.direction, 'build'), habitId ? eq(habit.id, habitId) : undefined))
+		.where(and(eq(habit.accountId, accountId), eq(habit.direction, 'build')))
 		.all();
+	let rows = all;
+	if (habitId) {
+		rows = all.filter((r) => r.id === habitId);
+		for (let i = 0; i < rows.length && i < all.length; i++)
+			rows.push(...all.filter((r) => r.parentId === rows[i].id && isFollow(r.schedule as Schedule | null)));
+	}
 	const last = end < today ? end : addDays(today, -1);
 	for (const r of rows) {
 		if (!r.schedule) continue;
@@ -449,34 +475,38 @@ export function repaused(accountId: string, habitId: string | null, start: strin
 
 /** Settle every build habit of an account, so pages that read the past (Stats, the chain) see every miss. */
 export function settleAll(accountId: string, today: string) {
+	settleTree(accountId, today, false);
+}
+
+/** The account's build habits, each after the habit it sits in, so a routine settles before the habits that follow it. */
+function treeOrder(accountId: string) {
 	const rows = db
-		.select({ id: habit.id, schedule: habit.schedule })
+		.select({ id: habit.id, schedule: habit.schedule, parentId: habit.parentId, archived: habit.archived })
 		.from(habit)
-		.where(and(eq(habit.accountId, accountId), eq(habit.archived, false), eq(habit.direction, 'build')))
+		.where(and(eq(habit.accountId, accountId), eq(habit.direction, 'build')))
 		.all();
-	for (const r of rows) if (r.schedule && !isGroup(r.schedule as Schedule)) settle(accountId, r.id, r.schedule as ScheduleForm, today);
-	if (rows.some((r) => isGroup(r.schedule as Schedule | null))) syncGroups(accountId, today, pausesOf(accountId));
+	const depth = new Map(rows.map((r) => [r.id, depthOf(rows, r.id)]));
+	return rows.filter((r) => !r.archived).sort((a, b) => depth.get(a.id)! - depth.get(b.id)!);
 }
 
 /**
- * Settle the habits inside groups, then write every group's days from them. With `withToday`,
- * today's Occurrences of the habits inside are made first, so the group's today is counted too.
+ * Settle every build habit, parents before the habits inside them, then write every group's
+ * and routine's days from them. With `withToday`, today's Occurrences are made first, so the
+ * parents' today is counted too.
  */
-function settleGroups(accountId: string, today: string, withToday: boolean) {
-	const rows = db
-		.select({ id: habit.id, schedule: habit.schedule, parentId: habit.parentId })
-		.from(habit)
-		.where(and(eq(habit.accountId, accountId), eq(habit.archived, false), eq(habit.direction, 'build')))
-		.all();
-	for (const r of rows) {
-		if (!r.parentId || !r.schedule || isGroup(r.schedule as Schedule)) continue;
-		if (withToday) ensureToday(accountId, r.id, r.schedule as ScheduleForm, today);
-		else settle(accountId, r.id, r.schedule as ScheduleForm, today);
+function settleTree(accountId: string, today: string, withToday: boolean) {
+	for (const r of treeOrder(accountId)) {
+		if (!r.schedule || isGroup(r.schedule as Schedule)) continue;
+		if (withToday) ensureOwnToday(accountId, r.id, r.schedule as ScheduleForm, today);
+		else {
+			const h = settlingOf(r.id);
+			if (h) settlePast(h, r.schedule as ScheduleForm, today, pausesForHabit(accountId, r.id));
+		}
 	}
-	syncGroups(accountId, today, pausesOf(accountId));
+	syncParents(accountId, today, pausesOf(accountId));
 }
 
-/** A group's Occurrence today, as last written by syncGroups: none on a paused day still open. */
+/** A group's Occurrence today, as last written by syncParents: none on a paused day still open. */
 function groupToday(accountId: string, habitId: string, today: string) {
 	const existing = db
 		.select()
@@ -490,11 +520,41 @@ function groupToday(accountId: string, habitId: string, today: string) {
 /**
  * Create today's Occurrence for a build habit if one is due and none exists yet. A group's
  * comes from the habits inside it: they are brought up to date, and the group's is returned.
+ * So is a routine's, once the habits inside it have counted.
  */
 export function ensureToday(accountId: string, habitId: string, schedule: ScheduleForm, today: string) {
 	if (isGroup(schedule)) {
-		settleGroups(accountId, today, true);
+		settleTree(accountId, today, true);
 		return groupToday(accountId, habitId, today);
+	}
+	const own = ensureOwnToday(accountId, habitId, schedule, today);
+	if (!inTree(habitId)) return own;
+	settleTree(accountId, today, true);
+	return db
+		.select()
+		.from(occurrence)
+		.where(and(eq(occurrence.habitId, habitId), eq(occurrence.date, today)))
+		.get() ?? null;
+}
+
+/** Habits whose today is being made, so a loop in old parent links can't recurse forever. */
+const ensuring = new Set<string>();
+
+/**
+ * Today's Occurrence from the habit's own schedule, without counting any parent again. A habit
+ * that follows its parent needs the parent's today first.
+ */
+function ensureOwnToday(accountId: string, habitId: string, schedule: ScheduleForm, today: string) {
+	if (isFollow(schedule)) {
+		const parent = parentRow(habitId);
+		if (parent?.schedule && !isGroup(parent.schedule as Schedule) && !ensuring.has(parent.id)) {
+			ensuring.add(parent.id);
+			try {
+				ensureOwnToday(accountId, parent.id, parent.schedule as ScheduleForm, today);
+			} finally {
+				ensuring.delete(parent.id);
+			}
+		}
 	}
 	const pauses = pausesForHabit(accountId, habitId);
 	const h = settlingOf(habitId);
@@ -510,10 +570,16 @@ export function ensureToday(accountId: string, habitId: string, schedule: Schedu
 	const paused = !!pauseOn(pauses, habitId, today);
 	if (existing) return paused && existing.status === 'due' ? null : existing;
 	if (paused) return null;
-	const variantId = dueOn(schedule as Schedule, history(habitId, today), today);
+	const variantId = dueOn(schedule as Schedule, history(habitId, today), today, followDue(habitId, schedule, today));
 	if (!variantId) return null;
 	return createOccurrence(accountId, habitId, variantId, today);
 }
+
+/** The habit this one sits in. */
+const parentRow = (habitId: string) => {
+	const c = db.select({ parentId: habit.parentId }).from(habit).where(eq(habit.id, habitId)).get();
+	return c?.parentId ? db.select({ id: habit.id, schedule: habit.schedule }).from(habit).where(eq(habit.id, c.parentId)).get() : undefined;
+};
 
 export function createOccurrence(
 	accountId: string,
@@ -586,8 +652,12 @@ export interface TodayItem {
 	progress: Progress | null;
 	/** The group this habit sits in, when that group is active. */
 	parentId: string | null;
-	/** For a group: its rule, today's count, and the habits inside it (shown on Today or not). */
-	group: { target: number | null; minimum: number | null; done: number; total: number; kids: string[] } | null;
+	/**
+	 * For a group, or a routine on a day the habits inside it count: its rule, today's count,
+	 * and the habits inside it (shown on Today or not). A routine can be marked done or skipped
+	 * as a whole, which marks the habits inside.
+	 */
+	group: { routine: boolean; target: number | null; minimum: number | null; done: number; total: number; kids: string[] } | null;
 }
 
 export interface PrepItem {
@@ -646,16 +716,24 @@ export function loadToday(accountId: string, today: string) {
 	const allPauses = pausesOf(accountId);
 	// Habits first, then the groups they sit in: a group's day is counted from theirs.
 	const groupIds = new Set(habits.filter((h) => h.direction === 'build' && isGroup(h.schedule as Schedule | null)).map((h) => h.id));
+	// A routine: a habit with its own schedule and habits inside it. It is judged from them too.
+	const hasKids = new Set(habits.filter((h) => h.direction === 'build' && h.parentId).map((h) => h.parentId!));
+	const routineIds = new Set(
+		habits.filter((h) => h.direction === 'build' && h.schedule && hasKids.has(h.id) && !isGroup(h.schedule as Schedule)).map((h) => h.id)
+	);
 	const todayOf = new Map<string, ReturnType<typeof ensureToday>>();
 	for (const h of habits)
 		if (h.direction === 'build' && h.schedule && !groupIds.has(h.id))
-			todayOf.set(h.id, ensureToday(accountId, h.id, h.schedule as ScheduleForm, today));
-	if (groupIds.size) {
-		syncGroups(accountId, today, allPauses);
+			todayOf.set(h.id, ensureOwnToday(accountId, h.id, h.schedule as ScheduleForm, today));
+	if (groupIds.size || routineIds.size) {
+		syncParents(accountId, today, allPauses);
 		for (const id of groupIds) todayOf.set(id, groupToday(accountId, id, today));
+		// What the habits inside did today is in the routine's day now.
+		for (const id of routineIds) if (todayOf.get(id)) todayOf.set(id, db.select().from(occurrence).where(eq(occurrence.id, todayOf.get(id)!.id)).get() ?? null);
 	}
+	const isParent = (id: string | null): id is string => !!id && (groupIds.has(id) || routineIds.has(id));
 	const kidsOf = new Map<string, string[]>();
-	for (const h of habits) if (h.parentId && groupIds.has(h.parentId)) kidsOf.set(h.parentId, [...(kidsOf.get(h.parentId) ?? []), h.id]);
+	for (const h of habits) if (isParent(h.parentId)) kidsOf.set(h.parentId, [...(kidsOf.get(h.parentId) ?? []), h.id]);
 
 	for (const h of habits) {
 		if (h.direction === 'break') {
@@ -738,7 +816,8 @@ export function loadToday(accountId: string, today: string) {
 		if (!schedule) continue;
 
 		const occ = todayOf.get(h.id) ?? null;
-		const group = isGroup(schedule) ? schedule : null;
+		// A routine shows as a parent on days the habits inside it count.
+		const group = isGroup(schedule) ? schedule : routineIds.has(h.id) && occ?.rollup ? rollupRuleOf(schedule as Schedule) : null;
 		const variants = db.select().from(variant).where(eq(variant.habitId, h.id)).all();
 		const marks = db
 			.select({ date: occurrence.date, status: occurrence.status, level: occurrence.level })
@@ -815,9 +894,10 @@ export function loadToday(accountId: string, today: string) {
 			pausedUntil: pauseOn(allPauses, h.id, today)?.end ?? null,
 			stats: habitStats(marks, today),
 			progress: null,
-			parentId: h.parentId && groupIds.has(h.parentId) ? h.parentId : null,
+			parentId: isParent(h.parentId) ? h.parentId : null,
 			group: group
 				? {
+						routine: routineIds.has(h.id),
 						target: group.target,
 						minimum: group.minimum,
 						done: occ?.rollup?.done ?? 0,
@@ -964,7 +1044,7 @@ export function loadPrep(accountId: string, today: string): PrepItem[] {
 			.where(and(eq(occurrence.habitId, h.id), eq(occurrence.date, today)))
 			.get();
 		if (todayOcc?.status === 'due') past.push({ date: today, variantId: todayOcc.variantId, status: 'done' });
-		if (!dueOn(h.schedule as Schedule, past, tomorrow)) continue;
+		if (!dueOn(h.schedule as Schedule, past, tomorrow, followDue(h.id, h.schedule, today))) continue;
 		const ticks = new Set(
 			db
 				.select({ item: prepTick.item })

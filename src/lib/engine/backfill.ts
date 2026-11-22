@@ -1,7 +1,7 @@
 // Logging past days: which dates can still be logged, and which Variant a past day gets.
 // Pure functions, so the rules can be tested without a database.
 import { addDays, daysBetween, weekday, weekStart, type ISODate } from './dates';
-import { dueOn, nextInRotation, type Done, type Schedule } from './schedule';
+import { dueOn, nextInRotation, type Done, type ParentDue, type Schedule } from './schedule';
 
 /**
  * How far back past days can be logged: null is any time, 0 is off, N is up to N days back
@@ -64,8 +64,8 @@ export function dependsOnHistory(s: Schedule): boolean {
  * day nothing was due, the one that would have come next. `history` holds only what was
  * acted on before `date`.
  */
-export function variantFor(s: Schedule, history: Done[], date: ISODate, variantIds: string[]): string | null {
-	const due = dueOn(s, history, date);
+export function variantFor(s: Schedule, history: Done[], date: ISODate, variantIds: string[], parentDue?: ParentDue): string | null {
+	const due = dueOn(s, history, date, parentDue);
 	if (due) return due;
 	switch (s.kind) {
 		case 'weekly': {
@@ -78,6 +78,7 @@ export function variantFor(s: Schedule, history: Done[], date: ISODate, variantI
 		}
 		case 'frequency':
 		case 'interval':
+		case 'follow':
 			return s.variantId;
 		case 'rotation':
 			if (s.order.length === 0) break;

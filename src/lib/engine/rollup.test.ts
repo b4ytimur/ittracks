@@ -46,6 +46,14 @@ describe('rollupDay: a group day from the habits inside it', () => {
 		expect(rollupDay([{ status: 'done' }, { status: 'due' }], all, { past: true })).toMatchObject({ status: 'done', total: 1 });
 	});
 
+	it('is done at Stretch only when every habit that counted was', () => {
+		const stretch = [{ status: 'done' as const, level: 'stretch' as const }, { status: 'done' as const, level: 'stretch' as const }];
+		expect(rollupDay(stretch, all, { past: true })).toMatchObject({ status: 'done', level: 'stretch' });
+		expect(rollupDay([stretch[0], { status: 'done' }], all, { past: true })).toMatchObject({ status: 'done', level: null });
+		// One of two is enough for the target, but not for Stretch.
+		expect(rollupDay([stretch[0], { status: 'missed' }], { target: 1, minimum: null }, { past: true })).toMatchObject({ level: null });
+	});
+
 	it('says how many were done', () => {
 		expect(rollupText({ done: 2, total: 3 })).toBe('2 of 3 habits');
 		expect(rollupText({ done: 1, total: 1 })).toBe('1 of 1 habit');

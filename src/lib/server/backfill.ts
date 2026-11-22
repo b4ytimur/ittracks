@@ -8,6 +8,7 @@ import { db } from './db';
 import { entry, habit, occurrence, slip, slot, task, variant } from './db/schema';
 import { PATH_RE } from '$lib/engine/parts';
 import { dueOn, isGroup, type Schedule } from '$lib/engine/schedule';
+import { followDue } from './rollup';
 import { carriesOver, dependsOnHistory, isRealDate, logWindow, variantFor, type LogWindow } from '$lib/engine/backfill';
 import { scheduleStartBy } from '$lib/engine/unlogged';
 import { pauseOn } from '$lib/engine/pause';
@@ -114,7 +115,8 @@ export function loadDay(accountId: string, date: string, today: string) {
 		const paused = !!pauseOn(pauses, h.id, date);
 		// The day is judged by the plan it had, even if the schedule changed since.
 		const sAt = scheduleAt(h, date);
-		const wasDue = !paused && !!dueOn(sAt, past, date);
+		const pd = followDue(h.id, sAt, today);
+		const wasDue = !paused && !!dueOn(sAt, past, date, pd);
 		const variants = db
 			.select({ id: variant.id, name: variant.name })
 			.from(variant)
@@ -122,7 +124,7 @@ export function loadDay(accountId: string, date: string, today: string) {
 			.orderBy(asc(variant.sortOrder))
 			.all();
 		const variantId =
-			occ?.variantId ?? variantFor(sAt, past, date, variants.map((v) => v.id));
+			occ?.variantId ?? variantFor(sAt, past, date, variants.map((v) => v.id), pd);
 		const item: PastItem = {
 			habitId: h.id,
 			name: h.name,
@@ -189,7 +191,7 @@ export function unloggedOn(accountId: string, date: string): string[] {
 			if (carriesOver(schedule) || pauseOn(pauses, h.id, date)) return false;
 			const occ = rowOn(h.id, date);
 			if (occ) return occ.status === 'missed' || occ.status === 'due';
-			return !!dueOn(schedule, history(h.id, date), date);
+			return !!dueOn(schedule, history(h.id, date), date, followDue(h.id, schedule, date));
 		})
 		.map((h) => h.name);
 }
@@ -214,9 +216,24 @@ export function occurrenceOn(accountId: string, h: HabitRow, date: string, chose
 		return existing;
 	}
 	const past = history(h.id, date);
-	const v = pick ?? variantFor(schedule, past, date, ids);
+	const pd = followDue(h.id, schedule, date);
+	const v = pick ?? variantFor(schedule, past, date, ids, pd);
 	// A day nothing was due is an extra: a rotation that skips ahead keeps its calendar.
-	return v ? createOccurrence(accountId, h.id, v, date, !dueOn(schedule, past, date)) : null;
+	return v ? createOccurrence(accountId, h.id, v, date, !dueOn(schedule, past, date, pd)) : null;
+}
+
+/**
+ * The habits inside a routine that were due on a past day and have no log yet get one (as
+ * due), so the routine's Done or Skip that day reaches them too.
+ */
+export function kidsDueOn(accountId: string, parentId: string, date: string) {
+	const pauses = pausesOf(accountId);
+	for (const h of activeHabits(accountId, date)) {
+		if (h.parentId !== parentId || h.direction !== 'build' || !h.schedule || isGroup(h.schedule as Schedule)) continue;
+		if (rowOn(h.id, date) || pauseOn(pauses, h.id, date)) continue;
+		const schedule = scheduleAt(h, date);
+		if (dueOn(schedule, history(h.id, date), date, followDue(h.id, schedule, date))) occurrenceOn(accountId, h, date, null);
+	}
 }
 
 /** What today's Occurrence was planned as, for schedules a past log can change. */
