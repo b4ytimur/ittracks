@@ -16,7 +16,7 @@ A template is a file (`.ittracks.json`) holding one habit, and the habits inside
    - **Ask what time**.
    - **+ Ask for a starting number** ("Your starting squat weight"): pick which targets it sets. With **In proportion**, every target moves by the same share as the answer, so a lighter day stays lighter. Without it, the answer becomes the target everywhere. Minimum and Stretch move with it either way.
    - Up to 10 questions in all.
-5. **Download the template** and send the file.
+5. **Download the template** and send the file, or **Save to my Gallery** to keep it on this server and add it again whenever you like.
 
 A routine or a group shares as a whole program: the habits inside it come along, at any depth, with their schedules and Tasks. Habits that follow the routine keep following it, on the same Variants. Archived habits stay out, and so does what sits inside them. A group with no habits inside can't be shared, since its days come from them. A habit inside a routine shared on its own takes the routine's days as a schedule of its own.
 
@@ -38,6 +38,8 @@ Change anything afterwards in the habit editor.
 ## The Gallery
 
 **Habits → Gallery** has ready-made habits: gym plans (Push Pull Legs, Beginner 5×5, Upper/Lower, full body, home bodyweight), running, walking, stretching, language practice, reading, instrument practice, meditation, journaling, gratitude, water, sleep on time, a morning routine, and habits to break (quit smoking, less social media, no added sugar).
+
+Templates you saved from the Share page are at the top, under **Yours**, newest first. Open one to add it again (a whole program adds all its habits at once), **Download the file** to send it to someone, or **Remove from my Gallery**; removing it keeps the habits you added from it. Saved templates are part of the full export in Settings, so they move with your data.
 
 Filter by search, category, **Any days a week**, **Any time a day** and **No equipment**. Adding one works like an import, with the same questions and preview. Weights in gallery templates use your [default weight unit](units.md#your-default-weight-unit).
 

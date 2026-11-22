@@ -1,5 +1,6 @@
 // Whole programs as templates, against a real (in-memory) database: sharing a routine or a group
 // takes the habits inside it along, and adding the file puts them back inside, all or nothing.
+// A template can also be kept in your own Gallery instead of downloaded.
 import { beforeAll, describe, expect, it } from 'vitest';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { randomUUID } from 'node:crypto';
@@ -12,7 +13,10 @@ import { loadToday, userToday } from './today';
 import { getHabitForm, saveHabit, setHabitArchived } from './repo/habits';
 import { saveTask } from './repo/tasks';
 import { addTemplate } from './repo/templates';
-import { shareContext, shareFile } from './share';
+import { shareContext, shareFile, sharedFile } from './share';
+import { deleteSavedTemplate, getSavedTemplate, listSavedTemplates, saveTemplate } from './repo/saved-templates';
+import { exportJson, importReplace } from './core/export';
+import { appActor } from './core/actor';
 import { habitForm, taskForm } from '$lib/forms';
 import { templateFile, type TemplateFile } from '$lib/template';
 import { addDays } from '$lib/engine/dates';
@@ -149,5 +153,45 @@ describe('a whole program as a template', () => {
 		};
 		expect(addTemplate(me, group, { today })).toMatchObject({ error: expect.stringContaining("can't go inside its habit") });
 		expect(count()).toEqual(before);
+	});
+});
+
+describe('a template saved to your Gallery', () => {
+	it('keeps the file the Share page makes, adds it again, and goes when removed', () => {
+		const p = program(today);
+		const made = sharedFile(me, p.id, { name: 'My running program', description: 'Base, then Build' });
+		if ('error' in made) throw new Error(made.error);
+		const id = saveTemplate(me, made.file);
+		expect(listSavedTemplates(me).map((t) => [t.id, t.template.name, t.template.children.length])).toContainEqual([id, 'My running program', 2]);
+
+		const r = addTemplate(me, getSavedTemplate(me, id)!.template, { today });
+		if ('error' in r) throw new Error(r.error);
+		expect(kidsOf(r.habitId)).toHaveLength(2);
+
+		// Only its owner sees it.
+		expect(getSavedTemplate(randomUUID(), id)).toBeNull();
+		expect(deleteSavedTemplate(me, id)).toBe(true);
+		expect(getSavedTemplate(me, id)).toBeNull();
+		// The habits added from it stay.
+		expect(getHabitForm(me, r.habitId)).not.toBeNull();
+	});
+
+	it('refuses a Share form that blocks, as the download does', () => {
+		const p = program(today);
+		expect(sharedFile(me, p.id, { name: '' })).toMatchObject({ status: 400 });
+		expect(sharedFile(me, randomUUID(), { name: 'x' })).toMatchObject({ status: 404 });
+	});
+
+	it('travels in the full export and comes back with an import', async () => {
+		const p = program(today);
+		const made = sharedFile(me, p.id, { name: 'Exported program' });
+		if ('error' in made) throw new Error(made.error);
+		saveTemplate(me, made.file);
+		const app = appActor(me);
+		const file = JSON.parse(JSON.stringify(exportJson(app)));
+		expect(file.counts.savedTemplate).toBe(listSavedTemplates(me).length);
+		const other = await createAccount('programs-copy', 'another long password');
+		importReplace(appActor(other), file);
+		expect(listSavedTemplates(other).map((t) => t.template.name)).toContain('Exported program');
 	});
 });
