@@ -211,6 +211,19 @@ export function rejudge(habitId: string, before: string) {
 export const plusStep = (m: { type: string; unit: string | null; step: number | null }) =>
 	m.step ?? defaultStep(m.type, m.unit);
 
+/** Each Metric's step by id, for a raise by steps (engine/progression.ts). */
+export function stepsOf(metricIds: string[], q: Pick<typeof db, 'select'> = db): Record<string, number> {
+	if (!metricIds.length) return {};
+	return Object.fromEntries(
+		q
+			.select({ id: metric.id, type: metric.type, unit: metric.unit, step: metric.step })
+			.from(metric)
+			.where(inArray(metric.id, [...new Set(metricIds)]))
+			.all()
+			.map((m) => [m.id, plusStep(m)])
+	);
+}
+
 /**
  * +1 from Today, for a habit with one number to reach: add one step to the value logged so
  * far (or take one away with `by: -1`). Reaching the target finishes the log; dropping

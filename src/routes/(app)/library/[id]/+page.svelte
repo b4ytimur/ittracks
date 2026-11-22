@@ -7,7 +7,9 @@
 	import NoteBox from '$lib/NoteBox.svelte';
 	import { defaultStep, metricsFromType, type TaskType } from '$lib/task-types';
 	import { blocked } from '$lib/rules/core';
-	import { checkTask, metricRules, taskRules } from '$lib/rules/task';
+	import { checkTask, checkTaskPast, metricPast, metricRules, taskRules } from '$lib/rules/task';
+	import { allowedNow, lockedNow } from '$lib/rules/history';
+	import { UNITS, type UnitChoice } from '$lib/units';
 	import { promptFor } from '$lib/journal';
 
 	let { data, form } = $props();
@@ -24,6 +26,27 @@
 	const longBlock = (m: MetricForm) => blocked(metricRules, m, 'long', undefined);
 	const repeatsBlock = (m: MetricForm) => blocked(metricRules, m, 'repeats', undefined);
 	const today = new Date().toISOString().slice(0, 10);
+
+	// History policies (src/lib/rules/history.ts): what an edit may do to data already logged.
+	let unitChoices = $state<Record<string, UnitChoice>>({});
+	const past = $derived(data.isNew ? null : checkTaskPast(data.task, t, data.logged, unitChoices));
+	const isLogged = (id: string) => data.logged.metrics.includes(id);
+	const tickedSub = (id: string) => data.logged.subtasks.includes(id);
+	const savedMetric = (id: string) => data.task.metrics.find((x) => x.id === id);
+	/** May this field switch to `type` now? Logged numbers can only become another kind of number. */
+	const typeOk = (m: MetricForm, type: string) => {
+		const was = savedMetric(m.id);
+		return !was || allowedNow(metricPast, 'type', isLogged(m.id), was.type, type);
+	};
+	const typeLocked = (m: MetricForm) => (savedMetric(m.id) ? lockedNow(metricPast, 'type', isLogged(m.id)) : null);
+	const repeatsLocked = (m: MetricForm) => (savedMetric(m.id) ? lockedNow(metricPast, 'repeats', isLogged(m.id)) : null);
+	const unitEdit = (m: MetricForm) => past?.units.find((u) => u.metricId === m.id) ?? null;
+	/** 100 kg as lb, for the "convert" choice: two decimals are enough to read. */
+	const sample = (f: number) => Math.round(100 * f * 100) / 100;
+	// Only choices for unit changes still in the form are sent.
+	const unitsPayload = $derived(
+		JSON.stringify(Object.fromEntries((past?.units ?? []).filter((u) => u.choice).map((u) => [u.metricId, u.choice])))
+	);
 	/** Numbers per option are on while any option has one. */
 	const scored = (m: MetricForm) => Object.keys(m.scores).length > 0;
 	function toggleScores(m: MetricForm, on: boolean) {
@@ -158,6 +181,7 @@
 
 <form method="POST" action="?/save" class="stack">
 	<input type="hidden" name="payload" value={JSON.stringify(t)} />
+	<input type="hidden" name="units" value={unitsPayload} />
 
 	<label>Name <input bind:value={t.name} placeholder="Bench press" required /></label>
 	<label
@@ -204,6 +228,9 @@
 		</select>
 		<button type="button" onclick={addTag}>Add</button>
 	</div>
+	<datalist id="known-units">
+		{#each UNITS as u (u.key)}<option value={u.key}></option>{/each}
+	</datalist>
 	<datalist id="all-tags">
 		{#each data.allTags as name (name)}<option value={name}></option>{/each}
 	</datalist>
@@ -218,14 +245,42 @@
 				<label class="grow">Name <input bind:value={m.name} placeholder="Weight" required /></label>
 				<label class="grow"
 					>Type
-					<select bind:value={m.type}>
-						{#each metricTypes as type (type)}<option value={type}>{typeLabels[type]}</option>{/each}
+					<select bind:value={m.type} title={typeLocked(m) ?? undefined}>
+						{#each metricTypes as type (type)}<option value={type} disabled={!typeOk(m, type)}>{typeLabels[type]}</option>{/each}
 					</select>
 				</label>
 				{#if m.type === 'number' || m.type === 'count' || m.type === 'duration'}
-					<label style="width: 6rem">Unit <input bind:value={m.unit} placeholder="kg" /></label>
+					<label style="width: 6rem">Unit <input bind:value={m.unit} placeholder={m.type === 'duration' ? 'min' : 'kg'} list="known-units" /></label>
 				{/if}
 			</div>
+			{#if typeLocked(m)}
+				<p class="muted small-text" style="margin: 0">
+					{isNumeric(m) ? 'Has logged values, so it can only switch between number, count and duration.' : 'Has logged values, so its type is fixed.'}
+				</p>
+			{/if}
+			{#if unitEdit(m)}
+				{@const u = unitEdit(m)!}
+				<fieldset class="card past">
+					<legend class="muted">Values {m.name || 'this field'} already has, in {u.from || 'no unit'}</legend>
+					{#if u.change.kind === 'convertible'}
+						<label style="color: var(--text)"
+							><input type="radio" name="unit-{m.id}" checked={u.choice === 'convert'} onchange={() => (unitChoices[m.id] = 'convert')} /> Convert them: 100 {u.from} becomes {sample(u.change.factor)} {u.to}</label
+						>
+					{/if}
+					<label style="color: var(--text)"
+						><input type="radio" name="unit-{m.id}" checked={u.choice === 'relabel'} onchange={() => (unitChoices[m.id] = 'relabel')} /> Keep the numbers: they were already in {u.to || 'no unit'}</label
+					>
+					<p class="muted small-text" style="margin: 0.25rem 0 0">
+						{u.choice === 'convert'
+							? 'Every logged value, Slot target and the targets kept with past logs are converted when you save.'
+							: u.choice === 'relabel'
+								? 'Nothing is converted: 100 stays 100, now read as ' + (u.to || 'no unit') + '.'
+								: u.change.kind === 'convertible'
+									? 'Pick one to save.'
+									: `${u.from || 'No unit'} and ${u.to || 'no unit'} don't convert, so the numbers can only be kept. Pick it to save.`}
+					</p>
+				</fieldset>
+			{/if}
 			{#if m.type === 'choice'}
 				<label
 					>Options, separated by commas
@@ -322,13 +377,18 @@
 				{#if m.required}<p class="muted small-text" style="margin: 0">{quickBlock({ ...m, quick: false })?.reason}.</p>{/if}
 			</details>
 			<div class="row">
-				<label class="grow" style="color: var(--text)" title={repeatsBlock(m)?.reason}
-					><input type="checkbox" bind:checked={m.repeats} disabled={!!repeatsBlock(m) && !m.repeats} /> Log per set</label
+				<label class="grow" style="color: var(--text)" title={repeatsLocked(m) ?? repeatsBlock(m)?.reason}
+					><input type="checkbox" bind:checked={m.repeats} disabled={!!repeatsLocked(m) || (!!repeatsBlock(m) && !m.repeats)} /> Log per set</label
 				>
 				<button type="button" class="small" onclick={() => move(t.metrics, i, -1)} aria-label="Move up">↑</button>
 				<button type="button" class="small" onclick={() => move(t.metrics, i, 1)} aria-label="Move down">↓</button>
-				<button type="button" class="small danger" onclick={() => t.metrics.splice(i, 1)}>Remove</button>
+				{#if isLogged(m.id)}
+					<button type="button" class="small danger" title="It has logged values: they stay in History and Stats" onclick={() => t.metrics.splice(i, 1)}>Archive</button>
+				{:else}
+					<button type="button" class="small danger" onclick={() => t.metrics.splice(i, 1)}>Remove</button>
+				{/if}
 			</div>
+			{#if repeatsLocked(m)}<p class="muted small-text" style="margin: 0">Has logged values, so “Log per set” is fixed.</p>{/if}
 		</div>
 	{/each}
 	<div class="row">
@@ -341,7 +401,11 @@
 	{#each t.subtasks as s, i (s.id)}
 		<div class="row">
 			<input class="grow" bind:value={s.name} aria-label="Sub-task name" required />
-			<button type="button" class="small danger" onclick={() => t.subtasks.splice(i, 1)}>Remove</button>
+			{#if tickedSub(s.id)}
+				<button type="button" class="small danger" title="It was ticked before: its past ticks stay" onclick={() => t.subtasks.splice(i, 1)}>Archive</button>
+			{:else}
+				<button type="button" class="small danger" onclick={() => t.subtasks.splice(i, 1)}>Remove</button>
+			{/if}
 		</div>
 	{/each}
 	<button type="button" onclick={() => t.subtasks.push({ id: crypto.randomUUID(), name: '' })}
@@ -361,7 +425,7 @@
 		{/if}
 	</div>
 
-	{#each [...new Set(ruleCheck.errors.map((i) => i.reason))] as reason (reason)}<p class="error">{reason}</p>{/each}
+	{#each [...new Set([...ruleCheck.errors, ...(past?.errors ?? [])].map((i) => i.reason))] as reason (reason)}<p class="error">{reason}</p>{/each}
 	{#each [...new Set(ruleCheck.warnings.map((i) => i.reason))] as reason (reason)}<p class="muted small-text">{reason}.</p>{/each}
 	{#if form?.error}<p class="error">{form.error}</p>{/if}
 
@@ -412,6 +476,9 @@
 	}
 	.small-text {
 		font-size: 0.85rem;
+	}
+	.past {
+		margin: 0;
 	}
 	.archived {
 		margin-bottom: 1rem;

@@ -12,6 +12,7 @@ import {
 	requiresAny,
 	type Issue
 } from './core';
+import { definePolicies, display, locked, pastIssues, recompute, unguarded, versioned } from './history';
 
 export type SlotForm = HabitForm['variants'][number]['slots'][number];
 
@@ -216,6 +217,65 @@ export function checkHabit(input: HabitForm, ctx: HabitCtx = {}, opts: { resolve
 		warnings: issues.filter((i) => i.severity === 'warn'),
 		fixed: [...new Set(fixed)]
 	};
+}
+
+// ---------- history: what an edit may do to data already logged (rules/history.ts) ----------
+
+const RECOUNT = 'Logs stay as they are; past days are judged again under the new setting';
+
+export const habitPast = definePolicies<HabitForm>({
+	name: display(),
+	// Build habits log days and break habits log slips: switching would hide one or the other.
+	direction: locked('This habit has logs. Build habits keep days and break habits keep slips, so switching would hide them. Make a new habit instead'),
+	notes: display(),
+	startDate: recompute('Days before a later start stop counting; an earlier start counts the days in between'),
+	areaId: display(),
+	identityIds: recompute('Identity votes are counted again from the days done'),
+	reframe: display(),
+	variants: unguarded('Removing a Variant unlinks the days logged with it from it'),
+	schedule: versioned('Earlier days keep the schedule they had, unless the change applies to past days too'),
+	'cue.time': display(),
+	'cue.range': display(),
+	'cue.place': display(),
+	'cue.afterHabitId': display(),
+	'cue.afterText': display(),
+	remind: display(),
+	streakRule: recompute('Streaks are worked out again from the days logged'),
+	'levels.enabled': recompute(RECOUNT),
+	'levels.minimum': display(),
+	'levels.target': display(),
+	'levels.stretch': display(),
+	minimumCounts: recompute(RECOUNT),
+	unlogged: recompute('Days nobody logged are counted again: as missed, or left out'),
+	quickDone: display(),
+	progression: display('A raise changes targets from then on; past logs keep the targets they aimed for'),
+	'bundle.reward': display(),
+	'bundle.strict': display(),
+	prep: display(),
+	'reward.celebrate': display(),
+	'reward.message': display(),
+	'reward.jar': recompute('The jar is filled again from the days done, at the new amount'),
+	'ifThen.when': display(),
+	'ifThen.then': display(),
+	'ifThen.habitId': display(),
+	triggers: display('Past slips keep the feeling they were logged with'),
+	cost: unguarded("Money saved uses today's price for every day, so a new price changes past savings"),
+	limit: versioned('A changed limit applies from today; past days keep the limit they had')
+});
+
+export const slotPast = definePolicies<SlotForm>({
+	id: locked('Logs point at a Slot by its id'),
+	taskId: versioned('Past logs keep the Task and targets they had'),
+	fillRule: versioned('Past days keep the Tasks picked for them'),
+	sets: versioned('Past logs keep the sets they aimed for'),
+	targets: versioned('Past logs keep the targets they aimed for'),
+	minTargets: versioned('Past logs keep the targets they aimed for'),
+	stretchTargets: versioned('Past logs keep the targets they aimed for')
+});
+
+/** Edits of a habit refused because of what is logged (build or break, once logged). */
+export function checkHabitPast(before: HabitForm, after: HabitForm, logged: boolean): Issue[] {
+	return pastIssues(habitPast, before, after, logged).map((i) => ({ path: i.path, reason: i.reason, severity: 'block' as const, rule: 'check' as const }));
 }
 
 export { isSet };

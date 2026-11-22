@@ -1,4 +1,4 @@
-import { keepGoals } from '$lib/server/progress';
+import { keepGoals, stepsOf } from '$lib/server/progress';
 import { error, fail, redirect } from '@sveltejs/kit';
 import { checkSettings } from '$lib/rules/settings';
 import { and, eq } from 'drizzle-orm';
@@ -145,14 +145,17 @@ export const actions: Actions = {
 			// Logs before the raise keep the targets they aimed for.
 			keepGoals(tx, variants.map((v) => v.id));
 			for (const v of variants)
-				for (const s of tx.select().from(slot).where(eq(slot.variantId, v.id)).all())
+				for (const s of tx.select().from(slot).where(eq(slot.variantId, v.id)).all()) {
+					// By steps, each target rises by its own field's step: 2.5 kg, 1 rep.
+					const steps = stepsOf([...Object.keys(s.targets ?? {}), ...Object.keys(s.stretchTargets ?? {})], tx);
 					tx.update(slot)
 						.set({
-							targets: s.targets ? raise(s.targets, p) : s.targets,
-							stretchTargets: s.stretchTargets ? raise(s.stretchTargets, p) : s.stretchTargets
+							targets: s.targets ? raise(s.targets, p, steps) : s.targets,
+							stretchTargets: s.stretchTargets ? raise(s.stretchTargets, p, steps) : s.stretchTargets
 						})
 						.where(eq(slot.id, s.id))
 						.run();
+				}
 			tx.update(habit).set({ progressionFrom: today }).where(eq(habit.id, h.id)).run();
 		});
 		return { raised: h.id };

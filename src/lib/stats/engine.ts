@@ -7,6 +7,7 @@ import { chainCells } from '../engine/chain';
 import { withinOn, withinStreak, usedIn, limitOn, type Limit } from '../engine/limit';
 import { compile, evaluate, FormulaError } from './formula';
 import { excerpt } from '../markdown';
+import { convert, convertible, effectiveUnit, findUnit } from '../units';
 import {
 	ADDS_UP,
 	SHARE_MEASURES,
@@ -272,54 +273,15 @@ export function prepare(ds: Dataset): Prepared {
 }
 
 // ---------- units ----------
-
-const UNITS: Record<string, { dim: string; f: number }> = {
-	s: { dim: 't', f: 1 / 60 },
-	sec: { dim: 't', f: 1 / 60 },
-	secs: { dim: 't', f: 1 / 60 },
-	seconds: { dim: 't', f: 1 / 60 },
-	min: { dim: 't', f: 1 },
-	mins: { dim: 't', f: 1 },
-	minute: { dim: 't', f: 1 },
-	minutes: { dim: 't', f: 1 },
-	h: { dim: 't', f: 60 },
-	hr: { dim: 't', f: 60 },
-	hrs: { dim: 't', f: 60 },
-	hour: { dim: 't', f: 60 },
-	hours: { dim: 't', f: 60 },
-	g: { dim: 'w', f: 0.001 },
-	kg: { dim: 'w', f: 1 },
-	lb: { dim: 'w', f: 0.45359237 },
-	lbs: { dim: 'w', f: 0.45359237 },
-	m: { dim: 'd', f: 0.001 },
-	km: { dim: 'd', f: 1 },
-	mi: { dim: 'd', f: 1.609344 },
-	mile: { dim: 'd', f: 1.609344 },
-	miles: { dim: 'd', f: 1.609344 }
-};
-const unitKey = (u: string | null) => (u ?? '').trim().toLowerCase();
+// The table itself is the app's unit registry (src/lib/units.ts).
 
 /** A field's unit: what it names, or minutes for a duration that names none (as the log screen shows it). */
-export const unitOfMetric = (m: Pick<DsMetric, 'unit' | 'type'>): string | null =>
-	m.unit && m.unit.trim() ? m.unit : m.type === 'duration' ? 'min' : null;
+export const unitOfMetric = (m: Pick<DsMetric, 'unit' | 'type'>): string | null => effectiveUnit(m) || null;
 
 /** Is this a unit of time (s, min, h…)? Times add up in minutes and show as hours and minutes. */
-const isTimeUnit = (u: string | null) => UNITS[unitKey(u)]?.dim === 't';
+const isTimeUnit = (u: string | null) => findUnit(u)?.dimension === 'time';
 
-/** Can values in `a` be added to values in `b`? Same unit, or both known units of one kind. */
-export function convertible(a: string | null, b: string | null): boolean {
-	const x = unitKey(a);
-	const y = unitKey(b);
-	if (x === y) return true;
-	return !!UNITS[x] && !!UNITS[y] && UNITS[x].dim === UNITS[y].dim;
-}
-
-export function convert(v: number, from: string | null, to: string | null): number {
-	const x = UNITS[unitKey(from)];
-	const y = UNITS[unitKey(to)];
-	if (!x || !y || x.dim !== y.dim || unitKey(from) === unitKey(to)) return v;
-	return (v * x.f) / y.f;
-}
+export { convertible, convert };
 
 // ---------- ranges and buckets ----------
 

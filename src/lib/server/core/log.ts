@@ -191,7 +191,7 @@ function tasksOf(occ: OccRow): TaskInLog[] {
 		out.push({
 			taskId,
 			name: t.name,
-			metrics: db.select().from(metric).where(eq(metric.taskId, taskId)).orderBy(asc(metric.sortOrder)).all(),
+			metrics: db.select().from(metric).where(and(eq(metric.taskId, taskId), eq(metric.archived, false))).orderBy(asc(metric.sortOrder)).all(),
 			subtasks: db
 				.select({ id: task.id, name: task.name, archived: task.archived })
 				.from(task)

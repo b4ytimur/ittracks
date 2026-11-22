@@ -1,6 +1,8 @@
 // Conflict rules for the Task editor and its Metrics. Ids (M1...) match the proposal.
 import type { MetricForm, TaskForm } from '../forms';
 import { check, defineRules, evaluate, exclusive, independent, normalize, onlyWhen, type Issue } from './core';
+import { archive, definePolicies, display, locked, migrate, pastIssues, removedItems, unguarded } from './history';
+import { effectiveUnit, findUnit, unitChange, type UnitChange, type UnitChoice } from '../units';
 
 export const isNumericType = (type: string) => type === 'number' || type === 'count' || type === 'duration';
 /** A Text field with several lines of Markdown. */
@@ -84,4 +86,107 @@ export function checkTask(input: TaskForm): { form: TaskForm; errors: Issue[]; w
 		errors: issues.filter((i) => i.severity === 'block'),
 		warnings: issues.filter((i) => i.severity === 'warn')
 	};
+}
+
+// ---------- history: what an edit may do to data already logged (rules/history.ts) ----------
+
+/** A field's unit as compared for a change: one key for every spelling ("lbs" is "lb"). */
+const unitKey = (m: Pick<MetricForm, 'type' | 'unit'>) => {
+	const u = effectiveUnit(m);
+	return findUnit(u)?.key ?? u.toLowerCase();
+};
+
+export const metricPast = definePolicies<MetricForm>({
+	id: locked('Logs point at a field by its id'),
+	name: unguarded('Logs keep their values, but custom measures in Stats find fields by name, so a rename changes their results'),
+	// Numbers, counts and durations all store a number, so they can switch; other kinds can't.
+	type: locked(
+		'This field has logged values, which would be read as another kind (a number as text, or as a tick). Add a new field instead',
+		(from, to) => isNumericType(String(from)) && isNumericType(String(to))
+	),
+	unit: migrate<MetricForm>('Past values are converted to the new unit, or keep their numbers', unitKey),
+	repeats: locked('This field has logged values. They were logged once or per set, and switching would read them the other way. Add a new field instead'),
+	choices: unguarded('Past values are stored as the option text, so a renamed or removed option leaves them unmatched'),
+	scores: unguarded('Numbers apply when Stats reads them, so a changed number changes past averages'),
+	prefill: display(),
+	step: display(),
+	required: display(),
+	quick: display(),
+	long: display('Past text stays as it was written'),
+	starter: display(),
+	prompts: display('Each answer keeps the prompt it was written to'),
+	promptOrder: display()
+});
+
+export const taskPast = definePolicies<TaskForm>({
+	name: display(),
+	notes: display(),
+	tags: display('Past days keep the Tasks Fill rules picked for them'),
+	metrics: archive('A field removed after it was logged is archived: its values stay in History and Stats'),
+	subtasks: archive('A sub-task removed after it was ticked is archived: its past ticks stay'),
+	areaId: display(),
+	collectionIds: display(),
+	restTimerEnabled: display(),
+	restTimerSeconds: display()
+});
+
+/** What has data logged against it: Metric ids with a value, sub-task ids with a tick. */
+export interface TaskLogged {
+	metrics: Set<string> | string[];
+	subtasks: Set<string> | string[];
+}
+
+const has = (s: Set<string> | string[], id: string) => (Array.isArray(s) ? s.includes(id) : s.has(id));
+
+/** A unit change on a field with logged values, and what can happen to them. */
+export interface UnitEdit {
+	metricId: string;
+	name: string;
+	from: string;
+	to: string;
+	change: Exclude<UnitChange, { kind: 'same' }>;
+	/** What the user picked; null until they do. */
+	choice: UnitChoice | null;
+}
+
+export interface TaskPast {
+	/** Edits refused because of what is logged. */
+	errors: Issue[];
+	/** Unit changes that need (or have) the user's choice. */
+	units: UnitEdit[];
+	/** Metrics and sub-tasks the edit removes: archived when logged, deleted otherwise. */
+	removed: Record<'metrics' | 'subtasks', { archive: string[]; drop: string[] }>;
+}
+
+/**
+ * Check an edit of a Task against its history policies. `choices` holds the user's pick per
+ * Metric id for a unit change on a field with logged values. Used by the editor (to grey out
+ * and ask) and the server (to refuse, archive and convert).
+ */
+export function checkTaskPast(before: TaskForm, after: TaskForm, logged: TaskLogged, choices: Record<string, UnitChoice> = {}): TaskPast {
+	const errors: Issue[] = [];
+	const units: UnitEdit[] = [];
+	after.metrics.forEach((m, i) => {
+		const was = before.metrics.find((x) => x.id === m.id);
+		if (!was) return;
+		const issues = pastIssues(metricPast, was, m, has(logged.metrics, m.id), `metrics.${i}.`);
+		const lockedOnes = issues.filter((x) => x.kind === 'locked');
+		// A locked change is refused outright; its knock-on unit change needs no question.
+		for (const issue of lockedOnes) errors.push({ path: issue.path, reason: `${m.name}: ${issue.reason}`, severity: 'block', rule: 'check' });
+		if (lockedOnes.length) return;
+		for (const issue of issues) {
+			const from = effectiveUnit(was);
+			const to = effectiveUnit(m);
+			const change = unitChange(from, to);
+			if (change.kind === 'same') continue;
+			const choice = choices[m.id] ?? null;
+			units.push({ metricId: m.id, name: m.name, from, to, change, choice });
+			if (!choice)
+				errors.push({ path: issue.path, reason: `Choose what happens to the values ${m.name} already has in ${from || 'no unit'}`, severity: 'block', rule: 'check' });
+			else if (choice === 'convert' && change.kind !== 'convertible')
+				errors.push({ path: issue.path, reason: `${from || 'No unit'} can't be converted to ${to || 'no unit'}. Keep the numbers, or add a new field`, severity: 'block', rule: 'check' });
+		}
+	});
+	const removed = removedItems(taskPast, before, after, (path, id) => has(path === 'metrics' ? logged.metrics : logged.subtasks, id));
+	return { errors, units, removed: { metrics: removed.metrics, subtasks: removed.subtasks } };
 }

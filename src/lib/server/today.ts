@@ -41,7 +41,7 @@ import { carriesOver, lastTimeFor } from '$lib/engine/backfill';
 import { missedDaysOver, recountFrom, scheduleOn, type EarlierSchedule, type Unlogged } from '$lib/engine/unlogged';
 import { habitStats, type HabitStats } from '$lib/engine/stats';
 import type { Progress } from '$lib/engine/progress';
-import { finishAs, progressFor, verdictsFor } from './progress';
+import { finishAs, progressFor, stepsOf, verdictsFor } from './progress';
 import { isTick, slotGroups as groupsOf } from '$lib/engine/groups';
 
 /**
@@ -527,7 +527,7 @@ export interface TodayItem {
 	bundle: { reward: string; strict: boolean } | null;
 	reward: { celebrate: boolean; message: string; jar: { total: number; unit: string; goal: string } | null } | null;
 	/** Targets have been hit this many times in a row; suggest raising them. */
-	progression: { hits: number; by: number; unit: 'percent' | 'amount'; changes: string[] } | null;
+	progression: { hits: number; by: number; unit: 'percent' | 'steps'; changes: string[] } | null;
 	/** Started on the log screen and saved, not finished yet. */
 	inProgress: boolean;
 	/** A finished log exists to copy with "Same as last time". */
@@ -810,7 +810,7 @@ function targetEntries(
 		...(s.targets ?? {}),
 		...((level === 'minimum' ? s.minTargets : level === 'stretch' ? s.stretchTargets : null) ?? {})
 	};
-	const metrics = tx.select().from(metric).where(eq(metric.taskId, taskId)).all();
+	const metrics = tx.select().from(metric).where(and(eq(metric.taskId, taskId), eq(metric.archived, false))).all();
 	const repeating = metrics.filter((m) => m.repeats && targets[m.id] !== undefined);
 	const single = metrics.filter((m) => !m.repeats && targets[m.id] !== undefined);
 	const sets = repeating.length ? Math.max(1, s.sets ?? 1) : 0;
@@ -856,9 +856,9 @@ function previewRaise(p: Progression, variantIds: string[]): string[] {
 	for (const s of slots) {
 		const t = db.select({ name: task.name }).from(task).where(eq(task.id, s.taskId!)).get();
 		const names = new Map(
-			db.select({ id: metric.id, name: metric.name }).from(metric).where(eq(metric.taskId, s.taskId!)).all().map((m) => [m.id, m.name])
+			db.select({ id: metric.id, name: metric.name }).from(metric).where(and(eq(metric.taskId, s.taskId!), eq(metric.archived, false))).all().map((m) => [m.id, m.name])
 		);
-		const next = raise(s.targets!, p);
+		const next = raise(s.targets!, p, stepsOf(Object.keys(s.targets!)));
 		const parts = Object.entries(s.targets!)
 			.filter(([k]) => names.has(k))
 			.map(([k, v]) => `${names.get(k)} ${v}→${next[k]}`);
@@ -926,7 +926,7 @@ export function missingRequired(occurrenceId: string): string[] {
 		const required = db
 			.select()
 			.from(metric)
-			.where(and(eq(metric.taskId, taskId), eq(metric.required, true)))
+			.where(and(eq(metric.taskId, taskId), eq(metric.required, true), eq(metric.archived, false)))
 			.all();
 		if (!required.length) continue;
 		const name = db.select({ name: task.name }).from(task).where(eq(task.id, taskId)).get()?.name ?? '';
@@ -957,7 +957,7 @@ function needsInput(occurrenceId: string): boolean {
 function ticksFor(tx: Tx, taskId: string): string[] {
 	const subs = tx.select({ id: task.id, archived: task.archived }).from(task).where(eq(task.parentTaskId, taskId)).all().filter((t) => !t.archived);
 	if (subs.length) return subs.map((t) => t.id);
-	return tx.select({ id: metric.id }).from(metric).where(eq(metric.taskId, taskId)).get() ? [] : [taskId];
+	return tx.select({ id: metric.id }).from(metric).where(and(eq(metric.taskId, taskId), eq(metric.archived, false))).get() ? [] : [taskId];
 }
 
 /** One tap: done at a level with its targets. Returns 'needsInput' when a required field is still empty. */
@@ -987,15 +987,18 @@ export function quickDone(occurrenceId: string, level: Level | null): 'done' | '
 	return needsInput(occ.id) ? 'needsInput' : 'done';
 }
 
-/** Fields set to start blank: a reading such as today's weight is never copied from an old day. */
+/**
+ * Fields set to start blank: a reading such as today's weight is never copied from an old day.
+ * Archived fields aren't either: they are kept for History, not logged again.
+ */
 function blankMetricIds(tx: Tx, taskId: string): Set<string> {
 	return new Set(
 		tx
-			.select({ id: metric.id, prefill: metric.prefill })
+			.select({ id: metric.id, prefill: metric.prefill, archived: metric.archived })
 			.from(metric)
 			.where(eq(metric.taskId, taskId))
 			.all()
-			.filter((m) => m.prefill === 'blank')
+			.filter((m) => m.prefill === 'blank' || m.archived)
 			.map((m) => m.id)
 	);
 }
@@ -1079,7 +1082,7 @@ export function sameAsLast(occurrenceId: string): 'done' | 'needsInput' | 'gone'
 			if (!taskId) continue;
 			const n = nth.get(taskId) ?? 0;
 			nth.set(taskId, n + 1);
-			const subs = tx.select({ id: task.id }).from(task).where(eq(task.parentTaskId, taskId)).all();
+			const subs = tx.select({ id: task.id }).from(task).where(and(eq(task.parentTaskId, taskId), eq(task.archived, false))).all();
 			const inSource = from.some((e) => e.taskId === taskId);
 			// A Task made only of sub-tasks is in that log when any of its steps is.
 			const subsInSource = inSource || from.some((e) => subs.some((x) => x.id === e.taskId));
@@ -1112,7 +1115,7 @@ export function sameAsLast(occurrenceId: string): 'done' | 'needsInput' | 'gone'
 			}
 			if (twice && sets) add(taskId, { _summary: true });
 			// Nothing to copy: ask on the quick log, if it has a field to ask with.
-			if (!wrote && tx.select({ id: metric.id }).from(metric).where(and(eq(metric.taskId, taskId), or(eq(metric.quick, true), eq(metric.required, true)))).get())
+			if (!wrote && tx.select({ id: metric.id }).from(metric).where(and(eq(metric.taskId, taskId), eq(metric.archived, false), or(eq(metric.quick, true), eq(metric.required, true)))).get())
 				empty = true;
 		}
 		tx.update(occurrence)

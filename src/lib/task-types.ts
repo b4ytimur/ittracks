@@ -1,6 +1,7 @@
 // Starting points for a new Task: which Metrics it logs and whether it rests between sets.
 import type { MetricType } from './metric-types';
 import { noteDefaults } from './forms';
+import { effectiveUnit, stepOf } from './units';
 
 export interface TaskTypeMetric {
 	name: string;
@@ -80,15 +81,10 @@ export const BUILTIN_TASK_TYPES: TaskType[] = [
 	}
 ];
 
-/** Default plus and minus step for a Metric with no step of its own. */
+/** Default plus and minus step for a Metric with no step of its own: the unit's, from the unit registry. */
 export function defaultStep(type: string, unit: string | null): number {
-	if (type === 'number') {
-		const u = (unit ?? '').toLowerCase();
-		if (u === 'kg') return 2.5;
-		if (u === 'lb' || u === 'lbs') return 5;
-		return 1;
-	}
-	if (type === 'duration') return 5;
+	if (type === 'number') return stepOf(unit) ?? 1;
+	if (type === 'duration') return stepOf(effectiveUnit({ type, unit })) ?? 5;
 	return 1;
 }
 
