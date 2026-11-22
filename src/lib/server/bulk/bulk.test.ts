@@ -14,7 +14,13 @@ import { addTemplate } from '../repo/templates';
 import { galleryItem } from '$lib/gallery';
 import { addDays } from '$lib/engine/dates';
 import { habitBulk, habitPast } from '$lib/rules/habit';
-import { BULK, BULK_NAMES, buttonsFor } from '$lib/bulk/catalog';
+import { BULK, BULK_NAMES, bulkInput, buttonsFor } from '$lib/bulk/catalog';
+import { askedFields, initialValues } from '$lib/bulk/fields';
+import { habitForm, taskForm } from '$lib/forms';
+import { saveHabit } from '../repo/habits';
+import { saveTask } from '../repo/tasks';
+import { moveHabit } from '../habit-actions';
+import { randomUUID } from 'node:crypto';
 import { appActor, type Actor } from '../core/actor';
 import { actorForKey, createKey } from '../core/tokens';
 import { catalog, runAction } from '../core/actions';
@@ -62,15 +68,29 @@ beforeAll(async () => {
 });
 
 describe('the catalog', () => {
-	it('sets only display fields that are habit columns, and every action has buttons', () => {
+	it('sets only habit columns whose past is display or worked out again, and every action has buttons', () => {
 		const columns = getTableColumns(habit);
 		for (const k of Object.keys(habitBulk)) {
-			expect(habitPast[k as keyof typeof habitPast].kind, k).toBe('display');
+			expect(['display', 'recompute'], k).toContain(habitPast[k as keyof typeof habitPast].kind);
 			expect(k in columns, k).toBe(true);
 		}
-		const buttons = [...buttonsFor('habit'), ...buttonsFor('task')].map((b) => b.action);
+		const buttons = [...buttonsFor('habit'), ...buttonsFor('task'), ...buttonsFor('day')].map((b) => b.action);
 		for (const n of BULK_NAMES) expect(buttons, n).toContain(n);
-		expect(buttonsFor('habit').map((b) => b.label)).toEqual(expect.arrayContaining(['Skip days', 'Pause', 'Area', 'Reminders']));
+		expect(buttonsFor('habit').map((b) => b.label)).toEqual(expect.arrayContaining(['Skip days', 'Pause', 'Archive', 'Area', 'Reminders', 'Streak rule', "Days you don't log"]));
+		expect(buttonsFor('task').map((b) => b.label)).toEqual(['Archive', 'Change a unit']);
+		expect(buttonsFor('day').map((b) => b.label)).toEqual(['Skip']);
+	});
+
+	it('builds a streak rule from its inputs, asking only the ones its kind needs', () => {
+		const b = buttonsFor('habit').find((x) => x.id === 'set:streakRule')!;
+		const v = initialValues(b.fields, today);
+		expect(askedFields(b.fields, v).map((f) => f.key)).toEqual(['kind']);
+		const grace = { ...v, kind: 'grace', misses: 2 };
+		expect(askedFields(b.fields, grace).map((f) => f.key)).toEqual(['kind', 'misses', 'period']);
+		const input = b.toInput(grace);
+		expect(input).toEqual({ set: { streakRule: { kind: 'grace', misses: 2, period: 'week' } } });
+		expect(() => bulkInput.parse({ action: { name: 'set', ...input }, filter: {} })).not.toThrow();
+		expect(b.toInput({ ...v, kind: 'consistency' })).toEqual({ set: { streakRule: { kind: 'consistency', days: 30 } } });
 	});
 
 	it('is in the v1 catalog with a JSON Schema for every action', () => {
@@ -279,5 +299,173 @@ describe('undo order and access', () => {
 		expect(() => bulk({ action: { name: 'convert_unit', field: 'Weight', to: 'lb', values: 'convert' }, filter: {} }, l)).toThrow(/limited/);
 		expect(bulk({ action: { name: 'set', set: { remind: false } }, filter: {} }, l).skipped.flatMap((s) => s.items.map((i) => i.id))).toEqual([ids.water]);
 		expect(BULK.set.scope).toBe('edit');
+	});
+});
+
+describe('archive', () => {
+	const archived = (id: string) => db.select({ a: habit.archived }).from(habit).where(eq(habit.id, id)).get()!.a;
+
+	it('archives habits, says which were already, and undo brings them back', () => {
+		const r = bulk({ action: { name: 'archive' }, ids: [ids.water, ids.read], apply: true });
+		expect(r.summary).toBe('Archived 2 habits');
+		expect([archived(ids.water), archived(ids.read)]).toEqual([true, true]);
+		expect(reasons(bulk({ action: { name: 'archive' }, ids: [ids.water] }))).toEqual({ 'Already archived': ['Drink water'] });
+		expect(undo(r.batch!)).toMatchObject({ restored: 2, kept: 0 });
+		expect([archived(ids.water), archived(ids.read)]).toEqual([false, false]);
+		expect(reasons(bulk({ action: { name: 'archive', archived: false }, ids: [ids.water] }))).toEqual({ 'Not archived': ['Drink water'] });
+	});
+
+	it('brings archived habits back, and undo archives them again', () => {
+		const a = bulk({ action: { name: 'archive' }, ids: [ids.walk], apply: true });
+		const b = bulk({ action: { name: 'archive', archived: false }, filter: { archived: true }, apply: true });
+		expect(b.summary).toBe('Brought back 1 habit');
+		expect(archived(ids.walk)).toBe(false);
+		undo(b.batch!);
+		expect(archived(ids.walk)).toBe(true);
+		undo(a.batch!);
+		expect(archived(ids.walk)).toBe(false);
+	});
+
+	it('keeps an item changed again since, and says when a group keeps the habits inside it', () => {
+		const group = saveHabit(
+			me,
+			null,
+			habitForm.parse({ name: 'Mornings', direction: 'build', startDate: addDays(today, -3), variants: [], schedule: { kind: 'group', target: null, minimum: null } }),
+			today
+		)!;
+		expect(moveHabit(me, ids.meditate, group)).toEqual({ parentId: group });
+		const r = bulk({ action: { name: 'archive' }, ids: [group], apply: true });
+		expect(r.notes.join(' ')).toMatch(/The habits inside Mornings stay as they are \(Meditate\)/);
+		runAction(app, 'bulk', { action: { name: 'archive', archived: false }, ids: [group], apply: true });
+		// That second batch is the latest: undo it first, then the first finds the group back already.
+		const latest = db.select().from(event).where(eq(event.type, 'bulk.applied')).all().at(-1)!.data.batch as string;
+		undo(latest);
+		db.update(habit).set({ archived: false }).where(eq(habit.id, group)).run();
+		expect(undo(r.batch!)).toMatchObject({ restored: 0, kept: 1 });
+		moveHabit(me, ids.meditate, null);
+		db.delete(habit).where(eq(habit.id, group)).run();
+	});
+
+	it('archives Library Tasks the same way', () => {
+		const squat = db.select().from(task).where(and(eq(task.accountId, me), eq(task.name, 'Squat'))).get()!;
+		const r = bulk({ action: { name: 'archive_tasks' }, ids: ['Squat'], apply: true });
+		expect(r.summary).toBe('Archived 1 Task');
+		expect(db.select({ a: task.archived }).from(task).where(eq(task.id, squat.id)).get()!.a).toBe(true);
+		undo(r.batch!);
+		expect(db.select({ a: task.archived }).from(task).where(eq(task.id, squat.id)).get()!.a).toBe(false);
+	});
+});
+
+describe("set: streak rule and days you don't log", () => {
+	const ruleOf = (id: string) => db.select({ r: habit.streakRule }).from(habit).where(eq(habit.id, id)).get()!.r;
+
+	it('sets a streak rule on build habits, notes the recount, warns where it can never break, and undoes', () => {
+		const before = ruleOf(ids.read);
+		const r = bulk({ action: { name: 'set', set: { streakRule: { kind: 'grace', misses: 2, period: 'week' } } }, ids: [ids.read, ids.smoke], apply: true });
+		expect(r.changes.map((c) => c.label)).toEqual(['Read']);
+		expect(r.summary).toBe('Set Streak rule: Grace days: 2 per week for 1 habit');
+		expect(reasons(r)['Only build habits use this']).toEqual(['Quit smoking']);
+		// Read has a day done, so its streak is worked out again: the policy's words say so.
+		expect(r.notes).toContain('Streak rule: Streaks are worked out again from the days logged.');
+		expect(ruleOf(ids.read)).toEqual({ kind: 'grace', misses: 2, period: 'week' });
+		const never = bulk({ action: { name: 'set', set: { streakRule: { kind: 'grace', misses: 7, period: 'week' } } }, ids: [ids.read] });
+		expect(never.changes[0].detail).toMatch(/can never break/);
+		undo(r.batch!);
+		expect(ruleOf(ids.read)).toEqual(before);
+	});
+
+	it('keeps a rule changed by hand since', () => {
+		const r = bulk({ action: { name: 'set', set: { streakRule: { kind: 'strict' } } }, ids: [ids.read], apply: true });
+		db.update(habit).set({ streakRule: { kind: 'consistency', days: 30 } }).where(eq(habit.id, ids.read)).run();
+		expect(undo(r.batch!)).toMatchObject({ restored: 0, kept: 1 });
+		expect(ruleOf(ids.read)).toEqual({ kind: 'consistency', days: 30 });
+		db.update(habit).set({ streakRule: { kind: 'neverTwice' } }).where(eq(habit.id, ids.read)).run();
+	});
+
+	it('ignoring days nobody logged takes their misses away, and undo counts them again', () => {
+		const misses = () =>
+			db
+				.select()
+				.from(occurrence)
+				.where(and(eq(occurrence.habitId, ids.water), eq(occurrence.status, 'missed')))
+				.all().length;
+		settleAll(me, today);
+		const n = misses();
+		expect(n).toBeGreaterThan(0);
+		const r = bulk({ action: { name: 'set', set: { unlogged: 'ignore' } }, ids: [ids.water, ids.smoke], apply: true });
+		expect(r.changes.map((c) => c.label)).toEqual(['Drink water']);
+		expect(misses()).toBe(0);
+		settleAll(me, today);
+		expect(misses()).toBe(0);
+		undo(r.batch!);
+		expect(db.select({ u: habit.unlogged }).from(habit).where(eq(habit.id, ids.water)).get()!.u).toBe('missed');
+		settleAll(me, today);
+		expect(misses()).toBe(n);
+	});
+});
+
+describe('skip: days picked one by one', () => {
+	it('skips picked days by log id or habit@date, says why it leaves others, and undoes', () => {
+		settleAll(me, today);
+		const d = addDays(today, -8);
+		const occ = dayOf(ids.water, d)!;
+		expect(occ.status).toBe('missed');
+		runAction(app, 'log_done', { habit: ids.read, date: addDays(today, -9), how: 'mark' });
+		const picked = [occ.id, `Walk@${d}`, `${ids.water}@${d}`, `Read@${addDays(today, -9)}`, `Walk@${addDays(today, 2)}`, `Quit smoking@${d}`];
+		const p = bulk({ action: { name: 'skip' }, ids: picked });
+		expect(p.count).toBe(2);
+		const why = reasons(p);
+		expect(why['Done, and it stays done. Undo it on its day first to skip it']).toEqual(['Read']);
+		expect(why["Days after today can't be skipped yet. Pause the habit for them instead"]).toEqual(['Walk']);
+		expect(why['Break habits count slips, not days']).toEqual(['Quit smoking']);
+
+		const r = bulk({ action: { name: 'skip' }, ids: picked, apply: true });
+		expect(r.summary).toBe('Skipped 2 days of 2 habits');
+		expect([statusOn(ids.water, d), statusOn(ids.walk, d)]).toEqual(['skipped', 'skipped']);
+		expect(r.changes[0]).toMatchObject({ id: occ.id, label: 'Drink water' });
+		undo(r.batch!);
+		expect([statusOn(ids.water, d), statusOn(ids.walk, d)]).toEqual(['missed', 'missed']);
+	});
+
+	it('takes days by id only, and refuses ones it does not know', () => {
+		expect(() => bulk({ action: { name: 'skip' }, filter: {} })).toThrow(/Pick days by id/);
+		expect(() => bulk({ action: { name: 'skip' }, ids: ['nope'] })).toThrow(/No day/);
+		expect(() => bulk({ action: { name: 'skip' }, ids: ['Walk@2026-02-30'] })).toThrow(/not a date/);
+	});
+});
+
+describe('convert_unit inside Tasks', () => {
+	let week: string;
+	const squatWeight = () =>
+		db
+			.select({ unit: metric.unit })
+			.from(metric)
+			.innerJoin(task, eq(metric.taskId, task.id))
+			.where(and(eq(task.accountId, me), eq(task.name, 'Squat'), eq(metric.name, 'Weight')))
+			.get()!.unit;
+	const part = (taskId: string) => ({ kind: 'task' as const, id: randomUUID(), taskId, sets: null, targets: {}, minTargets: {}, stretchTargets: {} });
+	const library = (name: string, parts: ReturnType<typeof part>[]) =>
+		saveTask(me, null, taskForm.parse({ name, restTimerEnabled: false, restTimerSeconds: 90, tags: [], metrics: [], parts }))!;
+
+	beforeAll(() => {
+		const squat = db.select().from(task).where(and(eq(task.accountId, me), eq(task.name, 'Squat'))).get()!;
+		week = library('Week plan', [part(library('Leg day', [part(squat.id)]))]);
+	});
+
+	it('reaches the fields of Library Tasks inside the selected ones, at any depth', () => {
+		const r = bulk({ action: { name: 'convert_unit', field: 'Weight', to: 'lb', values: 'convert' }, ids: [week], apply: true });
+		expect(r.changes.map((c) => c.label)).toEqual(['Week plan › Leg day › Squat › Weight']);
+		expect(squatWeight()).toBe('lb');
+		undo(r.batch!);
+		expect(squatWeight()).toBe('kg');
+	});
+
+	it('changes a Task once when it is both selected and inside another, and can leave the inside out', () => {
+		const both = bulk({ action: { name: 'convert_unit', field: 'Weight', to: 'lb', values: 'relabel' }, ids: [week, 'Squat'] });
+		expect(both.changes.map((c) => c.label)).toEqual(['Squat › Weight']);
+		const top = bulk({ action: { name: 'convert_unit', field: 'Weight', to: 'lb', values: 'relabel', inside: false }, ids: [week] });
+		expect(reasons(top)).toEqual({ 'No field called “Weight”': ['Week plan'] });
+		const none = bulk({ action: { name: 'convert_unit', field: 'Pace', to: 'lb', values: 'relabel' }, ids: [week] });
+		expect(reasons(none)).toEqual({ 'No field called “Pace”, here or inside it': ['Week plan'] });
 	});
 });
