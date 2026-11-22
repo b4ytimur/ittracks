@@ -3,21 +3,33 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { galleryItem } from '$lib/gallery';
 import { getSettings } from '$lib/server/settings';
 import { userToday } from '$lib/server/today';
-import { addTemplate, readAddForm } from '$lib/server/repo/templates';
+import { addTemplate, addedPath, readAddForm } from '$lib/server/repo/templates';
+import { deleteSavedTemplate, getSavedTemplate } from '$lib/server/repo/saved-templates';
 import { db } from '$lib/server/db';
 import { task } from '$lib/server/db/schema';
 import { listHabits } from '$lib/server/repo/habits';
 import { listAreas } from '$lib/server/repo/areas';
+import type { TemplateFile } from '$lib/template';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = ({ locals, params, cookies }) => {
+/** A ready-made template, or one you saved (by its id): `mine` says which. */
+function find(accountId: string, slug: string): { template: TemplateFile; mine: boolean } | null {
+	const builtIn = galleryItem(slug, getSettings(accountId).weightUnit);
+	if (builtIn) return { template: builtIn.template, mine: false };
+	const saved = getSavedTemplate(accountId, slug);
+	return saved ? { template: saved.template, mine: true } : null;
+}
+
+export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 	const accountId = locals.account!.id;
-	const item = galleryItem(params.slug, getSettings(accountId).weightUnit);
+	const item = find(accountId, params.slug);
 	if (!item) error(404, 'Template not found');
 	const names = (rows: { name: string }[]) => rows.map((r) => r.name.trim().toLowerCase());
 	return {
-		slug: item.slug,
+		slug: params.slug,
 		template: item.template,
+		mine: item.mine,
+		saved: url.searchParams.has('saved'),
 		libraryNames: names(
 			db.select({ name: task.name }).from(task).where(and(eq(task.accountId, accountId), isNull(task.parentTaskId), eq(task.archived, false))).all()
 		),
@@ -30,12 +42,16 @@ export const load: PageServerLoad = ({ locals, params, cookies }) => {
 export const actions: Actions = {
 	add: async ({ request, locals, params, cookies }) => {
 		const accountId = locals.account!.id;
-		const item = galleryItem(params.slug, getSettings(accountId).weightUnit);
+		const item = find(accountId, params.slug);
 		if (!item) error(404, 'Template not found');
 		const add = readAddForm(await request.formData(), item.template);
-		const tpl = add.tpl;
-		const r = addTemplate(accountId, tpl, { today: userToday(accountId, cookies.get('tz')), ...add });
+		const r = addTemplate(accountId, add.tpl, { today: userToday(accountId, cookies.get('tz')), ...add });
 		if ('error' in r) return fail(400, { error: r.error });
-		redirect(303, `/habits?added=${encodeURIComponent(r.name)}${tpl.view ? `&view=${encodeURIComponent(tpl.view)}` : ''}`);
+		redirect(303, addedPath(r, add.tpl.view));
+	},
+	/** Take a template you saved out of your Gallery. The habits added from it stay. */
+	delete: ({ locals, params }) => {
+		if (!deleteSavedTemplate(locals.account!.id, params.slug)) error(404, 'Template not found');
+		redirect(303, '/gallery');
 	}
 };

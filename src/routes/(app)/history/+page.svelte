@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import ViewBar from '$lib/ViewBar.svelte';
+	import EditableList from '$lib/ui/EditableList.svelte';
+	import EditButton from '$lib/ui/EditButton.svelte';
+	import BulkBar from '$lib/bulk/BulkBar.svelte';
 	import { STATUSES } from '$lib/views';
 	import { viewOp } from '$lib/viewclient';
 	import Markdown from '$lib/Markdown.svelte';
@@ -9,6 +13,9 @@
 
 	let views = $state(untrack(() => data.views));
 	let view = $state(untrack(() => data.initial));
+	/** Selecting is a flag on the same lists: tick days, then change them together from the bulk bar. */
+	let selecting = $state(false);
+	const selected = new SvelteSet<string>();
 
 	const label = (d: string) =>
 		new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
@@ -41,12 +48,17 @@
 	<div class="row">
 		{#if data.journal}<a class="button small" href="/journal">Journal</a>{/if}
 		{#if data.canBackfill}<a class="button small" href="/day">Log a past day</a>{/if}
+		{#if data.history.length}<EditButton bind:editing={selecting} label="Select" look="chip" />{/if}
 	</div>
 </header>
 
 {#if data.history.length}
 	<ViewBar page="history" bind:views bind:current={view} areas={data.areas} habits={data.habits} statuses={STATUSES} />
 	<label class="values"><input type="checkbox" checked={views.history.values} onchange={toggleValues} /> Show logged values (like "80 kg × 8")</label>
+{/if}
+
+{#if selecting}
+	<BulkBar kind="day" {selected} visible={days.flatMap((d) => d.occurrences.map((o) => o.id))} today={data.today} />
 {/if}
 
 {#if data.history.length === 0}
@@ -60,9 +72,10 @@
 		{label(day.date)}
 		{#if data.canBackfill && day.date < data.today}<a class="small-text" href="/day/{day.date}" aria-label="Log or change {label(day.date)}">Log this day</a>{/if}
 	</h2>
-	<ul class="list">
-		{#each day.occurrences as o (o.id)}
-			<li class="card">
+	{#if day.occurrences.length}
+	<EditableList items={day.occurrences} key={(o) => o.id} label={(o) => `${o.habit}, ${label(day.date)}`} {selecting} {selected} ariaLabel={label(day.date)}>
+		{#snippet row(o)}
+			<div class="card">
 				<a class="occ" href="/log/{o.id}">
 					<div class="row">
 						<span class="grow"
@@ -81,8 +94,12 @@
 					{/if}
 				</a>
 				{#if o.notes?.trim()}<div class="notes"><Markdown text={o.notes} small /></div>{/if}
-			</li>
-		{/each}
+			</div>
+		{/snippet}
+	</EditableList>
+	{/if}
+	{#if day.slips.length}
+	<ul class="list">
 		{#each day.slips as s, i (i)}
 			<li class="card row">
 				<span class="grow"><strong>{s.habit}</strong></span>
@@ -90,6 +107,7 @@
 			</li>
 		{/each}
 	</ul>
+	{/if}
 {/each}
 
 {#if data.history.length}

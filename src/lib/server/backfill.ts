@@ -8,7 +8,8 @@ import { db } from './db';
 import { entry, habit, occurrence, slip, slot, task, variant } from './db/schema';
 import { PATH_RE } from '$lib/engine/parts';
 import { dueOn, isGroup, type Schedule } from '$lib/engine/schedule';
-import { followDue, isRoutine } from './rollup';
+import { followDue, insideAt, isRoutine } from './rollup';
+import { parentOn } from '$lib/engine/tree';
 import { carriesOver, dependsOnHistory, isRealDate, logWindow, variantFor, type LogWindow } from '$lib/engine/backfill';
 import { scheduleStartBy } from '$lib/engine/unlogged';
 import { pauseOn } from '$lib/engine/pause';
@@ -188,7 +189,7 @@ export function unloggedOn(accountId: string, date: string): string[] {
 		.filter((h) => {
 			if (h.direction !== 'build' || !h.schedule) return false;
 			const schedule = scheduleAt(h, date);
-			if (carriesOver(schedule) || pauseOn(pauses, h.id, date)) return false;
+			if (carriesOver(schedule, date) || pauseOn(pauses, h.id, date)) return false;
 			const occ = rowOn(h.id, date);
 			if (occ) return occ.status === 'missed' || occ.status === 'due';
 			return !!dueOn(schedule, history(h.id, date), date, followDue(h.id, schedule, date));
@@ -229,7 +230,7 @@ export function occurrenceOn(accountId: string, h: HabitRow, date: string, chose
 export function kidsDueOn(accountId: string, parentId: string, date: string) {
 	const pauses = pausesOf(accountId);
 	for (const h of activeHabits(accountId, date)) {
-		if (h.parentId !== parentId || h.direction !== 'build' || !h.schedule || isGroup(h.schedule as Schedule)) continue;
+		if (parentOn(h.parentId, h.earlierParents, date) !== parentId || h.direction !== 'build' || !h.schedule || isGroup(h.schedule as Schedule)) continue;
 		if (rowOn(h.id, date) || pauseOn(pauses, h.id, date)) continue;
 		const schedule = scheduleAt(h, date);
 		if (dueOn(schedule, history(h.id, date), date, followDue(h.id, schedule, date))) occurrenceOn(accountId, h, date, null);
@@ -238,7 +239,7 @@ export function kidsDueOn(accountId: string, parentId: string, date: string) {
 
 /** What today's Occurrence was planned as, for schedules a past log can change. */
 export function planOfToday(habitId: string, schedule: ScheduleForm, today: string): string | null {
-	return dependsOnHistory(schedule as Schedule) ? dueOn(schedule as Schedule, history(habitId, today), today) : null;
+	return dependsOnHistory(schedule as Schedule, today) ? dueOn(schedule as Schedule, history(habitId, today), today) : null;
 }
 
 /**
@@ -248,7 +249,7 @@ export function planOfToday(habitId: string, schedule: ScheduleForm, today: stri
  * plan really changed. A rotation started early by hand is left alone.
  */
 export function replanToday(accountId: string, habitId: string, schedule: ScheduleForm, today: string, before: string | null) {
-	if (!before || !dependsOnHistory(schedule as Schedule)) return;
+	if (!before || !dependsOnHistory(schedule as Schedule, today)) return;
 	const occ = rowOn(habitId, today);
 	if (!occ || occ.status !== 'due' || occ.variantId !== before || entryCount(occ.id)) return;
 	const after = dueOn(schedule as Schedule, history(habitId, today), today);
@@ -295,16 +296,17 @@ type DaySnapshot = z.infer<typeof daySchema>;
 
 /** A copy of one habit's day: its Occurrence and Entries, or null when there is none. */
 export function snapshot(habitId: string, date: string): Snapshot {
-	const below = insideRoutine(habitId).map((id) => daySnapshot(id, date));
+	const below = insideRoutine(habitId, date).map((id) => daySnapshot(id, date));
 	return below.length ? { ...daySnapshot(habitId, date), below } : daySnapshot(habitId, date);
 }
 
-/** The habits inside a routine, at any depth (none for any other habit). */
-function insideRoutine(habitId: string): string[] {
-	if (!isRoutine(habitId)) return [];
+/** The habits inside a routine on a day, at any depth (none for any other habit). */
+function insideRoutine(habitId: string, date: string): string[] {
+	if (!isRoutine(habitId, date)) return [];
 	const out: string[] = [];
 	const walk = (id: string, depth: number) => {
-		for (const k of db.select({ id: habit.id }).from(habit).where(and(eq(habit.parentId, id), eq(habit.direction, 'build'))).all()) {
+		for (const k of insideAt(id, date, { archived: true })) {
+			if (out.includes(k.id)) continue;
 			out.push(k.id);
 			if (depth < 20 && out.length < 200) walk(k.id, depth + 1);
 		}

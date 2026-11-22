@@ -301,6 +301,50 @@ describe('template questions', () => {
 	});
 });
 
+describe('phases in templates (version 7)', () => {
+	const phased: HabitForm = habitForm.parse({
+		...gym,
+		schedule: {
+			kind: 'phases',
+			start: '2026-11-01',
+			phases: [
+				{ length: 1, unit: 'week', schedule: { kind: 'weekly', days: { '0': VA, '2': VA, '4': VA } } },
+				{ length: null, unit: 'week', schedule: { kind: 'interval', every: 2, start: '2026-11-08', variantId: VB } }
+			]
+		}
+	});
+	const tpl = toTemplate(phased, new Map([[T1, bench]]), { habits: new Map(), identities: new Map() });
+
+	it('exports phases with Variant keys and no ids', () => {
+		expect(tpl.version).toBe(TEMPLATE_VERSION);
+		expect(TEMPLATE_VERSION).toBeGreaterThanOrEqual(7);
+		const text = JSON.stringify(tpl.habit.schedule);
+		for (const id of [VA, VB]) expect(text).not.toContain(id);
+	});
+
+	it('imports phases starting on the day of import, each with the new Variant ids', () => {
+		const { habit } = fromTemplate(templateFile.parse(JSON.parse(JSON.stringify(tpl))), '2026-12-07');
+		expect(habitForm.safeParse(habit).success).toBe(true);
+		const s = habit.schedule as Extract<HabitForm['schedule'], { kind: 'phases' }>;
+		expect(s.start).toBe('2026-12-07');
+		const [a, b] = habit.variants.map((v) => v.id);
+		expect(s.phases[0].schedule).toEqual({ kind: 'weekly', days: { '0': a, '2': a, '4': a } });
+		// The second phase starts a week later, on its own first day.
+		expect(s.phases[1].schedule).toMatchObject({ kind: 'interval', variantId: b, start: '2026-12-14' });
+	});
+
+	it('puts the days someone picks in every phase', () => {
+		const file: TemplateFile = {
+			...templateFile.parse(JSON.parse(JSON.stringify(tpl))),
+			questions: [{ kind: 'days', key: 'days', label: 'Which days?', default: [0, 2, 4] }]
+		};
+		const out = applyAnswers(file, { days: [1, 3] });
+		const s = out.habit.schedule as { phases: { schedule: { kind: string; days?: Record<string, string> } }[] };
+		expect(Object.keys(s.phases[0].schedule.days!)).toEqual(['1', '3']);
+		expect(s.phases[1].schedule.kind).toBe('interval');
+	});
+});
+
 describe('sharing without losing anything (version 5)', () => {
 	const AREA = '00000000-0000-4000-8000-000000000020';
 	const SKULL = '00000000-0000-4000-8000-000000000021';
@@ -428,5 +472,87 @@ describe('number questions keep Minimum and Stretch in step', () => {
 			habit: { ...tpl(false).habit, cue: { time: null, place: 'Gym', after: null, range: 'Evening' } }
 		});
 		expect(applyAnswers(t, { t: '19:00' }).habit.cue).toEqual({ time: '19:00', place: 'Gym', after: null, range: null });
+	});
+});
+
+describe('habits inside a habit (version 8)', () => {
+	// "Program": a routine with Base and Build Variants. Inside it, "Walk" follows it on Base
+	// days, "Lifts" (a group) holds "Bench" on a schedule of its own.
+	const [BASE, BUILD, WALK_V, BENCH_V, P, WALK, LIFTS, BENCH] = [11, 12, 13, 14, 15, 16, 17, 18].map((n) => `00000000-0000-4000-8000-0000000000${n}`);
+	const program = habitForm.parse({
+		name: 'Program',
+		direction: 'build',
+		startDate: '2026-11-01',
+		variants: [
+			{ id: BASE, name: 'Base', slots: [] },
+			{ id: BUILD, name: 'Build', slots: [] }
+		],
+		schedule: { kind: 'weekly', days: { '0': BASE, '3': BUILD } }
+	});
+	const walk = habitForm.parse({
+		name: 'Walk',
+		direction: 'build',
+		startDate: '2026-11-01',
+		variants: [{ id: WALK_V, name: 'Main', slots: [] }],
+		schedule: { kind: 'follow', variantId: WALK_V, on: [BASE] },
+		parentId: P
+	});
+	const lifts = habitForm.parse({ name: 'Lifts', direction: 'build', startDate: '2026-11-01', variants: [], schedule: { kind: 'group', minimum: null, target: null }, parentId: P });
+	const benchHabit = habitForm.parse({
+		name: 'Bench',
+		direction: 'build',
+		startDate: '2026-11-01',
+		variants: [{ id: BENCH_V, name: 'Main', slots: [{ id: S1, taskId: T1, fillRule: null, sets: 3, targets: { [M1]: 60, [M2]: 8 } }] }],
+		schedule: { kind: 'weekly', days: { '1': BENCH_V } },
+		parentId: LIFTS
+	});
+	const tpl = toTemplate(program, new Map([[T1, bench]]), {}, {}, [
+		{ id: WALK, parentId: P, form: walk },
+		{ id: LIFTS, parentId: P, form: lifts },
+		{ id: BENCH, parentId: LIFTS, form: benchHabit }
+	]);
+	const file = templateFile.parse(JSON.parse(JSON.stringify(tpl)));
+
+	it('exports each habit inside with its parent by key, and no ids', () => {
+		expect(file.version).toBe(8);
+		expect(file.children.map((c) => [c.key, c.parent, c.name])).toEqual([
+			['h1', null, 'Walk'],
+			['h2', null, 'Lifts'],
+			['h3', 'h2', 'Bench']
+		]);
+		// A follower names its routine's Variants by the routine's keys.
+		expect(file.children[0].schedule).toEqual({ kind: 'follow', variantId: 'v1', on: ['v1'] });
+		const text = JSON.stringify(file);
+		for (const id of [BASE, BUILD, WALK_V, BENCH_V, P, WALK, LIFTS, BENCH, T1, M1]) expect(text).not.toContain(id);
+	});
+
+	it('imports the habits inside with new ids, following the new routine Variants', () => {
+		const { habit, children } = fromTemplate(file, '2026-12-07');
+		const [base] = habit.variants.map((v) => v.id);
+		expect(children.map((c) => [c.key, c.parent, c.habit.name])).toEqual([
+			['h1', null, 'Walk'],
+			['h2', null, 'Lifts'],
+			['h3', 'h2', 'Bench']
+		]);
+		const w = children[0].habit;
+		expect(w.schedule).toEqual({ kind: 'follow', variantId: w.variants[0].id, on: [base] });
+		expect(w.variants[0].id).not.toBe(WALK_V);
+		for (const c of children) expect(habitForm.safeParse(c.habit).success).toBe(true);
+		// The Task travels once and Bench's Slot points at its new id.
+		const bench3 = children[2].habit.variants[0].slots[0];
+		expect(bench3.taskId).not.toBe(T1);
+		expect(Object.values(bench3.targets)).toEqual([60, 8]);
+	});
+
+	it('sets a number answer in the Slots of the habits inside', () => {
+		const asked: TemplateFile = { ...file, questions: [{ kind: 'number', key: 'w', label: 'Bench weight', unit: 'kg', default: 60, metrics: ['t1m1'], scale: false }] };
+		expect(applyAnswers(asked, { w: 40 }).children[2].variants[0].slots[0].targets).toEqual({ t1m1: 40, t1m2: 8 });
+	});
+
+	it('reads a file from before version 8 as one habit with nothing inside', () => {
+		const v7 = { ...JSON.parse(JSON.stringify(file)), version: 7 };
+		delete v7.children;
+		expect(templateFile.parse(v7).children).toEqual([]);
+		expect(fromTemplate(templateFile.parse(v7), '2026-12-07').children).toEqual([]);
 	});
 });

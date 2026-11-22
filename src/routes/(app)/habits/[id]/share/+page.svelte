@@ -5,7 +5,7 @@
 	import { blocked, normalize } from '$lib/rules/core';
 	import { checkShare, shareRules } from '$lib/rules/share';
 
-	let { data } = $props();
+	let { data, form } = $props();
 	const ctx = untrack(() => data.ctx);
 
 	let f = $state<ShareForm>(
@@ -93,6 +93,14 @@
 
 	<section class="card stack">
 		<h2>What travels with it</h2>
+		{#if data.inside.length}
+			<div>
+				<span>{data.inside.length === 1 ? 'The habit inside it' : `The ${data.inside.length} habits inside it`}, with their schedules and Tasks</span>
+				<ul class="inside muted small-text">
+					{#each data.inside as h, i (i)}<li style:margin-left="{(h.depth - 1) * 1}rem">{h.name}</li>{/each}
+				</ul>
+			</div>
+		{/if}
 		<label class="opt" title={why('includeArea') ?? ''}
 			><input type="checkbox" bind:checked={f.includeArea} disabled={!!why('includeArea')} />
 			<span>Area{ctx.area ? ` "${ctx.area}"` : ''}, and the Areas of its Tasks{#if why('includeArea')}<br /><span class="muted small-text">{why('includeArea')}</span>{/if}</span></label
@@ -195,8 +203,14 @@
 			{#each issues as i (i.reason)}<li class={i.severity === 'block' ? 'error' : 'muted'}>{i.reason}</li>{/each}
 		</ul>
 	{/if}
-	<button class="primary" disabled={blocking.length > 0}>Download the template</button>
-	<p class="muted small-text">To share it, send the file. It imports from Habits, Import a template file.</p>
+	{#if form?.error}<p class="error">{form.error}</p>{/if}
+	<div class="row actions">
+		<button class="primary" disabled={blocking.length > 0}>Download the template</button>
+		<button formaction="?/save" disabled={blocking.length > 0}>Save to my Gallery</button>
+	</div>
+	<p class="muted small-text">
+		To share it, send the file. It imports from Habits, Import a template file. Saved to your Gallery, it stays here to add again whenever you like.
+	</p>
 </form>
 
 <style>
@@ -225,5 +239,12 @@
 	}
 	.small-text {
 		font-size: 0.85rem;
+	}
+	.actions {
+		flex-wrap: wrap;
+	}
+	.inside {
+		margin: 0.2rem 0 0;
+		padding-left: 1.1rem;
 	}
 </style>

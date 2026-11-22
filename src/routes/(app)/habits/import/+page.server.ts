@@ -6,7 +6,7 @@ import { db } from '$lib/server/db';
 import { task } from '$lib/server/db/schema';
 import { listHabits } from '$lib/server/repo/habits';
 import { listAreas } from '$lib/server/repo/areas';
-import { addTemplate, readAddForm } from '$lib/server/repo/templates';
+import { addTemplate, addedPath, readAddForm } from '$lib/server/repo/templates';
 import { userToday } from '$lib/server/today';
 import { templateFile } from '$lib/template';
 import type { Actions, PageServerLoad } from './$types';
@@ -40,10 +40,6 @@ export const actions: Actions = {
 		const add = readAddForm(f, parsed.data);
 		const r = addTemplate(accountId, add.tpl, { today: userToday(accountId, cookies.get('tz')), ...add });
 		if ('error' in r) return fail(400, { error: r.error });
-		const view = add.tpl.view;
-		redirect(
-			303,
-			`/habits?added=${encodeURIComponent(r.name)}&created=${r.created}&reused=${r.reused}${view ? `&view=${encodeURIComponent(view)}` : ''}`
-		);
+		redirect(303, addedPath(r, add.tpl.view));
 	}
 };

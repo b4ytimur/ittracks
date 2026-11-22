@@ -1,6 +1,7 @@
 // Habits inside groups: a tree kept as parent links. Pure, so the server, the editor and the
 // tests share it. A broken link (a parent that is gone, or a loop in old data) never hangs:
 // every walk stops at a habit it has already seen.
+import { addDays, type ISODate } from './dates';
 
 export interface Node {
 	id: string;
@@ -103,4 +104,50 @@ export function forest<T extends Node>(nodes: T[]): { roots: T[]; kids: Map<stri
 			place(n);
 		}
 	return { roots, kids };
+}
+
+/**
+ * Where a habit sat before a move that applies from a later day on: inside `parentId` (null:
+ * at the top level) up to `until`, inclusive. Like earlier schedules (engine/unlogged.ts), so
+ * a group's or routine's past days keep the habits that were inside them then.
+ */
+export interface EarlierParent {
+	until: ISODate;
+	parentId: string | null;
+}
+
+/** The habit a habit sat in on a day: the earliest earlier entry that still covers it, else where it is now. */
+export function parentOn(current: string | null, earlier: EarlierParent[] | null | undefined, date: ISODate): string | null {
+	for (const e of earlier ?? []) if (date <= e.until) return e.parentId;
+	return current;
+}
+
+/** Every habit a habit sits in now or sat in before. */
+export const parentsEver = (current: string | null, earlier: EarlierParent[] | null | undefined): string[] =>
+	[...new Set([current, ...(earlier ?? []).map((e) => e.parentId)])].filter((p): p is string => !!p);
+
+/**
+ * The earlier parents after a move on `today` from `from` to `to`: it counts in `to` from today
+ * on, and the days up to yesterday keep `from`. A habit with no past days yet keeps nothing.
+ * Moving back on the same day leaves no trace, and entries that say the same thing merge.
+ */
+export function keepParent(
+	earlier: EarlierParent[] | null | undefined,
+	from: string | null,
+	to: string | null,
+	startDate: ISODate,
+	today: ISODate
+): EarlierParent[] | null {
+	const list = [...(earlier ?? [])];
+	const yesterday = addDays(today, -1);
+	const last = list.at(-1)?.until;
+	if (from !== to && yesterday >= startDate && (!last || last < yesterday)) list.push({ until: yesterday, parentId: from });
+	// Days the newest entries keep in the habit it sits in now are covered by where it is now.
+	while (list.length && list.at(-1)!.parentId === to) list.pop();
+	const out: EarlierParent[] = [];
+	for (const e of list) {
+		if (out.length && out.at(-1)!.parentId === e.parentId) out[out.length - 1] = e;
+		else out.push(e);
+	}
+	return out.length ? out.slice(-50) : null;
 }

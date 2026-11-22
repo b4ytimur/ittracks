@@ -1,7 +1,8 @@
 // Conflict rules for the habit editor. Ids (H1, B2...) name each rule.
 import { z } from 'zod';
-import { DEFAULT_TRIGGERS, type HabitForm } from '../forms';
-import type { FieldEditor } from '../bulk/fields';
+import { DEFAULT_TRIGGERS, streakRuleForm, type HabitForm } from '../forms';
+import { variantsIn, type Schedule } from '../engine/schedule';
+import type { FieldEditor, FieldSpec } from '../bulk/fields';
 import {
 	check,
 	defineRules,
@@ -39,7 +40,7 @@ const NOT_GROUP = "A group's days come from the habits inside it, so it doesn't 
 function timesPer(h: HabitForm, period: 'week' | 'month'): number | null {
 	const s = h.schedule;
 	if (!s) return null;
-	if (s.kind === 'group' || s.kind === 'follow') return null;
+	if (s.kind === 'group' || s.kind === 'follow' || s.kind === 'phases') return null;
 	const perWeek =
 		s.kind === 'weekly'
 			? Object.keys(s.days).length
@@ -89,6 +90,26 @@ export const habitRules = defineRules<HabitForm, HabitCtx>({
 		check(
 			(h) => (h.schedule?.kind === 'frequency' || h.schedule?.kind === 'interval') && h.variants.length > 1,
 			'This schedule uses one Variant; the others never come up. Use a rotation to take turns.',
+			'warn'
+		),
+		// P1: phases after one with no end never come.
+		check(
+			(h) => h.schedule?.kind === 'phases' && h.schedule.phases.slice(0, -1).some((p) => p.length === null),
+			'Only the last phase can run on with no end; the phases after it would never come'
+		),
+		// P2 (S3 inside a phase): a weekly rotation in a phase needs weekdays.
+		check(
+			(h) => h.schedule?.kind === 'phases' && h.schedule.phases.some((p) => p.schedule.kind === 'rotation' && p.schedule.step === 'week' && p.schedule.weekdays.length === 0),
+			'Pick at least one weekday for each weekly rotation'
+		),
+		// P3 (S4 for phases): a Variant no phase uses never comes up.
+		check(
+			(h) => {
+				if (h.schedule?.kind !== 'phases') return false;
+				const used = new Set(variantsIn(h.schedule as Schedule));
+				return h.variants.some((v) => !used.has(v.id));
+			},
+			'A Variant isn\'t in any phase, so it never comes up',
 			'warn'
 		)
 	],
@@ -316,15 +337,18 @@ export { isSet };
 
 /**
  * A field bulk editing can set on many habits at once: its label, its input (one Zod schema for
- * the app, the API and the MCP server) and how the app asks for it. The conflict rules above
- * decide which habits it can't apply to, and its history policy must be `display`, so setting it
- * never touches past days (bulk.test.ts checks both). A new one is one entry here.
+ * the app, the API and the MCP server) and how the app asks for it: one input (`editor`), or
+ * several that make up one value (`fields` and `value`, a streak rule's kind and its number).
+ * The conflict rules above decide which habits it can't apply to. Its history policy must be
+ * `display` (past days don't care) or `recompute` (what is worked out from the logs is worked
+ * out again, and the preview says so); bulk.test.ts checks both. A new one is one entry here.
  */
-export interface BulkField {
-	label: string;
-	input: z.ZodType;
-	editor: FieldEditor;
-}
+export type BulkField = { label: string; input: z.ZodType } & (
+	| { editor: FieldEditor }
+	| { fields: FieldSpec[]; value: (values: Record<string, unknown>) => unknown }
+);
+
+const grace = { key: 'kind', is: ['grace'] };
 
 export const habitBulk = {
 	areaId: {
@@ -336,6 +360,57 @@ export const habitBulk = {
 		label: 'Reminders',
 		input: z.boolean().describe('Push a reminder at the cue time: true or false.'),
 		editor: { kind: 'toggle', on: 'On', off: 'Off' }
+	},
+	streakRule: {
+		label: 'Streak rule',
+		input: streakRuleForm.describe(
+			'How the streak counts misses: {kind: "neverTwice"} (one miss is forgiven), {kind: "strict"} (any miss resets it), {kind: "grace", misses: 1-15, period: "week" | "month"} (a few misses allowed), or {kind: "consistency", days: 7-365} (% done over the last N days, no streak).'
+		),
+		fields: [
+			{
+				key: 'kind',
+				label: 'How the streak counts',
+				kind: 'choice',
+				options: [
+					{ value: 'neverTwice', label: 'Never miss twice: one miss is forgiven' },
+					{ value: 'strict', label: 'Strict: any miss resets it' },
+					{ value: 'grace', label: 'Grace days: a few misses allowed' },
+					{ value: 'consistency', label: 'Consistency: % done, no streak' }
+				],
+				initial: 'neverTwice'
+			},
+			{ key: 'misses', label: 'Misses', kind: 'number', min: 1, max: 15, initial: 1, when: grace },
+			{
+				key: 'period',
+				label: 'Per',
+				kind: 'choice',
+				options: [
+					{ value: 'week', label: 'week' },
+					{ value: 'month', label: 'month' }
+				],
+				initial: 'week',
+				when: grace
+			},
+			{ key: 'days', label: 'Over the last N days', kind: 'number', min: 7, max: 365, initial: 30, when: { key: 'kind', is: ['consistency'] } }
+		],
+		value: (v) =>
+			v.kind === 'grace'
+				? { kind: 'grace', misses: Number(v.misses), period: v.period }
+				: v.kind === 'consistency'
+					? { kind: 'consistency', days: Number(v.days) }
+					: { kind: v.kind }
+	},
+	unlogged: {
+		label: "Days you don't log",
+		input: z.enum(['missed', 'ignore']).describe('"missed": a due day nobody logged counts as missed once it is over. "ignore": only what you log counts.'),
+		editor: {
+			kind: 'choice',
+			options: [
+				{ value: 'missed', label: 'Count as missed once the day is over' },
+				{ value: 'ignore', label: "Don't count them: only what you log counts" }
+			],
+			initial: 'missed'
+		}
 	}
 } satisfies Partial<Record<FieldPath<HabitForm>, BulkField>>;
 

@@ -18,7 +18,7 @@ import type { Actions, PageServerLoad } from './$types';
 /** The routine's day and the habits inside it due that day, or null when it isn't one. */
 function routineDay(accountId: string, occurrenceId: string) {
 	const o = ownedOccurrence(accountId, occurrenceId);
-	if (!o || !isRoutine(o.habit.id)) return null;
+	if (!o || !isRoutine(o.habit.id, o.occ.date)) return null;
 	const kids = kidsOn(o.habit.id, o.occ.date).filter((k) => !k.occ.extra);
 	if (!kids.length) return null;
 	return { o, kids };

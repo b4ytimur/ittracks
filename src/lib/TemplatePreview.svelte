@@ -1,8 +1,9 @@
 <script lang="ts">
 	// What adding a template gives you, before you add it: its questions, the schedule for the
-	// next four weeks and each Variant's Tasks. Used by the Gallery and by importing a file,
+	// next four weeks, each Variant's Tasks, and the habits inside it with theirs. Used by the
+	// Gallery and by importing a file,
 	// inside the page's own form (the fields are named for the server's add action).
-	import { applyAnswers, fromTemplate, type TemplateAnswers, type TemplateFile } from '$lib/template';
+	import { applyAnswers, fromTemplate, type TemplateAnswers, type TemplateFile, type TemplateHabit } from '$lib/template';
 	import { describeSchedule, weekdayNames } from '$lib/describe';
 	import { dueOn, type Done, type Schedule } from '$lib/engine/schedule';
 	import { addDays, weekStart } from '$lib/engine/dates';
@@ -46,7 +47,8 @@
 		const variantName = new Map(made.habit.variants.map((v) => [v.id, v.name]));
 		const s = made.habit.schedule as Schedule | null;
 		const weeks: { date: string; variant: string | null }[][] = [];
-		if (s && s.kind !== 'frequency') {
+		// A group's days come from the habits inside it, so it has no calendar of its own.
+		if (s && s.kind !== 'frequency' && s.kind !== 'group') {
 			const history: Done[] = [];
 			const start = weekStart(today);
 			for (let w = 0; w < 4; w++) {
@@ -60,13 +62,27 @@
 				weeks.push(week);
 			}
 		}
-		return { filled, made, weeks, schedule: describeSchedule(made.habit.schedule) };
+		// The habits inside, in the file's order, each with how deep it sits and its days in words.
+		const byKey = new Map<string | null, { habit: typeof made.habit; depth: number }>([[null, { habit: made.habit, depth: 0 }]]);
+		const inside = made.children.map((c, i) => {
+			const parent = byKey.get(c.parent);
+			const depth = (parent?.depth ?? 0) + 1;
+			byKey.set(c.key, { habit: c.habit, depth });
+			return {
+				key: c.key,
+				name: c.habit.name,
+				depth,
+				schedule: describeSchedule(c.habit.schedule, parent && { name: parent.habit.name, variants: parent.habit.variants }, c.habit.variants),
+				variants: filled.children[i].variants
+			};
+		});
+		return { filled, made, weeks, inside, schedule: describeSchedule(made.habit.schedule, undefined, made.habit.variants) };
 	});
 
 	const taskByKey = $derived(new Map(preview.filled.tasks.map((t) => [t.key, t])));
 	const inLibrary = $derived(tpl.tasks.filter((t) => libraryNames.includes(t.name.trim().toLowerCase())).map((t) => t.key));
 	/** Tasks no fixed Slot uses: the ones auto-filled Slots pick from. */
-	const pool = $derived(tpl.tasks.filter((t) => !tpl.habit.variants.some((v) => v.slots.some((s) => s.task === t.key))));
+	const pool = $derived(tpl.tasks.filter((t) => ![tpl.habit, ...tpl.children].some((h) => h.variants.some((v) => v.slots.some((s) => s.task === t.key)))));
 	const sameName = $derived(habitNames.includes(name.trim().toLowerCase()));
 	const newAreas = $derived(
 		[...new Set([tpl.meta?.area, ...tpl.tasks.map((t) => t.area)].filter((a): a is string => !!a))].filter((a) => !areaNames.includes(a.toLowerCase()))
@@ -76,6 +92,27 @@
 	const shortName = (v: string) => (v.length > 8 ? v.slice(0, 7) + '…' : v);
 	const day = (d: string) => Number(d.slice(8));
 </script>
+
+{#snippet slots(v: TemplateHabit['variants'][number])}
+	<ul class="slots">
+		{#each v.slots as s, i (i)}
+			{@const t = s.task ? taskByKey.get(s.task) : undefined}
+			{#if t}
+				<li>
+					<span>{t.name}</span>
+					{#if inLibrary.includes(t.key) && !separate}<span class="chip">in your Library</span>{/if}
+					<span class="muted small-text">
+						{s.sets ? `${s.sets} × ` : ''}{t.metrics
+							.map((m) => (s.targets[m.key] !== undefined ? `${s.targets[m.key]}${m.unit ? ' ' + m.unit : ''} ${m.name.toLowerCase()}` : m.name.toLowerCase()))
+							.join(', ')}
+					</span>
+				</li>
+			{:else if s.fillRule}
+				<li><span class="muted">Picked for you from matching Tasks</span></li>
+			{/if}
+		{/each}
+	</ul>
+{/snippet}
 
 {#if tpl.description}<p class="desc">{tpl.description}</p>{/if}
 
@@ -123,29 +160,30 @@
 		{/if}
 	</section>
 
-	{#each preview.filled.habit.variants as v (v.key)}
+	<!-- A routine's Variants have no Tasks of their own: the habits inside it hold them. -->
+	{#each preview.filled.habit.variants.filter((v) => v.slots.length) as v (v.key)}
 		<section class="card">
 			{#if preview.filled.habit.variants.length > 1}<strong>{v.name}</strong>{/if}
-			<ul class="slots">
-				{#each v.slots as s, i (i)}
-					{@const t = s.task ? taskByKey.get(s.task) : undefined}
-					{#if t}
-						<li>
-							<span>{t.name}</span>
-							{#if inLibrary.includes(t.key) && !separate}<span class="chip">in your Library</span>{/if}
-							<span class="muted small-text">
-								{s.sets ? `${s.sets} × ` : ''}{t.metrics
-									.map((m) => (s.targets[m.key] !== undefined ? `${s.targets[m.key]}${m.unit ? ' ' + m.unit : ''} ${m.name.toLowerCase()}` : m.name.toLowerCase()))
-									.join(', ')}
-							</span>
-						</li>
-					{:else if s.fillRule}
-						<li><span class="muted">Picked for you from matching Tasks</span></li>
-					{/if}
+			{@render slots(v)}
+		</section>
+	{/each}
+	{#if preview.inside.length}
+		<section class="card">
+			<strong>{preview.inside.length === 1 ? 'A habit inside it' : `${preview.inside.length} habits inside it`}</strong>
+			<ul class="inside">
+				{#each preview.inside as c (c.key)}
+					<li style:margin-left="{(c.depth - 1) * 1}rem">
+						<span>{c.name}</span>
+						<span class="muted small-text">{c.schedule}</span>
+						{#each c.variants as v (v.key)}
+							{#if c.variants.length > 1}<span class="small-text">{v.name}</span>{/if}
+							{@render slots(v)}
+						{/each}
+					</li>
 				{/each}
 			</ul>
 		</section>
-	{/each}
+	{/if}
 	{#if pool.length}
 		<p class="muted small-text">Also adds {pool.length === 1 ? 'a Task' : `${pool.length} Tasks`} for the auto-picked slots: {pool.map((t) => t.name).join(', ')}.</p>
 	{/if}
@@ -237,6 +275,17 @@
 		flex-wrap: wrap;
 		gap: 0.4rem;
 		align-items: baseline;
+	}
+	.inside {
+		list-style: none;
+		padding: 0;
+		margin: 0.4rem 0 0;
+		display: grid;
+		gap: 0.6rem;
+	}
+	.inside li {
+		display: grid;
+		gap: 0.15rem;
 	}
 	.small-text {
 		font-size: 0.85rem;

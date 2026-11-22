@@ -48,7 +48,8 @@ const TABLES = {
 	slip: s.slip,
 	craving: s.craving,
 	dayNote: s.dayNote,
-	event: s.event
+	event: s.event,
+	savedTemplate: s.savedTemplate
 } as const;
 type TableName = keyof typeof TABLES;
 type Rows = Partial<Record<TableName, Record<string, unknown>[]>>;
@@ -106,7 +107,8 @@ function accountRows(accountId: string): Rows {
 		slip: by(s.slip, db.select({ r: s.slip }).from(s.slip).innerJoin(s.habit, eq(s.slip.habitId, s.habit.id)).where(habitOf).all()),
 		craving: by(s.craving, db.select({ r: s.craving }).from(s.craving).innerJoin(s.habit, eq(s.craving.habitId, s.habit.id)).where(habitOf).all()),
 		dayNote: db.select().from(s.dayNote).where(eq(s.dayNote.accountId, accountId)).all(),
-		event: db.select().from(s.event).where(eq(s.event.accountId, accountId)).all()
+		event: db.select().from(s.event).where(eq(s.event.accountId, accountId)).all(),
+		savedTemplate: db.select().from(s.savedTemplate).where(eq(s.savedTemplate.accountId, accountId)).all()
 	};
 }
 
@@ -319,7 +321,7 @@ export function readExport(raw: unknown): { file: z.infer<typeof exportFile>; pr
 }
 
 /** Tables whose rows have their own id, which an import may need to renumber. */
-const WITH_ID: TableName[] = ['area', 'tag', 'task', 'metric', 'taskPart', 'collection', 'identity', 'habit', 'variant', 'slot', 'pause', 'occurrence', 'entry', 'slip', 'craving'];
+const WITH_ID: TableName[] = ['area', 'tag', 'task', 'metric', 'taskPart', 'collection', 'identity', 'habit', 'variant', 'slot', 'pause', 'occurrence', 'entry', 'slip', 'craving', 'savedTemplate'];
 
 /**
  * Columns that point at another row, and the table that row is in. An import may only point
@@ -445,7 +447,7 @@ export function importReplace(actor: Actor, raw: unknown): { counts: Record<stri
 		// Habits and Tasks take their logs, Variants, Slots, Metrics and links with them.
 		tx.delete(s.habit).where(eq(s.habit.accountId, accountId)).run();
 		tx.delete(s.task).where(eq(s.task.accountId, accountId)).run();
-		for (const t of [s.tag, s.area, s.collection, s.identity, s.pause, s.dayNote, s.event, s.settings, s.bulkBatch] as const)
+		for (const t of [s.tag, s.area, s.collection, s.identity, s.pause, s.dayNote, s.event, s.settings, s.bulkBatch, s.savedTemplate] as const)
 			tx.delete(t).where(eq(t.accountId, accountId)).run();
 
 		// Ids another account here already has would clash: then every id gets a new one.

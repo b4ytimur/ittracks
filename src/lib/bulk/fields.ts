@@ -11,8 +11,11 @@ export type FieldSpec = {
 	key: string;
 	label: string;
 	hint?: string;
+	/** Asked only while another input of the same form has one of these values (a grace rule's misses). */
+	when?: { key: string; is: string[] };
 } & (
 	| { kind: 'date'; /** Days from today it starts at: 0 today, -1 yesterday. */ initial?: number }
+	| { kind: 'number'; min?: number; max?: number; step?: number; initial?: number }
 	| { kind: 'select'; /** A list the page provides, such as "areas" or "fields". */ source: string; /** Shown for null; left out, a value is required. */ empty?: string }
 	| { kind: 'choice'; options: FieldOption[]; initial?: string }
 	| { kind: 'toggle'; on: string; off: string; initial?: boolean }
@@ -30,6 +33,7 @@ export function initialValues(fields: FieldSpec[], today: string, sources: Field
 	const out: Record<string, unknown> = {};
 	for (const f of fields) {
 		if (f.kind === 'date') out[f.key] = shift(today, f.initial ?? 0);
+		else if (f.kind === 'number') out[f.key] = f.initial ?? f.min ?? 0;
 		else if (f.kind === 'toggle') out[f.key] = f.initial ?? true;
 		else if (f.kind === 'choice') out[f.key] = f.initial ?? f.options[0]?.value ?? '';
 		else if (f.kind === 'select') out[f.key] = f.empty !== undefined ? null : (sources[f.source]?.[0]?.value ?? '');
@@ -37,6 +41,10 @@ export function initialValues(fields: FieldSpec[], today: string, sources: Field
 	}
 	return out;
 }
+
+/** The inputs a form asks for now: those whose `when` holds for its values. */
+export const askedFields = (fields: FieldSpec[], values: Record<string, unknown>) =>
+	fields.filter((f) => !f.when || f.when.is.includes(String(values[f.when.key])));
 
 const shift = (d: string, n: number) => {
 	const t = new Date(`${d}T00:00:00Z`);

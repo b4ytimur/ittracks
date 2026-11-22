@@ -155,7 +155,7 @@
 	const lineFor = (h: (typeof data.habits)[number]) => {
 		const a = area(h.areaId);
 		return [
-			show('schedule') ? (h.direction === 'break' ? 'Break habit' : describeSchedule(h.schedule, data.habits.find((x) => x.id === h.parentId))) : null,
+			show('schedule') ? (h.direction === 'break' ? 'Break habit' : describeSchedule(h.schedule, data.habits.find((x) => x.id === h.parentId), h.variants)) : null,
 			show('cue') ? cueText(h.cue) : null,
 			show('area') && a && view.group !== 'area' ? `${a.icon} ${a.name}` : null,
 			show('consistency') && h.consistency !== null ? `${h.consistency}% in 30 days` : null,
@@ -179,7 +179,7 @@
 
 {#if data.added}
 	<p class="card added">
-		Added "{data.added}"{data.created ? ` with ${data.created} new ${data.created === 1 ? 'Task' : 'Tasks'}` : ''}{data.reused
+		Added "{data.added}"{data.inside ? ` and the ${data.inside === 1 ? 'habit' : `${data.inside} habits`} inside it` : ''}{data.created ? ` with ${data.created} new ${data.created === 1 ? 'Task' : 'Tasks'}` : ''}{data.reused
 			? `${data.created ? ',' : ''} using ${data.reused} from your Library`
 			: ''}. It's on Today when it's due.
 	</p>

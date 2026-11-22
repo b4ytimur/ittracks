@@ -1,4 +1,5 @@
-import type { ScheduleForm } from './forms';
+import type { PlainScheduleForm, ScheduleForm } from './forms';
+import { phaseSpans, variantsIn, type Phases, type Schedule } from './engine/schedule';
 
 export const weekdayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -8,13 +9,41 @@ export function groupRuleText(s: { target: number | null; minimum: number | null
 	return s.minimum === null ? done : `${done}; ${s.minimum} for the Minimum`;
 }
 
+type Named = { id: string; name: string };
+
+/** "1 week", "10 days". */
+export const lengthText = (length: number, unit: 'day' | 'week') => `${length} ${unit}${length === 1 ? '' : 's'}`;
+
 /**
  * A one-line, human description of a Schedule. A habit that follows its parent reads better
- * with the parent's name and Variant names.
+ * with the parent's name and Variant names; phases read better with the habit's own Variant
+ * names (`own`), which they show when there is more than one.
  */
-export function describeSchedule(s: ScheduleForm | null, parent?: { name: string; variants?: { id: string; name: string }[] }): string {
+export function describeSchedule(
+	s: ScheduleForm | PlainScheduleForm | null,
+	parent?: { name: string; variants?: Named[] },
+	own?: Named[]
+): string {
 	if (!s) return 'No schedule';
 	switch (s.kind) {
+		case 'phases': {
+			const named = (p: PlainScheduleForm) => {
+				const text = describeSchedule(p);
+				if (!own || own.length < 2) return text;
+				const names = variantsIn(p as Schedule)
+					.map((id) => own.find((v) => v.id === id)?.name)
+					.filter((n): n is string => !!n);
+				return names.length ? `${text} (${names.join(', ')})` : text;
+			};
+			const shown = phaseSpans(s as Phases).map((span) => s.phases[span.index]);
+			const parts = shown.map((p, i) => {
+				const text = named(p.schedule);
+				const first = i === 0 ? text : text.charAt(0).toLowerCase() + text.slice(1);
+				return p.length === null ? first : `${first} for ${lengthText(p.length, p.unit)}`;
+			});
+			const ends = shown.at(-1)?.length !== null;
+			return `${parts.join(', then ')}${ends ? ', then it ends' : ''}`;
+		}
 		case 'weekly': {
 			const days = Object.keys(s.days)
 				.map(Number)

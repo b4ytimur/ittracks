@@ -3,13 +3,115 @@
 import { addDays, daysBetween, toDays, weekday, weekStart, type ISODate } from './dates';
 
 /** Weekdays are 0 = Monday ... 6 = Sunday. */
-export type Schedule =
-	| ({ kind: 'weekly'; days: Partial<Record<string, string>> } & Routine)
-	| ({ kind: 'frequency'; times: number; period: 'week' | 'month'; variantId: string } & Routine)
-	| (Rotation & Routine)
-	| ({ kind: 'interval'; every: number; start: ISODate; variantId: string } & Routine)
-	| GroupRule
-	| Follow;
+export type Schedule = ((Plain | Phases) & Routine) | GroupRule | Follow;
+
+/** A schedule that decides its days by itself, from the calendar and what was done. */
+export type Plain =
+	| { kind: 'weekly'; days: Partial<Record<string, string>> }
+	| { kind: 'frequency'; times: number; period: 'week' | 'month'; variantId: string }
+	| Rotation
+	| { kind: 'interval'; every: number; start: ISODate; variantId: string };
+
+/**
+ * Schedules one after another, from `start`: "every day with Ramp-up for 1 week, then every
+ * day with Maintain from then on". Each phase runs its own schedule as if it began on the
+ * phase's first day, and only remembers what was done in that phase. Targets stay on the
+ * Variants each phase uses. A list of phases is as expressive as phases inside phases, so a
+ * phase holds a schedule with days of its own, never another list.
+ */
+export interface Phases {
+	kind: 'phases';
+	start: ISODate;
+	phases: Phase[];
+}
+
+export interface Phase {
+	/** How many `unit`s it runs; null runs on with no end. Phases after one with no end never come. */
+	length: number | null;
+	unit: 'day' | 'week';
+	schedule: Plain;
+}
+
+/** A phase with the days it runs (`to` null: no end), its schedule moved to start on `from`. */
+export interface PhaseSpan {
+	index: number;
+	from: ISODate;
+	to: ISODate | null;
+	schedule: Plain;
+}
+
+/** Nothing is ever due: before the first phase, and after the last one ends. */
+export const NOTHING_DUE: Plain = { kind: 'weekly', days: {} };
+
+export const isPhases = (s: { kind: string } | null | undefined): s is Phases => s?.kind === 'phases';
+
+/** Days a phase runs, or null when it has no end. */
+export const phaseDays = (p: Pick<Phase, 'length' | 'unit'>): number | null =>
+	p.length === null ? null : Math.max(1, Math.floor(p.length)) * (p.unit === 'week' ? 7 : 1);
+
+/** A schedule moved to begin on `from`: its own start, when it has one, becomes that day. */
+const rebase = (s: Plain, from: ISODate): Plain => ('start' in s ? { ...s, start: from } : s);
+
+/** Every phase that comes, with its days, oldest first. */
+export function phaseSpans(s: Phases): PhaseSpan[] {
+	const out: PhaseSpan[] = [];
+	let from = s.start;
+	for (const [index, p] of s.phases.entries()) {
+		const n = phaseDays(p);
+		const to = n === null ? null : addDays(from, n - 1);
+		out.push({ index, from, to, schedule: rebase(p.schedule, from) });
+		if (to === null) break;
+		from = addDays(to, 1);
+	}
+	return out;
+}
+
+/** The phase a date falls in, or null before the first and after the last one ends. */
+export function phaseOn(s: Phases, date: ISODate): PhaseSpan | null {
+	if (date < s.start) return null;
+	return phaseSpans(s).find((p) => date >= p.from && (p.to === null || date <= p.to)) ?? null;
+}
+
+/** The phases with each inner schedule's start set to its phase's first day, as saved. */
+export function tidyPhases<S extends Phases>(s: S): S {
+	const spans = phaseSpans(s);
+	return { ...s, phases: s.phases.map((p, i) => ({ ...p, schedule: spans[i]?.schedule ?? p.schedule })) };
+}
+
+/**
+ * The schedule with days of its own that is in force on a date: the phase's, for phases
+ * (nothing due outside them), else the schedule itself.
+ */
+export function planOn<S extends Schedule>(s: S, date: ISODate): Exclude<S, Phases> | Plain {
+	if (!isPhases(s)) return s as Exclude<S, Phases>;
+	return phaseOn(s, date)?.schedule ?? NOTHING_DUE;
+}
+
+/** Only what was done in the phase a date falls in counts toward that phase's plan. */
+export function historyOn(s: Schedule, history: Done[], date: ISODate): Done[] {
+	if (!isPhases(s)) return history;
+	const p = phaseOn(s, date);
+	return p ? history.filter((h) => h.date >= p.from) : [];
+}
+
+/** The Variants a schedule can have due: for phases, those of every phase. */
+export function variantsIn(s: Schedule | null | undefined): string[] {
+	if (!s) return [];
+	switch (s.kind) {
+		case 'weekly':
+			return [...new Set(Object.values(s.days).filter((v): v is string => !!v))];
+		case 'frequency':
+		case 'interval':
+		case 'follow':
+			return [s.variantId];
+		case 'rotation':
+			return [...new Set(s.order.map((o) => o.variantId))];
+		case 'phases':
+			return [...new Set(s.phases.flatMap((p) => variantsIn(p.schedule)))];
+		case 'group':
+			return [];
+	}
+}
 
 /**
  * How a habit with habits inside it judges its day from theirs (see engine/rollup.ts):
@@ -121,6 +223,11 @@ export function dueOn(schedule: Schedule, history: Done[], date: ISODate, parent
 			const p = parentDue?.(date) ?? null;
 			if (p === null) return null;
 			return !schedule.on || schedule.on.includes(p) ? schedule.variantId : null;
+		}
+
+		case 'phases': {
+			const p = phaseOn(schedule, date);
+			return p ? dueOn(p.schedule, history.filter((h) => h.date >= p.from), date) : null;
 		}
 	}
 }

@@ -2,13 +2,17 @@
 	import { tick, untrack } from 'svelte';
 	import { deserialize, enhance } from '$app/forms';
 	import type { SubmitFunction } from '@sveltejs/kit';
-	import type { HabitForm, ScheduleForm } from '$lib/forms';
+	import type { HabitForm, PlainScheduleForm, ScheduleForm } from '$lib/forms';
 	import OptionList from '$lib/OptionList.svelte';
-	import { describeSchedule, weekdayNames } from '$lib/describe';
+	import { describeSchedule, lengthText } from '$lib/describe';
 	import FillRuleEditor from './FillRuleEditor.svelte';
 	import NoteBox from '$lib/NoteBox.svelte';
 	import { limitOn, nextDrop } from '$lib/engine/limit';
-	import { sameSchedule, scheduleStartBy } from '$lib/engine/unlogged';
+	import { sameSchedule, scheduleStartBy, startMovedBack } from '$lib/engine/unlogged';
+	import { tidyPhases, type Schedule } from '$lib/engine/schedule';
+	import ScheduleFields from '$lib/ui/ScheduleFields.svelte';
+	import EditableList from '$lib/ui/EditableList.svelte';
+	import { addPhase, fitVariants, isPlainKind, phaseDates, plainOfKind, removePhase, savedPlain, type PhaseRow } from '$lib/ui/schedule';
 	import { blocked } from '$lib/rules/core';
 	import { checkHabit, habitPast, habitRules } from '$lib/rules/habit';
 	import { lockedNow } from '$lib/rules/history';
@@ -48,25 +52,38 @@
 	const s0 = untrack(() => data.habit.schedule);
 	const savedStart = untrack(() => data.habit.startDate);
 	let kind = $state<ScheduleForm['kind']>(s0?.kind ?? 'interval');
-	let weeklyDays = $state<Record<string, string>>(s0?.kind === 'weekly' ? { ...s0.days } : {});
-	let times = $state(s0?.kind === 'frequency' ? s0.times : 3);
-	let period = $state<'week' | 'month'>(s0?.kind === 'frequency' ? s0.period : 'week');
-	let every = $state(s0?.kind === 'interval' ? s0.every : 1);
-	let singleVariant = $state(s0?.kind === 'frequency' || s0?.kind === 'interval' || s0?.kind === 'follow' ? s0.variantId : '');
-	let step_ = $state<'variant' | 'week'>(s0?.kind === 'rotation' ? s0.step : 'variant');
-	let onMiss = $state<'wait' | 'skip'>(s0?.kind === 'rotation' ? s0.onMiss : 'wait');
-	let restDays = $state<Record<string, number>>(
-		s0?.kind === 'rotation' ? Object.fromEntries(s0.order.map((o) => [o.variantId, o.restDays])) : {}
+	/**
+	 * The schedule with days of its own (weekdays, N a week, every N days, a rotation). While
+	 * phases, a group or following is picked it keeps the last one, which a first phase starts from.
+	 */
+	let plain = $state<PlainScheduleForm>(
+		untrack(() =>
+			s0 && isPlainKind(s0.kind)
+				? (({ rollup: _, ...rest }) => rest)(s0 as PlainScheduleForm & { rollup?: unknown }) as PlainScheduleForm
+				: s0?.kind === 'phases'
+					? structuredClone(s0.phases[0].schedule)
+					: { kind: 'interval', every: 1, start: savedStart, variantId: data.habit.variants[0]?.id ?? '' }
+		)
 	);
-	let weekdays = $state<number[]>(s0?.kind === 'rotation' ? [...s0.weekdays] : [0, 2, 4]);
-	let start = $state(
-		s0?.kind === 'rotation' || s0?.kind === 'interval' ? s0.start : savedStart
-	);
+	/** Phases: schedules one after another, from `phasesStart`. */
+	let phaseKey = 0;
+	let phasesStart = $state(s0?.kind === 'phases' ? s0.start : savedStart);
+	let phases = $state<PhaseRow[]>(s0?.kind === 'phases' ? s0.phases.map((p) => ({ ...structuredClone(p), key: `p${phaseKey++}` })) : []);
+	/** Picking phases for the first time: one week of the schedule set so far, then the same from then on, to change. */
+	$effect(() => {
+		if (kind === 'phases' && untrack(() => phases.length === 0)) {
+			const first = fitVariants($state.snapshot(plain), untrack(() => h.variants), true);
+			phases = addPhase([{ key: `p${phaseKey++}`, length: 1, unit: 'week', schedule: first }], `p${phaseKey++}`, first);
+		}
+	});
+	const phaseRanges = $derived(phaseDates(phasesStart, phases));
 	/** A group: done when all (null) or this many habits inside are done; the Minimum, or none. */
 	let groupTarget = $state<number | null>(s0?.kind === 'group' ? s0.target : s0 && 'rollup' in s0 ? (s0.rollup?.target ?? null) : null);
 	let groupMinimum = $state<number | null>(s0?.kind === 'group' ? s0.minimum : s0 && 'rollup' in s0 ? (s0.rollup?.minimum ?? null) : null);
 	/** Following the routine it sits in: only on these of the routine's Variants, or null for all. */
 	let followOn = $state<string[] | null>(s0?.kind === 'follow' ? s0.on : null);
+	/** The Variant a follower logs. */
+	let followVariant = $state(s0?.kind === 'follow' ? s0.variantId : '');
 	/** Why the group choice can't be saved as it stands, from what is logged or inside. */
 	const groupProblem = $derived(
 		kind === 'group' && data.ownLogs
@@ -100,51 +117,50 @@
 	 * A new start date for the habit. The schedule's own start follows: along with it when the
 	 * two were the same day and nothing is logged yet (a new plan begins on the day you give),
 	 * else back far enough to cover it, by whole cycles, so planned days keep their Variant.
+	 * Phases only move along with it: moving them back would move every phase.
 	 */
 	function setStart(v: string) {
 		if (!v) return;
 		const old = h.startDate;
 		h.startDate = v;
-		if (kind !== 'interval' && kind !== 'rotation') return;
-		if (start === old && !data.hasLogs) start = v;
-		else if (v < start && schedule) start = (scheduleStartBy(schedule, v) as { start: string }).start;
+		if (kind === 'phases') {
+			if (phasesStart === old && !data.hasLogs) phasesStart = v;
+			return;
+		}
+		if (plain.kind !== 'interval' && plain.kind !== 'rotation') return;
+		if (plain.start === old && !data.hasLogs) plain.start = v;
+		else if (v < plain.start) plain.start = (scheduleStartBy(plain as Schedule, v) as { start: string }).start;
 	}
 
-	/** The Schedule as it will be saved. Rotations follow the Variant order. */
+	/** The Schedule as it will be saved, with only Variants the habit has. Rotations follow the Variant order. */
 	const schedule = $derived.by((): ScheduleForm | null => {
 		if (h.direction === 'break') return null;
 		const ids = new Set(h.variants.map((v) => v.id));
-		const pick = ids.has(singleVariant) ? singleVariant : firstVariant;
 		switch (kind) {
-			case 'weekly':
-				return {
+			case 'phases':
+				return tidyPhases({
 					kind,
-					days: Object.fromEntries(Object.entries(weeklyDays).filter(([, v]) => ids.has(v))),
+					start: phasesStart,
+					phases: phases.map(({ key: _, ...p }) => ({ ...p, schedule: savedPlain(p.schedule, h.variants, false) })),
 					...routineRule
-				};
-			case 'frequency':
-				return { kind, times, period, variantId: pick, ...routineRule };
-			case 'interval':
-				return { kind, every, start, variantId: pick, ...routineRule };
-			case 'rotation':
-				return {
-					...routineRule,
-					kind,
-					step: step_,
-					onMiss,
-					start,
-					weekdays: step_ === 'week' ? [...weekdays].sort() : [],
-					order: h.variants.map((v) => ({ variantId: v.id, restDays: restDays[v.id] ?? 1 }))
-				};
+				});
 			case 'group':
 				return { kind, target: groupTarget, minimum: groupMinimum };
 			case 'follow':
-				return { kind, variantId: pick, on: followOn };
+				return { kind, variantId: ids.has(followVariant) ? followVariant : firstVariant, on: followOn };
+			default:
+				return { ...savedPlain(plain, h.variants, true), ...routineRule };
 		}
 	});
-	/** A schedule edit on a habit with a past: from today on (the default), or past days too. */
+	/**
+	 * A schedule edit on a habit with a past: from today on (the default), or past days too.
+	 * Not asked for a habit with no past days yet, or when Started on only moved the
+	 * schedule's start back with it: the server keeps no old plan for those.
+	 */
 	let scheduleApplies = $state<'today' | 'past'>('today');
-	const scheduleEdited = $derived(!data.isNew && !!s0 && !sameSchedule(s0, schedule) && savedStart < data.today);
+	const scheduleEdited = $derived(
+		!data.isNew && !!s0 && !sameSchedule(s0, schedule) && savedStart < data.today && !startMovedBack(s0, schedule, savedStart, h.startDate)
+	);
 
 	// ----- Cue, stacking, levels, streak, identity, if-then -----
 	let afterMode = $state<'none' | 'habit' | 'text'>(
@@ -263,33 +279,24 @@
 	function applyPreset(p: Preset) {
 		const v = h.variants[0]?.id;
 		if (!v) return;
-		if (p === 'daily') {
-			kind = 'weekly';
-			weeklyDays = Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((d) => [String(d), v]));
-		} else if (p === 'weekdays') {
-			kind = 'weekly';
-			weeklyDays = Object.fromEntries([0, 1, 2, 3, 4].map((d) => [String(d), v]));
-		} else if (p === 'mwf') {
-			kind = 'weekly';
-			weeklyDays = Object.fromEntries([0, 2, 4].map((d) => [String(d), v]));
-		} else if (p === 'three') {
-			kind = 'frequency';
-			times = 3;
-			period = 'week';
-			singleVariant = v;
-		} else {
+		const days = (ds: number[]) => Object.fromEntries(ds.map((d) => [String(d), v]));
+		if (p === 'daily') plain = { kind: 'weekly', days: days([0, 1, 2, 3, 4, 5, 6]) };
+		else if (p === 'weekdays') plain = { kind: 'weekly', days: days([0, 1, 2, 3, 4]) };
+		else if (p === 'mwf') plain = { kind: 'weekly', days: days([0, 2, 4]) };
+		else if (p === 'three') plain = { kind: 'frequency', times: 3, period: 'week', variantId: v };
+		else {
 			if (h.variants.length < 2) addVariant();
-			kind = 'rotation';
-			step_ = 'variant';
-			onMiss = 'wait';
-			restDays = Object.fromEntries(h.variants.map((x) => [x.id, 1]));
+			// A rotation through every Variant, 1 rest day after each, waiting when a day is missed.
+			plain = plainOfKind('rotation', $state.snapshot(plain), h.variants, h.startDate);
 		}
+		kind = plain.kind;
 	}
 	const presetOn = $derived.by((): Preset | null => {
-		if (kind === 'frequency' && times === 3 && period === 'week') return 'three';
-		if (kind === 'rotation' && step_ === 'variant' && h.variants.length === 2) return 'ab';
-		if (kind !== 'weekly') return null;
-		const days = Object.keys(weeklyDays).filter((d) => weeklyDays[d]).sort().join('');
+		if (kind !== plain.kind) return null;
+		if (plain.kind === 'frequency' && plain.times === 3 && plain.period === 'week') return 'three';
+		if (plain.kind === 'rotation' && plain.step === 'variant' && h.variants.length === 2) return 'ab';
+		if (plain.kind !== 'weekly') return null;
+		const days = Object.keys(plain.days).filter((d) => plain.kind === 'weekly' && plain.days[d]).sort().join('');
 		return days === '0123456' ? 'daily' : days === '01234' ? 'weekdays' : days === '024' ? 'mwf' : null;
 	});
 
@@ -388,9 +395,6 @@
 		[list[i], list[j]] = [list[j], list[i]];
 	}
 
-	function toggleWeekday(d: number) {
-		weekdays = weekdays.includes(d) ? weekdays.filter((x) => x !== d) : [...weekdays, d];
-	}
 </script>
 
 <svelte:head><title>{data.isNew ? 'New habit' : h.name} · ittracks</title></svelte:head>
@@ -543,40 +547,80 @@
 		<button type="button" class="chip" class:on={presetOn === 'ab'} onclick={() => applyPreset('ab')}>A/B with 1 rest day</button>
 	</div>
 	{/if}
-	<label
-		>How often
-		<select bind:value={kind}>
-			<option value="weekly">On fixed weekdays</option>
-			<option value="frequency">A number of times per week or month</option>
-			<option value="interval">Every few days</option>
-			<option value="rotation">Rotate through Variants</option>
-			<option value="group">From the habits inside it (a group)</option>
-			{#if parent?.routine}<option value="follow">Whenever {parent.name} is due</option>{/if}
-		</select>
-	</label>
+	<ScheduleFields
+		bind:value={plain}
+		bind:kind
+		variants={h.variants}
+		start={h.startDate}
+		more={[
+			{ value: 'phases', label: 'In phases: one schedule after another' },
+			{ value: 'group', label: 'From the habits inside it (a group)' },
+			...(parent?.routine ? [{ value: 'follow', label: `Whenever ${parent.name} is due` }] : [])
+		]}
+	/>
 	{#if groupProblem}<p class="error small-text">{groupProblem}</p>{/if}
 
-	{#if kind === 'weekly'}
-		{#each weekdayNames as day, d (day)}
-			<div class="row">
-				<span style="width: 3rem">{day}</span>
-				<select class="grow" bind:value={weeklyDays[d]} aria-label="Variant on {day}">
-					<option value="">Rest</option>
-					{#each h.variants as v (v.id)}<option value={v.id}>{h.variants.length > 1 ? v.name : 'Do it'}</option>{/each}
-				</select>
-			</div>
-		{/each}
-	{:else if kind === 'frequency'}
-		<div class="row">
-			<label style="width: 6rem">Times <input type="number" min="1" max="31" bind:value={times} /></label>
-			<label class="grow"
-				>Per
-				<select bind:value={period}>
-					<option value="week">week</option>
-					<option value="month">month</option>
-				</select>
-			</label>
-		</div>
+	{#if kind === 'phases'}
+		<p class="muted small-text" style="margin: 0">
+			Each phase runs its own schedule from its first day, then the next one takes over. Use a Variant per phase to change the targets: 5 a day
+			with one Variant for a week, then 1 a day with another.
+		</p>
+		<label style="width: 12rem">Starting <input type="date" bind:value={phasesStart} /></label>
+		<EditableList
+			items={phases}
+			key={(p) => p.key}
+			label={(p) => `Phase ${phases.indexOf(p) + 1}`}
+			editing
+			layout="block"
+			ariaLabel="Phases"
+			onmove={(_, order) => (phases = order.map((k) => phases.find((p) => p.key === k)!))}
+			onremove={(p) => (phases = removePhase(phases, p.key))}
+			onadd={() => (phases = addPhase($state.snapshot(phases), `p${phaseKey++}`, $state.snapshot(plain)))}
+			addLabel="phase"
+		>
+			{#snippet title(p)}
+				{@const i = phases.indexOf(p)}
+				{@const r = phaseRanges[i]}
+				<strong>Phase {i + 1}</strong>
+				<span class="muted small-text"
+					>{r?.from ? (r.to ? `${shortDate(r.from)} to ${shortDate(r.to)}` : `from ${shortDate(r.from)} on`) : 'never comes: a phase before it has no end'}</span
+				>
+			{/snippet}
+			{#snippet row(p)}
+				<div class="stack">
+					<div class="row">
+						{#if p.length !== null}
+							<label style="width: 6rem">For <input type="number" min="1" max="520" bind:value={p.length} aria-label="Phase length" /></label>
+						{/if}
+						<label class="grow"
+							>{p.length === null ? 'Runs' : 'Unit'}
+							<select
+								value={p.length === null ? 'end' : p.unit}
+								onchange={(e) => {
+									const v = e.currentTarget.value;
+									if (v === 'end') p.length = null;
+									else {
+										p.unit = v as 'day' | 'week';
+										p.length ??= 1;
+									}
+								}}
+							>
+								<option value="day">days</option>
+								<option value="week">weeks</option>
+								<option value="end">from then on, with no end</option>
+							</select>
+						</label>
+					</div>
+					<ScheduleFields bind:value={p.schedule} variants={h.variants} start={phasesStart} subset showStart={false} label="Schedule in this phase" />
+				</div>
+			{/snippet}
+		</EditableList>
+		{#if phases.length && phases.at(-1)?.length !== null}
+			{@const last = phases.at(-1)!}
+			<p class="muted small-text" style="margin: 0">
+				After the last phase ({lengthText(last.length!, last.unit)}) nothing is due. Pick "from then on" on it to keep going.
+			</p>
+		{/if}
 	{:else if kind === 'group'}
 		<p class="muted small-text" style="margin: 0">
 			A group has no Tasks of its own. It is due on days a habit inside it is due, and its streak counts the days enough of them were done.
@@ -621,56 +665,6 @@
 				{/each}
 			</div>
 		{/if}
-	{:else if kind === 'interval'}
-		<div class="row">
-			<label style="width: 8rem">Every N days <input type="number" min="1" max="365" bind:value={every} /></label>
-			<label class="grow">Starting <input type="date" bind:value={start} /></label>
-		</div>
-	{:else}
-		<label
-			>Rotate by
-			<select bind:value={step_}>
-				<option value="variant">Variant, with rest days between them</option>
-				<option value="week">Week: a different Variant each week</option>
-			</select>
-		</label>
-		{#if step_ === 'variant'}
-			{#each h.variants as v (v.id)}
-				<div class="row">
-					<span class="grow">After {v.name}, rest</span>
-					<input
-						type="number"
-						min="0"
-						max="30"
-						style="width: 5rem"
-						value={restDays[v.id] ?? 1}
-						oninput={(e) => (restDays[v.id] = Number(e.currentTarget.value))}
-						aria-label="Rest days after {v.name}"
-					/>
-					<span>days</span>
-				</div>
-			{/each}
-			<fieldset class="card">
-				<legend class="muted">If you miss a day</legend>
-				<label style="color: var(--text)"
-					><input type="radio" bind:group={onMiss} value="wait" /> Wait: the Variant stays due until
-					you do it</label
-				>
-				<label style="color: var(--text)"
-					><input type="radio" bind:group={onMiss} value="skip" /> Skip ahead to the next Variant</label
-				>
-			</fieldset>
-		{:else}
-			<div class="chips" role="group" aria-label="Training days">
-				{#each weekdayNames as day, d (day)}
-					<button type="button" class="chip small" class:on={weekdays.includes(d)} onclick={() => toggleWeekday(d)}
-						>{day}</button
-					>
-				{/each}
-			</div>
-			<p class="muted">Variants take turns week by week, in the order listed above.</p>
-		{/if}
-		<label>Starting <input type="date" bind:value={start} /></label>
 	{/if}
 
 	{#if isRoutine}
@@ -702,10 +696,10 @@
 		</fieldset>
 	{/if}
 
-	{#if (kind === 'frequency' || kind === 'interval' || kind === 'follow') && h.variants.length > 1}
+	{#if kind === 'follow' && h.variants.length > 1}
 		<label
 			>Variant
-			<select bind:value={singleVariant}>
+			<select bind:value={followVariant}>
 				{#each h.variants as v (v.id)}<option value={v.id}>{v.name}</option>{/each}
 			</select>
 		</label>
@@ -1020,7 +1014,8 @@
 			<a href="/habits/{data.id}/chain">Chain</a>
 			<a href="/habits/{data.id}/stats">Stats</a>
 			<a href="/habits/new?from={data.id}" data-sveltekit-reload>Duplicate</a>
-			{#if s0?.kind !== 'group'}<a href="/habits/{data.id}/share">Share as template</a>{/if}
+			<!-- A group travels with the habits inside it; with none, it has nothing to give. -->
+			{#if s0?.kind !== 'group' || data.inside.some((x) => !x.archived)}<a href="/habits/{data.id}/share">Share as template</a>{/if}
 		{/if}
 		<a href="/habits">Cancel</a>
 	</div>
@@ -1075,7 +1070,7 @@
 		{:else}
 			<h2>Check</h2>
 			<div class="card stack">
-				<div><strong>{h.name || 'Unnamed habit'}</strong> · {h.direction === 'break' ? 'Break habit' : describeSchedule(schedule)}</div>
+				<div><strong>{h.name || 'Unnamed habit'}</strong> · {h.direction === 'break' ? 'Break habit' : describeSchedule(schedule, undefined, h.variants)}</div>
 				{#if h.direction === 'build'}
 					<div class="muted small-text">
 						{h.variants.flatMap((v) => v.slots).length

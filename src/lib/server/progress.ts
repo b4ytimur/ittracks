@@ -248,16 +248,16 @@ export function plusOne(occurrenceId: string, by: 1 | -1 = 1): { value: number; 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
- * Before a Variant's targets change (Raise, an edit): logs made against the old ones keep
- * them, so Target met, "3 of 6 glasses" and the habit's rule judge each log by what it
- * aimed for. Logs that already keep theirs are left as they are.
+ * Before a Variant's Slots or targets change (Raise, an edit, a Slot added or taken away):
+ * logs made against the old ones keep them, every Slot with its Task, sets and targets, so
+ * Target met, "3 of 6 glasses", the habit's rule and the log screen judge and show each log
+ * by the plan it had. Logs that already keep theirs are left as they are.
  */
 export function keepGoals(tx: Tx, variantIds: string[]) {
 	for (const variantId of variantIds) {
-		const slots = tx.select().from(slot).where(eq(slot.variantId, variantId)).all();
-		if (!slots.length) continue;
+		const slots = tx.select().from(slot).where(eq(slot.variantId, variantId)).orderBy(asc(slot.sortOrder)).all();
 		const goals: Record<string, SlotGoals> = Object.fromEntries(
-			slots.map((s) => [s.id, { taskId: s.taskId, sets: s.sets, targets: s.targets, minTargets: s.minTargets, stretchTargets: s.stretchTargets }])
+			slots.map((s, i) => [s.id, { sortOrder: i, taskId: s.taskId, sets: s.sets, targets: s.targets, minTargets: s.minTargets, stretchTargets: s.stretchTargets }])
 		);
 		tx.update(occurrence)
 			.set({ goals })

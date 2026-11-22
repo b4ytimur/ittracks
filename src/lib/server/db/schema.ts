@@ -6,6 +6,7 @@ import type { Level, StreakRule } from '../../engine/streak';
 import type { Limit } from '../../engine/limit';
 import type { Progression } from '../../engine/progression';
 import type { EarlierSchedule } from '../../engine/unlogged';
+import type { EarlierParent } from '../../engine/tree';
 import type { ChoiceOption, EarlierScores, Scores } from '../../options';
 
 /** Temptation bundling: something you want, paired with the habit. */
@@ -306,7 +307,12 @@ export const habit = sqliteTable('habit', {
 	 * The group this habit sits in: another build habit whose Schedule is a group. Groups can
 	 * sit in groups. Deleting a group moves what was inside it to the top level.
 	 */
-	parentId: text('parent_id').references((): AnySQLiteColumn => habit.id, { onDelete: 'set null' })
+	parentId: text('parent_id').references((): AnySQLiteColumn => habit.id, { onDelete: 'set null' }),
+	/**
+	 * Where it sat before a move, oldest first: each entry still decides which group or routine
+	 * it counted in up to its `until` (see engine/tree.ts), as moves apply from that day on.
+	 */
+	earlierParents: text('earlier_parents', { mode: 'json' }).$type<EarlierParent[]>()
 });
 
 /** A pause for one Habit, or for all of them when habitId is null. Dates are inclusive. */
@@ -414,8 +420,13 @@ export const occurrence = sqliteTable('occurrence', {
 	rollup: text('rollup', { mode: 'json' }).$type<{ done: number; total: number }>()
 });
 
-/** One Slot's targets as they were: Target, Minimum and Stretch values by Metric id, and sets. */
+/**
+ * One Slot as it was when its Variant's Slots changed later: its Task, sets, and Target,
+ * Minimum and Stretch values by Metric id. A log keeps every Slot its Variant had then, so it
+ * is judged and shown by that plan; `sortOrder` is the Slot's place (absent in older rows).
+ */
 export interface SlotGoals {
+	sortOrder?: number;
 	taskId: string | null;
 	sets: number | null;
 	targets: Record<string, number> | null;
@@ -600,4 +611,23 @@ export const bulkBatch = sqliteTable(
 		undoneAt: integer('undone_at', { mode: 'timestamp_ms' })
 	},
 	(t) => [index('bulk_batch_account_idx').on(t.accountId, t.createdAt)]
+);
+
+/**
+ * A template someone saved to their own Gallery from the Share page: the same file a download
+ * gives (src/lib/template.ts), kept here so it can be added again, or by another account on
+ * this server later. It holds keys, never ids of this account's rows.
+ */
+export const savedTemplate = sqliteTable(
+	'saved_template',
+	{
+		id: id(),
+		accountId: text('account_id')
+			.notNull()
+			.references(() => account.id, { onDelete: 'cascade' }),
+		name: text('name').notNull(),
+		file: text('file', { mode: 'json' }).notNull().$type<unknown>(),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull()
+	},
+	(t) => [index('saved_template_account_idx').on(t.accountId, t.createdAt)]
 );

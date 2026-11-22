@@ -15,8 +15,9 @@ import { Reporter, plural, type Report } from './report';
 import { select } from './select';
 import { UndoLog, undoAll, type UndoOp, type UndoResult } from './undo';
 import type { Ctx, Run } from './types';
-import { skipDays } from './skip';
+import { skipDays, skipPicked } from './skip';
 import { pauseHabits } from './pause';
+import { archiveHabits, archiveTasks } from './archive';
 import { setFields } from './set';
 import { convertUnit } from './unit';
 
@@ -24,6 +25,9 @@ import { convertUnit } from './unit';
 const RUN: { [N in BulkName]: Run<N> } = {
 	skip_days: skipDays,
 	pause: pauseHabits,
+	skip: skipPicked,
+	archive: archiveHabits,
+	archive_tasks: archiveTasks,
 	set: setFields,
 	convert_unit: convertUnit
 };

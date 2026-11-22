@@ -2,7 +2,7 @@
 // habit is set to ignore days you don't log. Pure functions, so the rules can be tested
 // without a database; the server writes the misses as Occurrences (see server/today.ts).
 import { addDays, daysBetween, weekStart, type ISODate } from './dates';
-import { dueOn, type Done, type ParentDue, type Rotation, type Schedule } from './schedule';
+import { dueOn, isPhases, phaseOn, phaseSpans, tidyPhases, type Done, type ParentDue, type Rotation, type Schedule } from './schedule';
 
 /** What a due day that ends with no log counts as. A per-habit setting. */
 export type Unlogged = 'missed' | 'ignore';
@@ -27,12 +27,13 @@ const lastOfMonth = (d: ISODate): ISODate => {
 };
 
 /**
- * Sessions a period asks for. A first period that began part way through asks for its share,
- * rounded down: "4 a week" started on a Sunday owes nothing that week, on a Thursday 2.
+ * Sessions a period asks for. A period the schedule only covers part of (it began part way
+ * through, or a phase ended part way through) asks for its share, rounded down: "4 a week"
+ * started on a Sunday owes nothing that week, on a Thursday 2.
  */
-function owed(times: number, p: { from: ISODate; to: ISODate }, lo: ISODate): number {
-	if (lo <= p.from) return times;
-	return Math.floor((times * (daysBetween(lo, p.to) + 1)) / (daysBetween(p.from, p.to) + 1));
+function owed(times: number, p: { from: ISODate; to: ISODate }, lo: ISODate, hi: ISODate = p.to): number {
+	if (lo <= p.from && hi >= p.to) return times;
+	return Math.floor((times * (daysBetween(lo, hi) + 1)) / (daysBetween(p.from, p.to) + 1));
 }
 
 /** The week or month a date falls in. */
@@ -65,6 +66,7 @@ function waitingMiss(s: Rotation, last: Done | undefined, d: ISODate): string | 
  *   on the last free days of the period. A skip counts as a session; so does a miss already
  *   written, so running this twice adds nothing.
  * - A rotation that waits: see waitingMiss.
+ * - Phases: each phase on its own days, from its first day, with only its own logs.
  */
 export function missedDays(
 	schedule: Schedule,
@@ -74,10 +76,20 @@ export function missedDays(
 	to: ISODate,
 	paused: (d: ISODate) => boolean = () => false,
 	/** For a habit that follows its parent: what the parent had due each day. */
-	parentDue?: ParentDue
+	parentDue?: ParentDue,
+	/** The schedule stops after this day (a phase that ends): a period it cuts short owes its share. */
+	end?: ISODate
 ): Miss[] {
 	if (from < start) from = start;
 	if (from > to) return [];
+	if (schedule.kind === 'phases')
+		return phaseSpans(schedule).flatMap((p) => {
+			const lo = from > p.from ? from : p.from;
+			const hi = p.to !== null && p.to < to ? p.to : to;
+			if (lo > hi) return [];
+			const own = rows.filter((r) => r.date >= p.from && (p.to === null || r.date <= p.to));
+			return missedDays(p.schedule, own, start > p.from ? start : p.from, lo, hi, paused, undefined, p.to ?? undefined);
+		});
 	const taken = new Set(rows.map((r) => r.date));
 	const free = (d: ISODate) => !taken.has(d) && !paused(d);
 	const out: Miss[] = [];
@@ -85,13 +97,15 @@ export function missedDays(
 	if (schedule.kind === 'frequency') {
 		// Every period whose last day falls between `from` and `to`.
 		for (let p = periodOf(from, schedule.period); p.from <= to; p = periodOf(addDays(p.to, 1), schedule.period)) {
-			if (p.to < from || p.to > to) continue;
+			// The period's last day the schedule covers: its end, or the day a phase stops.
+			const last = end && end < p.to ? end : p.to;
+			if (last < from || last > to) continue;
 			const lo = p.from < start ? start : p.from;
 			let open = 0;
-			for (let d = lo; d <= p.to; d = addDays(d, 1)) if (!paused(d)) open++;
-			const counted = rows.filter((r) => r.date >= p.from && r.date <= p.to && r.status !== 'due').length;
-			let missing = Math.min(owed(schedule.times, p, lo), open) - counted;
-			for (let d = p.to; missing > 0 && d >= lo; d = addDays(d, -1)) {
+			for (let d = lo; d <= last; d = addDays(d, 1)) if (!paused(d)) open++;
+			const counted = rows.filter((r) => r.date >= p.from && r.date <= last && r.status !== 'due').length;
+			let missing = Math.min(owed(schedule.times, p, lo, last), open) - counted;
+			for (let d = last; missing > 0 && d >= lo; d = addDays(d, -1)) {
 				if (!free(d)) continue;
 				out.push({ date: d, variantId: schedule.variantId });
 				missing--;
@@ -133,6 +147,12 @@ export function missedDays(
  * again from, or null when each day's miss stands on its own.
  */
 export function recountFrom(s: Schedule, date: ISODate): ISODate | null {
+	if (s.kind === 'phases') {
+		// Only the phase the day falls in carries over, and never back past its first day.
+		const p = phaseOn(s, date);
+		const from = p ? recountFrom(p.schedule, date) : null;
+		return from && p && from < p.from ? p.from : from;
+	}
 	if (s.kind === 'frequency') return periodOf(date, s.period).from;
 	if (s.kind === 'rotation' && s.step === 'variant' && s.onMiss === 'wait') return date;
 	return null;
@@ -141,13 +161,33 @@ export function recountFrom(s: Schedule, date: ISODate): ISODate | null {
 /**
  * Move a schedule's own start back so it begins no later than `date`, for a habit whose start
  * date moved back. Every N days and a weekly rotation move by whole cycles, so the days already
- * planned keep their Variant. Schedules without a start are returned as they are.
+ * planned keep their Variant. Schedules without a start are returned as they are, and so are
+ * phases: moving their start would move every phase, and change days already planned.
  */
 export function scheduleStartBy<S extends Schedule>(s: S, date: ISODate): S {
-	if (!('start' in s) || !s.start || s.start <= date) return s;
+	if (s.kind === 'phases' || !('start' in s) || !s.start || s.start <= date) return s;
 	const back = daysBetween(date, s.start);
 	const cycle = cycleOf(s);
 	return cycle ? { ...s, start: addDays(s.start, -Math.ceil(back / cycle) * cycle) } : { ...s, start: date };
+}
+
+/** The schedule as it would be with its own start on `start` (phases move every phase with it). */
+function withStart(s: Schedule, start: ISODate): Schedule {
+	if (isPhases(s)) return tidyPhases({ ...s, start });
+	return 'start' in s ? ({ ...s, start } as Schedule) : s;
+}
+
+/**
+ * An edit that only moved the schedule's own start back, along with the habit's start date
+ * (Started on): the same plan, begun earlier. It is not a change of plan, so no earlier
+ * schedule is kept for the past.
+ */
+export function startMovedBack(before: unknown, after: unknown, beforeStart: ISODate, afterStart: ISODate): boolean {
+	if (!before || !after || afterStart >= beforeStart) return false;
+	const a = before as Schedule;
+	const b = after as Schedule;
+	if (a.kind !== b.kind || !('start' in a) || !('start' in b) || !(b.start < a.start)) return false;
+	return sameSchedule(withStart(b, a.start), a);
 }
 
 /**

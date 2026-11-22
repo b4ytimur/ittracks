@@ -14,13 +14,19 @@ import { upgradeOptionIds } from '$lib/server/db/upgrade';
 migrate(db, { migrationsFolder: './drizzle' });
 // Rows still in a shape older code wrote (choice options as words): brought up to date.
 if (!building) db.transaction((tx) => upgradeOptionIds(tx));
-// Once: days that got part of the way and were settled as missed before the partial-day rule.
-if (!building && !db.select().from(appValue).where(eq(appValue.key, 'partial-days-restored')).get()) {
+/** A repair of rows older code wrote, run once per database; the count it changed is kept. */
+function once(key: string, run: () => number) {
+	if (building || db.select().from(appValue).where(eq(appValue.key, key)).get()) return;
 	db.transaction(() => {
-		const n = restorePartialDays();
-		db.insert(appValue).values({ key: 'partial-days-restored', value: String(n) }).run();
+		const n = run();
+		db.insert(appValue).values({ key, value: String(n) }).run();
 	});
 }
+// Days that got part of the way and were settled as missed before the partial-day rule.
+once('partial-days-restored', restorePartialDays);
+// Again for days logged part of the way through a key or a quick-log link, before those were
+// judged by the same rule as the app.
+once('partial-days-restored-2', restorePartialDays);
 if (!building) startReminders();
 
 export const handle: Handle = async ({ event, resolve }) => {
