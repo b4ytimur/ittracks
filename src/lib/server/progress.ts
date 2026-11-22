@@ -47,7 +47,8 @@ function slotsFor(occs: OccRow[], level?: (o: OccRow) => Level | null): Map<stri
 		? db
 				.select({ id: metric.id, taskId: metric.taskId, name: metric.name, type: metric.type, unit: metric.unit, repeats: metric.repeats, step: metric.step })
 				.from(metric)
-				.where(inArray(metric.taskId, taskIds))
+				// A log is measured by the fields it asks for: archived ones are kept for History only.
+				.where(and(inArray(metric.taskId, taskIds), eq(metric.archived, false)))
 				.orderBy(asc(metric.sortOrder))
 				.all()
 		: [];
