@@ -968,6 +968,7 @@
 			<label>What's the habit called? <input bind:value={h.name} placeholder="Gym, Spanish, Read" maxlength="120" required /></label>
 			{@render typePart()}
 			{@render areaPart()}
+			{@render insidePart()}
 			{#if h.direction === 'build'}
 				<h2>What you do</h2>
 				<p class="muted small-text">Add the Tasks you log, like exercises or "new words". Leave it empty for a simple tick-off habit.</p>
