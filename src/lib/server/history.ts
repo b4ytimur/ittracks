@@ -82,18 +82,24 @@ export function habitLogged(habitId: string, q: Db = db): boolean {
 	);
 }
 
+/** Told about every row a change writes, with the columns before and after: how bulk Undo puts them back. */
+export type OnWrite = (table: 'entry' | 'slot' | 'taskPart' | 'occurrence', id: string, before: Record<string, unknown>, after: Record<string, unknown>) => void;
+
 const scale = (r: Record<string, number> | null | undefined, metricId: string, f: number) =>
 	r && typeof r[metricId] === 'number' ? { ...r, [metricId]: roundConverted(r[metricId] * f) } : r;
 
 /**
  * Convert one Metric's past values by `factor` (kg to lb: 2.2046): every logged value, the
- * targets of every Slot, and the targets kept with past logs. Runs inside the Task's save, so
- * the new unit and the converted numbers land together or not at all.
+ * targets of every Slot, and the targets kept with past logs. Runs inside the Task's save (or a
+ * bulk change), so the new unit and the converted numbers land together or not at all.
  */
-export function convertMetricValues(tx: Tx, accountId: string, taskId: string, metricId: string, factor: number) {
+export function convertMetricValues(tx: Db, accountId: string, taskId: string, metricId: string, factor: number, onWrite?: OnWrite) {
 	for (const e of tx.select({ id: entry.id, values: entry.values }).from(entry).where(eq(entry.taskId, taskId)).all()) {
 		const v = e.values?.[metricId];
-		if (typeof v === 'number') tx.update(entry).set({ values: { ...e.values, [metricId]: roundConverted(v * factor) } }).where(eq(entry.id, e.id)).run();
+		if (typeof v !== 'number') continue;
+		const values = { ...e.values, [metricId]: roundConverted(v * factor) };
+		onWrite?.('entry', e.id, { values: e.values }, { values });
+		tx.update(entry).set({ values }).where(eq(entry.id, e.id)).run();
 	}
 	// Slots of this account that have a target for the field: fixed to the Task, or open.
 	const slots = tx
@@ -106,17 +112,16 @@ export function convertMetricValues(tx: Tx, accountId: string, taskId: string, m
 		.map((r) => r.s);
 	for (const s of slots) {
 		if (![s.targets, s.minTargets, s.stretchTargets].some((r) => r && metricId in r)) continue;
-		tx.update(slot)
-			.set({ targets: scale(s.targets, metricId, factor), minTargets: scale(s.minTargets, metricId, factor), stretchTargets: scale(s.stretchTargets, metricId, factor) })
-			.where(eq(slot.id, s.id))
-			.run();
+		const set = { targets: scale(s.targets, metricId, factor), minTargets: scale(s.minTargets, metricId, factor), stretchTargets: scale(s.stretchTargets, metricId, factor) };
+		onWrite?.('slot', s.id, { targets: s.targets, minTargets: s.minTargets, stretchTargets: s.stretchTargets }, set);
+		tx.update(slot).set(set).where(eq(slot.id, s.id)).run();
 	}
 	// Parts that aim for the field inside another Task.
-	for (const p of partsAiming(tx, accountId, [metricId]))
-		tx.update(taskPart)
-			.set({ targets: scale(p.targets, metricId, factor), minTargets: scale(p.minTargets, metricId, factor), stretchTargets: scale(p.stretchTargets, metricId, factor) })
-			.where(eq(taskPart.id, p.id))
-			.run();
+	for (const p of partsAiming(tx, accountId, [metricId])) {
+		const set = { targets: scale(p.targets, metricId, factor), minTargets: scale(p.minTargets, metricId, factor), stretchTargets: scale(p.stretchTargets, metricId, factor) };
+		onWrite?.('taskPart', p.id, { targets: p.targets, minTargets: p.minTargets, stretchTargets: p.stretchTargets }, set);
+		tx.update(taskPart).set(set).where(eq(taskPart.id, p.id)).run();
+	}
 	const kept = tx
 		.select({ id: occurrence.id, goals: occurrence.goals })
 		.from(occurrence)
@@ -132,7 +137,9 @@ export function convertMetricValues(tx: Tx, accountId: string, taskId: string, m
 				return [slotId, { ...g, targets: scale(g.targets, metricId, factor) ?? null, minTargets: scale(g.minTargets, metricId, factor) ?? null, stretchTargets: scale(g.stretchTargets, metricId, factor) ?? null }];
 			})
 		);
-		if (changed) tx.update(occurrence).set({ goals }).where(eq(occurrence.id, o.id)).run();
+		if (!changed) continue;
+		onWrite?.('occurrence', o.id, { goals: o.goals }, { goals });
+		tx.update(occurrence).set({ goals }).where(eq(occurrence.id, o.id)).run();
 	}
 }
 
@@ -167,7 +174,7 @@ export function dropTargets(tx: Tx, accountId: string, metricIds: string[]) {
 }
 
 /** Parts of this account's Tasks with a target for any of these fields. */
-function partsAiming(tx: Tx, accountId: string, metricIds: string[]) {
+function partsAiming(tx: Db, accountId: string, metricIds: string[]) {
 	const ids = new Set(metricIds);
 	return tx
 		.select({ p: taskPart })

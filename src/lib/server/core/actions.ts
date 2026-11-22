@@ -14,6 +14,8 @@ import { analysisOptions, correlation, series } from './analysis';
 import { statsCompare, statsDescribe, statsGroups, statsTrend } from './statistics';
 import { listEvents, EVENT_TYPES } from './events';
 import { BUCKETS, OVER_TIME, SOURCES, SPLITS } from '$lib/stats/model';
+import { BULK, BULK_NAMES, bulkInput } from '$lib/bulk/catalog';
+import { runBulk, undoBulk } from '../bulk';
 
 export const API_VERSION = 1;
 
@@ -378,6 +380,27 @@ export const ACTIONS: ActionDef[] = [
 		description: "Save the day's free Markdown note (Settings → Journal). append: true adds to it instead of replacing. Needs notes access.",
 		input: z.object({ date, text: z.string().max(20000), append: z.boolean().optional() }),
 		run: (a, i) => writeDayNote(a, i)
+	}),
+	// ---------- change many at once ----------
+	def({
+		name: 'bulk',
+		version: 1,
+		kind: 'write',
+		scope: 'log',
+		title: 'Change many at once',
+		description: `One change on many habits or Tasks: ${BULK_NAMES.map((n) => `${n} (${BULK[n].title}, on ${BULK[n].target}s${BULK[n].scope === 'edit' ? ', needs edit access' : ''}): ${BULK[n].description}`).join(' ')} Pick the items with ids (or names), or every item that matches a filter ({} is all). Without apply it only previews: what would change, and what would be left as it is and why. With apply: true it changes everything in one go and returns a batch id; bulk_undo with it puts everything back.`,
+		input: bulkInput,
+		run: (a, i) => runBulk(a, i)
+	}),
+	def({
+		name: 'bulk_undo',
+		version: 1,
+		kind: 'write',
+		scope: 'log',
+		title: 'Undo a bulk change',
+		description: 'Put back everything one bulk change did, by its batch id. Only the latest bulk change not undone yet; anything changed again since is kept as it is.',
+		input: z.object({ batch: z.string().min(1).max(80).describe('The batch id bulk returned.') }),
+		run: (a, i) => undoBulk(a, i.batch)
 	}),
 	def({
 		name: 'write_log_note',

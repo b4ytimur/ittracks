@@ -78,12 +78,20 @@ export function doneOcc(actor: Actor, occ: OccRow, how: DoneHow, level: Level | 
 	const kids = routineKids(occ, actor);
 	if (kids) {
 		// A routine is done through the habits inside it: each one still open gets its one tap.
-		for (const k of kids) if (k.occ.status !== 'done' && k.occ.status !== 'skipped') doneOcc(actor, k.occ, oneTap(k.occ), level);
+		inside(() => {
+			for (const k of kids) if (k.occ.status !== 'done' && k.occ.status !== 'skipped') doneOcc(actor, k.occ, oneTap(k.occ), level);
+		});
 		const now = recountRoutine(actor, occ);
 		if (now?.status !== 'done') return 'needsInput';
 		emit(actor, 'occurrence.done', { habitId: occ.habitId, date: occ.date, data: { occurrenceId: occ.id, level: now.level ?? null, how } });
 		return 'done';
 	}
+	const r = doneOne(actor, occ, how, level);
+	syncAbove(actor, occ);
+	return r;
+}
+
+function doneOne(actor: Actor, occ: OccRow, how: DoneHow, level: Level | null): 'done' | 'needsInput' | 'gone' {
 	let r: 'done' | 'needsInput' | 'gone';
 	if (how === 'mark') {
 		db.update(occurrence)
@@ -106,9 +114,12 @@ export function doneOcc(actor: Actor, occ: OccRow, how: DoneHow, level: Level | 
 export function skipOcc(actor: Actor, occ: OccRow) {
 	const kids = routineKids(occ, actor);
 	// Skipping a routine skips the habits inside it that are still open; done ones stay done.
-	for (const k of kids ?? []) if (k.occ.status !== 'done' && k.occ.status !== 'skipped') skipOcc(actor, k.occ);
+	inside(() => {
+		for (const k of kids ?? []) if (k.occ.status !== 'done' && k.occ.status !== 'skipped') skipOcc(actor, k.occ);
+	});
 	db.update(occurrence).set({ status: 'skipped', finishedAt: null, level: null }).where(eq(occurrence.id, occ.id)).run();
 	if (kids) recountRoutine(actor, occ);
+	else syncAbove(actor, occ);
 	emit(actor, 'occurrence.skipped', { habitId: occ.habitId, date: occ.date, data: { occurrenceId: occ.id } });
 }
 
@@ -116,9 +127,12 @@ export function skipOcc(actor: Actor, occ: OccRow) {
 export function reopenOcc(actor: Actor, occ: OccRow, clear: boolean) {
 	const kids = routineKids(occ);
 	// Undo on a routine opens the habits inside it again. What they logged stays.
-	for (const k of kids ?? []) if (k.occ.status === 'done' || k.occ.status === 'skipped') reopenOcc(actor, k.occ, false);
+	inside(() => {
+		for (const k of kids ?? []) if (k.occ.status === 'done' || k.occ.status === 'skipped') reopenOcc(actor, k.occ, false);
+	});
 	reopen(occ.id, clear);
 	if (kids) recountRoutine(actor, occ);
+	else syncAbove(actor, occ);
 	emit(actor, 'occurrence.reopened', { habitId: occ.habitId, date: occ.date, data: { occurrenceId: occ.id, cleared: clear } });
 }
 
@@ -141,6 +155,24 @@ function oneTap(occ: OccRow): DoneHow {
 		.where(and(eq(occurrence.habitId, occ.habitId), eq(occurrence.status, 'done')))
 		.get();
 	return before ? 'same' : 'targets';
+}
+
+/** While a routine marks the habits inside it, they don't each judge it again: it is judged once after. */
+let marking = 0;
+function inside(run: () => void) {
+	marking++;
+	try {
+		run();
+	} finally {
+		marking--;
+	}
+}
+
+/** A habit inside a group or a routine changed: the days it counts toward are judged again. */
+function syncAbove(actor: Actor, occ: OccRow) {
+	if (marking) return;
+	const h = db.select({ parentId: habit.parentId }).from(habit).where(eq(habit.id, occ.habitId)).get();
+	if (h?.parentId) syncParents(actor.accountId, userToday(actor.accountId, actor.tz), pausesOf(actor.accountId));
 }
 
 /** The routine's day counted again from the habits inside it. */

@@ -8,7 +8,7 @@ import { db } from './db';
 import { entry, habit, occurrence, slip, slot, task, variant } from './db/schema';
 import { PATH_RE } from '$lib/engine/parts';
 import { dueOn, isGroup, type Schedule } from '$lib/engine/schedule';
-import { followDue } from './rollup';
+import { followDue, isRoutine } from './rollup';
 import { carriesOver, dependsOnHistory, isRealDate, logWindow, variantFor, type LogWindow } from '$lib/engine/backfill';
 import { scheduleStartBy } from '$lib/engine/unlogged';
 import { pauseOn } from '$lib/engine/pause';
@@ -270,7 +270,7 @@ export function clearDay(accountId: string, habitId: string, schedule: ScheduleF
 
 // ---------- Undo: a copy of a day's log, taken before a change ----------
 
-const snapshotSchema = z.object({
+const daySchema = z.object({
 	habitId: z.string().uuid(),
 	date: z.string().refine(isRealDate),
 	occ: z
@@ -288,10 +288,32 @@ const snapshotSchema = z.object({
 		})
 		.nullable()
 });
+/** A routine's day carries the days of the habits inside it: its Done, Skip and Undo mark them too. */
+const snapshotSchema = daySchema.extend({ below: z.array(daySchema).max(200).optional() });
 export type Snapshot = z.infer<typeof snapshotSchema>;
+type DaySnapshot = z.infer<typeof daySchema>;
 
 /** A copy of one habit's day: its Occurrence and Entries, or null when there is none. */
 export function snapshot(habitId: string, date: string): Snapshot {
+	const below = insideRoutine(habitId).map((id) => daySnapshot(id, date));
+	return below.length ? { ...daySnapshot(habitId, date), below } : daySnapshot(habitId, date);
+}
+
+/** The habits inside a routine, at any depth (none for any other habit). */
+function insideRoutine(habitId: string): string[] {
+	if (!isRoutine(habitId)) return [];
+	const out: string[] = [];
+	const walk = (id: string, depth: number) => {
+		for (const k of db.select({ id: habit.id }).from(habit).where(and(eq(habit.parentId, id), eq(habit.direction, 'build'))).all()) {
+			out.push(k.id);
+			if (depth < 20 && out.length < 200) walk(k.id, depth + 1);
+		}
+	};
+	walk(habitId, 0);
+	return out.slice(0, 200);
+}
+
+function daySnapshot(habitId: string, date: string): DaySnapshot {
 	const occ = rowOn(habitId, date);
 	return {
 		habitId,
@@ -320,7 +342,12 @@ export function snapshot(habitId: string, date: string): Snapshot {
 export function restore(accountId: string, raw: unknown): boolean {
 	const parsed = snapshotSchema.safeParse(raw);
 	if (!parsed.success) return false;
-	const snap = parsed.data;
+	// The habits inside a routine first, then the routine, which is judged from them.
+	for (const kid of parsed.data.below ?? []) restoreDay(accountId, kid);
+	return restoreDay(accountId, parsed.data);
+}
+
+function restoreDay(accountId: string, snap: DaySnapshot): boolean {
 	const h = db.select().from(habit).where(and(eq(habit.id, snap.habitId), eq(habit.accountId, accountId))).get();
 	if (!h) return false;
 	const existing = rowOn(h.id, snap.date);

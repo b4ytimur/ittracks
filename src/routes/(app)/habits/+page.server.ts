@@ -8,7 +8,9 @@ import { habit, occurrence } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 import { userToday } from '$lib/server/today';
 import { initialState, templateById } from '$lib/views';
-import type { PageServerLoad } from './$types';
+import { fail } from '@sveltejs/kit';
+import { archiveHabit, renameHabit, unarchiveHabit } from '$lib/server/habit-actions';
+import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ locals, url, cookies }) => {
 	const accountId = locals.account!.id;
@@ -41,6 +43,8 @@ export const load: PageServerLoad = ({ locals, url, cookies }) => {
 		areas: listAreas(accountId),
 		views,
 		initial,
+		/** For the bulk bar's date inputs. */
+		today,
 		added: url.searchParams.get('added'),
 		/** After an import: how many Tasks were made, and how many came from your Library. */
 		created: Number(url.searchParams.get('created')) || 0,
@@ -50,4 +54,24 @@ export const load: PageServerLoad = ({ locals, url, cookies }) => {
 			return t && t.id !== views.template ? { id: t.id, name: t.name, summary: t.summary } : null;
 		})()
 	};
+};
+
+/** Changes the list makes in place while editing. The order is a view setting (/api/views). */
+export const actions: Actions = {
+	rename: async ({ request, locals }) => {
+		const f = await request.formData();
+		const r = renameHabit(locals.account!.id, String(f.get('id') ?? ''), String(f.get('name') ?? ''));
+		if ('error' in r) return fail(400, { error: r.error });
+		return { renamed: r.name };
+	},
+	archive: async ({ request, locals, cookies }) => {
+		const id = String((await request.formData()).get('id') ?? '');
+		if (!archiveHabit(locals.account!.id, id, userToday(locals.account!.id, cookies.get('tz')))) return fail(404, { error: 'No such habit' });
+		return { archived: id };
+	},
+	unarchive: async ({ request, locals, cookies }) => {
+		const id = String((await request.formData()).get('id') ?? '');
+		if (!unarchiveHabit(locals.account!.id, id, userToday(locals.account!.id, cookies.get('tz')))) return fail(404, { error: 'No such habit' });
+		return { unarchived: id };
+	}
 };

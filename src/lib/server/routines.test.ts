@@ -9,9 +9,10 @@ import { db } from './db';
 import { habit, occurrence, pause } from './db/schema';
 import { createAccount } from './auth';
 import { saveSettings } from './settings';
-import { loadToday, repaused, settleAll, userToday } from './today';
+import { loadToday, recount, repaused, settleAll, userToday } from './today';
+import { restore, snapshot } from './backfill';
 import { checkHabitEdit, checkLinks, deleteHabit, getHabitForm, saveHabit } from './repo/habits';
-import { habitForm, type HabitForm } from '$lib/forms';
+import { habitForm, type HabitForm, type ScheduleForm } from '$lib/forms';
 import { addDays, weekday } from '$lib/engine/dates';
 import { appActor, type Actor } from './core/actor';
 import { runAction } from './core/actions';
@@ -77,6 +78,17 @@ describe('habits that follow a routine', () => {
 		expect(t.build.find((x) => x.habitId === r.id)?.occurrence?.status).toBe('done');
 	});
 
+	it('judge its day again as soon as one of them is marked', () => {
+		const r = routine('Judged at once', 0);
+		const a = follower('First', r.id, 0);
+		follower('Second', r.id, 0);
+		loadToday(me, today);
+		doneOcc(app, occOf(a), 'mark', null);
+		expect(occOf(r.id)).toMatchObject({ status: 'due', rollup: { done: 1, total: 2 } });
+		reopenOcc(app, occOf(a), false);
+		expect(occOf(r.id)).toMatchObject({ rollup: { done: 0, total: 2 } });
+	});
+
 	it('only come up with the Variants they follow', () => {
 		const a = randomUUID();
 		const b = randomUUID();
@@ -130,6 +142,21 @@ describe('habits that follow a routine', () => {
 		expect(rowOn(r.id, d1)).toMatchObject({ status: 'done', rollup: { done: 1, total: 1 } });
 	});
 
+	it('Undo of a past day puts back the habits inside too', () => {
+		const r = routine('Undoable', 1);
+		const a = follower('Inside undoable', r.id, 1);
+		const d1 = addDays(today, -1);
+		settleAll(me, today);
+		const before = snapshot(r.id, d1);
+		expect(before.below).toHaveLength(1);
+		run('log_done', { habit: r.id, date: d1 });
+		expect([rowOn(a, d1)?.status, rowOn(r.id, d1)?.status]).toEqual(['done', 'done']);
+		expect(restore(me, before)).toBe(true);
+		const h = db.select().from(habit).where(eq(habit.id, r.id)).get()!;
+		recount(me, r.id, h.schedule as ScheduleForm, d1, today);
+		expect([rowOn(a, d1)?.status, rowOn(r.id, d1)?.status]).toEqual(['missed', 'missed']);
+	});
+
 	it('done at Stretch when every one of them was', () => {
 		const r = routine('Warm-up', 0);
 		const a = follower('Jog', r.id, 0);
@@ -168,6 +195,21 @@ describe('Done, Skip and Undo on a routine', () => {
 		loadToday(me, today);
 		expect(run('log_done', { habit: r.id })).toMatchObject({ status: 'done' });
 		expect(occOf(a).status).toBe('done');
+	});
+});
+
+describe('bulk Skip on a routine', () => {
+	it('skips the habits inside on those days, and its Undo opens them again', () => {
+		const r = routine('Bulk routine', 2);
+		const a = follower('Bulk inside', r.id, 2);
+		db.update(habit).set({ unlogged: 'ignore' }).where(eq(habit.id, a)).run();
+		const d2 = addDays(today, -2);
+		const d1 = addDays(today, -1);
+		settleAll(me, today);
+		const res = run('bulk', { action: { name: 'skip_days', from: d2, to: d1 }, ids: [r.id, a], apply: true }) as { batch: string };
+		expect([rowOn(a, d2)?.status, rowOn(a, d1)?.status, rowOn(r.id, d2)?.status]).toEqual(['skipped', 'skipped', 'skipped']);
+		run('bulk_undo', { batch: res.batch });
+		expect([rowOn(a, d2), rowOn(a, d1), rowOn(r.id, d2)?.status]).toEqual([undefined, undefined, 'missed']);
 	});
 });
 

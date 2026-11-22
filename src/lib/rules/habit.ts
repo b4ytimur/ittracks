@@ -1,5 +1,7 @@
 // Conflict rules for the habit editor. Ids (H1, B2...) name each rule.
+import { z } from 'zod';
 import { DEFAULT_TRIGGERS, type HabitForm } from '../forms';
+import type { FieldEditor } from '../bulk/fields';
 import {
 	check,
 	defineRules,
@@ -10,6 +12,7 @@ import {
 	normalize,
 	onlyWhen,
 	requiresAny,
+	type FieldPath,
 	type Issue
 } from './core';
 import { archive, definePolicies, display, locked, pastIssues, recompute, removedItems, unguarded, versioned } from './history';
@@ -308,3 +311,32 @@ export function checkHabitPast(before: HabitForm, after: HabitForm, logged: bool
 }
 
 export { isSet };
+
+// ---------- bulk: fields many habits can be set to at once (src/lib/bulk) ----------
+
+/**
+ * A field bulk editing can set on many habits at once: its label, its input (one Zod schema for
+ * the app, the API and the MCP server) and how the app asks for it. The conflict rules above
+ * decide which habits it can't apply to, and its history policy must be `display`, so setting it
+ * never touches past days (bulk.test.ts checks both). A new one is one entry here.
+ */
+export interface BulkField {
+	label: string;
+	input: z.ZodType;
+	editor: FieldEditor;
+}
+
+export const habitBulk = {
+	areaId: {
+		label: 'Area',
+		input: z.string().trim().min(1).max(200).nullable().describe('Area id or name; null takes the habits out of their Area.'),
+		editor: { kind: 'select', source: 'areas', empty: 'No Area' }
+	},
+	remind: {
+		label: 'Reminders',
+		input: z.boolean().describe('Push a reminder at the cue time: true or false.'),
+		editor: { kind: 'toggle', on: 'On', off: 'Off' }
+	}
+} satisfies Partial<Record<FieldPath<HabitForm>, BulkField>>;
+
+export type HabitBulkField = keyof typeof habitBulk;

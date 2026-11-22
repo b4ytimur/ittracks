@@ -16,7 +16,8 @@
 		statuses = null,
 		direction = false,
 		archived = false,
-		children
+		children,
+		end
 	}: {
 		page: Page;
 		views: ViewSettings;
@@ -28,6 +29,8 @@
 		direction?: boolean;
 		archived?: boolean;
 		children?: Snippet;
+		/** More controls at the end of the chip row, such as the page's Edit switch. */
+		end?: Snippet;
 	} = $props();
 
 	let open = $state(false);
@@ -94,6 +97,7 @@
 		<button class="chip small" aria-expanded={open} onclick={() => (open = !open)}>
 			Customize{filters ? ` · ${filters} filter${filters === 1 ? '' : 's'}` : ''}
 		</button>
+		{@render end?.()}
 	</div>
 
 	{#if open}

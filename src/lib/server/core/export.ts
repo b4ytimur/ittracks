@@ -445,7 +445,7 @@ export function importReplace(actor: Actor, raw: unknown): { counts: Record<stri
 		// Habits and Tasks take their logs, Variants, Slots, Metrics and links with them.
 		tx.delete(s.habit).where(eq(s.habit.accountId, accountId)).run();
 		tx.delete(s.task).where(eq(s.task.accountId, accountId)).run();
-		for (const t of [s.tag, s.area, s.collection, s.identity, s.pause, s.dayNote, s.event, s.settings] as const)
+		for (const t of [s.tag, s.area, s.collection, s.identity, s.pause, s.dayNote, s.event, s.settings, s.bulkBatch] as const)
 			tx.delete(t).where(eq(t.accountId, accountId)).run();
 
 		// Ids another account here already has would clash: then every id gets a new one.
