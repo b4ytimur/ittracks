@@ -12,7 +12,8 @@ import { scheduleStartBy } from '$lib/engine/unlogged';
 import { pauseOn } from '$lib/engine/pause';
 import { limitOn, usedIn } from '$lib/engine/limit';
 import type { Level } from '$lib/engine/streak';
-import type { ScheduleForm } from '$lib/forms';
+import { DEFAULT_TRIGGERS, type ScheduleForm } from '$lib/forms';
+import { optionName } from '$lib/options';
 import { createOccurrence, history, pausesOf, pickForVariant, recount, reopen, scheduleAt, settle } from './today';
 import { getSettings } from './settings';
 
@@ -97,7 +98,7 @@ export function loadDay(accountId: string, date: string, today: string) {
 				name: h.name,
 				slips: all
 					.filter((s) => s.date === date)
-					.map((s) => ({ id: s.id, count: s.count, time: s.time, feeling: s.feeling })),
+					.map((s) => ({ id: s.id, count: s.count, time: s.time, feeling: optionName(h.triggers ?? DEFAULT_TRIGGERS, s.feeling) })),
 				limit: h.limit ? { used: usedIn(h.limit, all, date), max: limitOn(h.limit, date), period: h.limit.period } : null
 			});
 			continue;

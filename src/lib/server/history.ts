@@ -15,12 +15,17 @@ export class PastEditError extends Error {}
 
 const filled = (v: unknown) => v !== undefined && v !== null && v !== '';
 
-/** The Task's Metrics that have a value in any log, and its sub-tasks ticked in any log. */
-export function taskLogged(taskId: string, q: Db = db): { metrics: Set<string>; subtasks: Set<string> } {
-	const metricIds = new Set(q.select({ id: metric.id }).from(metric).where(eq(metric.taskId, taskId)).all().map((m) => m.id));
+/** The Task's Metrics that have a value in any log, its sub-tasks ticked in any log, and the Choice options picked. */
+export function taskLogged(taskId: string, q: Db = db): { metrics: Set<string>; subtasks: Set<string>; options: Set<string> } {
+	const types = new Map(q.select({ id: metric.id, type: metric.type }).from(metric).where(eq(metric.taskId, taskId)).all().map((m) => [m.id, m.type]));
 	const metrics = new Set<string>();
+	const options = new Set<string>();
 	for (const e of q.select({ values: entry.values }).from(entry).where(eq(entry.taskId, taskId)).all())
-		for (const [k, v] of Object.entries(e.values ?? {})) if (metricIds.has(k) && filled(v)) metrics.add(k);
+		for (const [k, v] of Object.entries(e.values ?? {})) {
+			if (!types.has(k) || !filled(v)) continue;
+			metrics.add(k);
+			if (types.get(k) === 'choice' && typeof v === 'string') options.add(v);
+		}
 	const subIds = q.select({ id: task.id }).from(task).where(eq(task.parentTaskId, taskId)).all().map((s) => s.id);
 	const subtasks = new Set(
 		subIds.length
@@ -32,14 +37,26 @@ export function taskLogged(taskId: string, q: Db = db): { metrics: Set<string>; 
 					.map((r) => r.id)
 			: []
 	);
-	return { metrics, subtasks };
+	return { metrics, subtasks, options };
 }
 
 /** For the editor: the same, as lists. */
-export const taskLoggedLists = (taskId: string): TaskLogged & { metrics: string[]; subtasks: string[] } => {
+export const taskLoggedLists = (taskId: string): TaskLogged & { metrics: string[]; subtasks: string[]; options: string[] } => {
 	const l = taskLogged(taskId);
-	return { metrics: [...l.metrics], subtasks: [...l.subtasks] };
+	return { metrics: [...l.metrics], subtasks: [...l.subtasks], options: [...l.options] };
 };
+
+/** The feelings (ids) the habit's slips were logged with. */
+export function feelingsUsed(habitId: string, q: Db = db): Set<string> {
+	return new Set(
+		q
+			.selectDistinct({ f: slip.feeling })
+			.from(slip)
+			.where(and(eq(slip.habitId, habitId), isNotNull(slip.feeling)))
+			.all()
+			.map((r) => r.f!)
+	);
+}
 
 /**
  * Has anything been logged for this habit: a day done or skipped, a value, a note, a slip or a

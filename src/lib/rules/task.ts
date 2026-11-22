@@ -1,15 +1,16 @@
 // Conflict rules for the Task editor and its Metrics. Ids (M1...) match the proposal.
 import type { MetricForm, TaskForm } from '../forms';
 import { check, defineRules, evaluate, exclusive, independent, normalize, onlyWhen, type Issue } from './core';
-import { archive, definePolicies, display, locked, migrate, pastIssues, removedItems, unguarded } from './history';
+import { archive, definePolicies, display, locked, migrate, pastIssues, removedItems, unguarded, versioned } from './history';
 import { effectiveUnit, findUnit, unitChange, type UnitChange, type UnitChoice } from '../units';
+import { repeatedName } from '../options';
 
 export const isNumericType = (type: string) => type === 'number' || type === 'count' || type === 'duration';
 /** A Text field with several lines of Markdown. */
 export const isLongText = (m: Pick<MetricForm, 'type' | 'long'>) => m.type === 'text' && m.long;
 /** Some options of a Choice have a number and some don't. */
 export const partlyScored = (m: Pick<MetricForm, 'choices' | 'scores'>) =>
-	m.choices.some((c) => typeof m.scores[c] === 'number') && m.choices.some((c) => typeof m.scores[c] !== 'number');
+	m.choices.some((c) => typeof m.scores[c.id] === 'number') && m.choices.some((c) => typeof m.scores[c.id] !== 'number');
 
 export const metricRules = defineRules<MetricForm>({
 	id: independent,
@@ -28,7 +29,9 @@ export const metricRules = defineRules<MetricForm>({
 	step: [onlyWhen((m) => isNumericType(m.type), 'Only numbers, counts and durations have a step', null)],
 	choices: [
 		onlyWhen((m) => m.type === 'choice', 'Only a Choice has options', []),
-		check((m) => m.type === 'choice' && m.choices.length < 2, 'A Choice needs at least two options')
+		check((m) => m.type === 'choice' && m.choices.length < 2, 'A Choice needs at least two options'),
+		// A value can be logged by the option's name (API, links), so two options can't share one.
+		check((m) => m.type === 'choice' && !!repeatedName(m.choices), 'Two options have the same name')
 	],
 	// J5: scored choices, so Stats can average a mood. Every option has a number, or none does.
 	scores: [
@@ -68,10 +71,10 @@ export const taskRules = defineRules<TaskForm>({
 	restTimerSeconds: independent
 });
 
-/** Numbers only for options the Choice still has (an option renamed or removed loses its number). */
+/** Numbers only for options the Choice still has, by id: a renamed option keeps its number. */
 const keepScores = (m: MetricForm): MetricForm => ({
 	...m,
-	scores: Object.fromEntries(Object.entries(m.scores ?? {}).filter(([k, v]) => m.choices.includes(k) && Number.isFinite(v)))
+	scores: Object.fromEntries(Object.entries(m.scores ?? {}).filter(([k, v]) => m.choices.some((c) => c.id === k) && Number.isFinite(v)))
 });
 
 export function checkTask(input: TaskForm): { form: TaskForm; errors: Issue[]; warnings: Issue[] } {
@@ -106,8 +109,8 @@ export const metricPast = definePolicies<MetricForm>({
 	),
 	unit: migrate<MetricForm>('Past values are converted to the new unit, or keep their numbers', unitKey),
 	repeats: locked('This field has logged values. They were logged once or per set, and switching would read them the other way. Add a new field instead'),
-	choices: unguarded('Past values are stored as the option text, so a renamed or removed option leaves them unmatched'),
-	scores: unguarded('Numbers apply when Stats reads them, so a changed number changes past averages'),
+	choices: archive('Logs store the option, not its name: a renamed option is renamed in past logs too, and one removed after it was logged is archived'),
+	scores: versioned('A changed number applies from today; past days keep the numbers they had'),
 	prefill: display(),
 	step: display(),
 	required: display(),
@@ -130,10 +133,11 @@ export const taskPast = definePolicies<TaskForm>({
 	restTimerSeconds: display()
 });
 
-/** What has data logged against it: Metric ids with a value, sub-task ids with a tick. */
+/** What has data logged against it: Metric ids with a value, sub-task ids with a tick, Choice option ids picked. */
 export interface TaskLogged {
 	metrics: Set<string> | string[];
 	subtasks: Set<string> | string[];
+	options: Set<string> | string[];
 }
 
 const has = (s: Set<string> | string[], id: string) => (Array.isArray(s) ? s.includes(id) : s.has(id));
@@ -156,6 +160,8 @@ export interface TaskPast {
 	units: UnitEdit[];
 	/** Metrics and sub-tasks the edit removes: archived when logged, deleted otherwise. */
 	removed: Record<'metrics' | 'subtasks', { archive: string[]; drop: string[] }>;
+	/** Choice options the edit removes, per Metric id: archived when a log picked them. */
+	options: Record<string, { archive: string[]; drop: string[] }>;
 }
 
 /**
@@ -166,9 +172,12 @@ export interface TaskPast {
 export function checkTaskPast(before: TaskForm, after: TaskForm, logged: TaskLogged, choices: Record<string, UnitChoice> = {}): TaskPast {
 	const errors: Issue[] = [];
 	const units: UnitEdit[] = [];
+	const options: TaskPast['options'] = {};
 	after.metrics.forEach((m, i) => {
 		const was = before.metrics.find((x) => x.id === m.id);
 		if (!was) return;
+		const gone = removedItems(metricPast, was, m, (_, id) => has(logged.options, id)).choices;
+		if (gone.archive.length || gone.drop.length) options[m.id] = gone;
 		const issues = pastIssues(metricPast, was, m, has(logged.metrics, m.id), `metrics.${i}.`);
 		const lockedOnes = issues.filter((x) => x.kind === 'locked');
 		// A locked change is refused outright; its knock-on unit change needs no question.
@@ -188,5 +197,5 @@ export function checkTaskPast(before: TaskForm, after: TaskForm, logged: TaskLog
 		}
 	});
 	const removed = removedItems(taskPast, before, after, (path, id) => has(path === 'metrics' ? logged.metrics : logged.subtasks, id));
-	return { errors, units, removed: { metrics: removed.metrics, subtasks: removed.subtasks } };
+	return { errors, units, removed: { metrics: removed.metrics, subtasks: removed.subtasks }, options };
 }

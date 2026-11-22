@@ -35,7 +35,8 @@ export interface LogTask {
 			type: string;
 			unit: string | null;
 			repeats: boolean;
-			choices: string[] | null;
+			/** A Choice's options: the value is the option's id. */
+			choices: { id: string; name: string }[] | null;
 			prefill: 'last' | 'target' | 'blank';
 			step: number | null;
 			required: boolean;
@@ -81,7 +82,8 @@ function loadTask(id: string, kept: Set<string>) {
 				type,
 				unit,
 				repeats,
-				choices,
+				// Options a new log offers, and archived ones this log picked, so it reads and saves as is.
+				choices: choices ? choices.filter((o) => !o.archived || kept.has(o.id)).map((o) => ({ id: o.id, name: o.name })) : null,
 				prefill,
 				step,
 				required,
@@ -133,7 +135,8 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		.all();
 
 	// Fields and sub-tasks this log already holds: shown even when archived since.
-	const kept = new Set(entries.flatMap((e) => [e.taskId, ...Object.keys(e.values ?? {})]));
+	// Ids this log holds: Tasks, fields, and the options its Choice values are.
+	const kept = new Set(entries.flatMap((e) => [e.taskId, ...Object.keys(e.values ?? {}), ...Object.values(e.values ?? {}).filter((v): v is string => typeof v === 'string')]));
 	// The same Task in two Slots: each Slot gets its own group of Entries, not both.
 	const nth = new Map<string, number>();
 	const items: LogTask[] = slots.map((s) => {

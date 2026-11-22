@@ -8,6 +8,7 @@ import { withinOn, withinStreak, usedIn, limitOn, type Limit } from '../engine/l
 import { compile, evaluate, FormulaError } from './formula';
 import { excerpt } from '../markdown';
 import { convert, convertible, effectiveUnit, findUnit } from '../units';
+import { optionName, scoresOn, type ChoiceOption, type EarlierScores, type Scores } from '../options';
 import {
 	ADDS_UP,
 	SHARE_MEASURES,
@@ -57,9 +58,12 @@ export interface DsMetric {
 	type: string;
 	unit: string | null;
 	repeats: boolean;
-	choices: string[] | null;
-	/** Choice fields: a number per option, for averages (J5). */
-	scores?: Record<string, number> | null;
+	/** Choice fields: the options. Logs store an option's id. */
+	choices: ChoiceOption[] | null;
+	/** Choice fields: a number per option id, for averages (J5). */
+	scores?: Scores | null;
+	/** Numbers an edit replaced, with the last day each applied. */
+	earlierScores?: EarlierScores[] | null;
 }
 export interface DsVariant {
 	id: string;
@@ -815,9 +819,21 @@ export function pointsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range): 
 					if (card.perLog === 'ticked') {
 						push(raw === true ? 1 : 0, series);
 					} else if (card.perLog === 'option') {
-						if (typeof raw === 'string' && raw) push(1, card.split === 'option' || card.split === 'none' ? [{ key: `o:${raw}`, label: raw, w: 1, order: m.choices?.indexOf(raw) ?? 0 }] : tagsFor(base));
+						// Grouped by the option's name now: a renamed option keeps its past logs, and an
+						// archived option and a new one of the same name count together.
+						const name = optionName(m.choices, raw)?.toLowerCase();
+						// Shown as the option offered now, when one has that name.
+						const at = name ? (m.choices ?? []).findIndex((o) => !o.archived && o.name.toLowerCase() === name) : -1;
+						const label = at >= 0 ? m.choices![at].name : optionName(m.choices, raw);
+						if (name && label)
+							push(
+								1,
+								card.split === 'option' || card.split === 'none'
+									? [{ key: `o:${name}`, label, w: 1, order: at >= 0 ? at : (m.choices ?? []).findIndex((o) => o.id === raw) }]
+									: tagsFor(base)
+							);
 					} else if (card.perLog === 'score') {
-						const sc = typeof raw === 'string' ? m.scores?.[raw] : undefined;
+						const sc = typeof raw === 'string' ? scoresOn(m.scores, m.earlierScores, l.occ.date)[raw] : undefined;
 						if (typeof sc === 'number') push(sc, series);
 					} else if (card.perLog === 'present') {
 						if (filled(raw)) push(1, series);
@@ -1397,6 +1413,7 @@ export function describeLog(l: Log, P: Prepared): string {
 		if (!filled(v)) return null;
 		// A text field can hold a whole journal entry: its start is enough here.
 		if (m.type === 'text' && typeof v === 'string') return excerpt(v, 80);
+		if (m.type === 'choice') return optionName(m.choices, v);
 		return `${v}${m.unit ? ` ${m.unit}` : ''}`;
 	};
 	const parts: string[] = [];

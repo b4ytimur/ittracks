@@ -78,8 +78,8 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		collections: listCollections(accountId).filter((c) => !c.filter),
 		types: [...BUILTIN_TASK_TYPES, ...settings.taskTypes],
 		usage: isNew ? null : (taskUsage(accountId).get(params.id) ?? { habits: [], lastLogged: null, timesLogged: 0 }),
-		/** Fields with logged values and sub-tasks with ticks: the history policies guard their edits. */
-		logged: isNew ? { metrics: [], subtasks: [] } : taskLoggedLists(params.id),
+		/** Fields with logged values, sub-tasks with ticks and options picked: the history policies guard their edits. */
+		logged: isNew ? { metrics: [] as string[], subtasks: [] as string[], options: [] as string[] } : taskLoggedLists(params.id),
 		history: isNew ? null : taskHistory(accountId, params.id, cookies.get('tz'))
 	};
 };

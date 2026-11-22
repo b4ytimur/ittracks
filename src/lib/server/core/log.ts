@@ -13,6 +13,7 @@ import { getDayNote, saveDayNote } from '../journal';
 import { finishAs, plusOne, progressForIds } from '../progress';
 import { progressText } from '$lib/engine/progress';
 import { NOTE_MAX } from '$lib/forms';
+import { activeOptions, findOption, optionName } from '$lib/options';
 import type { Level } from '$lib/engine/streak';
 import { ActionError, canSeeHabit, requireScope, type Actor } from './actor';
 import { emit } from './events';
@@ -228,10 +229,11 @@ function checkValue(actor: Actor, m: typeof metric.$inferSelect, v: unknown): un
 		if (v === 0 || v === 'false' || v === 'no' || v === '0') return false;
 		throw new ActionError('invalid', `${m.name} takes true or false.`);
 	}
+	// A Choice takes an option by id or by name, and stores the id.
 	if (m.type === 'choice') {
-		const c = (m.choices ?? []).find((x) => norm(x) === norm(String(v)));
-		if (!c) throw new ActionError('invalid', `${m.name} is one of: ${(m.choices ?? []).join(', ')}.`);
-		return c;
+		const c = findOption(m.choices, String(v));
+		if (!c) throw new ActionError('invalid', `${m.name} is one of: ${activeOptions(m.choices).map((o) => o.name).join(', ')}.`);
+		return c.id;
 	}
 	// Text fields can hold journal entries: private, like notes.
 	requireScope(actor, 'notes');
@@ -326,7 +328,7 @@ export function logValue(
 		});
 		finishIf(actor, occ, input.finish ?? 'auto', 'value');
 		const target = t.targets[m.id] ?? null;
-		return { ...resultOf(occ.id), field: `${t.name}: ${m.name}`, value: m.type === 'text' ? '(saved)' : value, target };
+		return { ...resultOf(occ.id), field: `${t.name}: ${m.name}`, value: m.type === 'text' ? '(saved)' : m.type === 'choice' ? optionName(m.choices, value) : value, target };
 	});
 }
 
@@ -435,6 +437,14 @@ function breakHabit(actor: Actor, ref: string): HabitRow {
 	return h;
 }
 
+/** A feeling given by id or by name, as the id of one of the habit's feelings. */
+function feelingOf(h: HabitRow, given: string | null | undefined): string | null {
+	if (!given?.trim()) return null;
+	const f = findOption(h.triggers, given);
+	if (!f) throw new ActionError('invalid', `The feeling is one of: ${activeOptions(h.triggers).map((o) => o.name).join(', ') || "none (add feelings to the habit first)"}.`);
+	return f.id;
+}
+
 export function addSlip(
 	actor: Actor,
 	input: { habit: string; date?: string | null; count?: number; time?: string | null; place?: string | null; feeling?: string | null; withWhom?: string | null; notes?: string | null },
@@ -459,7 +469,7 @@ export function addSlip(
 			notes: clip(input.notes, NOTE_MAX),
 			time,
 			place: clip(input.place, 120),
-			feeling: clip(input.feeling, 40),
+			feeling: feelingOf(h, input.feeling),
 			withWhom: clip(input.withWhom, 120)
 		})
 		.run();

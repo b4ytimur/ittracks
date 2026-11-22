@@ -339,7 +339,7 @@ export const ACTIONS: ActionDef[] = [
 			count: z.number().int().min(1).max(1000).optional(),
 			time: z.string().max(5).optional(),
 			place: z.string().max(120).optional(),
-			feeling: z.string().max(40).optional(),
+			feeling: z.string().max(40).optional().describe("One of the habit's feelings (describe lists them), by name or id."),
 			withWhom: z.string().max(120).optional(),
 			notes: z.string().max(20000).optional()
 		}),

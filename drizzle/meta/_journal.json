@@ -71,6 +71,13 @@
       "when": 1795341354415,
       "tag": "0009_habit_groups",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1795345459180,
+      "tag": "0010_option_ids",
+      "breakpoints": true
     }
   ]
 }
