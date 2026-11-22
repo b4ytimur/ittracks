@@ -2,11 +2,13 @@
 	import { describeSchedule } from '$lib/describe';
 	import { forest } from '$lib/engine/tree';
 	import { untrack } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { invalidateAll } from '$app/navigation';
 	import ViewBar from '$lib/ViewBar.svelte';
 	import EditableList from '$lib/ui/EditableList.svelte';
 	import EditButton from '$lib/ui/EditButton.svelte';
 	import InlineText from '$lib/ui/InlineText.svelte';
+	import BulkBar from '$lib/bulk/BulkBar.svelte';
 	import { reorderFrom } from '$lib/ui/list';
 	import { viewOp } from '$lib/viewclient';
 	import { runAction, showToast } from '$lib/toast.svelte';
@@ -19,6 +21,10 @@
 	let habits = $derived(data.habits);
 	/** Edit mode is a flag on this same page: drag to reorder, rename in place, archive. */
 	let editing = $state(false);
+	/** So is selecting: tick habits, then change them together from the bulk bar. One mode at a time. */
+	let selecting = $state(false);
+	const selected = new SvelteSet<string>();
+	const areaOptions = $derived(data.areas.map((a) => ({ value: a.id, label: `${a.icon} ${a.name}`.trim() })));
 
 	let views = $state(untrack(() => data.views));
 	let viewDismissed = $state(false);
@@ -157,7 +163,10 @@
 		direction
 		archived
 	>
-		{#snippet end()}<EditButton bind:editing look="chip" />{/snippet}
+		{#snippet end()}
+			<EditButton bind:editing look="chip" onchange={(on) => on && (selecting = false)} />
+			<EditButton bind:editing={selecting} label="Select" look="chip" onchange={(on) => on && (editing = false)} />
+		{/snippet}
 		<fieldset>
 			<legend class="small-text">Lines on each habit</legend>
 			{#each Object.entries(HABIT_LINES) as [k, label] (k)}
@@ -172,6 +181,9 @@
 
 {#if editing}
 	<p class="muted small-text">Drag ⠿ to reorder, tap a name to rename it. This is My order, shared with Today.</p>
+{/if}
+{#if selecting}
+	<BulkBar kind="habit" {selected} visible={shown.map((h) => h.id)} today={data.today} sources={{ areas: areaOptions }} />
 {/if}
 
 {#each groups as g (g.key)}
@@ -189,6 +201,8 @@
 		key={(h) => h.id}
 		label={(h) => h.name}
 		{editing}
+		{selecting}
+		{selected}
 		ariaLabel={name}
 		onmove={(_, order) => reorder(order)}
 		onremove={archive}

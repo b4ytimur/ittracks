@@ -6,7 +6,10 @@ import { db } from '../db';
 import { event } from '../db/schema';
 import type { Actor } from './actor';
 
-/** Every event type, with what its data holds. Bump the version when a type's data changes shape. */
+/**
+ * Every event type, with what its data holds. Bump the version when a type's data changes shape.
+ * Any event can also carry `batch`: the bulk change it was part of.
+ */
 export const EVENT_TYPES = {
 	'occurrence.done': { v: 1, about: 'A habit was done for a day. data: occurrenceId, level, how' },
 	'occurrence.skipped': { v: 1, about: 'A habit was skipped for a day. data: occurrenceId' },
@@ -22,6 +25,8 @@ export const EVENT_TYPES = {
 	'craving.removed': { v: 1, about: 'A resisted craving was taken back. data: cravingId' },
 	'note.saved': { v: 1, about: 'A note was saved (the text is never in the event). data: kind, occurrenceId' },
 	'data.imported': { v: 1, about: 'A full export was restored into this account. data: counts' },
+	'bulk.applied': { v: 1, about: 'A bulk change ran (src/lib/bulk/catalog.ts). Events it wrote carry the same batch. data: batch, action, count, ids' },
+	'bulk.undone': { v: 1, about: 'A bulk change was undone. data: batch, action, restored, kept' },
 	'metric.unit_changed': {
 		v: 1,
 		about: "A field's unit changed after it had values. Converted: its past values (and targets) were multiplied by factor; otherwise they kept their numbers. data: taskId, metricId, from, to, converted, factor"
@@ -44,7 +49,7 @@ export function emit(
 			date: e.date ?? null,
 			source: actor.source,
 			tokenId: actor.tokenId,
-			data: e.data ?? {}
+			data: actor.batch ? { ...(e.data ?? {}), batch: actor.batch } : (e.data ?? {})
 		})
 		.run();
 }

@@ -7,7 +7,8 @@ export const SCOPES = {
 	read: 'Read habits, logs and stats (values only, no notes)',
 	log: 'Log, skip and undo, and add slips',
 	notes: 'Read and write notes and the journal',
-	export: 'Download a full export'
+	export: 'Download a full export',
+	edit: 'Change habits and Tasks in bulk (Area, pause, reminders, units)'
 } as const;
 export type Scope = keyof typeof SCOPES;
 export const ALL_SCOPES = Object.keys(SCOPES) as Scope[];
@@ -25,6 +26,8 @@ export interface Actor {
 	habitIds: ReadonlySet<string> | null;
 	/** The browser's time zone, when known (the app sends it as a cookie). */
 	tz?: string;
+	/** The bulk change this is part of: every event written meanwhile carries it, so Undo finds them. */
+	batch?: string;
 }
 
 /** The signed-in person using the app: every scope, every habit. */

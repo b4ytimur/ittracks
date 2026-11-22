@@ -43,6 +43,8 @@ export const load: PageServerLoad = ({ locals, url, cookies }) => {
 		areas: listAreas(accountId),
 		views,
 		initial,
+		/** For the bulk bar's date inputs. */
+		today,
 		added: url.searchParams.get('added'),
 		/** After an import: how many Tasks were made, and how many came from your Library. */
 		created: Number(url.searchParams.get('created')) || 0,

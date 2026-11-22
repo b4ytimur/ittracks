@@ -574,3 +574,30 @@ export const event = sqliteTable(
 	},
 	(t) => [index('event_account_seq').on(t.accountId, t.seq)]
 );
+
+// ---------- Bulk editing ----------
+
+/**
+ * One bulk change (src/lib/server/bulk): what was asked, a one-line summary, and how to undo
+ * it. The events the change wrote carry its id as `batch`, so Undo reverts the whole batch.
+ * Undo state only: not part of exports, and an import clears it.
+ */
+export const bulkBatch = sqliteTable(
+	'bulk_batch',
+	{
+		id: id(),
+		accountId: text('account_id')
+			.notNull()
+			.references(() => account.id, { onDelete: 'cascade' }),
+		/** The bulk action's name, from src/lib/bulk/catalog.ts. */
+		action: text('action').notNull(),
+		/** The action's input and the ids it ran on. */
+		request: text('request', { mode: 'json' }).notNull().$type<Record<string, unknown>>(),
+		summary: text('summary').notNull(),
+		/** What Undo puts back (src/lib/server/bulk/undo.ts). */
+		undo: text('undo', { mode: 'json' }).notNull().$type<unknown[]>(),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+		undoneAt: integer('undone_at', { mode: 'timestamp_ms' })
+	},
+	(t) => [index('bulk_batch_account_idx').on(t.accountId, t.createdAt)]
+);
