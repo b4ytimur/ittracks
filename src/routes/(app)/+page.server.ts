@@ -3,7 +3,7 @@ import { error, fail, redirect } from '@sveltejs/kit';
 import { checkSettings } from '$lib/rules/settings';
 import { and, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { entry, habit, prepTick, slot, variant } from '$lib/server/db/schema';
+import { entry, habit, occurrence, prepTick, slot, variant } from '$lib/server/db/schema';
 import { createOccurrence, loadPrep, loadToday, timeIn, userToday } from '$lib/server/today';
 import { raise } from '$lib/engine/progression';
 import { addDays } from '$lib/engine/dates';
@@ -82,6 +82,16 @@ const levelOf = (f: FormData): Level | null => {
 };
 const clip = (v: string, n = 120) => v.trim().slice(0, n) || null;
 
+/**
+ * What a Done from Today ended as. A log that falls short of the habit's rule stays open, and
+ * the toast says why instead of celebrating.
+ */
+function ended(o: { occ: { id: string }; habit: { id: string; name: string; minimumCounts: boolean } }, clear: boolean) {
+	const status = db.select({ status: occurrence.status }).from(occurrence).where(eq(occurrence.id, o.occ.id)).get()?.status;
+	const short = status === 'due' ? (o.habit.minimumCounts ? 'minimum' : 'target') : undefined;
+	return { finished: status === 'done' ? o.habit.id : null, did: { occurrence: o.occ.id, habit: o.habit.name, clear, short } };
+}
+
 export const actions: Actions = {
 	/** Mark a habit with nothing to log as done, straight from Today. */
 	done: async ({ request, locals, cookies }) => {
@@ -89,7 +99,7 @@ export const actions: Actions = {
 		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
 		if (!o) error(404);
 		doneOcc(actorOf(locals, cookies), o.occ, 'mark', levelOf(f));
-		return { finished: o.habit.id, did: { occurrence: o.occ.id, habit: o.habit.name, clear: false } };
+		return ended(o, false);
 	},
 	/** One tap: done at a level, logging that level's Slot targets. */
 	quick: async ({ request, locals, cookies }) => {
@@ -97,7 +107,7 @@ export const actions: Actions = {
 		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
 		if (!o) error(404);
 		if (doneOcc(actorOf(locals, cookies), o.occ, 'targets', levelOf(f)) === 'needsInput') redirect(303, `/log/${o.occ.id}?quick`);
-		return { finished: o.habit.id, did: { occurrence: o.occ.id, habit: o.habit.name, clear: true } };
+		return ended(o, true);
 	},
 	/** +1 toward a habit's one target ("3 of 6 glasses"), or by=-1 to take a tap back. Reaching the target finishes it. */
 	plus: async ({ request, locals, cookies }) => {
@@ -162,7 +172,7 @@ export const actions: Actions = {
 		// Same as last keeps what was already logged, so Undo must not clear it.
 		const started = !!db.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, o.occ.id)).get();
 		if (o.occ.status === 'due' && doneOcc(actorOf(locals, cookies), o.occ, 'same', null) === 'needsInput') redirect(303, `/log/${o.occ.id}?quick`);
-		return { finished: o.habit.id, did: { occurrence: o.occ.id, habit: o.habit.name, clear: !started } };
+		return ended(o, !started);
 	},
 	skip: async ({ request, locals, cookies }) => {
 		const f = await request.formData();

@@ -1001,24 +1001,24 @@
 				<label style="width: 10rem">Over the last N days <input type="number" min="7" max="365" bind:value={h.streakRule.days} /></label>
 			{/if}
 			{#if h.direction === 'build'}
-			<fieldset class="card">
-				<legend class="muted">A day that falls short of the target</legend>
-				<label style="color: var(--text)"
-					><input type="radio" bind:group={h.minimumCounts} value={true} />
-					{h.levels.enabled ? 'Counts once it reaches the Minimum' : 'Counts once anything is logged'}</label
-				>
-				<label style="color: var(--text)"
-					><input type="radio" bind:group={h.minimumCounts} value={false} /> Only the full target counts</label
-				>
-				<p class="muted small-text" style="margin: 0.25rem 0 0">
-					{h.minimumCounts
-						? h.levels.enabled
-							? 'Doing the Minimum keeps the streak alive. Less than that is a miss once the day is over.'
-							: '5 of 6 glasses is a done day, shown as "Done · 5 of 6 glasses".'
-						: 'Good for medication: 1 of 2 doses is a miss once the day is over, shown as "Missed · 1 of 2 steps".'}
-					What you logged always stays in History and Stats.
-				</p>
-			</fieldset>
+				<fieldset class="card">
+					<legend class="muted">A day that falls short of the target</legend>
+					<label style="color: var(--text)"
+						><input type="radio" bind:group={h.minimumCounts} value={true} />
+						{h.levels.enabled ? 'Counts once it reaches the Minimum' : 'Counts once anything is logged'}</label
+					>
+					<label style="color: var(--text)"
+						><input type="radio" bind:group={h.minimumCounts} value={false} /> Only the full target counts</label
+					>
+					<p class="muted small-text" style="margin: 0.25rem 0 0">
+						{h.minimumCounts
+							? h.levels.enabled
+								? 'Doing the Minimum keeps the streak alive. Less than that is a miss once the day is over.'
+								: '5 of 6 glasses is a done day, shown as "Done · 5 of 6 glasses".'
+							: 'Good for medication: 1 of 2 doses is a miss once the day is over, shown as "Missed · 1 of 2 steps".'}
+						What you logged always stays in History and Stats.
+					</p>
+				</fieldset>
 			{/if}
 			<fieldset class="card">
 				<legend class="muted">Days you don't log</legend>

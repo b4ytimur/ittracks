@@ -96,15 +96,21 @@
 		replaceState(u, {});
 	});
 
-	type Did = { occurrence: string; habit: string; clear: boolean; skipped?: boolean };
+	type Did = { occurrence: string; habit: string; clear: boolean; skipped?: boolean; short?: 'minimum' | 'target' };
 	/** After a quick action: say what happened and offer Undo. */
 	function afterDid(result: ActionResult) {
 		if (result.type !== 'success') return;
 		const did = result.data?.did as Did | undefined;
 		if (!did) return;
-		showToast(`${did.skipped ? 'Skipped' : 'Logged'} ${did.habit}.`, () =>
-			postAction('?/undo', { occurrence: did.occurrence, clear: did.clear ? '1' : '' }).then(() => {})
-		);
+		const undo = () => postAction('?/undo', { occurrence: did.occurrence, clear: did.clear ? '1' : '' }).then(() => {});
+		// Short of what counts for this habit: it stays open, and says why.
+		if (did.short)
+			showToast(
+				`Logged ${did.habit}. It counts once it reaches ${did.short === 'target' ? 'the full target' : 'the Minimum'}, and stays open until the day ends.`,
+				undo,
+				7000
+			);
+		else showToast(`${did.skipped ? 'Skipped' : 'Logged'} ${did.habit}.`, undo);
 	}
 	const quick = (occurrenceId: string, name: string, kind: 'done' | 'skipped' = 'done') =>
 		queueable(`${name}`, {

@@ -751,7 +751,8 @@ export function taskValue(perLog: string, l: Log, P: Prepared, ctx: Ctx): number
 			return parts.length ? (parts.reduce((a, b) => a + b, 0) / parts.length) * 100 : null;
 		}
 		case 'targetMet':
-			return metOf(targetMetOfLog(l, P));
+			// A log still open today isn't judged yet.
+			return l.occ.status === 'due' ? null : metOf(targetMetOfLog(l, P));
 		default: {
 			if (!isCustom(perLog)) return null;
 			const m = measureOf(customId(perLog), ctx.settings.measures);

@@ -151,15 +151,21 @@ export function verdictsFor(ids: string[]): Map<string, Verdict> {
 	// Measured against the Target whatever level was logged, and against the Minimum.
 	const atTarget = slotsFor(logged, () => null);
 	const atMinimum = slotsFor(logged, () => 'minimum');
-	const entries = db
-		.select({ occurrenceId: entry.occurrenceId, taskId: entry.taskId, values: entry.values })
-		.from(entry)
-		.where(inArray(entry.occurrenceId, logged.map((o) => o.id)))
-		.orderBy(asc(entry.sortOrder))
-		.all();
+	const entriesOf = new Map<string, { taskId: string; values: Record<string, unknown> }[]>();
+	for (let i = 0; i < logged.length; i += 900)
+		for (const e of db
+			.select({ occurrenceId: entry.occurrenceId, taskId: entry.taskId, values: entry.values })
+			.from(entry)
+			.where(inArray(entry.occurrenceId, logged.slice(i, i + 900).map((o) => o.id)))
+			.orderBy(asc(entry.sortOrder))
+			.all()) {
+			const list = entriesOf.get(e.occurrenceId) ?? [];
+			list.push(e);
+			entriesOf.set(e.occurrenceId, list);
+		}
 	for (const o of logged) {
 		const h = habits.get(o.habitId);
-		const mine = entries.filter((e) => e.occurrenceId === o.id);
+		const mine = entriesOf.get(o.id) ?? [];
 		const t = progressOf(atTarget.get(o.id) ?? [], mine, 'due');
 		// The habit has a Minimum when Levels are on and it sets a lower number to reach.
 		const m = h?.levels?.enabled ? progressOf(atMinimum.get(o.id) ?? [], mine, 'due') : null;
