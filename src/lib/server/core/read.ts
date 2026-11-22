@@ -12,6 +12,7 @@ import { ensureToday, settleAll, userToday } from '../today';
 import { prepare, describeLog, type Dataset, type Prepared } from '$lib/stats/engine';
 import { describeSchedule } from '$lib/describe';
 import { progressText } from '$lib/engine/progress';
+import { rollupText } from '$lib/engine/rollup';
 import { progressForIds } from '../progress';
 import { streak, type StreakRule } from '$lib/engine/streak';
 import { addDays, weekday } from '$lib/engine/dates';
@@ -240,7 +241,7 @@ export function listLogs(
 			status: o.status,
 			variant: o.variantId ? (P.variants.get(o.variantId)?.name ?? null) : null,
 			level: o.level ?? (o.status === 'done' ? 'target' : null),
-			progress: p ? progressText(p) : null,
+			progress: p ? progressText(p) : o.rollup ? rollupText(o.rollup) : null,
 			summary: logs.map((l) => `${l.task.name}: ${describeLog(l, P)}`).join(' | ') || undefined,
 			time: o.time,
 			...(notes && occNotes.get(o.id) ? { notes: occNotes.get(o.id) } : {})

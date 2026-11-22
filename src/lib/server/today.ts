@@ -18,7 +18,7 @@ import {
 	variant
 } from './db/schema';
 import { dueOn, isGroup, nextInRotation, type Done, type Schedule } from '$lib/engine/schedule';
-import { syncGroups } from './groups';
+import { syncGroups } from './rollup';
 import { pickTask, type Candidate, type FillRule } from '$lib/engine/fill';
 import {
 	daysSinceSlip,
@@ -222,7 +222,7 @@ function judgeEnded(h: Settling, today: string, paused: (d: string) => boolean) 
  * their misses are counted per missed session instead.
  */
 function settlePast(h: Settling, schedule: ScheduleForm, today: string, pauses: Pause[]) {
-	// A group's days are written from the habits inside it (see groups.ts), never settled here.
+	// A group's days are written from the habits inside it (see rollup.ts), never settled here.
 	if (isGroup(schedule)) return;
 	const habitId = h.id;
 	judgeEnded(h, today, (d) => !!pauseOn(pauses, habitId, d));

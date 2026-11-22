@@ -1,5 +1,5 @@
 // A group's day, worked out from the days of the habits inside it. Pure: the server stores the
-// result as the group's Occurrence (see server/groups.ts), and Today uses it to count live.
+// result as the group's Occurrence (see server/rollup.ts), and Today uses it to count live.
 import type { GroupRule } from './schedule';
 import type { Level, OccurrenceStatus } from './streak';
 

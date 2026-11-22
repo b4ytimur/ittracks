@@ -100,6 +100,7 @@ export function loadDataset(accountId: string, tz?: string): Dataset {
 			level: o.level ?? null,
 			picks: o.picks ?? null,
 			goals: o.goals ?? null,
+			...(o.rollup ? { rollup: o.rollup } : {}),
 			// Logged for another day (past-day logging): the finish time says nothing about when it happened.
 			time: o.finishedAt && timeIn(zone, o.finishedAt) && sameDay(o.finishedAt, o.date, zone, s.dayStart) ? timeIn(zone, o.finishedAt) : null
 		})),

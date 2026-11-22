@@ -87,6 +87,8 @@ export interface DsOcc {
 	time: string | null;
 	/** The targets each Slot had, kept when they changed later. */
 	goals?: Record<string, { sets: number | null; targets: Record<string, number> | null }> | null;
+	/** A group's day: how many habits inside were done, of how many that counted. */
+	rollup?: { done: number; total: number } | null;
 }
 export interface DsEntry {
 	occurrenceId: string;

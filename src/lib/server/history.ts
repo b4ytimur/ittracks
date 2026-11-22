@@ -1,6 +1,6 @@
 // What is logged against a Task or a habit, for the history policies (src/lib/rules/history.ts),
 // and the one migration they can ask for: converting a field's past values to a new unit.
-import { and, eq, inArray, isNotNull } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { db } from './db';
 import { craving, entry, habit, metric, occurrence, slip, slot, task, variant } from './db/schema';
 import type { TaskLogged } from '$lib/rules/task';
@@ -43,13 +43,14 @@ export const taskLoggedLists = (taskId: string): TaskLogged & { metrics: string[
 
 /**
  * Has anything been logged for this habit: a day done or skipped, a value, a note, a slip or a
- * resisted craving? Misses the app wrote for days nobody logged don't count.
+ * resisted craving? Misses the app wrote for days nobody logged don't count, nor do a group's
+ * days, which are worked out from the habits inside it.
  */
 export function habitLogged(habitId: string, q: Db = db): boolean {
 	const touched = q
 		.select({ id: occurrence.id })
 		.from(occurrence)
-		.where(and(eq(occurrence.habitId, habitId), inArray(occurrence.status, ['done', 'skipped'])))
+		.where(and(eq(occurrence.habitId, habitId), inArray(occurrence.status, ['done', 'skipped']), isNull(occurrence.rollup)))
 		.get();
 	if (touched) return true;
 	if (q.select({ id: occurrence.id }).from(occurrence).where(and(eq(occurrence.habitId, habitId), isNotNull(occurrence.notes))).get()) return true;
