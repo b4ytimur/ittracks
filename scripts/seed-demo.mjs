@@ -915,7 +915,7 @@ const seedAll = db.transaction(() => {
     j({ celebrate: true, message: "¡Muy bien!", jar: null }),
     null,
     null,
-    j({ after: 5, by: 5, unit: "amount" }),
+    j({ after: 5, by: 1, unit: "steps" }),
     null,
     sp,
   );
