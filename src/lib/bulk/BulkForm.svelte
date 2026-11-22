@@ -1,6 +1,6 @@
 <script lang="ts">
 	// Asks for a bulk action's input from its field specs (fields.ts). One form for every action.
-	import type { FieldSpec, FieldSources } from './fields';
+	import { askedFields, type FieldSpec, type FieldSources } from './fields';
 
 	let {
 		fields,
@@ -16,11 +16,14 @@
 </script>
 
 <div class="fields">
-	{#each fields as f (f.key)}
+	{#each askedFields(fields, values) as f (f.key)}
 		{@const id = `${uid}-${f.key}`}
 		{#if f.kind === 'date'}
 			<label for={id}>{f.label}</label>
 			<input {id} type="date" bind:value={values[f.key]} required />
+		{:else if f.kind === 'number'}
+			<label for={id}>{f.label}</label>
+			<input {id} type="number" bind:value={values[f.key]} min={f.min} max={f.max} step={f.step ?? 1} required />
 		{:else if f.kind === 'select'}
 			<label for={id}>{f.label}</label>
 			<select {id} bind:value={values[f.key]}>

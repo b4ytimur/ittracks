@@ -68,9 +68,15 @@
 	/** Selecting is a flag on the same list: tick Tasks, then change them together from the bulk bar. */
 	let selecting = $state(false);
 	const selected = new SvelteSet<string>();
-	/** The number fields in the ticked Tasks, by name: what "Change a unit" can pick. */
+	/** The ticked Tasks and the Library Tasks inside them, at any depth. */
+	function withInside(ids: string[]) {
+		const out = new Set(ids);
+		for (const id of out) for (const p of data.inside) if (p.taskId === id) out.add(p.childTaskId);
+		return out;
+	}
+	/** The number fields in the ticked Tasks and the Tasks inside them, by name: what "Change a unit" can pick. */
 	function fieldsIn(ids: string[]) {
-		const picked = new Set(ids);
+		const picked = withInside(ids);
 		const byName = new Map<string, { name: string; tasks: Set<string>; units: Set<string> }>();
 		for (const f of data.numberFields) {
 			if (!picked.has(f.taskId)) continue;

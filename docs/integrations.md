@@ -15,7 +15,7 @@ A key lets something other than the app use your account: a Shortcut, a quick-lo
    | **Log** | Log, skip and undo, and add slips |
    | **Notes** | Read and write notes and the journal |
    | **Export** | Download a full export |
-   | **Edit** | Change habits and Tasks in bulk (Area, pause, reminders, units) |
+   | **Edit** | Change habits and Tasks in bulk (archive, Area, pause, reminders, streak rule, units) |
 
 3. Under **For**, choose **Every habit, now and later** or **Only some habits**. A key limited to some habits can't download an export.
 4. **Make key**, and copy it now. It is shown only once; the server keeps only its hash. Treat it like a password.

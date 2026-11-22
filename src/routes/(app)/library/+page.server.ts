@@ -1,7 +1,7 @@
 import { fail } from '@sveltejs/kit';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, ne } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { metric, task } from '$lib/server/db/schema';
+import { metric, task, taskPart } from '$lib/server/db/schema';
 import { userToday } from '$lib/server/today';
 import { effectiveUnit } from '$lib/units';
 import { listTagNames, listTasks, renameTask, setTaskArchived, taskUsage } from '$lib/server/repo/tasks';
@@ -45,7 +45,14 @@ export const load: PageServerLoad = ({ locals, url, cookies }) => {
 			.innerJoin(task, eq(metric.taskId, task.id))
 			.where(and(eq(task.accountId, accountId), eq(metric.archived, false), inArray(metric.type, ['number', 'count', 'duration'])))
 			.all()
-			.map((m) => ({ taskId: m.taskId, name: m.name, unit: effectiveUnit(m) }))
+			.map((m) => ({ taskId: m.taskId, name: m.name, unit: effectiveUnit(m) })),
+		/** Library Tasks inside other Tasks: a unit change reaches their fields too. */
+		inside: db
+			.select({ taskId: taskPart.taskId, childTaskId: taskPart.childTaskId })
+			.from(taskPart)
+			.innerJoin(task, eq(taskPart.taskId, task.id))
+			.where(and(eq(task.accountId, accountId), eq(taskPart.archived, false), ne(taskPart.id, taskPart.childTaskId)))
+			.all()
 	};
 };
 

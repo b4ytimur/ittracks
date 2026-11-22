@@ -255,8 +255,8 @@ function scheduleAfter(
  * (on the next settle). Starting later drops misses before the new start. A schedule edit
  * that applies to past days too counts them all again.
  */
-function settledAfter(
-	tx: Tx,
+export function settledAfter(
+	tx: Tx | typeof db,
 	id: string,
 	before: { startDate: string; unlogged: 'missed' | 'ignore' },
 	after: { startDate: string; unlogged: 'missed' | 'ignore' },
