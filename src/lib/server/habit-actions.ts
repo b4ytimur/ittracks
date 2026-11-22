@@ -1,16 +1,12 @@
 // Small changes to a habit that the Habits list makes in place and the habit editor makes too:
 // archive, unarchive, rename. One place, so both doors behave the same.
 import { and, eq } from 'drizzle-orm';
-import { z } from 'zod';
 import { db } from './db';
 import { habit } from './db/schema';
 import { ownedHabit } from './owned';
 import { setHabitArchived } from './repo/habits';
 import { settle, unarchived } from './today';
-import type { ScheduleForm } from '$lib/forms';
-
-/** The same rule as the habit form's name. */
-export const habitName = z.string().trim().min(1, 'A name is required').max(120, 'Keep names to 120 characters or fewer');
+import { name as habitName, type ScheduleForm } from '$lib/forms';
 
 /** Archive a habit. Its misses up to today are counted first: days in the archive are not. */
 export function archiveHabit(accountId: string, id: string, today: string): boolean {
