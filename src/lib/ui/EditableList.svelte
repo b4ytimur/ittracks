@@ -28,8 +28,10 @@
 		onadd,
 		addLabel = 'Add',
 		row,
+		title,
 		children,
 		empty,
+		layout = 'row',
 		ariaLabel,
 		class: klass = ''
 	}: {
@@ -54,6 +56,14 @@
 		onadd?: () => void;
 		addLabel?: string;
 		row: Snippet<[T, RowContext]>;
+		/** With layout "block": the title in the bar above the row, beside the handle and remove button. */
+		title?: Snippet<[T, RowContext]>;
+		/**
+		 * "row" (the default): handle, row and remove button side by side, for rows of one line.
+		 * "block": a bar with the handle, title and remove button above the row at full width,
+		 * for big items such as a page section that holds a list of its own.
+		 */
+		layout?: 'row' | 'block';
 		/**
 		 * What sits under a row, inside it: usually another EditableList for what the item holds.
 		 * It moves with the row when the row is dragged, and drops are worked out on the row itself.
@@ -138,7 +148,7 @@
 			// The first row whose bottom is below the pointer; past the last row means after it.
 			const r = others.find((x) => x.getBoundingClientRect().bottom > d.y) ?? others[others.length - 1];
 			// Where on the row is worked out on its own line, not on what sits under it.
-			const head = (r.querySelector(':scope > .head') ?? r).getBoundingClientRect();
+			const head = (layout === 'block' ? r : (r.querySelector(':scope > .head') ?? r)).getBoundingClientRect();
 			const target = r.dataset.key!;
 			const nest = allowed({ key: d.key, target, position: 'inside' });
 			pos = d.y < head.top ? 'before' : d.y > head.bottom ? 'after' : dropPosition(d.y, head, nest);
@@ -226,7 +236,7 @@
 	}}
 />
 
-<ul class="list elist {klass}" class:editing class:selecting bind:this={list} aria-label={ariaLabel}>
+<ul class="list elist {klass}" class:block={layout === 'block'} class:editing class:selecting bind:this={list} aria-label={ariaLabel}>
 	{#each items as item, index (key(item))}
 		{@const k = key(item)}
 		{@const on = !!selected?.has(k)}
@@ -271,13 +281,22 @@
 						onkeydown={(e) => keydown(e, k)}><span aria-hidden="true">⠿</span></button
 					>
 				{/if}
-				<div class="body">
-					{@render row(item, ctx)}
-				</div>
+				{#if layout === 'block'}
+					<div class="title">{@render title?.(item, ctx)}</div>
+				{:else}
+					<div class="body">
+						{@render row(item, ctx)}
+					</div>
+				{/if}
 				{#if editing && onremove}
 					<button type="button" class="small remove" aria-label="{removeOf(item)} {nameOf(item)}" onclick={() => onremove(item)}>{removeOf(item)}</button>
 				{/if}
 			</div>
+			{#if layout === 'block'}
+				<div class="body">
+					{@render row(item, ctx)}
+				</div>
+			{/if}
 			{#if children}{@render children(item, ctx)}{/if}
 		</li>
 	{:else}
@@ -359,6 +378,30 @@
 		outline: 2px dashed var(--accent);
 		outline-offset: 2px;
 		border-radius: var(--radius);
+	}
+	/* Block layout: a framed item with a title bar. */
+	.block > li {
+		border: 1px dashed var(--border);
+		border-radius: var(--radius);
+		padding: 0.35rem 0.5rem 0.5rem;
+		background: var(--bg, transparent);
+	}
+	.block > li > .head {
+		min-height: 2rem;
+	}
+	.block .title {
+		flex: 1;
+		min-width: 0;
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--muted);
+	}
+	.block > li > .body:not(:empty) {
+		margin-top: 0.4rem;
+	}
+	.block > li.dragging {
+		box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
+		background: var(--surface);
 	}
 	.pick {
 		flex: none;
