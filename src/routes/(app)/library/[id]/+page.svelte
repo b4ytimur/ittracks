@@ -428,12 +428,6 @@
 				{:else}
 					{@const c = choiceOf(p.taskId)}
 					<a class="grow" href="/library/{p.taskId}">{c?.name ?? 'A Task'}</a>
-					{#if c && (c.hasParts || c.metrics.some((m) => m.repeats))}
-						<label class="sets-input"
-							>{c.metrics.some((m) => m.repeats) ? 'Sets' : 'Rounds'}
-							<input type="number" min="0" max="50" value={p.sets ?? ''} oninput={(e) => (p.sets = e.currentTarget.value ? Number(e.currentTarget.value) : null)} />
-						</label>
-					{/if}
 				{/if}
 				<button type="button" class="small" onclick={() => move(t.parts, i, -1)} aria-label="Move up">↑</button>
 				<button type="button" class="small" onclick={() => move(t.parts, i, 1)} aria-label="Move down">↓</button>
@@ -444,7 +438,14 @@
 				{/if}
 			</div>
 			{#if p.kind === 'task'}
-				{@const nums = (choiceOf(p.taskId)?.metrics ?? []).filter((m) => numericType(m.type))}
+				{@const c = choiceOf(p.taskId)}
+				{@const nums = (c?.metrics ?? []).filter((m) => numericType(m.type))}
+				{#if c && (c.hasParts || c.metrics.some((m) => m.repeats))}
+					<label class="sets-input"
+						>{c.metrics.some((m) => m.repeats) ? 'Sets' : 'Rounds'}
+						<input type="number" min="0" max="50" value={p.sets ?? ''} oninput={(e) => (p.sets = e.currentTarget.value ? Number(e.currentTarget.value) : null)} />
+					</label>
+				{/if}
 				{#if nums.length}
 					<table class="targets">
 						<thead><tr><th></th><th>Minimum</th><th>Target</th><th>Stretch</th></tr></thead>
@@ -459,11 +460,15 @@
 							{/each}
 						</tbody>
 					</table>
-					<p class="muted small-text" style="margin: 0">Every habit that uses this Task aims for these. Minimum and Stretch count in habits with levels on.</p>
 				{/if}
 			{/if}
 		</div>
 	{/each}
+	{#if t.parts.some((p) => p.kind === 'task')}
+		<p class="muted small-text" style="margin: 0 0 0.5rem">
+			Targets set here apply in every habit that uses this Task. Minimum and Stretch count in habits with levels on.
+		</p>
+	{/if}
 	<div class="row">
 		<button type="button" onclick={() => t.parts.push({ kind: 'step', id: crypto.randomUUID(), name: '' })}>Add a step</button>
 		<select class="grow" bind:value={addPart} onchange={() => addLibraryPart(addPart)} aria-label="Add a Task from your Library">
@@ -546,7 +551,7 @@
 		margin-bottom: 0.5rem;
 	}
 	.sets-input {
-		width: 6rem;
+		width: 7rem;
 	}
 	.targets input {
 		width: 5rem;
