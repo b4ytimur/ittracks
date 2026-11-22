@@ -137,8 +137,17 @@ const schedule = z.discriminatedUnion('kind', [
 	z.object({ kind: z.literal('phases'), start: z.string().date(), phases: z.array(phaseForm).min(1).max(20), ...routine }),
 	// A group of habits: due when one inside is due; done when all (target null) or `target` are done.
 	z.object({ kind: z.literal('group'), ...rollupRule.shape }),
-	// Inside a routine: due whenever the routine is (only on its Variants in `on`, when set).
-	z.object({ kind: z.literal('follow'), variantId: id, on: z.array(id).max(50).nullable() })
+	// Inside a routine: due whenever the routine is (only on its Variants in `on`, when set), with
+	// the Variant `map` pairs with the routine's that day, else `variantId` (see engine/schedule.ts).
+	z.object({
+		kind: z.literal('follow'),
+		variantId: id,
+		on: z.array(id).max(50).nullable(),
+		map: z
+			.record(id, id)
+			.refine((m) => Object.keys(m).length <= 50, 'Pair at most 50 of the routine\'s Variants')
+			.optional()
+	})
 ]);
 export type ScheduleForm = z.infer<typeof schedule>;
 

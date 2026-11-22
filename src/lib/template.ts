@@ -36,9 +36,11 @@ export const TEMPLATE_FORMAT = 'ittracks-template';
  * Version 8 adds the habits inside a habit (`children`), so a routine or a group travels with
  * everything in it, at any depth. Each names the habit it sits in by key (none: the file's own
  * habit); one that follows its routine keeps following it, by the routine's Variant keys.
+ * Version 9 adds which Variant a habit that follows its routine logs on each of the routine's
+ * Variants (the follow schedule's `map`, routine Variant key -> the habit's own key).
  * Older files still import; the new fields take their defaults.
  */
-export const TEMPLATE_VERSION = 8;
+export const TEMPLATE_VERSION = 9;
 
 const key = z.string().min(1).max(64);
 
@@ -214,7 +216,7 @@ export type TemplateChild = z.infer<typeof templateChild>;
 
 export const templateFile = z.object({
 	format: z.literal(TEMPLATE_FORMAT),
-	version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6), z.literal(7), z.literal(8)]),
+	version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6), z.literal(7), z.literal(8), z.literal(9)]),
 	name: z.string().min(1).max(120),
 	/** Version 4: a view template this habit works well with (e.g. "gym"). Only ever offered, never applied by itself. */
 	view: z.string().max(32).nullable().default(null),
@@ -230,8 +232,8 @@ export type TemplateFile = z.infer<typeof templateFile>;
 
 /**
  * The schedule with every Variant id it names passed through `map` (phases: in each phase).
- * One that follows its routine also names the routine's Variants (`on`): those go through
- * `parentMap`, and stay as they are without one.
+ * One that follows its routine also names the routine's Variants (`on`, and the keys of `map`):
+ * those go through `parentMap`, and stay as they are without one.
  */
 export function mapSchedule<S extends ScheduleForm | PlainScheduleForm>(s: S | null, map: (id: string) => string, parentMap?: (id: string) => string): S | null;
 export function mapSchedule(s: ScheduleForm | null, map: (id: string) => string, parentMap?: (id: string) => string): ScheduleForm | null {
@@ -248,8 +250,12 @@ export function mapSchedule(s: ScheduleForm | null, map: (id: string) => string,
 			return { ...s, order: s.order.map((o) => ({ ...o, variantId: map(o.variantId) })) };
 		case 'group':
 			return s;
-		case 'follow':
-			return { ...s, variantId: map(s.variantId), on: s.on && parentMap ? s.on.map(parentMap) : s.on };
+		case 'follow': {
+			const routine = parentMap ?? ((id: string) => id);
+			const out = { ...s, variantId: map(s.variantId), on: s.on && parentMap ? s.on.map(parentMap) : s.on };
+			if (s.map) out.map = Object.fromEntries(Object.entries(s.map).flatMap(([p, c]) => (c ? [[routine(p), map(c)]] : [])));
+			return out;
+		}
 	}
 }
 

@@ -47,7 +47,7 @@ These two only apply to habits inside other habits. See [Groups and routines](gr
 
 ### Which Variant comes up
 
-"N times a week", "every N days" and "follow a routine" use a single Variant: pick it under **Variant**. If a habit has more Variants than its schedule can use, the editor warns you. Use a rotation to take turns.
+"N times a week" and "every N days" use a single Variant: pick it under **Variant**. If a habit has more Variants than its schedule can use, the editor warns you. Use a rotation to take turns. A habit that follows a routine with several Variants can pair one of its own with each of the routine's (see [Keeping two rotations in step](groups-and-routines.md#keeping-two-rotations-in-step)). In phases, it logs whatever the routine's Variant in that phase is paired with.
 
 ## Changing a schedule
 

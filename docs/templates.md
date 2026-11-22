@@ -18,7 +18,7 @@ A template is a file (`.ittracks.json`) holding one habit, and the habits inside
    - Up to 10 questions in all.
 5. **Download the template** and send the file, or **Save to my Gallery** to keep it on this server and add it again whenever you like.
 
-A routine or a group shares as a whole program: the habits inside it come along, at any depth, with their schedules and Tasks. Habits that follow the routine keep following it, on the same Variants. Archived habits stay out, and so does what sits inside them. A group with no habits inside can't be shared, since its days come from them. A habit inside a routine shared on its own takes the routine's days as a schedule of its own.
+A routine or a group shares as a whole program: the habits inside it come along, at any depth, with their schedules and Tasks. Habits that follow the routine keep following it, on the same Variants and with the same pairs of Variants. Archived habits stay out, and so does what sits inside them. A group with no habits inside can't be shared, since its days come from them. A habit inside a routine shared on its own takes the routine's days as a schedule of its own, with the Variants it was paired with.
 
 For a plain export with no questions, use **Settings → Export, import and templates → Export a habit**.
 
@@ -45,4 +45,4 @@ Filter by search, category, **Any days a week**, **Any time a day** and **No equ
 
 ## File format
 
-The format is defined in `src/lib/template.ts` and is at version 8. Version 7 added phases, which start on the day you add the template. Version 8 added `children`: the habits inside the file's habit, each naming the habit it sits in by key, parents first. Older files (versions 1 to 7) still import as one habit; newer fields take their defaults. Notes in a template come from a stranger, so they are shown with raw HTML off and images as links (see [Notes](notes-and-journal.md)).
+The format is defined in `src/lib/template.ts` and is at version 9. Version 7 added phases, which start on the day you add the template. Version 8 added `children`: the habits inside the file's habit, each naming the habit it sits in by key, parents first. Version 9 added `map` to a follower's schedule: the routine's Variant key paired with the habit's own Variant key. Older files (versions 1 to 8) still import; newer fields take their defaults (versions 1 to 7 as one habit). Notes in a template come from a stranger, so they are shown with raw HTML off and images as links (see [Notes](notes-and-journal.md)).

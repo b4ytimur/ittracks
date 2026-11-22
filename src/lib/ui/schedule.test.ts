@@ -76,4 +76,14 @@ describe('schedule editor', () => {
 		expect(describeSchedule(s, undefined, [A, B])).toBe('Every day (Ramp-up) for 1 week, then every day (Maintain)');
 		expect(describeSchedule({ ...s, phases: [{ length: 10, unit: 'day', schedule: every('a') }] }, undefined, [A])).toBe('Every day for 10 days, then it ends');
 	});
+
+	it('reads a habit that follows its routine with the Variant each of the routine’s brings up', () => {
+		const parent = { name: 'Gym day', variants: [{ id: 'ua', name: 'Upper A' }, { id: 'la', name: 'Lower A' }, { id: 'ub', name: 'Upper B' }] };
+		const own = [{ id: 'h', name: 'Heavy' }, { id: 'l', name: 'Light' }];
+		expect(describeSchedule({ kind: 'follow', variantId: 'h', on: ['ua', 'ub'], map: { ub: 'l' } }, parent, own)).toBe('When Gym day is due with Upper A or Upper B (Heavy on Upper A, Light on Upper B)');
+		expect(describeSchedule({ kind: 'follow', variantId: 'h', on: null, map: { ub: 'l' } }, parent, own)).toBe('Whenever Gym day is due (Heavy on Upper A, Heavy on Lower A, Light on Upper B)');
+		const same = [{ id: 'x', name: 'Upper A' }, { id: 'y', name: 'Lower A' }, { id: 'z', name: 'Upper B' }];
+		expect(describeSchedule({ kind: 'follow', variantId: 'x', on: null, map: { la: 'y', ub: 'z' } }, parent, same)).toBe('Whenever Gym day is due, with the Variant of the same name');
+		expect(describeSchedule({ kind: 'follow', variantId: 'h', on: null }, parent, own)).toBe('Whenever Gym day is due');
+	});
 });

@@ -12,7 +12,7 @@ import {
 import { makesLoop } from '$lib/engine/stack';
 import { keepEarlier, sameSchedule, scheduleStartBy, startMovedBack, type EarlierSchedule } from '$lib/engine/unlogged';
 import { isFollow, isGroup, type Schedule } from '$lib/engine/schedule';
-import { standaloneSchedule } from '$lib/engine/follow';
+import { fitFollow, standaloneSchedule } from '$lib/engine/follow';
 import { keepParent, makesCycle } from '$lib/engine/tree';
 import { keepGoals, rejudge } from '../progress';
 import type { StreakRule } from '$lib/engine/streak';
@@ -324,6 +324,8 @@ export function saveHabit(
 ): string | null {
 	// Values that can't apply (Levels on a break habit, a reminder with no time) are cleared.
 	f = checkHabitForm(f).form;
+	// Following its routine: it logs one of its own Variants, paired only with the routine's.
+	if (isFollow(f.schedule)) f = { ...f, schedule: fitFollow(f.schedule, f.variants.map((v) => v.id), f.parentId ? variantIdsOf(f.parentId) : undefined) };
 	const refused = id ? checkHabitEdit(accountId, id, f) : null;
 	if (refused) throw new PastEditError(refused);
 	let judgeAgain = false;
@@ -512,6 +514,9 @@ function daysOf(id: string, depth = 0): Schedule | null {
 	const above = h.parentId && depth < 20 ? daysOf(h.parentId, depth + 1) : null;
 	return standaloneSchedule(above, s, h.startDate);
 }
+
+/** A habit's Variant ids. */
+const variantIdsOf = (habitId: string) => db.select({ id: variant.id }).from(variant).where(eq(variant.habitId, habitId)).all().map((v) => v.id);
 
 /** The habits inside this one that follow its schedule. */
 const followers = (id: string) =>
