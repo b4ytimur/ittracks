@@ -1,7 +1,7 @@
 // Logging past days: which dates can still be logged, and which Variant a past day gets.
 // Pure functions, so the rules can be tested without a database.
 import { addDays, daysBetween, weekday, weekStart, type ISODate } from './dates';
-import { dueOn, nextInRotation, type Done, type ParentDue, type Schedule } from './schedule';
+import { dueOn, nextInRotation, phaseOn, phaseSpans, planOn, type Done, type ParentDue, type Schedule } from './schedule';
 
 /**
  * How far back past days can be logged: null is any time, 0 is off, N is up to N days back
@@ -50,12 +50,17 @@ export function isRealDate(v: string): boolean {
  * Schedules whose missed days don't exist: a frequency target and a rotation that waits
  * carry the habit over to the next day instead.
  */
-export function carriesOver(s: Schedule): boolean {
+export function carriesOver(s: Schedule, date?: ISODate): boolean {
+	// Phases: the phase in force that day. With no day, the whole habit carries over only
+	// when every phase does.
+	if (s.kind === 'phases') return date ? carriesOver(planOn(s, date)) : s.phases.every((p) => carriesOver(p.schedule));
 	return s.kind === 'frequency' || (s.kind === 'rotation' && s.step === 'variant' && s.onMiss === 'wait');
 }
 
 /** Schedules where what is due depends on what was done before: a past log can change today. */
-export function dependsOnHistory(s: Schedule): boolean {
+export function dependsOnHistory(s: Schedule, date?: ISODate): boolean {
+	// Phases: the phase in force that day, or with no day, any phase.
+	if (s.kind === 'phases') return date ? dependsOnHistory(planOn(s, date)) : s.phases.some((p) => dependsOnHistory(p.schedule));
 	return s.kind === 'frequency' || (s.kind === 'rotation' && s.step === 'variant');
 }
 
@@ -68,6 +73,13 @@ export function variantFor(s: Schedule, history: Done[], date: ISODate, variantI
 	const due = dueOn(s, history, date, parentDue);
 	if (due) return due;
 	switch (s.kind) {
+		case 'phases': {
+			// The phase the day falls in; before the first, the first; after the last, the last.
+			const spans = phaseSpans(s);
+			const p = phaseOn(s, date) ?? (date < s.start ? spans[0] : spans.at(-1));
+			if (!p) break;
+			return variantFor(p.schedule, history.filter((h) => h.date >= p.from), date, variantIds);
+		}
 		case 'weekly': {
 			// The Variant of the closest scheduled weekday before this one.
 			for (let back = 1; back <= 7; back++) {

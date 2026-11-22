@@ -301,6 +301,50 @@ describe('template questions', () => {
 	});
 });
 
+describe('phases in templates (version 7)', () => {
+	const phased: HabitForm = habitForm.parse({
+		...gym,
+		schedule: {
+			kind: 'phases',
+			start: '2026-11-01',
+			phases: [
+				{ length: 1, unit: 'week', schedule: { kind: 'weekly', days: { '0': VA, '2': VA, '4': VA } } },
+				{ length: null, unit: 'week', schedule: { kind: 'interval', every: 2, start: '2026-11-08', variantId: VB } }
+			]
+		}
+	});
+	const tpl = toTemplate(phased, new Map([[T1, bench]]), { habits: new Map(), identities: new Map() });
+
+	it('exports phases with Variant keys and no ids', () => {
+		expect(tpl.version).toBe(TEMPLATE_VERSION);
+		expect(TEMPLATE_VERSION).toBe(7);
+		const text = JSON.stringify(tpl.habit.schedule);
+		for (const id of [VA, VB]) expect(text).not.toContain(id);
+	});
+
+	it('imports phases starting on the day of import, each with the new Variant ids', () => {
+		const { habit } = fromTemplate(templateFile.parse(JSON.parse(JSON.stringify(tpl))), '2026-12-07');
+		expect(habitForm.safeParse(habit).success).toBe(true);
+		const s = habit.schedule as Extract<HabitForm['schedule'], { kind: 'phases' }>;
+		expect(s.start).toBe('2026-12-07');
+		const [a, b] = habit.variants.map((v) => v.id);
+		expect(s.phases[0].schedule).toEqual({ kind: 'weekly', days: { '0': a, '2': a, '4': a } });
+		// The second phase starts a week later, on its own first day.
+		expect(s.phases[1].schedule).toMatchObject({ kind: 'interval', variantId: b, start: '2026-12-14' });
+	});
+
+	it('puts the days someone picks in every phase', () => {
+		const file: TemplateFile = {
+			...templateFile.parse(JSON.parse(JSON.stringify(tpl))),
+			questions: [{ kind: 'days', key: 'days', label: 'Which days?', default: [0, 2, 4] }]
+		};
+		const out = applyAnswers(file, { days: [1, 3] });
+		const s = out.habit.schedule as { phases: { schedule: { kind: string; days?: Record<string, string> } }[] };
+		expect(Object.keys(s.phases[0].schedule.days!)).toEqual(['1', '3']);
+		expect(s.phases[1].schedule.kind).toBe('interval');
+	});
+});
+
 describe('sharing without losing anything (version 5)', () => {
 	const AREA = '00000000-0000-4000-8000-000000000020';
 	const SKULL = '00000000-0000-4000-8000-000000000021';

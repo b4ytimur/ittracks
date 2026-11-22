@@ -17,7 +17,7 @@ import {
 	taskTag,
 	variant
 } from './db/schema';
-import { dueOn, isFollow, isGroup, nextInRotation, rollupRuleOf, type Done, type ParentDue, type Schedule } from '$lib/engine/schedule';
+import { dueOn, historyOn, isFollow, isGroup, nextInRotation, planOn, rollupRuleOf, type Done, type ParentDue, type Schedule } from '$lib/engine/schedule';
 import { followDue, parentDueFor, syncParents } from './rollup';
 import { depthOf } from '$lib/engine/tree';
 import { pickTask, type Candidate, type FillRule } from '$lib/engine/fill';
@@ -253,25 +253,32 @@ function settlePast(h: Settling, schedule: ScheduleForm, today: string, pauses: 
 		lt(occurrence.date, today)
 	);
 	// Logs with something in them were judged above, so what is still due here is untouched.
-	if (carriesOver(schedule as Schedule)) {
-		db.delete(occurrence).where(stale).run();
-	} else {
-		// A day the schedule never planned (a past day opened to log by hand, a rotation
-		// started early) that was left without a log goes away instead of counting as a miss.
-		// With unlogged days ignored, so does any due day left untouched (a note is kept).
-		const gone = db
-			.select({ id: occurrence.id, date: occurrence.date, notes: occurrence.notes })
-			.from(occurrence)
-			.where(stale)
-			.all()
-			.filter(
-				(o) =>
-					!hasEntries(o.id) &&
-					(h.unlogged === 'ignore' ? !o.notes : !dueOn(scheduleOn(schedule as Schedule, h.earlierSchedules, o.date), history(habitId, o.date), o.date, pd))
-			);
-		if (gone.length) db.delete(occurrence).where(inArray(occurrence.id, gone.map((o) => o.id))).run();
-		db.update(occurrence).set({ status: 'missed' }).where(stale).run();
-	}
+	// A day whose plan carries over (a weekly target, a waiting rotation) was never missed on
+	// its own: it goes away. Each day by the plan it had, since phases and edits change it.
+	const carried = db
+		.select({ id: occurrence.id, date: occurrence.date })
+		.from(occurrence)
+		.where(stale)
+		.all()
+		.filter((o) => carriesOver(scheduleOn(schedule as Schedule, h.earlierSchedules, o.date), o.date))
+		.map((o) => o.id);
+	if (carried.length) db.delete(occurrence).where(inArray(occurrence.id, carried)).run();
+
+	// A day the schedule never planned (a past day opened to log by hand, a rotation
+	// started early) that was left without a log goes away instead of counting as a miss.
+	// With unlogged days ignored, so does any due day left untouched (a note is kept).
+	const gone = db
+		.select({ id: occurrence.id, date: occurrence.date, notes: occurrence.notes })
+		.from(occurrence)
+		.where(stale)
+		.all()
+		.filter(
+			(o) =>
+				!hasEntries(o.id) &&
+				(h.unlogged === 'ignore' ? !o.notes : !dueOn(scheduleOn(schedule as Schedule, h.earlierSchedules, o.date), history(habitId, o.date), o.date, pd))
+		);
+	if (gone.length) db.delete(occurrence).where(inArray(occurrence.id, gone.map((o) => o.id))).run();
+	db.update(occurrence).set({ status: 'missed' }).where(stale).run();
 	const yesterday = addDays(today, -1);
 	if (h.unlogged === 'missed') fillMisses(h, schedule, yesterday, pauses, pd);
 	if (!h.settledThrough || h.settledThrough < yesterday)
@@ -421,7 +428,7 @@ export function restorePartialDays(): number {
 	const first = new Map<string, (typeof back)[number]>();
 	for (const r of back) if (!first.has(r.habitId) || r.date < first.get(r.habitId)!.date) first.set(r.habitId, r);
 	for (const r of first.values())
-		if (r.schedule && carriesOver(r.schedule as Schedule))
+		if (r.schedule && carriesOver(r.schedule as Schedule, r.date))
 			recount(r.accountId, r.habitId, r.schedule as ScheduleForm, r.date, addDays(r.settledThrough!, 1));
 	return back.length;
 }
@@ -609,8 +616,9 @@ export function createOccurrence(
 
 /** For a rotation that is resting today: the Variant you could start early. */
 export function nextEarly(habitId: string, schedule: ScheduleForm, today: string) {
-	if (schedule.kind !== 'rotation' || schedule.step !== 'variant') return null;
-	return nextInRotation(schedule, history(habitId, today), today)?.variantId ?? null;
+	const plan = planOn(schedule as Schedule, today);
+	if (plan.kind !== 'rotation' || plan.step !== 'variant') return null;
+	return nextInRotation(plan, historyOn(schedule as Schedule, history(habitId, today), today), today)?.variantId ?? null;
 }
 
 export interface TodayItem {

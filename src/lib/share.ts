@@ -69,6 +69,8 @@ export interface ShareCtx {
 
 /** The weekdays a schedule is on, for the days question. */
 export function scheduleDays(s: ScheduleForm | null): { fit: boolean; days: number[] } {
+	// Phases: the answer applies to every phase; the first phase that has weekdays suggests them.
+	if (s?.kind === 'phases') return s.phases.map((p) => scheduleDays(p.schedule)).find((d) => d.fit) ?? { fit: false, days: [] };
 	if (s?.kind === 'weekly') return { fit: true, days: Object.keys(s.days).map(Number).sort() };
 	if (s?.kind === 'rotation' && s.step === 'week') return { fit: true, days: [...s.weekdays].sort() };
 	if (s?.kind === 'frequency' && s.period === 'week') {

@@ -155,7 +155,7 @@
 	const lineFor = (h: (typeof data.habits)[number]) => {
 		const a = area(h.areaId);
 		return [
-			show('schedule') ? (h.direction === 'break' ? 'Break habit' : describeSchedule(h.schedule, data.habits.find((x) => x.id === h.parentId))) : null,
+			show('schedule') ? (h.direction === 'break' ? 'Break habit' : describeSchedule(h.schedule, data.habits.find((x) => x.id === h.parentId), h.variants)) : null,
 			show('cue') ? cueText(h.cue) : null,
 			show('area') && a && view.group !== 'area' ? `${a.icon} ${a.name}` : null,
 			show('consistency') && h.consistency !== null ? `${h.consistency}% in 30 days` : null,

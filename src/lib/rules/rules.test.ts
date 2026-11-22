@@ -158,6 +158,26 @@ describe('habit rules', () => {
 		expect(checkHabit(h).errors[0].path).toBe('schedule');
 	});
 
+	it('P1-P3: phases after one with no end are refused, weekly rotations need days, unused Variants warn', () => {
+		const daily = { kind: 'weekly' as const, days: { '0': V } };
+		const h: HabitForm = {
+			...base(),
+			schedule: { kind: 'phases', start: '2026-11-01', phases: [{ length: null, unit: 'week', schedule: daily }, { length: 1, unit: 'week', schedule: daily }] }
+		};
+		expect(checkHabit(h).errors.map((e) => e.path)).toEqual(['schedule']);
+		h.schedule = {
+			kind: 'phases',
+			start: '2026-11-01',
+			phases: [{ length: 1, unit: 'week', schedule: { kind: 'rotation', step: 'week', order: [{ variantId: V, restDays: 0 }], onMiss: 'wait', weekdays: [], start: '2026-11-01' } }]
+		};
+		expect(checkHabit(h).errors.map((e) => e.reason)).toEqual(['Pick at least one weekday for each weekly rotation']);
+		h.schedule = { kind: 'phases', start: '2026-11-01', phases: [{ length: null, unit: 'week', schedule: daily }] };
+		h.variants.push({ id: H, name: 'B', slots: [] });
+		const r = checkHabit(h);
+		expect(r.errors).toEqual([]);
+		expect(r.warnings.map((w) => w.reason)).toEqual(["A Variant isn't in any phase, so it never comes up"]);
+	});
+
 	it('S4, S5: soft conflicts warn but do not block', () => {
 		const h = base();
 		h.variants.push({ id: H, name: 'B', slots: [] });

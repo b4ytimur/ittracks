@@ -19,7 +19,7 @@ import { streak, type StreakRule } from '$lib/engine/streak';
 import { addDays, weekday } from '$lib/engine/dates';
 import { excerpt } from '$lib/markdown';
 import type { ScheduleForm } from '$lib/forms';
-import { isGroup, rollupRuleOf, type Schedule } from '$lib/engine/schedule';
+import { isGroup, isPhases, phaseSpans, rollupRuleOf, variantsIn, type Phases, type Schedule } from '$lib/engine/schedule';
 import { ActionError, canSeeHabit, requireScope, type Actor } from './actor';
 import { dayOf, findHabit, visibleHabits } from './day';
 import { listEvents } from './events';
@@ -148,8 +148,20 @@ export function describe(actor: Actor) {
 				startDate: h.startDate,
 				schedule:
 					h.direction === 'build'
-						? describeSchedule(h.schedule as ScheduleForm | null, parentFor(h.parentId))
+						? describeSchedule(h.schedule as ScheduleForm | null, parentFor(h.parentId), variants.filter((v) => v.habitId === h.id))
 						: 'Break habit: log slips',
+				// Phases: each one's dates and schedule, so "which phase was I in" can be answered exactly.
+				...(isPhases(h.schedule as Schedule | null)
+					? {
+							phases: phaseSpans(h.schedule as Phases).map((p) => ({
+								from: p.from,
+								to: p.to,
+								schedule: describeSchedule(p.schedule as ScheduleForm),
+								variants: variantsIn(p.schedule).map((id) => variants.find((v) => v.id === id)?.name ?? id),
+								current: today >= p.from && (p.to === null || today <= p.to)
+							}))
+						}
+					: {}),
 				// The feelings a slip can be logged with (log_slip takes one by name or id).
 				...(h.direction === 'break' ? { feelings: activeOptions(h.triggers).map((o) => ({ id: o.id, name: o.name })) } : {}),
 				// A group's days are worked out from the habits inside it; it can't be logged itself.

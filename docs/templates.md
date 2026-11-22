@@ -42,4 +42,4 @@ Filter by search, category, **Any days a week**, **Any time a day** and **No equ
 
 ## File format
 
-The format is defined in `src/lib/template.ts` and is at version 6. Older files (versions 1 to 5) still import; newer fields take their defaults. Notes in a template come from a stranger, so they are shown with raw HTML off and images as links (see [Notes](notes-and-journal.md)).
+The format is defined in `src/lib/template.ts` and is at version 7 (version 7 added phases, which start on the day you add the template). Older files (versions 1 to 6) still import; newer fields take their defaults. Notes in a template come from a stranger, so they are shown with raw HTML off and images as links (see [Notes](notes-and-journal.md)).

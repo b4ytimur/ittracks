@@ -37,7 +37,8 @@ function skipDay({ actor, today, undo }: Ctx, h: HabitRow, d: string, pauses: Pa
 	const occ = db.select().from(occurrence).where(and(eq(occurrence.habitId, h.id), eq(occurrence.date, d))).get();
 	if (occ?.status === 'done') return 'done';
 	if (occ?.status === 'skipped') return 'already';
-	if (!occ && (pauseOn(pauses, h.id, d) || !dueOn(scheduleAt(h, d), history(h.id, d), d, followDue(h.id, scheduleAt(h, d), today)))) return 'not_due';
+	// A day whose phase carries over (a weekly target) has no fixed day to skip, like a whole habit that does.
+	if (!occ && (pauseOn(pauses, h.id, d) || carriesOver(scheduleAt(h, d), d) || !dueOn(scheduleAt(h, d), history(h.id, d), d, followDue(h.id, scheduleAt(h, d), today)))) return 'not_due';
 	const before = snapshot(h.id, d);
 	try {
 		logSkip(actor, { habit: h.id, date: d });
