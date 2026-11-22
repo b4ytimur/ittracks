@@ -1,9 +1,12 @@
 // Undo for a bulk change: while it runs, each action records what it is about to change, and
-// Undo puts those things back in reverse order. One mechanism for every action, in four kinds:
+// Undo puts those things back in reverse order. One mechanism for every action, in six kinds:
 //
-// - row: columns of a row, before and after (a habit's Area, a field's unit, logged values);
+// - row: columns of a row, before and after (a field's unit, logged values, targets);
+// - habit: bulk-editable habit fields, put back through the same write as the change, so a
+//   field's effect is undone with it (habit-fields.ts);
 // - day: a habit's whole day before and after (src/lib/server/backfill.ts snapshots);
 // - pause: a pause the change added, taken away again;
+// - archive: a habit or Task archived or brought back, the other way again (archive.ts);
 // - convert: values logged after a unit conversion, converted back with it.
 //
 // Anything changed again since the batch (a day logged by hand, a value edited) is left as it
@@ -17,14 +20,19 @@ import { roundConverted } from '$lib/units';
 import type { ScheduleForm } from '$lib/forms';
 import type { OnWrite } from '../history';
 import type { Actor } from '../core/actor';
+import type { HabitBulkField } from '$lib/rules/habit';
+import { habitFieldsNow, writeHabitFields } from './habit-fields';
+import { ARCHIVE, type ArchiveKind } from './archive';
 
 const TABLES = { habit, metric, entry, slot, taskPart, occurrence } as const;
 export type RowTable = keyof typeof TABLES;
 
 export type UndoOp =
 	| { k: 'row'; t: RowTable; id: string; before: Record<string, unknown>; after: Record<string, unknown> }
+	| { k: 'habit'; id: string; before: Partial<Record<HabitBulkField, unknown>>; after: Partial<Record<HabitBulkField, unknown>> }
 	| { k: 'day'; before: Snapshot; after: Snapshot }
 	| { k: 'pause'; id: string }
+	| { k: 'archive'; t: ArchiveKind; id: string; archived: boolean }
 	| { k: 'convert'; taskId: string; metricId: string; unitBefore: string | null; factor: number; entries: string[] };
 
 /** What a running bulk change records for its Undo. */
@@ -35,12 +43,21 @@ export class UndoLog {
 		this.ops.push({ k: 'row', t, id, before, after });
 	}
 
+	habit(id: string, before: Partial<Record<HabitBulkField, unknown>>, after: Partial<Record<HabitBulkField, unknown>>) {
+		this.ops.push({ k: 'habit', id, before, after });
+	}
+
 	day(before: Snapshot, after: Snapshot) {
 		this.ops.push({ k: 'day', before, after });
 	}
 
 	pause(id: string) {
 		this.ops.push({ k: 'pause', id });
+	}
+
+	/** `archived`: what the change set it to. */
+	archive(t: ArchiveKind, id: string, archived: boolean) {
+		this.ops.push({ k: 'archive', t, id, archived });
 	}
 
 	/** Recorded before the field's unit changes, so Undo reaches it after the unit is back. */
@@ -82,12 +99,37 @@ export interface UndoResult {
 export function undoAll(actor: Actor, ops: UndoOp[], today: string): UndoResult {
 	const r: UndoResult = { restored: 0, kept: 0 };
 	for (const op of [...ops].reverse()) {
-		const ok =
-			op.k === 'row' ? undoRow(op) : op.k === 'day' ? undoDay(actor, op, today) : op.k === 'pause' ? undoPause(actor, op, today) : undoConvert(op);
+		const ok = UNDO[op.k](actor, op as never, today);
 		if (ok === null) continue;
 		r[ok ? 'restored' : 'kept']++;
 	}
 	return r;
+}
+
+type Op<K extends UndoOp['k']> = Extract<UndoOp, { k: K }>;
+
+/** How each kind is undone: true put back, false changed since and kept, null nothing to do. */
+const UNDO: { [K in UndoOp['k']]: (actor: Actor, op: Op<K>, today: string) => boolean | null } = {
+	row: (_a, op) => undoRow(op),
+	habit: (_a, op) => undoHabit(op),
+	day: undoDay,
+	pause: undoPause,
+	archive: undoArchive,
+	convert: (_a, op) => undoConvert(op)
+};
+
+function undoHabit(op: Op<'habit'>): boolean {
+	const now = habitFieldsNow(op.id, Object.keys(op.after) as HabitBulkField[]);
+	if (!now || Object.keys(op.after).some((k) => !same(now[k as HabitBulkField], op.after[k as HabitBulkField]))) return false;
+	writeHabitFields(op.id, op.after, op.before);
+	return true;
+}
+
+function undoArchive(actor: Actor, op: Op<'archive'>, today: string): boolean {
+	const kind = ARCHIVE[op.t];
+	if (kind.isArchived(actor.accountId, op.id) !== op.archived) return false;
+	kind.set(actor.accountId, op.id, !op.archived, today);
+	return true;
 }
 
 function undoRow(op: Extract<UndoOp, { k: 'row' }>): boolean {
