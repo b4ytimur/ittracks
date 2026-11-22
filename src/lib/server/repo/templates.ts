@@ -3,7 +3,8 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '../db';
 import { metric, task } from '../db/schema';
 import { applyAnswers, fromTemplate, type TemplateAnswers, type TemplateFile } from '$lib/template';
-import { habitForm } from '$lib/forms';
+import { habitForm, type TaskForm } from '$lib/forms';
+import { MAX_DEPTH } from '$lib/engine/parts';
 import { saveTask } from './tasks';
 import { checkHabitForm, saveHabit } from './habits';
 import { checkTask } from '$lib/rules/task';
@@ -59,7 +60,7 @@ export function addTemplate(
 			continue;
 		}
 		taskMap.set(t.id, match.id);
-		const theirs = db.select().from(metric).where(eq(metric.taskId, match.id)).all();
+		const theirs = db.select().from(metric).where(and(eq(metric.taskId, match.id), eq(metric.archived, false))).all();
 		for (const m of t.form.metrics) {
 			const same = theirs.find((x) => x.name.toLowerCase() === m.name.toLowerCase() && x.type === m.type);
 			if (same) metricMap.set(m.id, same.id);
@@ -78,10 +79,32 @@ export function addTemplate(
 			}
 		}
 
+	// Tasks inside new Tasks: a reused one is pointed at, with only its matched fields' targets.
+	for (const t of toCreate)
+		t.form.parts = t.form.parts.map((p) =>
+			p.kind === 'task' && taskMap.has(p.taskId)
+				? { ...p, taskId: taskMap.get(p.taskId)!, targets: remap(p.targets), minTargets: remap(p.minTargets), stretchTargets: remap(p.stretchTargets) }
+				: p
+		);
+	// A Task is created after the Tasks inside it. A file with Tasks inside each other in a loop is refused.
+	const ordered: typeof toCreate = [];
+	const pending = new Map(toCreate.map((t) => [t.id, t]));
+	while (pending.size) {
+		const ready = [...pending.values()].filter((t) => t.form.parts.every((p) => p.kind === 'step' || !pending.has(p.taskId) || p.taskId === t.id));
+		if (!ready.length || ready.some((t) => t.form.parts.some((p) => p.kind === 'task' && p.taskId === t.id)))
+			return { error: 'The template has Tasks inside each other in a loop.' };
+		for (const t of ready) {
+			ordered.push(t);
+			pending.delete(t.id);
+		}
+	}
+	if (ordered.some((t) => t.form.parts.some((p) => p.kind === 'task' && depthOf(ordered, p.taskId) >= MAX_DEPTH)))
+		return { error: `The template has Tasks inside each other more than ${MAX_DEPTH} levels deep.` };
+
 	const addAreas = opts.addAreas ?? true;
 	const areaId = areaFor(accountId, tpl.meta?.area, addAreas);
 	const taskArea = new Map(tpl.tasks.map((t, i) => [tasks[i]?.id, t.area]));
-	for (const t of toCreate) {
+	for (const t of ordered) {
 		const own = taskArea.get(t.id);
 		saveTask(accountId, null, { ...t.form, areaId: own ? areaFor(accountId, own, addAreas) : areaId }, t.id);
 	}
@@ -89,6 +112,13 @@ export function addTemplate(
 	habit.identityIds = identities.map((statement) => identityFor(accountId, statement));
 	const habitId = saveHabit(accountId, null, habit, opts.today)!;
 	return { habitId, name: habit.name, created: toCreate.length, reused: taskMap.size };
+}
+
+/** How many levels of parts sit below a new Task of a template (reused Tasks count as none). */
+function depthOf(tasks: { id: string; form: TaskForm }[], id: string, seen = new Set<string>()): number {
+	const t = tasks.find((x) => x.id === id);
+	if (!t || seen.has(id)) return 0;
+	return Math.max(0, ...t.form.parts.map((p) => (p.kind === 'task' ? 1 + depthOf(tasks, p.taskId, new Set([...seen, id])) : 0)));
 }
 
 /** Read the add form shared by the Gallery and file import: answers, name, and the choices under the preview. */

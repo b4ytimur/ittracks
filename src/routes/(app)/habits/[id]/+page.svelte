@@ -3,13 +3,15 @@
 	import { deserialize, enhance } from '$app/forms';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { HabitForm, ScheduleForm } from '$lib/forms';
+	import OptionList from '$lib/OptionList.svelte';
 	import { describeSchedule, weekdayNames } from '$lib/describe';
 	import FillRuleEditor from './FillRuleEditor.svelte';
 	import NoteBox from '$lib/NoteBox.svelte';
 	import { limitOn, nextDrop } from '$lib/engine/limit';
 	import { sameSchedule, scheduleStartBy } from '$lib/engine/unlogged';
 	import { blocked } from '$lib/rules/core';
-	import { checkHabit, habitRules } from '$lib/rules/habit';
+	import { checkHabit, habitPast, habitRules } from '$lib/rules/habit';
+	import { lockedNow } from '$lib/rules/history';
 
 	let { data, form } = $props();
 
@@ -23,10 +25,23 @@
 	let metricsByTask = $state(untrack(() => ({ ...data.metrics })));
 	/** Tasks that log something per set; a Yes or no Task has no sets to aim for. */
 	let repeating = $state(untrack(() => new Set(data.repeating)));
+	/** History policies (src/lib/rules/history.ts): build or break is fixed once something is logged. */
+	const directionLocked = untrack(() => lockedNow(habitPast, 'direction', data.directionLocked));
+	/** One raise by steps, per Slot target: "Weight +2.5 kg", in each field's own step and unit. */
+	const raiseLines = $derived.by(() => {
+		if (h.progression?.unit !== 'steps') return [];
+		const by = h.progression.by;
+		const out = new Set<string>();
+		for (const v of h.variants)
+			for (const s of v.slots)
+				for (const m of (s.taskId && metricsByTask[s.taskId]) || [])
+					if (s.targets[m.id] !== undefined) out.add(`${m.name} +${Math.round(m.step * by * 1000) / 1000}${m.unit ? ` ${m.unit}` : ''}`);
+		return [...out];
+	});
 
-	// A build habit always has at least one Variant to put Slots in.
+	// A build habit always has at least one Variant to put Slots in. A group has none: the habits inside it do.
 	$effect(() => {
-		if (h.direction === 'build' && h.variants.length === 0) addVariant();
+		if (h.direction === 'build' && h.variants.length === 0 && kind !== 'group') addVariant();
 	});
 
 	// ----- Schedule editor state, seeded from the saved Schedule -----
@@ -37,7 +52,7 @@
 	let times = $state(s0?.kind === 'frequency' ? s0.times : 3);
 	let period = $state<'week' | 'month'>(s0?.kind === 'frequency' ? s0.period : 'week');
 	let every = $state(s0?.kind === 'interval' ? s0.every : 1);
-	let singleVariant = $state(s0?.kind === 'frequency' || s0?.kind === 'interval' ? s0.variantId : '');
+	let singleVariant = $state(s0?.kind === 'frequency' || s0?.kind === 'interval' || s0?.kind === 'follow' ? s0.variantId : '');
 	let step_ = $state<'variant' | 'week'>(s0?.kind === 'rotation' ? s0.step : 'variant');
 	let onMiss = $state<'wait' | 'skip'>(s0?.kind === 'rotation' ? s0.onMiss : 'wait');
 	let restDays = $state<Record<string, number>>(
@@ -47,8 +62,39 @@
 	let start = $state(
 		s0?.kind === 'rotation' || s0?.kind === 'interval' ? s0.start : savedStart
 	);
+	/** A group: done when all (null) or this many habits inside are done; the Minimum, or none. */
+	let groupTarget = $state<number | null>(s0?.kind === 'group' ? s0.target : s0 && 'rollup' in s0 ? (s0.rollup?.target ?? null) : null);
+	let groupMinimum = $state<number | null>(s0?.kind === 'group' ? s0.minimum : s0 && 'rollup' in s0 ? (s0.rollup?.minimum ?? null) : null);
+	/** Following the routine it sits in: only on these of the routine's Variants, or null for all. */
+	let followOn = $state<string[] | null>(s0?.kind === 'follow' ? s0.on : null);
+	/** Why the group choice can't be saved as it stands, from what is logged or inside. */
+	const groupProblem = $derived(
+		kind === 'group' && data.ownLogs
+			? 'This habit has logs, and a group gets its days from the habits inside it. Make a new habit for the group instead.'
+			: kind !== 'group' && s0?.kind === 'group' && data.inside.length
+				? 'Move the habits inside this group out of it first.'
+				: null
+	);
 
 	const firstVariant = $derived(h.variants[0]?.id ?? '');
+
+	// ----- Routines: a habit with its own schedule and habits inside it -----
+	/** The habit this one sits in, as the Inside picker lists it. */
+	const parent = $derived(data.groups.find((g) => g.id === h.parentId) ?? null);
+	/** This habit holds habits and has days of its own: its day is judged from theirs too. */
+	const isRoutine = $derived(h.direction === 'build' && data.inside.length > 0 && kind !== 'group');
+	/** Following needs a routine to follow. Leaving it switches to a schedule of its own. */
+	$effect(() => {
+		if (kind === 'follow' && !parent?.routine) untrack(() => (kind = 'interval'));
+	});
+	function toggleFollowOn(id: string) {
+		const all = parent?.variants.map((v) => v.id) ?? [];
+		const now = followOn ?? all;
+		const next = now.includes(id) ? now.filter((x) => x !== id) : [...now, id];
+		followOn = next.length === all.length ? null : next;
+	}
+	/** A routine's rule, kept with its schedule only when it isn't the default (all, no Minimum). */
+	const routineRule = $derived(isRoutine && (groupTarget !== null || groupMinimum !== null) ? { rollup: { target: groupTarget, minimum: groupMinimum } } : {});
 
 	/**
 	 * A new start date for the habit. The schedule's own start follows: along with it when the
@@ -73,14 +119,16 @@
 			case 'weekly':
 				return {
 					kind,
-					days: Object.fromEntries(Object.entries(weeklyDays).filter(([, v]) => ids.has(v)))
+					days: Object.fromEntries(Object.entries(weeklyDays).filter(([, v]) => ids.has(v))),
+					...routineRule
 				};
 			case 'frequency':
-				return { kind, times, period, variantId: pick };
+				return { kind, times, period, variantId: pick, ...routineRule };
 			case 'interval':
-				return { kind, every, start, variantId: pick };
+				return { kind, every, start, variantId: pick, ...routineRule };
 			case 'rotation':
 				return {
+					...routineRule,
 					kind,
 					step: step_,
 					onMiss,
@@ -88,6 +136,10 @@
 					weekdays: step_ === 'week' ? [...weekdays].sort() : [],
 					order: h.variants.map((v) => ({ variantId: v.id, restDays: restDays[v.id] ?? 1 }))
 				};
+			case 'group':
+				return { kind, target: groupTarget, minimum: groupMinimum };
+			case 'follow':
+				return { kind, variantId: pick, on: followOn };
 		}
 	});
 	/** A schedule edit on a habit with a past: from today on (the default), or past days too. */
@@ -153,13 +205,6 @@
 		} else identityError = 'Could not add that identity.';
 	}
 
-	let newTrigger = $state('');
-	function addTrigger() {
-		const t = newTrigger.trim();
-		if (t && !h.triggers.includes(t)) h.triggers = [...h.triggers, t];
-		newTrigger = '';
-	}
-
 	function setTarget(map: Record<string, number>, metricId: string, value: string) {
 		if (value === '') delete map[metricId];
 		else map[metricId] = Number(value);
@@ -194,9 +239,6 @@
 
 	// Text typed into "add" boxes but not added yet still counts when saving.
 	const pendingPrep = $derived(newPrep.trim() && !h.prep.includes(newPrep.trim()) ? [newPrep.trim()] : []);
-	const pendingTrigger = $derived(
-		newTrigger.trim() && !h.triggers.includes(newTrigger.trim()) ? [newTrigger.trim()] : []
-	);
 	// ----- Conflict rules (src/lib/rules): what is blocked right now, and why -----
 	const ruleForm = $derived({ ...h, schedule, cue } as HabitForm);
 	const ruleCheck = $derived(checkHabit(ruleForm));
@@ -212,8 +254,7 @@
 			cue,
 			pinned,
 			scheduleApplies: scheduleEdited ? scheduleApplies : 'today',
-			prep: [...h.prep, ...pendingPrep],
-			triggers: [...h.triggers, ...pendingTrigger]
+			prep: [...h.prep, ...pendingPrep]
 		})
 	);
 
@@ -287,7 +328,7 @@
 		const res = await fetch('?/quickTask', { method: 'POST', body, headers: { 'x-sveltekit-action': 'true' } });
 		const r = deserialize(await res.text());
 		if (r.type === 'success' && r.data?.newTask) {
-			const t = r.data.newTask as { id: string; name: string; repeats: boolean; metrics: { id: string; name: string; unit: string }[] };
+			const t = r.data.newTask as { id: string; name: string; repeats: boolean; metrics: { id: string; name: string; unit: string; step: number }[] };
 			tasks = [...tasks, { id: t.id, name: t.name }].sort((a, b) => a.name.localeCompare(b.name));
 			metricsByTask = { ...metricsByTask, [t.id]: t.metrics };
 			if (t.repeats) repeating = new Set([...repeating, t.id]);
@@ -415,7 +456,18 @@
 							{#if newTaskError}<p class="error">{newTaskError}</p>{/if}
 						</div>
 					{/if}
-					{#if !s.taskId || repeating.has(s.taskId)}
+					{#if s.taskId && !repeating.has(s.taskId) && data.withParts.includes(s.taskId)}
+						<label style="width: 8rem" title="Everything inside this Task is logged once per round"
+							>Rounds
+							<input
+								type="number"
+								min="0"
+								max="50"
+								value={s.sets ?? ''}
+								oninput={(e) => (s.sets = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
+							/>
+						</label>
+					{:else if !s.taskId || repeating.has(s.taskId)}
 						<label style="width: 8rem"
 							>Target sets
 							<input
@@ -459,6 +511,9 @@
 				</div>
 			{/each}
 
+			{#if isRoutine}
+				<p class="muted small-text" style="margin: 0">Its Tasks are the habits inside it, so it has none of its own for now.</p>
+			{:else}
 			<div class="row">
 				{#if tasks.length}
 					<button type="button" onclick={() => addSlot(v.slots, false)}>Add a Task</button>
@@ -467,7 +522,8 @@
 				{/if}
 				<button type="button" onclick={() => addSlot(v.slots, true)}>Add an auto-filled slot</button>
 			</div>
-			{#if !v.slots.length}
+			{/if}
+			{#if !v.slots.length && !isRoutine}
 				<p class="muted small-text" style="margin: 0">No Tasks means there's nothing to fill in: you just tick it off.</p>
 			{/if}
 		</div>
@@ -478,6 +534,7 @@
 {/snippet}
 
 {#snippet schedulePart()}
+	{#if kind !== 'group'}
 	<div class="chips" role="group" aria-label="Quick schedules">
 		<button type="button" class="chip" class:on={presetOn === 'daily'} onclick={() => applyPreset('daily')}>Every day</button>
 		<button type="button" class="chip" class:on={presetOn === 'weekdays'} onclick={() => applyPreset('weekdays')}>Weekdays</button>
@@ -485,6 +542,7 @@
 		<button type="button" class="chip" class:on={presetOn === 'three'} onclick={() => applyPreset('three')}>3 times a week</button>
 		<button type="button" class="chip" class:on={presetOn === 'ab'} onclick={() => applyPreset('ab')}>A/B with 1 rest day</button>
 	</div>
+	{/if}
 	<label
 		>How often
 		<select bind:value={kind}>
@@ -492,8 +550,11 @@
 			<option value="frequency">A number of times per week or month</option>
 			<option value="interval">Every few days</option>
 			<option value="rotation">Rotate through Variants</option>
+			<option value="group">From the habits inside it (a group)</option>
+			{#if parent?.routine}<option value="follow">Whenever {parent.name} is due</option>{/if}
 		</select>
 	</label>
+	{#if groupProblem}<p class="error small-text">{groupProblem}</p>{/if}
 
 	{#if kind === 'weekly'}
 		{#each weekdayNames as day, d (day)}
@@ -516,6 +577,50 @@
 				</select>
 			</label>
 		</div>
+	{:else if kind === 'group'}
+		<p class="muted small-text" style="margin: 0">
+			A group has no Tasks of its own. It is due on days a habit inside it is due, and its streak counts the days enough of them were done.
+		</p>
+		<label
+			>Done when
+			<select
+				value={groupTarget === null ? 'all' : 'some'}
+				onchange={(e) => (groupTarget = e.currentTarget.value === 'all' ? null : Math.max(1, Math.min(groupMinimum !== null ? groupMinimum + 1 : 2, 100)))}
+			>
+				<option value="all">Every habit inside that is due is done</option>
+				<option value="some">A number of them are done</option>
+			</select>
+		</label>
+		{#if groupTarget !== null}
+			<label style="width: 10rem">How many <input type="number" min="1" max="100" bind:value={groupTarget} /></label>
+		{/if}
+		<label style="color: var(--text)"
+			><input type="checkbox" checked={groupMinimum !== null} onchange={(e) => (groupMinimum = e.currentTarget.checked ? 1 : null)} /> A day with fewer done still counts at the Minimum</label
+		>
+		{#if groupMinimum !== null}
+			<label style="width: 10rem">Habits for the Minimum <input type="number" min="1" max="100" bind:value={groupMinimum} /></label>
+		{/if}
+		<p class="muted small-text" style="margin: 0">
+			{#if data.inside.length}
+				Inside: {data.inside.map((x) => x.name + (x.archived ? ' (archived)' : '')).join(', ')}.
+			{:else}
+				Nothing inside yet. Open a habit and pick this group under Inside.
+			{/if}
+			On a day only some are due, "a number" means that many of the ones due.
+		</p>
+	{:else if kind === 'follow' && parent}
+		<p class="muted small-text" style="margin: 0">
+			Due on {parent.name}'s days{followOn ? ', with the Variants picked here' : ''}. On Today it shows inside {parent.name}, and marking
+			{parent.name} done marks this done too.
+		</p>
+		{#if parent.variants.length > 1}
+			<span class="muted small-text">Only when {parent.name} is on</span>
+			<div class="chips" role="group" aria-label="{parent.name}'s Variants">
+				{#each parent.variants as pv (pv.id)}
+					<button type="button" class="chip small" class:on={!followOn || followOn.includes(pv.id)} onclick={() => toggleFollowOn(pv.id)}>{pv.name}</button>
+				{/each}
+			</div>
+		{/if}
 	{:else if kind === 'interval'}
 		<div class="row">
 			<label style="width: 8rem">Every N days <input type="number" min="1" max="365" bind:value={every} /></label>
@@ -568,7 +673,36 @@
 		<label>Starting <input type="date" bind:value={start} /></label>
 	{/if}
 
-	{#if (kind === 'frequency' || kind === 'interval') && h.variants.length > 1}
+	{#if isRoutine}
+		<fieldset class="card">
+			<legend class="muted">On its days, judged from the habits inside</legend>
+			<label
+				>Done when
+				<select
+					value={groupTarget === null ? 'all' : 'some'}
+					onchange={(e) => (groupTarget = e.currentTarget.value === 'all' ? null : Math.max(1, Math.min(groupMinimum !== null ? groupMinimum + 1 : 2, 100)))}
+				>
+					<option value="all">Every habit inside that is due is done</option>
+					<option value="some">A number of them are done</option>
+				</select>
+			</label>
+			{#if groupTarget !== null}
+				<label style="width: 10rem">How many <input type="number" min="1" max="100" bind:value={groupTarget} /></label>
+			{/if}
+			<label style="color: var(--text)"
+				><input type="checkbox" checked={groupMinimum !== null} onchange={(e) => (groupMinimum = e.currentTarget.checked ? 1 : null)} /> A day with fewer done still counts at the Minimum</label
+			>
+			{#if groupMinimum !== null}
+				<label style="width: 10rem">Habits for the Minimum <input type="number" min="1" max="100" bind:value={groupMinimum} /></label>
+			{/if}
+			<p class="muted small-text" style="margin: 0">
+				Inside: {data.inside.map((x) => x.name + (x.archived ? ' (archived)' : '')).join(', ')}. Done on Today marks the ones due done; a day none of
+				them is due, you tick it off like any habit.
+			</p>
+		</fieldset>
+	{/if}
+
+	{#if (kind === 'frequency' || kind === 'interval' || kind === 'follow') && h.variants.length > 1}
 		<label
 			>Variant
 			<select bind:value={singleVariant}>
@@ -656,12 +790,13 @@
 	<fieldset class="card">
 		<legend class="muted">Type</legend>
 		<label style="color: var(--text)"
-			><input type="radio" bind:group={h.direction} value="build" /> Build: something to do</label
+			><input type="radio" bind:group={h.direction} value="build" disabled={!!directionLocked && h.direction !== 'build'} /> Build: something to do</label
 		>
 		<label style="color: var(--text)"
-			><input type="radio" bind:group={h.direction} value="break" /> Break: something to stop, with
+			><input type="radio" bind:group={h.direction} value="break" disabled={!!directionLocked && h.direction !== 'break'} /> Break: something to stop, with
 			a slip counter</label
 		>
+		{#if directionLocked}<p class="muted small-text" style="margin: 0.25rem 0 0">{directionLocked}.</p>{/if}
 	</fieldset>
 {/snippet}
 
@@ -676,6 +811,39 @@
 				{/each}
 			</div>
 		</div>
+	{/if}
+{/snippet}
+
+{#snippet insidePart()}
+	{#if h.direction === 'build' && (data.groups.length || h.parentId)}
+		{@const groupsOnly = data.groups.filter((g) => !g.routine)}
+		<!-- A group is judged, never marked, so it can't sit in a routine (whose Done marks what is inside). -->
+		{@const routines = kind === 'group' ? [] : data.groups.filter((g) => g.routine)}
+		<label
+			>Inside
+			<select bind:value={h.parentId}>
+				<option value={null}>Not inside another habit</option>
+				{#if groupsOnly.length}
+					<optgroup label="Groups">
+						{#each groupsOnly as g (g.id)}<option value={g.id}>{g.name}{g.archived ? ' (archived)' : ''}</option>{/each}
+					</optgroup>
+				{/if}
+				{#if routines.length}
+					<optgroup label="Routines (habits with no Tasks of their own)">
+						{#each routines as g (g.id)}<option value={g.id}>{g.name}{g.archived ? ' (archived)' : ''}</option>{/each}
+					</optgroup>
+				{/if}
+			</select>
+		</label>
+		{#if parent}
+			<p class="muted small-text" style="margin-top: -0.25rem">
+				{#if parent.routine}
+					On Today it shows inside {parent.name}, and {parent.name}'s days count it. Under How often it can follow {parent.name}'s days.
+				{:else}
+					On Today it shows inside its group, and the group's days count it.
+				{/if}
+			</p>
+		{/if}
 	{/if}
 {/snippet}
 
@@ -744,19 +912,14 @@
 
 	<h2>Slip triggers</h2>
 	<p class="muted">Feelings you can pick when you log a slip. Over time Today shows which ones come up most.</p>
-	<div class="chips">
-		{#each h.triggers as t, ti (t)}
-			<span class="chip on"
-				>{t}
-				<button type="button" class="link" onclick={() => h.triggers.splice(ti, 1)} aria-label="Remove {t}">×</button></span
-			>
-		{/each}
-	</div>
-	<div class="row">
-		<input class="grow" bind:value={newTrigger} placeholder="Add a feeling" aria-label="New trigger"
-			onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), addTrigger())} />
-		<button type="button" onclick={addTrigger}>Add</button>
-	</div>
+	<OptionList
+		bind:options={h.triggers}
+		used={(id) => data.usedFeelings.includes(id)}
+		label="Feeling"
+		addLabel="Add feeling"
+		placeholder="e.g. Stressed"
+		usedTitle="Past slips were logged with it: they keep it, and a rename shows there too"
+	/>
 
 	{#if !off('cost')}
 	<h2>Cost</h2>
@@ -857,7 +1020,7 @@
 			<a href="/habits/{data.id}/chain">Chain</a>
 			<a href="/habits/{data.id}/stats">Stats</a>
 			<a href="/habits/new?from={data.id}" data-sveltekit-reload>Duplicate</a>
-			<a href="/habits/{data.id}/share">Share as template</a>
+			{#if s0?.kind !== 'group'}<a href="/habits/{data.id}/share">Share as template</a>{/if}
 		{/if}
 		<a href="/habits">Cancel</a>
 	</div>
@@ -890,6 +1053,7 @@
 			<label>What's the habit called? <input bind:value={h.name} placeholder="Gym, Spanish, Read" maxlength="120" required /></label>
 			{@render typePart()}
 			{@render areaPart()}
+			{@render insidePart()}
 			{#if h.direction === 'build'}
 				<h2>What you do</h2>
 				<p class="muted small-text">Add the Tasks you log, like exercises or "new words". Leave it empty for a simple tick-off habit.</p>
@@ -940,12 +1104,15 @@
 
 	{@render typePart()}
 	{@render areaPart()}
+	{@render insidePart()}
 
 	{#if h.direction === 'break'}
 		{@render breakPart()}
 	{:else}
-		<h2>{h.variants.length > 1 ? 'Variants' : 'What you do'}</h2>
-		{@render whatYouDo()}
+		{#if kind !== 'group'}
+			<h2>{h.variants.length > 1 ? 'Variants' : 'What you do'}</h2>
+			{@render whatYouDo()}
+		{/if}
 
 		<h2>Schedule</h2>
 		{@render schedulePart()}
@@ -957,7 +1124,7 @@
 			{@render cuePart()}
 		{/if}
 
-		{#if open.levels && (!off('levels') || h.levels.enabled)}
+		{#if open.levels && kind !== 'group' && (!off('levels') || h.levels.enabled)}
 			<h2>Levels</h2>
 			<label style="color: var(--text)"
 				><input type="checkbox" bind:checked={h.levels.enabled} /> Use levels: a two-minute Minimum, your Target, and a Stretch</label
@@ -969,7 +1136,7 @@
 				<p class="muted small-text">Set numbers for each level per Task in the Slots above. Whether a Minimum day counts is under Streak.</p>
 			{/if}
 		{/if}
-		{#if h.variants.some((v) => v.slots.length)}
+		{#if kind !== 'group' && h.variants.some((v) => v.slots.length)}
 			<label style="color: var(--text)"
 				><input type="checkbox" bind:checked={h.quickDone} /> One-tap Done on Today (logs your targets)</label
 			>
@@ -1000,17 +1167,17 @@
 			{:else if h.streakRule.kind === 'consistency'}
 				<label style="width: 10rem">Over the last N days <input type="number" min="7" max="365" bind:value={h.streakRule.days} /></label>
 			{/if}
-			{#if h.direction === 'build'}
+			{#if h.direction === 'build' && (kind !== 'group' || groupMinimum !== null)}
 				<fieldset class="card">
 					<legend class="muted">A day that falls short of the target</legend>
 					<label style="color: var(--text)"
 						><input type="radio" bind:group={h.minimumCounts} value={true} />
-						{h.levels.enabled ? 'Counts once it reaches the Minimum' : 'Counts once anything is logged'}</label
+						{kind === 'group' ? `Counts once ${groupMinimum} inside are done` : h.levels.enabled ? 'Counts once it reaches the Minimum' : 'Counts once anything is logged'}</label
 					>
 					<label style="color: var(--text)"
 						><input type="radio" bind:group={h.minimumCounts} value={false} /> Only the full target counts</label
 					>
-					<p class="muted small-text" style="margin: 0.25rem 0 0">
+					<p class="muted small-text" style="margin: 0.25rem 0 0" hidden={kind === 'group'}>
 						{h.minimumCounts
 							? h.levels.enabled
 								? 'Doing the Minimum keeps the streak alive. Less than that is a miss once the day is over.'
@@ -1020,6 +1187,7 @@
 					</p>
 				</fieldset>
 			{/if}
+			{#if kind !== 'group'}
 			<fieldset class="card">
 				<legend class="muted">Days you don't log</legend>
 				<label style="color: var(--text)"
@@ -1034,6 +1202,7 @@
 						: 'Streaks, consistency, the chain and Stats treat a forgotten day as a miss. Log or skip it later to change that.'}
 				</p>
 			</fieldset>
+			{/if}
 		{/if}
 
 		<details class="extras" open={!!(h.bundle.reward || h.prep.length || h.reward.celebrate || h.reward.jar || h.progression)}>
@@ -1108,10 +1277,15 @@
 					<label style="width: 7rem"
 						><select bind:value={h.progression.unit} aria-label="Raise unit">
 							<option value="percent">%</option>
-							<option value="amount">units</option>
+							<option value="steps">steps</option>
 						</select></label
 					>
 				</div>
+				{#if h.progression.unit === 'steps'}
+					<p class="muted small-text">
+						A step is each field's own +/− step, in its own unit{raiseLines.length ? `: ${raiseLines.join(', ')}` : ''}. Change a step in the Task's “When logging”.
+					</p>
+				{/if}
 				<p class="muted small-text">ittracks only suggests it. Nothing changes until you accept.</p>
 			{/if}
 		{/if}
@@ -1138,14 +1312,14 @@
 	{#if Object.values(open).some((x) => !x)}
 		<div class="chips add-more">
 			{#if h.direction === 'build' && !open.when}<button type="button" class="chip" onclick={() => (open.when = true)}>+ When and where</button>{/if}
-			{#if h.direction === 'build' && !open.levels && !off('levels')}<button type="button" class="chip" onclick={() => (open.levels = true)}>+ Levels</button>{/if}
+			{#if h.direction === 'build' && kind !== 'group' && !open.levels && !off('levels')}<button type="button" class="chip" onclick={() => (open.levels = true)}>+ Levels</button>{/if}
 			{#if h.direction === 'build' && !open.streak}<button type="button" class="chip" onclick={() => (open.streak = true)}>+ Streak and days you don't log</button>{/if}
 			{#if !open.identity && !off('identities')}<button type="button" class="chip" onclick={() => (open.identity = true)}>+ Identity</button>{/if}
 			{#if !open.notes}<button type="button" class="chip" onclick={() => (open.notes = true)}>+ Notes</button>{/if}
 		</div>
 	{/if}
 
-	{#if h.direction === 'build'}
+	{#if h.direction === 'build' && kind !== 'group'}
 		<label style="color: var(--text)"><input type="checkbox" bind:checked={pinned} /> Add to home screen shortcuts (long-press the app icon)</label>
 		{#if !data.isNew}
 			<p class="muted small-text" style="margin: 0">

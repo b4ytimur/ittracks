@@ -10,6 +10,7 @@ import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { z } from 'zod';
 import { db } from '../db';
 import * as s from '../db/schema';
+import { upgradeOptionIds } from '../db/upgrade';
 import { getSettings } from '../settings';
 import { zip } from '../zip';
 import { describeSchedule } from '$lib/describe';
@@ -17,6 +18,9 @@ import type { ScheduleForm } from '$lib/forms';
 import { ActionError, requireScope, type Actor } from './actor';
 import { emit } from './events';
 import { listLogs, listValues, type LogRow, type ValueRow } from './read';
+import { depthOf } from '$lib/engine/tree';
+import { PATH_RE } from '$lib/engine/parts';
+import { activeOptions } from '$lib/options';
 
 export const EXPORT_FORMAT = 'ittracks-export';
 export const EXPORT_VERSION = 1;
@@ -29,6 +33,7 @@ const TABLES = {
 	task: s.task,
 	taskTag: s.taskTag,
 	metric: s.metric,
+	taskPart: s.taskPart,
 	collection: s.collection,
 	collectionTask: s.collectionTask,
 	identity: s.identity,
@@ -71,6 +76,7 @@ function accountRows(accountId: string): Rows {
 		task: db.select().from(s.task).where(taskOf).all(),
 		taskTag: by(s.taskTag, db.select({ r: s.taskTag }).from(s.taskTag).innerJoin(s.task, eq(s.taskTag.taskId, s.task.id)).where(taskOf).all()),
 		metric: by(s.metric, db.select({ r: s.metric }).from(s.metric).innerJoin(s.task, eq(s.metric.taskId, s.task.id)).where(taskOf).all()),
+		taskPart: by(s.taskPart, db.select({ r: s.taskPart }).from(s.taskPart).innerJoin(s.task, eq(s.taskPart.taskId, s.task.id)).where(taskOf).all()),
 		collection: db.select().from(s.collection).where(eq(s.collection.accountId, accountId)).all(),
 		collectionTask: by(
 			s.collectionTask,
@@ -183,8 +189,9 @@ day start. To restore an account, use the JSON export instead: these files can't
 | status | done, missed, skipped or due (still open) |
 | variant | Which version of the habit (e.g. Day A) |
 | level | minimum, target or stretch, when finished |
-| task | The Task; a step (sub-task) shows as \`Task › Step\` |
+| task | The Task; a step or a Task inside another shows where it sits, as \`Circuit › Push-ups\` |
 | set | 1, 2, 3… for a value logged per set; empty for one logged once per log |
+| round | The round of a Circuit (a Task whose parts repeat) it was logged in; empty outside rounds |
 | field | The field's name; \`Done\` for a ticked step or Yes/no Task |
 | type | number, count, duration, checkbox, choice, text, or tick |
 | unit | kg, min, pages…; durations without a unit are minutes |
@@ -199,7 +206,7 @@ feeling, place${notes ? ', notes' : ''}.
 
 ## habits.csv and fields.csv
 
-habits.csv: id, name, direction (build or break), area, schedule (in words), start_date, archived.
+habits.csv: id, name, direction (build or break), area, schedule (in words), start_date, archived, group_id (the group or routine the habit sits in; a group's days, and a routine's on days the habits inside are due, are worked out from them).
 fields.csv: one row per field of each Task: task_id, task, field_id, field, type, unit, per_set,
 options. Ids match the JSON export and the app's links.
 `;
@@ -223,7 +230,7 @@ export function exportCsvZip(actor: Actor): { body: Uint8Array; today: string } 
 		{ name: 'ittracks-export/README.md', text: README(notes, username, today) },
 		{
 			name: 'ittracks-export/values.csv',
-			text: csvOf(['ref', 'date', 'weekday', 'habit', 'status', 'variant', 'level', 'task', 'set', 'field', 'type', 'unit', 'value', 'score'], values.rows as unknown as Record<string, unknown>[])
+			text: csvOf(['ref', 'date', 'weekday', 'habit', 'status', 'variant', 'level', 'task', 'set', 'round', 'field', 'type', 'unit', 'value', 'score'], values.rows as unknown as Record<string, unknown>[])
 		},
 		{
 			name: 'ittracks-export/logs.csv',
@@ -235,7 +242,7 @@ export function exportCsvZip(actor: Actor): { body: Uint8Array; today: string } 
 		{
 			name: 'ittracks-export/habits.csv',
 			text: csvOf(
-				['id', 'name', 'direction', 'area', 'schedule', 'start_date', 'archived'],
+				['id', 'name', 'direction', 'area', 'schedule', 'start_date', 'archived', 'group_id'],
 				habits.map((h) => ({
 					id: h.id,
 					name: h.name,
@@ -243,7 +250,8 @@ export function exportCsvZip(actor: Actor): { body: Uint8Array; today: string } 
 					area: h.areaId ? areas.get(h.areaId) : '',
 					schedule: h.direction === 'build' ? describeSchedule(h.schedule as ScheduleForm | null) : '',
 					start_date: h.startDate,
-					archived: h.archived
+					archived: h.archived,
+					group_id: h.parentId ?? ''
 				}))
 			)
 		},
@@ -259,7 +267,7 @@ export function exportCsvZip(actor: Actor): { body: Uint8Array; today: string } 
 					type: m.type,
 					unit: m.unit || (m.type === 'duration' ? 'min' : ''),
 					per_set: m.repeats,
-					options: (m.choices ?? []).join(' | ')
+					options: activeOptions(m.choices).map((o) => o.name).join(' | ')
 				}))
 			)
 		}
@@ -311,7 +319,7 @@ export function readExport(raw: unknown): { file: z.infer<typeof exportFile>; pr
 }
 
 /** Tables whose rows have their own id, which an import may need to renumber. */
-const WITH_ID: TableName[] = ['area', 'tag', 'task', 'metric', 'collection', 'identity', 'habit', 'variant', 'slot', 'pause', 'occurrence', 'entry', 'slip', 'craving'];
+const WITH_ID: TableName[] = ['area', 'tag', 'task', 'metric', 'taskPart', 'collection', 'identity', 'habit', 'variant', 'slot', 'pause', 'occurrence', 'entry', 'slip', 'craving'];
 
 /**
  * Columns that point at another row, and the table that row is in. An import may only point
@@ -323,9 +331,10 @@ const REFS: Partial<Record<TableName, Record<string, { to: TableName; loose?: bo
 	task: { areaId: { to: 'area' }, parentTaskId: { to: 'task', loose: true } },
 	taskTag: { taskId: { to: 'task' }, tagId: { to: 'tag' } },
 	metric: { taskId: { to: 'task' } },
+	taskPart: { taskId: { to: 'task' }, childTaskId: { to: 'task' } },
 	collection: { parentId: { to: 'collection', loose: true } },
 	collectionTask: { collectionId: { to: 'collection' }, taskId: { to: 'task' } },
-	habit: { areaId: { to: 'area' } },
+	habit: { areaId: { to: 'area' }, parentId: { to: 'habit', loose: true } },
 	habitIdentity: { habitId: { to: 'habit' }, identityId: { to: 'identity' } },
 	variant: { habitId: { to: 'habit' } },
 	slot: { variantId: { to: 'variant' }, taskId: { to: 'task' } },
@@ -337,6 +346,13 @@ const REFS: Partial<Record<TableName, Record<string, { to: TableName; loose?: bo
 	craving: { habitId: { to: 'habit' } },
 	event: { habitId: { to: 'habit', loose: true } }
 };
+
+/** Habit rows ordered so each group comes before the habits inside it. */
+function parentsFirst(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+	const nodes = rows.map((r) => ({ id: String(r.id ?? ''), parentId: r.parentId ? String(r.parentId) : null }));
+	const depth = new Map(nodes.map((n) => [n.id, depthOf(nodes, n.id)]));
+	return [...rows].sort((a, b) => depth.get(String(a.id ?? ''))! - depth.get(String(b.id ?? ''))!);
+}
 
 /** Check (and where loose, clear) a row's pointers against the ids the file brings. */
 function checkRefs(name: TableName, row: Record<string, unknown>, i: number, known: Map<TableName, Set<string>>) {
@@ -351,8 +367,33 @@ function checkRefs(name: TableName, row: Record<string, unknown>, i: number, kno
 		row.picks = Object.fromEntries(
 			Object.entries(row.picks as Record<string, unknown>).filter(([slotId, taskId]) => known.get('slot')?.has(slotId) && known.get('task')?.has(String(taskId)))
 		);
+	// A path is ids and round numbers only; anything else is dropped, and the Entry is placed by its Task.
+	if (name === 'entry' && row.path != null && (typeof row.path !== 'string' || !PATH_RE.test(row.path))) row.path = null;
 	// Keys belong to one server and are never exported.
 	if (name === 'event') row.tokenId = null;
+}
+
+/** An Entry's path with each id in it renumbered. */
+const remapPath = (path: unknown, ids: Map<string, string>) =>
+	typeof path === 'string'
+		? path
+				.split('/')
+				.map((seg) => {
+					const [id, r] = seg.split('#');
+					return (ids.get(id) ?? id) + (r ? `#${r}` : '');
+				})
+				.join('/')
+		: path;
+
+/**
+ * An export from before Tasks had parts lists steps only as Tasks with a parent: they become
+ * parts, as the migration did (a step's part takes its id).
+ */
+function partsFromSteps(tasks: Record<string, unknown>[]): Record<string, unknown>[] {
+	const ids = new Set(tasks.map((t) => String(t.id ?? '')));
+	return tasks
+		.filter((t) => t.parentTaskId && ids.has(String(t.parentTaskId)))
+		.map((t) => ({ id: t.id, taskId: t.parentTaskId, childTaskId: t.id, sortOrder: t.sortOrder ?? 0, archived: t.archived ?? false }));
 }
 
 /** Replace every string (and object key) that is an old id with its new one, all the way down. */
@@ -395,7 +436,8 @@ export function importReplace(actor: Actor, raw: unknown): { counts: Record<stri
 	if (actor.source !== 'app') throw new ActionError('forbidden', 'Importing replaces everything, so it can only be done in the app.');
 	const r = readExport(raw);
 	if ('error' in r) throw new ActionError('invalid', r.error);
-	const tables = r.file.tables as Rows;
+	const tables = { ...(r.file.tables as Rows) };
+	if (!tables.taskPart) tables.taskPart = partsFromSteps(tables.task ?? []);
 	const accountId = actor.accountId;
 	const counts: Record<string, number> = {};
 	let renumbered = false;
@@ -403,7 +445,7 @@ export function importReplace(actor: Actor, raw: unknown): { counts: Record<stri
 		// Habits and Tasks take their logs, Variants, Slots, Metrics and links with them.
 		tx.delete(s.habit).where(eq(s.habit.accountId, accountId)).run();
 		tx.delete(s.task).where(eq(s.task.accountId, accountId)).run();
-		for (const t of [s.tag, s.area, s.collection, s.identity, s.pause, s.dayNote, s.event, s.settings] as const)
+		for (const t of [s.tag, s.area, s.collection, s.identity, s.pause, s.dayNote, s.event, s.settings, s.bulkBatch] as const)
 			tx.delete(t).where(eq(t.accountId, accountId)).run();
 
 		// Ids another account here already has would clash: then every id gets a new one.
@@ -421,10 +463,13 @@ export function importReplace(actor: Actor, raw: unknown): { counts: Record<stri
 			WITH_ID.map((name) => [name, new Set((tables[name] ?? []).map((x) => String(x.id ?? '')).filter(Boolean).map((id) => (renumbered ? (ids.get(id) ?? id) : id)))])
 		);
 		for (const [name, table] of Object.entries(TABLES) as [TableName, SQLiteTable][]) {
-			const rows = tables[name] ?? [];
+			// A group goes in before the habits inside it, so their link to it holds.
+			const rows = name === 'habit' ? parentsFirst(tables[name] ?? []) : (tables[name] ?? []);
 			counts[name] = rows.length;
 			for (let i = 0; i < rows.length; i++) {
-				const row = rowFor(table, (renumbered ? remap(rows[i], ids) : rows[i]) as Record<string, unknown>, accountId);
+				const raw = renumbered ? (remap(rows[i], ids) as Record<string, unknown>) : rows[i];
+				if (renumbered && name === 'entry') raw.path = remapPath(rows[i].path, ids);
+				const row = rowFor(table, raw, accountId);
 				checkRefs(name, row, i, known);
 				try {
 					tx.insert(table).values(row as never).run();
@@ -433,6 +478,8 @@ export function importReplace(actor: Actor, raw: unknown): { counts: Record<stri
 				}
 			}
 		}
+		// An export from an older version brings older shapes (choice options as words).
+		upgradeOptionIds(tx);
 	});
 	emit(actor, 'data.imported', { data: { counts, renumbered } });
 	return { counts, renumbered };

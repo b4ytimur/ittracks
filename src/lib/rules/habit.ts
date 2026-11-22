@@ -1,5 +1,7 @@
 // Conflict rules for the habit editor. Ids (H1, B2...) name each rule.
+import { z } from 'zod';
 import { DEFAULT_TRIGGERS, type HabitForm } from '../forms';
+import type { FieldEditor } from '../bulk/fields';
 import {
 	check,
 	defineRules,
@@ -10,25 +12,34 @@ import {
 	normalize,
 	onlyWhen,
 	requiresAny,
+	type FieldPath,
 	type Issue
 } from './core';
+import { archive, definePolicies, display, locked, pastIssues, recompute, removedItems, unguarded, versioned } from './history';
 
 export type SlotForm = HabitForm['variants'][number]['slots'][number];
 
 export interface HabitCtx {
 	/** Does this Task log anything per set? Unknown Tasks are given the benefit of the doubt. */
 	taskRepeats?: (taskId: string) => boolean | undefined;
+	/** Does this Task have Tasks inside it? Then its sets are rounds. */
+	taskHasParts?: (taskId: string) => boolean | undefined;
 }
 
 const build = (h: HabitForm) => h.direction === 'build';
 const brk = (h: HabitForm) => h.direction === 'break';
+/** A group: a build habit whose days come from the habits inside it (G rules). */
+const isGroupForm = (h: HabitForm) => h.schedule?.kind === 'group';
+const notGroup = (h: HabitForm) => !isGroupForm(h);
 const BUILD_ONLY = 'Only build habits use this';
 const BREAK_ONLY = 'Only break habits use this';
+const NOT_GROUP = "A group's days come from the habits inside it, so it doesn't use this";
 
 /** Times a habit comes up per week or month, when the Schedule says. */
 function timesPer(h: HabitForm, period: 'week' | 'month'): number | null {
 	const s = h.schedule;
 	if (!s) return null;
+	if (s.kind === 'group' || s.kind === 'follow') return null;
 	const perWeek =
 		s.kind === 'weekly'
 			? Object.keys(s.days).length
@@ -55,11 +66,20 @@ export const habitRules = defineRules<HabitForm, HabitCtx>({
 	areaId: independent,
 	identityIds: independent,
 	reframe: independent,
+	// G1: only build habits sit in groups and routines for now (break habits log slips, not days).
+	parentId: [onlyWhen(build, BUILD_ONLY, null)],
 
-	// B1: a break habit has no Schedule or Variants.
-	variants: [onlyWhen(build, BUILD_ONLY, [])],
+	// B1: a break habit has no Schedule or Variants. G2: nor does a group; the habits inside it do.
+	variants: [onlyWhen(build, BUILD_ONLY, []), onlyWhen(notGroup, 'A group has no Tasks of its own; the habits inside it do', [])],
 	schedule: [
 		onlyWhen(build, BUILD_ONLY, null),
+		// R1: following a routine needs the routine it sits in.
+		check((h) => h.schedule?.kind === 'follow' && !h.parentId, 'Pick the routine it sits in, or give it a schedule of its own'),
+		// G3: the Minimum is fewer habits than the target.
+		check(
+			(h) => h.schedule?.kind === 'group' && h.schedule.minimum !== null && h.schedule.target !== null && h.schedule.minimum >= h.schedule.target,
+			'The Minimum must be fewer habits than the target'
+		),
 		// S3: rotation weekdays only apply to a rotation by week, and it needs some.
 		check(
 			(h) => h.schedule?.kind === 'rotation' && h.schedule.step === 'week' && h.schedule.weekdays.length === 0,
@@ -92,7 +112,7 @@ export const habitRules = defineRules<HabitForm, HabitCtx>({
 		})
 	],
 	// H3: a reminder needs a moment to fire.
-	remind: [onlyWhen(build, BUILD_ONLY, false), requiresAny(['cue.time', 'cue.range'], 'Set a time or a part of the day first', false)],
+	remind: [onlyWhen(build, BUILD_ONLY, false), onlyWhen(notGroup, NOT_GROUP, false), requiresAny(['cue.time', 'cue.range'], 'Set a time or a part of the day first', false)],
 
 	// L1 is the streakRule type itself. S5: grace that can never run out.
 	streakRule: [
@@ -104,18 +124,20 @@ export const habitRules = defineRules<HabitForm, HabitCtx>({
 		}, 'With this many grace misses the streak can never break. Lower the misses or use Consistency.', 'warn')
 	],
 	// L2, L3: Levels.
-	'levels.enabled': [onlyWhen(build, BUILD_ONLY, false)],
+	// G4: a group's Minimum is a number of habits, set on its schedule.
+	'levels.enabled': [onlyWhen(build, BUILD_ONLY, false), onlyWhen(notGroup, NOT_GROUP, false)],
 	'levels.minimum': [onlyWhen((h) => build(h) && h.levels.enabled, 'Turn on Levels first', '')],
 	'levels.target': [onlyWhen((h) => build(h) && h.levels.enabled, 'Turn on Levels first', '')],
 	'levels.stretch': [onlyWhen((h) => build(h) && h.levels.enabled, 'Turn on Levels first', '')],
 	// A day short of its target: counts at the Minimum (any log without Levels), or only in full.
 	minimumCounts: [onlyWhen(build, BUILD_ONLY, true)],
 	// Days nobody logged: break habits count slips, not days, so only build habits choose.
-	unlogged: [onlyWhen(build, BUILD_ONLY, 'missed')],
-	quickDone: [onlyWhen(build, BUILD_ONLY, false)],
+	unlogged: [onlyWhen(build, BUILD_ONLY, 'missed'), onlyWhen(notGroup, NOT_GROUP, 'missed')],
+	quickDone: [onlyWhen(build, BUILD_ONLY, false), onlyWhen(notGroup, NOT_GROUP, false)],
 	// L4: progression raises targets, so it needs some.
 	progression: [
 		onlyWhen(build, BUILD_ONLY, null),
+		onlyWhen(notGroup, NOT_GROUP, null),
 		check((h) => !!h.progression && build(h) && !hasNumberTarget(h), 'Progression needs a number target on at least one Slot')
 	],
 	'bundle.reward': [onlyWhen(build, BUILD_ONLY, '')],
@@ -165,11 +187,11 @@ export const slotRules = defineRules<SlotForm, SlotCtx>({
 			'warn'
 		)
 	],
-	// F4: sets need something logged per set.
+	// F4: sets need something logged per set, or Tasks inside to repeat in rounds.
 	sets: [
 		onlyWhen(
-			(s, c) => !s.taskId || c.taskRepeats?.(s.taskId) !== false,
-			'Sets need a Task that logs something per set',
+			(s, c) => !s.taskId || c.taskRepeats?.(s.taskId) !== false || c.taskHasParts?.(s.taskId) === true,
+			'Sets need a Task that logs something per set, or has Tasks inside it to repeat in rounds',
 			null
 		)
 	],
@@ -218,4 +240,103 @@ export function checkHabit(input: HabitForm, ctx: HabitCtx = {}, opts: { resolve
 	};
 }
 
+// ---------- history: what an edit may do to data already logged (rules/history.ts) ----------
+
+const RECOUNT = 'Logs stay as they are; past days are judged again under the new setting';
+
+export const habitPast = definePolicies<HabitForm>({
+	name: display(),
+	// Build habits log days and break habits log slips: switching would hide one or the other.
+	direction: locked('This habit has logs. Build habits keep days and break habits keep slips, so switching would hide them. Make a new habit instead'),
+	notes: display(),
+	startDate: recompute('Days before a later start stop counting; an earlier start counts the days in between'),
+	areaId: display(),
+	parentId: recompute("A group's or routine's past days are counted again from the habits inside it now"),
+	identityIds: recompute('Identity votes are counted again from the days done'),
+	reframe: display(),
+	variants: unguarded('Removing a Variant unlinks the days logged with it from it'),
+	schedule: versioned('Earlier days keep the schedule they had, unless the change applies to past days too'),
+	'cue.time': display(),
+	'cue.range': display(),
+	'cue.place': display(),
+	'cue.afterHabitId': display(),
+	'cue.afterText': display(),
+	remind: display(),
+	streakRule: recompute('Streaks are worked out again from the days logged'),
+	'levels.enabled': recompute(RECOUNT),
+	'levels.minimum': display(),
+	'levels.target': display(),
+	'levels.stretch': display(),
+	minimumCounts: recompute(RECOUNT),
+	unlogged: recompute('Days nobody logged are counted again: as missed, or left out'),
+	quickDone: display(),
+	progression: display('A raise changes targets from then on; past logs keep the targets they aimed for'),
+	'bundle.reward': display(),
+	'bundle.strict': display(),
+	prep: display(),
+	'reward.celebrate': display(),
+	'reward.message': display(),
+	'reward.jar': recompute('The jar is filled again from the days done, at the new amount'),
+	'ifThen.when': display(),
+	'ifThen.then': display(),
+	'ifThen.habitId': display(),
+	triggers: archive('Slips store the feeling, not its word: a renamed feeling is renamed in past slips too, and one removed after a slip used it is archived'),
+	cost: unguarded("Money saved uses today's price for every day, so a new price changes past savings"),
+	limit: versioned('A changed limit applies from today; past days keep the limit they had')
+});
+
+export const slotPast = definePolicies<SlotForm>({
+	id: locked('Logs point at a Slot by its id'),
+	taskId: versioned('Past logs keep the Task and targets they had'),
+	fillRule: versioned('Past days keep the Tasks picked for them'),
+	sets: versioned('Past logs keep the sets they aimed for'),
+	targets: versioned('Past logs keep the targets they aimed for'),
+	minTargets: versioned('Past logs keep the targets they aimed for'),
+	stretchTargets: versioned('Past logs keep the targets they aimed for')
+});
+
+/** Feelings an edit removes: archived when a slip used them, deleted otherwise. */
+export function removedTriggers(
+	before: Pick<HabitForm, 'triggers'>,
+	after: Pick<HabitForm, 'triggers'>,
+	used: ReadonlySet<string> | readonly string[]
+): { archive: string[]; drop: string[] } {
+	const usedSet = new Set(used);
+	return removedItems(habitPast, before as HabitForm, after as HabitForm, (_, id) => usedSet.has(id)).triggers;
+}
+
+/** Edits of a habit refused because of what is logged (build or break, once logged). */
+export function checkHabitPast(before: HabitForm, after: HabitForm, logged: boolean): Issue[] {
+	return pastIssues(habitPast, before, after, logged).map((i) => ({ path: i.path, reason: i.reason, severity: 'block' as const, rule: 'check' as const }));
+}
+
 export { isSet };
+
+// ---------- bulk: fields many habits can be set to at once (src/lib/bulk) ----------
+
+/**
+ * A field bulk editing can set on many habits at once: its label, its input (one Zod schema for
+ * the app, the API and the MCP server) and how the app asks for it. The conflict rules above
+ * decide which habits it can't apply to, and its history policy must be `display`, so setting it
+ * never touches past days (bulk.test.ts checks both). A new one is one entry here.
+ */
+export interface BulkField {
+	label: string;
+	input: z.ZodType;
+	editor: FieldEditor;
+}
+
+export const habitBulk = {
+	areaId: {
+		label: 'Area',
+		input: z.string().trim().min(1).max(200).nullable().describe('Area id or name; null takes the habits out of their Area.'),
+		editor: { kind: 'select', source: 'areas', empty: 'No Area' }
+	},
+	remind: {
+		label: 'Reminders',
+		input: z.boolean().describe('Push a reminder at the cue time: true or false.'),
+		editor: { kind: 'toggle', on: 'On', off: 'Off' }
+	}
+} satisfies Partial<Record<FieldPath<HabitForm>, BulkField>>;
+
+export type HabitBulkField = keyof typeof habitBulk;

@@ -1,6 +1,7 @@
 // How far along a log is: "3 of 6 glasses" for a habit with one number to reach, or
-// "2 of 4 steps" for one made of several Tasks, sub-tasks and Yes or no ticks.
+// "2 of 4 steps" for one made of several Tasks, steps inside them and Yes or no ticks.
 // Shown on Today, the past-day page and History, so a partial day doesn't read as plain "Done".
+import { isStep, place } from './parts';
 
 export interface ProgressMetric {
 	id: string;
@@ -11,23 +12,27 @@ export interface ProgressMetric {
 	step: number | null;
 }
 
+/** One place in a log (see engine/parts.ts): a Slot's Task, or a Task inside it. */
 export interface ProgressSlot {
-	taskId: string | null;
+	path: string;
+	taskId: string;
 	metrics: ProgressMetric[];
-	subtaskIds: string[];
+	/** Parts inside it: a Task made of steps is not a step itself unless it has fields. */
+	kids: number;
 	/** Targets at the log's level (falling back to Target), by Metric id. */
 	targets: Record<string, number>;
 }
 
 export interface ProgressEntry {
 	taskId: string;
+	path?: string | null;
 	values: Record<string, unknown>;
 }
 
 export type Progress =
 	/** One number to reach, such as glasses of water or minutes read. */
 	| { kind: 'amount'; value: number; target: number; unit: string; name: string; taskId: string; metricId: string; type: string; step: number | null }
-	/** Several things to do, each one a step: a Task logged, a sub-task or a Yes or no Task ticked. */
+	/** Several things to do, each one a step: a Task logged, or a step or a Yes or no Task ticked. */
 	| { kind: 'steps'; done: number; total: number };
 
 const numeric = (t: string) => t === 'number' || t === 'count' || t === 'duration';
@@ -35,14 +40,13 @@ const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFin
 
 /**
  * The single target a habit counts toward, when it has exactly one: one Task with one
- * once-per-log number that has a target, no sets and no sub-tasks. Other fields (a note,
+ * once-per-log number that has a target, no sets and nothing inside it. Other fields (a note,
  * a choice) may sit next to it.
  */
 export function amountTarget(slots: ProgressSlot[]): { slot: ProgressSlot; metric: ProgressMetric; target: number } | null {
-	const filled = slots.filter((s) => s.taskId);
-	if (filled.length !== 1) return null;
-	const s = filled[0];
-	if (s.subtaskIds.length || s.metrics.some((m) => m.repeats)) return null;
+	if (slots.length !== 1) return null;
+	const s = slots[0];
+	if (s.kids || s.metrics.some((m) => m.repeats)) return null;
 	const withTarget = s.metrics.filter((m) => numeric(m.type) && isNum(s.targets[m.id]) && s.targets[m.id] > 0);
 	if (withTarget.length !== 1) return null;
 	return { slot: s, metric: withTarget[0], target: s.targets[withTarget[0].id] };
@@ -77,20 +81,15 @@ export function progressOf(slots: ProgressSlot[], entries: ProgressEntry[], stat
 			step: amount.metric.step
 		};
 	}
-	const logged = new Set(entries.map((e) => e.taskId));
+	const { at } = place(slots, entries);
 	let total = 0;
 	let done = 0;
+	// Each place is a step when it has fields to fill in, or is a plain Yes or no; a Task
+	// made only of steps counts through them. A Circuit of 3 rounds has each step 3 times.
 	for (const s of slots) {
-		if (!s.taskId) continue;
-		// The Task itself is a step when it has fields to fill in, or when it is a plain Yes or no.
-		if (s.metrics.length || !s.subtaskIds.length) {
-			total++;
-			if (logged.has(s.taskId)) done++;
-		}
-		for (const id of s.subtaskIds) {
-			total++;
-			if (logged.has(id)) done++;
-		}
+		if (!isStep(s, s.metrics.length)) continue;
+		total++;
+		if (at.get(s.path)?.some((e) => !(e.values._summary === true && Object.keys(e.values).length === 1))) done++;
 	}
 	if (total < 2) return null;
 	if (!entries.length) return null;

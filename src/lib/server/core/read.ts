@@ -5,21 +5,25 @@
 // Notes, journal entries and text fields need the notes scope; without it they are left out.
 import { and, asc, eq, gte, inArray, lte } from 'drizzle-orm';
 import { db } from '../db';
-import { area, dayNote, entry, habit, metric, occurrence, slip, slot, tag, task, taskTag, variant } from '../db/schema';
+import { area, dayNote, entry, habit, metric, occurrence, slip, slot, tag, task, taskPart, taskTag, variant } from '../db/schema';
+import { parsePath } from '$lib/engine/parts';
 import { getSettings } from '../settings';
 import { getStats, loadDataset } from '../stats';
 import { ensureToday, settleAll, userToday } from '../today';
 import { prepare, describeLog, type Dataset, type Prepared } from '$lib/stats/engine';
-import { describeSchedule } from '$lib/describe';
+import { describeSchedule, groupRuleText } from '$lib/describe';
 import { progressText } from '$lib/engine/progress';
+import { rollupText } from '$lib/engine/rollup';
 import { progressForIds } from '../progress';
 import { streak, type StreakRule } from '$lib/engine/streak';
 import { addDays, weekday } from '$lib/engine/dates';
 import { excerpt } from '$lib/markdown';
 import type { ScheduleForm } from '$lib/forms';
+import { isGroup, rollupRuleOf, type Schedule } from '$lib/engine/schedule';
 import { ActionError, canSeeHabit, requireScope, type Actor } from './actor';
 import { dayOf, findHabit, visibleHabits } from './day';
 import { listEvents } from './events';
+import { activeOptions, optionName, scoresOn } from '$lib/options';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 type Values = Record<string, unknown>;
@@ -78,9 +82,30 @@ export function describe(actor: Actor) {
 	const slotRows = variants.length
 		? db.select().from(slot).where(inArray(slot.variantId, variants.map((v) => v.id))).orderBy(asc(slot.sortOrder)).all()
 		: [];
+	/** The habit a habit sits in, with its Variants, so "follows its routine" reads with names. */
+	const parentFor = (id: string | null) => {
+		const p = id ? habits.find((x) => x.id === id) : undefined;
+		return p ? { name: p.name, variants: variants.filter((v) => v.habitId === p.id).map((v) => ({ id: v.id, name: v.name })) } : undefined;
+	};
 	const allTasks = db.select().from(task).where(eq(task.accountId, actor.accountId)).orderBy(asc(task.sortOrder), asc(task.name)).all();
-	// A key limited to some habits sees only the Tasks those habits use.
+	const allParts = db
+		.select({ p: taskPart })
+		.from(taskPart)
+		.innerJoin(task, eq(taskPart.taskId, task.id))
+		.where(and(eq(task.accountId, actor.accountId), eq(taskPart.archived, false)))
+		.orderBy(asc(taskPart.sortOrder))
+		.all()
+		.map((r) => r.p);
+	// A key limited to some habits sees only the Tasks those habits use, and what is inside them.
 	const used = new Set(slotRows.map((x) => x.taskId).filter((x): x is string => !!x));
+	for (let grew = true; grew; ) {
+		grew = false;
+		for (const p of allParts)
+			if (used.has(p.taskId) && !used.has(p.childTaskId)) {
+				used.add(p.childTaskId);
+				grew = true;
+			}
+	}
 	const tasks = actor.habitIds ? allTasks.filter((t) => used.has(t.id) || (t.parentTaskId && used.has(t.parentTaskId))) : allTasks;
 	const taskIds = tasks.map((t) => t.id);
 	const metrics = taskIds.length ? db.select().from(metric).where(inArray(metric.taskId, taskIds)).orderBy(asc(metric.sortOrder)).all() : [];
@@ -121,7 +146,20 @@ export function describe(actor: Actor) {
 				area: h.areaId ? (areaName.get(h.areaId) ?? null) : null,
 				archived: h.archived,
 				startDate: h.startDate,
-				schedule: h.direction === 'build' ? describeSchedule(h.schedule as ScheduleForm | null) : 'Break habit: log slips',
+				schedule:
+					h.direction === 'build'
+						? describeSchedule(h.schedule as ScheduleForm | null, parentFor(h.parentId))
+						: 'Break habit: log slips',
+				// The feelings a slip can be logged with (log_slip takes one by name or id).
+				...(h.direction === 'break' ? { feelings: activeOptions(h.triggers).map((o) => ({ id: o.id, name: o.name })) } : {}),
+				// A group's days are worked out from the habits inside it; it can't be logged itself.
+				...(isGroup(h.schedule as Schedule | null) ? { group: { inside: habits.filter((x) => x.parentId === h.id).map((x) => x.name) } } : {}),
+				// A routine has days of its own; on them it is judged from the habits inside, and log_done
+				// or skip on it marks them.
+				...(!isGroup(h.schedule as Schedule | null) && habits.some((x) => x.parentId === h.id && x.direction === 'build')
+					? { routine: { inside: habits.filter((x) => x.parentId === h.id).map((x) => x.name), rule: groupRuleText(rollupRuleOf(h.schedule as Schedule)) } }
+					: {}),
+				...(h.parentId ? { inGroup: habits.find((x) => x.id === h.parentId)?.name ?? null } : {}),
 				streakRule: (h.streakRule as StreakRule).kind,
 				variants: variants
 					.filter((v) => v.habitId === h.id)
@@ -150,7 +188,23 @@ export function describe(actor: Actor) {
 			ref: `task:${t.id}`,
 			id: t.id,
 			name: t.name,
+			// A step: private to the Task it is inside.
 			parent: t.parentTaskId ? (taskName.get(t.parentTaskId) ?? null) : null,
+			// What sits inside it, in order: steps, and Library Tasks with their sets (rounds, on a
+			// Task without per-set fields of its own) and targets. Log them as "Task › Part".
+			...(allParts.some((p) => p.taskId === t.id)
+				? {
+						inside: allParts
+							.filter((p) => p.taskId === t.id)
+							.map((p) => ({
+								taskId: p.childTaskId,
+								task: taskName.get(p.childTaskId) ?? null,
+								step: p.id === p.childTaskId,
+								sets: p.sets,
+								targets: Object.fromEntries(Object.entries(p.targets ?? {}).map(([k, v]) => [metrics.find((m) => m.id === k)?.name ?? k, v]))
+							}))
+					}
+				: {}),
 			area: t.areaId ? (areaName.get(t.areaId) ?? null) : null,
 			archived: t.archived,
 			tags: tags.filter((x) => x.taskId === t.id).map((x) => `${x.name} (${levelName[x.level] ?? x.level})`),
@@ -162,8 +216,21 @@ export function describe(actor: Actor) {
 					type: m.type,
 					unit: metricUnit(m),
 					perSet: m.repeats,
-					...(m.choices?.length ? { options: m.choices } : {}),
-					...(m.scores && Object.keys(m.scores).length ? { scores: m.scores } : {})
+					// Removed from the Task after it was logged: its past values are still in the logs.
+					...(m.archived ? { archived: true } : {}),
+					// Each option with its id (logs store it) and its number, if it has one. An archived
+					// option was removed after it was logged: past values still name it.
+					...(m.type === 'choice'
+						? {
+								options: (m.choices ?? []).map((o) => ({
+									id: o.id,
+									name: o.name,
+									...(typeof m.scores?.[o.id] === 'number' ? { score: m.scores[o.id] } : {}),
+									...(o.archived ? { archived: true } : {})
+								}))
+							}
+						: {}),
+					...(m.earlierScores?.length ? { earlierScores: m.earlierScores } : {})
 				}))
 		})),
 		areas: areas.map((a) => a.name),
@@ -234,7 +301,7 @@ export function listLogs(
 			status: o.status,
 			variant: o.variantId ? (P.variants.get(o.variantId)?.name ?? null) : null,
 			level: o.level ?? (o.status === 'done' ? 'target' : null),
-			progress: p ? progressText(p) : null,
+			progress: p ? progressText(p) : o.rollup ? rollupText(o.rollup) : null,
 			summary: logs.map((l) => `${l.task.name}: ${describeLog(l, P)}`).join(' | ') || undefined,
 			time: o.time,
 			...(notes && occNotes.get(o.id) ? { notes: occNotes.get(o.id) } : {})
@@ -243,13 +310,13 @@ export function listLogs(
 	if (!input.status?.length || input.status.includes('slip')) {
 		const slips = P.ds.slips.length
 			? db
-					.select({ s: slip })
+					.select({ s: slip, triggers: habit.triggers })
 					.from(slip)
 					.innerJoin(habit, eq(slip.habitId, habit.id))
 					.where(and(eq(habit.accountId, actor.accountId), gte(slip.date, from), lte(slip.date, to)))
 					.all()
 			: [];
-		for (const { s } of slips) {
+		for (const { s, triggers } of slips) {
 			if (!canSeeHabit(actor, s.habitId) || !okHabit(s.habitId)) continue;
 			rows.push({
 				ref: `slip:${s.id}`,
@@ -260,7 +327,7 @@ export function listLogs(
 				habit: P.habits.get(s.habitId)?.name ?? '',
 				count: s.count,
 				time: s.time,
-				feeling: s.feeling,
+				feeling: optionName(triggers, s.feeling),
 				place: s.place,
 				...(notes && s.notes ? { notes: s.notes } : {})
 			});
@@ -296,9 +363,12 @@ export interface ValueRow {
 	variant: string | null;
 	level: string | null;
 	taskId: string;
+	/** The Task, or for a Task inside another its place: "Circuit › Push-ups". */
 	task: string;
 	/** 1, 2, 3… for a value logged per set; null for one logged once per log. */
 	set: number | null;
+	/** The round of a Circuit it was logged in, from 1; null outside rounds. */
+	round: number | null;
 	fieldId: string;
 	field: string;
 	type: string;
@@ -354,6 +424,29 @@ export function listValues(
 	const variants = new Map(
 		hs.length ? db.select().from(variant).where(inArray(variant.habitId, hs.map((h) => h.id))).all().map((v) => [v.id, v.name]) : []
 	);
+	const parts = new Map(
+		db
+			.select({ p: taskPart })
+			.from(taskPart)
+			.innerJoin(task, eq(taskPart.taskId, task.id))
+			.where(eq(task.accountId, actor.accountId))
+			.all()
+			.map((r) => [r.p.id, r.p])
+	);
+	/** Where an Entry sits, in words, and its round: "Circuit › Push-ups", 2. */
+	const placeOf = (e: { taskId: string; path: string | null }): { name: string; round: number | null; inside: string[] } => {
+		const t = tasks.get(e.taskId);
+		const segs = e.path ? parsePath(e.path) : [];
+		const round = segs.find((x) => x.round)?.round ?? null;
+		const chain = segs.slice(1).map((x) => parts.get(x.id));
+		if (chain.length && chain.every(Boolean)) {
+			const ids = [chain[0]!.taskId, ...chain.map((p) => p!.childTaskId)];
+			return { name: ids.map((id) => tasks.get(id)?.name ?? '').join(' › '), round, inside: ids.slice(0, -1) };
+		}
+		// A step ticked before paths: under the Task it belongs to.
+		if (t?.parentTaskId) return { name: `${tasks.get(t.parentTaskId)?.name ?? ''} › ${t.name}`, round, inside: [t.parentTaskId] };
+		return { name: t?.name ?? '', round, inside: [] };
+	};
 	const matchTask = input.tasks?.length ? input.tasks.map((t) => t.toLowerCase()) : null;
 	const matchField = input.fields?.length ? input.fields.map((f) => f.toLowerCase()) : null;
 	const taskOk = (id: string, name: string) => !matchTask || matchTask.includes(id.toLowerCase()) || matchTask.includes(name.toLowerCase());
@@ -377,18 +470,20 @@ export function listValues(
 			variant: o.variantId ? (variants.get(o.variantId) ?? null) : null,
 			level: o.level ?? (o.status === 'done' ? 'target' : null)
 		};
-		// A sub-task tick, or a plain Yes or no Task.
+		const at = placeOf(e);
+		// A Task asked for by name also brings what is logged inside it.
+		const asked = taskOk(t.id, t.name) || at.inside.some((id) => taskOk(id, tasks.get(id)?.name ?? ''));
+		// A ticked step, or a plain Yes or no Task.
 		if (values.done === true && Object.keys(values).length === 1) {
-			const name = t.parentTaskId ? `${tasks.get(t.parentTaskId)?.name ?? ''} › ${t.name}` : t.name;
-			if (taskOk(t.id, t.name) || (t.parentTaskId && taskOk(t.parentTaskId, tasks.get(t.parentTaskId)?.name ?? '')))
-				if (fieldOk('done', 'done')) rows.push({ ...base, taskId: t.id, task: name, set: null, fieldId: 'done', field: 'Done', type: 'tick', unit: null, value: true, score: null });
+			if (asked && fieldOk('done', 'done'))
+				rows.push({ ...base, taskId: t.id, task: at.name, set: null, round: at.round, fieldId: 'done', field: 'Done', type: 'tick', unit: null, value: true, score: null });
 			continue;
 		}
-		if (!taskOk(t.id, t.name)) continue;
+		if (!asked) continue;
 		const isSet = !values._summary;
 		let n: number | null = null;
 		if (isSet) {
-			const k = `${o.id}|${t.id}`;
+			const k = `${o.id}|${e.path ?? t.id}`;
 			n = (setNo.get(k) ?? 0) + 1;
 			setNo.set(k, n);
 		}
@@ -402,20 +497,22 @@ export function listValues(
 			rows.push({
 				...base,
 				taskId: t.id,
-				task: t.name,
+				task: at.name,
 				set: isSet ? n : null,
+				round: at.round,
 				fieldId: m.id,
 				field: m.name,
 				type: m.type,
 				unit: metricUnit(m),
-				value: v,
-				score: typeof v === 'string' && typeof m.scores?.[v] === 'number' ? m.scores[v] : null
+				// A Choice stores its option's id: the row shows the option's name and number.
+				value: m.type === 'choice' ? (optionName(m.choices, v) ?? v) : v,
+				score: m.type === 'choice' && typeof v === 'string' ? (scoresOn(m.scores, m.earlierScores, o.date)[v] ?? null) : null
 			});
 		}
 	}
 	const out = page(rows, input, { from, to }, 5000);
 	if (input.format === 'csv') {
-		const cols: (keyof ValueRow)[] = ['ref', 'date', 'weekday', 'habit', 'status', 'variant', 'level', 'task', 'set', 'field', 'type', 'unit', 'value', 'score'];
+		const cols: (keyof ValueRow)[] = ['ref', 'date', 'weekday', 'habit', 'status', 'variant', 'level', 'task', 'set', 'round', 'field', 'type', 'unit', 'value', 'score'];
 		const cell = (v: unknown) => {
 			const s = v === null || v === undefined ? '' : String(v);
 			return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -446,9 +543,9 @@ export function getRecord(actor: Actor, input: { ref: string }) {
 		return { ...t, notes: row?.notes ?? undefined };
 	}
 	if (kind === 'slip') {
-		const r = db.select({ s: slip, name: habit.name }).from(slip).innerJoin(habit, eq(slip.habitId, habit.id)).where(and(eq(slip.id, id), eq(habit.accountId, actor.accountId))).get();
+		const r = db.select({ s: slip, name: habit.name, triggers: habit.triggers }).from(slip).innerJoin(habit, eq(slip.habitId, habit.id)).where(and(eq(slip.id, id), eq(habit.accountId, actor.accountId))).get();
 		if (!r || !canSeeHabit(actor, r.s.habitId)) throw new ActionError('not_found', 'No such slip.');
-		return { ref: `slip:${r.s.id}`, habit: r.name, habitId: r.s.habitId, date: r.s.date, count: r.s.count, time: r.s.time, place: r.s.place, feeling: r.s.feeling, withWhom: r.s.withWhom, notes: notes ? r.s.notes : undefined };
+		return { ref: `slip:${r.s.id}`, habit: r.name, habitId: r.s.habitId, date: r.s.date, count: r.s.count, time: r.s.time, place: r.s.place, feeling: optionName(r.triggers, r.s.feeling), withWhom: r.s.withWhom, notes: notes ? r.s.notes : undefined };
 	}
 	if (kind === 'day') {
 		const date = dayOf(actor, id).date;
@@ -483,7 +580,12 @@ export function today(actor: Actor) {
 	requireScope(actor, 'read');
 	const date = userToday(actor.accountId, actor.tz);
 	// As opening Today does: create today's logs for habits due today.
-	for (const h of visibleHabits(actor)) if (h.direction === 'build' && h.schedule) ensureToday(actor.accountId, h.id, h.schedule as ScheduleForm, date);
+	// Groups last: one of them counts every group's day from the habits inside.
+	const build = visibleHabits(actor).filter((h) => h.direction === 'build' && h.schedule);
+	for (const h of build) if (!isGroup(h.schedule as Schedule)) ensureToday(actor.accountId, h.id, h.schedule as ScheduleForm, date);
+	const group = build.find((h) => isGroup(h.schedule as Schedule));
+	if (group) ensureToday(actor.accountId, group.id, group.schedule as ScheduleForm, date);
+	// ensureToday counts parents again for habits in a tree; a group alone does it for all.
 	return dayView(actor, date);
 }
 

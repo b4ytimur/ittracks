@@ -2,12 +2,12 @@
 // One read per table: the engine does the rest in memory, so a card never needs its own query.
 import { and, asc, eq, inArray, lte, ne } from 'drizzle-orm';
 import { db } from './db';
-import { area, craving, entry, habit, habitIdentity, identity, metric, occurrence, slip, slot, tag, task, taskTag, variant } from './db/schema';
+import { area, craving, entry, habit, habitIdentity, identity, metric, occurrence, slip, slot, tag, task, taskPart, taskTag, variant } from './db/schema';
 import { getSettings, getViews, saveSettings } from './settings';
 import { settleAll, timeIn, userToday } from './today';
 import { listAreas } from './repo/areas';
 import { listIdentities } from './repo/identities';
-import { computeCard, describeLog, prepare, type CardResult, type Ctx, type Dataset, type Prepared } from '$lib/stats/engine';
+import { computeCard, describeLog, prepare, type CardResult, type Ctx, type Dataset, type DsPart, type Prepared } from '$lib/stats/engine';
 import { readStats, statsSettings, type Board, type StatCard, type StatsSettings } from '$lib/stats/model';
 import { startingBoards } from '$lib/stats/auto';
 import { catalogOf, statCtx, type Catalog } from '$lib/stats/catalog';
@@ -15,6 +15,7 @@ import { checkCard } from '$lib/rules/stats';
 import { DEFAULT_STREAK_RULE } from '$lib/engine/streak';
 import { logicalDate } from '$lib/engine/day';
 import { value as formatValue } from '$lib/stats/format';
+import { isGroup, type Schedule } from '$lib/engine/schedule';
 
 export function loadDataset(accountId: string, tz?: string): Dataset {
 	const s = getSettings(accountId);
@@ -76,7 +77,8 @@ export function loadDataset(accountId: string, tz?: string): Dataset {
 			cost: h.cost ?? null,
 			streakRule: h.streakRule ?? DEFAULT_STREAK_RULE,
 			minimumCounts: h.minimumCounts,
-			limit: h.limit ?? null
+			limit: h.limit ?? null,
+			...(isGroup(h.schedule as Schedule | null) ? { group: true } : {})
 		})),
 		tasks: tasks.map((t) => ({
 			id: t.id,
@@ -86,7 +88,7 @@ export function loadDataset(accountId: string, tz?: string): Dataset {
 			archived: t.archived,
 			tags: tags.filter((x) => x.taskId === t.id).map((x) => ({ name: x.name, level: x.level }))
 		})),
-		metrics: metrics.map((m) => ({ id: m.id, taskId: m.taskId, name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, choices: m.choices ?? null, scores: m.scores ?? null })),
+		metrics: metrics.map((m) => ({ id: m.id, taskId: m.taskId, name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, choices: m.choices ?? null, scores: m.scores ?? null, earlierScores: m.earlierScores ?? null })),
 		variants: variants.map((v) => ({ id: v.id, habitId: v.habitId, name: v.name })),
 		slots: slots.map((x) => ({ id: x.id, variantId: x.variantId, taskId: x.taskId, sets: x.sets, targets: x.targets ?? null, minTargets: x.minTargets ?? null, stretchTargets: x.stretchTargets ?? null })),
 		occurrences: occs.map((o) => ({
@@ -98,13 +100,38 @@ export function loadDataset(accountId: string, tz?: string): Dataset {
 			level: o.level ?? null,
 			picks: o.picks ?? null,
 			goals: o.goals ?? null,
+			...(o.rollup ? { rollup: o.rollup } : {}),
 			// Logged for another day (past-day logging): the finish time says nothing about when it happened.
 			time: o.finishedAt && timeIn(zone, o.finishedAt) && sameDay(o.finishedAt, o.date, zone, s.dayStart) ? timeIn(zone, o.finishedAt) : null
 		})),
-		entries: entries.map((e) => ({ occurrenceId: e.occurrenceId, taskId: e.taskId, values: e.values ?? {}, sortOrder: e.sortOrder })),
+		entries: entries.map((e) => ({ occurrenceId: e.occurrenceId, taskId: e.taskId, values: e.values ?? {}, sortOrder: e.sortOrder, path: e.path })),
 		slips: slips.map((x) => ({ habitId: x.habitId, date: x.date, count: x.count, time: x.time })),
-		cravings: cravings.map((x) => ({ habitId: x.habitId, date: x.date, time: x.time }))
+		cravings: cravings.map((x) => ({ habitId: x.habitId, date: x.date, time: x.time })),
+		parts: partsOfTasks(tasks.map((t) => t.id))
 	};
+}
+
+/** The parts inside these Tasks, for the stats engine. */
+function partsOfTasks(taskIds: string[]): DsPart[] {
+	const out: DsPart[] = [];
+	for (let i = 0; i < taskIds.length; i += 900)
+		out.push(
+			...db
+				.select({
+					id: taskPart.id,
+					taskId: taskPart.taskId,
+					childTaskId: taskPart.childTaskId,
+					sets: taskPart.sets,
+					targets: taskPart.targets,
+					minTargets: taskPart.minTargets,
+					stretchTargets: taskPart.stretchTargets,
+					archived: taskPart.archived
+				})
+				.from(taskPart)
+				.where(inArray(taskPart.taskId, taskIds.slice(i, i + 900)))
+				.all()
+		);
+	return out;
 }
 
 /** Did `at` fall on `date` in the user's zone, counting the day from `dayStart` as Today does? */
@@ -226,12 +253,15 @@ export interface Recap {
  */
 export function recapFor(accountId: string, taskIds: string[], excludeOcc: string, weightUnit: string, today: string): Record<string, Recap> {
 	if (!taskIds.length) return {};
+	// Those Tasks and everything inside them, so "3 of 4 steps" counts.
+	const parts = partsOfTasks(taskIds);
+	const inside = new Set(parts.map((p) => p.childTaskId));
 	const tasks = db
 		.select()
 		.from(task)
 		.where(eq(task.accountId, accountId))
 		.all()
-		.filter((t) => taskIds.includes(t.id) || (t.parentTaskId && taskIds.includes(t.parentTaskId)));
+		.filter((t) => taskIds.includes(t.id) || inside.has(t.id) || (t.parentTaskId && taskIds.includes(t.parentTaskId)));
 	const ids = tasks.map((t) => t.id);
 	if (!ids.length) return {};
 	const metrics = db.select().from(metric).where(inArray(metric.taskId, ids)).all();
@@ -251,11 +281,12 @@ export function recapFor(accountId: string, taskIds: string[], excludeOcc: strin
 		areas: [],
 		habits: habits.map((h) => ({ id: h.id, name: h.name, direction: h.direction, areaId: h.areaId, startDate: h.startDate, archived: h.archived, identities: [], cost: null, streakRule: DEFAULT_STREAK_RULE, minimumCounts: true, limit: null })),
 		tasks: tasks.map((t) => ({ id: t.id, name: t.name, areaId: t.areaId, parentTaskId: t.parentTaskId, archived: t.archived, tags: [] })),
-		metrics: metrics.map((m) => ({ id: m.id, taskId: m.taskId, name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, choices: m.choices ?? null, scores: m.scores ?? null })),
+		metrics: metrics.map((m) => ({ id: m.id, taskId: m.taskId, name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, choices: m.choices ?? null, scores: m.scores ?? null, earlierScores: m.earlierScores ?? null })),
 		variants: [],
 		slots: [],
 		occurrences: occs.map((o) => ({ id: o.id, habitId: o.habitId, variantId: null, date: o.date, status: o.status, level: o.level ?? null, picks: null, time: null })),
-		entries: rows.map((r) => ({ occurrenceId: r.e.occurrenceId, taskId: r.e.taskId, values: r.e.values ?? {}, sortOrder: r.e.sortOrder })),
+		entries: rows.map((r) => ({ occurrenceId: r.e.occurrenceId, taskId: r.e.taskId, values: r.e.values ?? {}, sortOrder: r.e.sortOrder, path: r.e.path })),
+		parts,
 		slips: [],
 		cravings: []
 	};

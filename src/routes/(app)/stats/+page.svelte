@@ -4,10 +4,12 @@
 	import { statsOp } from '$lib/stats/client';
 	import { RANGES, rangeLabel, type BoardFilter } from '$lib/stats/model';
 	import CardGrid from '$lib/stats/ui/CardGrid.svelte';
+	import EditButton from '$lib/ui/EditButton.svelte';
 
 	let { data } = $props();
 
-	let customizing = $state(false);
+	/** Edit mode is a flag on this same page: the grid shows handles, sizes and Edit on each card. */
+	let editing = $state(false);
 	let adding = $state(false);
 	let newBoard = $state(false);
 	let boardName = $state('');
@@ -44,7 +46,7 @@
 			boardName = '';
 			await goto(`?board=${r.id}`);
 			if (!template) {
-				customizing = true;
+				editing = true;
 				adding = true;
 			}
 		}
@@ -55,7 +57,7 @@
 		const copy = $state.snapshot(board);
 		const r = await op({ op: 'board.delete', id: board.id });
 		if (r) {
-			customizing = false;
+			editing = false;
 			await goto('/stats');
 			showToast(`Deleted the board “${copy.name}”`, async () => {
 				await statsOp({ op: 'board.restore', board: copy, index });
@@ -72,7 +74,7 @@
 	<header class="bar">
 		<h1>Stats</h1>
 		{#if board}
-			<button type="button" class:primary={customizing} onclick={() => ((customizing = !customizing), (adding = false))}>{customizing ? 'Done' : 'Customize'}</button>
+			<EditButton bind:editing label="Customize" onchange={() => (adding = false)} />
 		{/if}
 	</header>
 
@@ -107,7 +109,7 @@
 	{#if !board}
 		<p class="muted">No boards yet. Add one to see your numbers.</p>
 	{:else}
-		{#if customizing}
+		{#if editing}
 			<section class="card board-tools">
 				<div class="row">
 					<label class="grow">Board name <input value={board.name} maxlength="40" onchange={(e) => patch({ name: (e.currentTarget as HTMLInputElement).value.trim() || board.name })} /></label>
@@ -194,7 +196,7 @@
 		{#if board.cards.length === 0 && !adding}
 			<div class="card empty">
 				<p>This board has no cards yet.</p>
-				<button type="button" class="primary" onclick={() => ((customizing = true), (adding = true))}>Add a card</button>
+				<button type="button" class="primary" onclick={() => ((editing = true), (adding = true))}>Add a card</button>
 			</div>
 		{/if}
 
@@ -207,7 +209,7 @@
 			hidden={data.hidden}
 			suggested={data.suggested}
 			gallery={data.gallery}
-			{customizing}
+			{editing}
 			bind:adding
 			{csv}
 		/>

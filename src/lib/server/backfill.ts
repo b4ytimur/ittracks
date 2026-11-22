@@ -6,13 +6,16 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { db } from './db';
 import { entry, habit, occurrence, slip, slot, task, variant } from './db/schema';
-import { dueOn, type Schedule } from '$lib/engine/schedule';
+import { PATH_RE } from '$lib/engine/parts';
+import { dueOn, isGroup, type Schedule } from '$lib/engine/schedule';
+import { followDue, isRoutine } from './rollup';
 import { carriesOver, dependsOnHistory, isRealDate, logWindow, variantFor, type LogWindow } from '$lib/engine/backfill';
 import { scheduleStartBy } from '$lib/engine/unlogged';
 import { pauseOn } from '$lib/engine/pause';
 import { limitOn, usedIn } from '$lib/engine/limit';
 import type { Level } from '$lib/engine/streak';
-import type { ScheduleForm } from '$lib/forms';
+import { DEFAULT_TRIGGERS, type ScheduleForm } from '$lib/forms';
+import { optionName } from '$lib/options';
 import { createOccurrence, history, pausesOf, pickForVariant, recount, reopen, scheduleAt, settle } from './today';
 import { getSettings } from './settings';
 
@@ -97,13 +100,14 @@ export function loadDay(accountId: string, date: string, today: string) {
 				name: h.name,
 				slips: all
 					.filter((s) => s.date === date)
-					.map((s) => ({ id: s.id, count: s.count, time: s.time, feeling: s.feeling })),
+					.map((s) => ({ id: s.id, count: s.count, time: s.time, feeling: optionName(h.triggers ?? DEFAULT_TRIGGERS, s.feeling) })),
 				limit: h.limit ? { used: usedIn(h.limit, all, date), max: limitOn(h.limit, date), period: h.limit.period } : null
 			});
 			continue;
 		}
 		const schedule = h.schedule as ScheduleForm | null;
-		if (!schedule) continue;
+		// A group's day comes from the habits inside it, so it isn't logged here.
+		if (!schedule || isGroup(schedule)) continue;
 		// Leftovers from earlier visits settle first, as Today would.
 		settle(accountId, h.id, schedule, today);
 		const occ = rowOn(h.id, date);
@@ -111,7 +115,8 @@ export function loadDay(accountId: string, date: string, today: string) {
 		const paused = !!pauseOn(pauses, h.id, date);
 		// The day is judged by the plan it had, even if the schedule changed since.
 		const sAt = scheduleAt(h, date);
-		const wasDue = !paused && !!dueOn(sAt, past, date);
+		const pd = followDue(h.id, sAt, today);
+		const wasDue = !paused && !!dueOn(sAt, past, date, pd);
 		const variants = db
 			.select({ id: variant.id, name: variant.name })
 			.from(variant)
@@ -119,7 +124,7 @@ export function loadDay(accountId: string, date: string, today: string) {
 			.orderBy(asc(variant.sortOrder))
 			.all();
 		const variantId =
-			occ?.variantId ?? variantFor(sAt, past, date, variants.map((v) => v.id));
+			occ?.variantId ?? variantFor(sAt, past, date, variants.map((v) => v.id), pd);
 		const item: PastItem = {
 			habitId: h.id,
 			name: h.name,
@@ -186,7 +191,7 @@ export function unloggedOn(accountId: string, date: string): string[] {
 			if (carriesOver(schedule) || pauseOn(pauses, h.id, date)) return false;
 			const occ = rowOn(h.id, date);
 			if (occ) return occ.status === 'missed' || occ.status === 'due';
-			return !!dueOn(schedule, history(h.id, date), date);
+			return !!dueOn(schedule, history(h.id, date), date, followDue(h.id, schedule, date));
 		})
 		.map((h) => h.name);
 }
@@ -211,9 +216,24 @@ export function occurrenceOn(accountId: string, h: HabitRow, date: string, chose
 		return existing;
 	}
 	const past = history(h.id, date);
-	const v = pick ?? variantFor(schedule, past, date, ids);
+	const pd = followDue(h.id, schedule, date);
+	const v = pick ?? variantFor(schedule, past, date, ids, pd);
 	// A day nothing was due is an extra: a rotation that skips ahead keeps its calendar.
-	return v ? createOccurrence(accountId, h.id, v, date, !dueOn(schedule, past, date)) : null;
+	return v ? createOccurrence(accountId, h.id, v, date, !dueOn(schedule, past, date, pd)) : null;
+}
+
+/**
+ * The habits inside a routine that were due on a past day and have no log yet get one (as
+ * due), so the routine's Done or Skip that day reaches them too.
+ */
+export function kidsDueOn(accountId: string, parentId: string, date: string) {
+	const pauses = pausesOf(accountId);
+	for (const h of activeHabits(accountId, date)) {
+		if (h.parentId !== parentId || h.direction !== 'build' || !h.schedule || isGroup(h.schedule as Schedule)) continue;
+		if (rowOn(h.id, date) || pauseOn(pauses, h.id, date)) continue;
+		const schedule = scheduleAt(h, date);
+		if (dueOn(schedule, history(h.id, date), date, followDue(h.id, schedule, date))) occurrenceOn(accountId, h, date, null);
+	}
 }
 
 /** What today's Occurrence was planned as, for schedules a past log can change. */
@@ -250,7 +270,7 @@ export function clearDay(accountId: string, habitId: string, schedule: ScheduleF
 
 // ---------- Undo: a copy of a day's log, taken before a change ----------
 
-const snapshotSchema = z.object({
+const daySchema = z.object({
 	habitId: z.string().uuid(),
 	date: z.string().refine(isRealDate),
 	occ: z
@@ -262,14 +282,38 @@ const snapshotSchema = z.object({
 			picks: z.record(z.string(), z.string()).nullable(),
 			finishedAt: z.number().nullable(),
 			extra: z.boolean().default(false),
-			entries: z.array(z.object({ taskId: z.string().uuid(), values: z.record(z.string(), z.unknown()) })).max(1000)
+			entries: z
+				.array(z.object({ taskId: z.string().uuid(), path: z.string().regex(PATH_RE).nullable().default(null), values: z.record(z.string(), z.unknown()) }))
+				.max(1000)
 		})
 		.nullable()
 });
+/** A routine's day carries the days of the habits inside it: its Done, Skip and Undo mark them too. */
+const snapshotSchema = daySchema.extend({ below: z.array(daySchema).max(200).optional() });
 export type Snapshot = z.infer<typeof snapshotSchema>;
+type DaySnapshot = z.infer<typeof daySchema>;
 
 /** A copy of one habit's day: its Occurrence and Entries, or null when there is none. */
 export function snapshot(habitId: string, date: string): Snapshot {
+	const below = insideRoutine(habitId).map((id) => daySnapshot(id, date));
+	return below.length ? { ...daySnapshot(habitId, date), below } : daySnapshot(habitId, date);
+}
+
+/** The habits inside a routine, at any depth (none for any other habit). */
+function insideRoutine(habitId: string): string[] {
+	if (!isRoutine(habitId)) return [];
+	const out: string[] = [];
+	const walk = (id: string, depth: number) => {
+		for (const k of db.select({ id: habit.id }).from(habit).where(and(eq(habit.parentId, id), eq(habit.direction, 'build'))).all()) {
+			out.push(k.id);
+			if (depth < 20 && out.length < 200) walk(k.id, depth + 1);
+		}
+	};
+	walk(habitId, 0);
+	return out.slice(0, 200);
+}
+
+function daySnapshot(habitId: string, date: string): DaySnapshot {
 	const occ = rowOn(habitId, date);
 	return {
 		habitId,
@@ -284,7 +328,7 @@ export function snapshot(habitId: string, date: string): Snapshot {
 					finishedAt: occ.finishedAt ? occ.finishedAt.getTime() : null,
 					extra: occ.extra,
 					entries: db
-						.select({ taskId: entry.taskId, values: entry.values })
+						.select({ taskId: entry.taskId, path: entry.path, values: entry.values })
 						.from(entry)
 						.where(eq(entry.occurrenceId, occ.id))
 						.orderBy(asc(entry.sortOrder))
@@ -298,7 +342,12 @@ export function snapshot(habitId: string, date: string): Snapshot {
 export function restore(accountId: string, raw: unknown): boolean {
 	const parsed = snapshotSchema.safeParse(raw);
 	if (!parsed.success) return false;
-	const snap = parsed.data;
+	// The habits inside a routine first, then the routine, which is judged from them.
+	for (const kid of parsed.data.below ?? []) restoreDay(accountId, kid);
+	return restoreDay(accountId, parsed.data);
+}
+
+function restoreDay(accountId: string, snap: DaySnapshot): boolean {
 	const h = db.select().from(habit).where(and(eq(habit.id, snap.habitId), eq(habit.accountId, accountId))).get();
 	if (!h) return false;
 	const existing = rowOn(h.id, snap.date);
@@ -335,7 +384,7 @@ export function restore(accountId: string, raw: unknown): boolean {
 			tx.insert(occurrence).values({ id, habitId: h.id, date: snap.date, ...fields }).run();
 		}
 		o.entries.forEach((e, i) =>
-			tx.insert(entry).values({ id: randomUUID(), occurrenceId: id!, taskId: e.taskId, values: e.values, sortOrder: i }).run()
+			tx.insert(entry).values({ id: randomUUID(), occurrenceId: id!, taskId: e.taskId, path: e.path, values: e.values, sortOrder: i }).run()
 		);
 	});
 	return true;

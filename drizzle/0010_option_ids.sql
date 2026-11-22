@@ -1,0 +1,1 @@
+ALTER TABLE `metric` ADD `earlier_scores` text;

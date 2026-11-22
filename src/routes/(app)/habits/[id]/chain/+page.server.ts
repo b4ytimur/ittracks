@@ -6,7 +6,7 @@ import { ownedHabit } from '$lib/server/owned';
 import { pausesOf, settle, userToday } from '$lib/server/today';
 import { missedDaysOver } from '$lib/engine/unlogged';
 import { pauseOn } from '$lib/engine/pause';
-import type { Schedule } from '$lib/engine/schedule';
+import { isGroup, type Schedule } from '$lib/engine/schedule';
 import type { ScheduleForm } from '$lib/forms';
 import { getSettings } from '$lib/server/settings';
 import { addDays, weekStart } from '$lib/engine/dates';
@@ -67,6 +67,8 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		id: h.id,
 		name: h.name,
 		direction: h.direction,
+		/** A group: its days come from the habits inside it, logged on the day page. */
+		group: isGroup(schedule),
 		weeks,
 		today,
 		days: [],

@@ -3,7 +3,7 @@
 
 	let { data, form } = $props();
 
-	const scopeNames: Record<string, string> = { read: 'Read', log: 'Log', notes: 'Notes', export: 'Export' };
+	const scopeNames: Record<string, string> = { read: 'Read', log: 'Log', notes: 'Notes', export: 'Export', edit: 'Edit' };
 	const when = (d: Date | null) =>
 		d ? d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' }) : 'never';
 	const habitName = (id: string) => data.habits.find((h) => h.id === id)?.name ?? 'an archived or deleted habit';

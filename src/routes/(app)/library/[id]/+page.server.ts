@@ -3,14 +3,22 @@ import { z } from 'zod';
 import { firstError, taskForm, type TaskForm } from '$lib/forms';
 import { checkTask } from '$lib/rules/task';
 import {
+	checkTaskEdit,
+	checkTaskLinks,
 	deleteTask,
+	libraryForParts,
 	duplicateTask,
 	getTaskForm,
 	listTagNames,
+	PastEditError,
 	saveTask,
 	setTaskArchived,
 	taskUsage
 } from '$lib/server/repo/tasks';
+import { taskLoggedLists } from '$lib/server/history';
+import { appActor } from '$lib/server/core/actor';
+import { emit } from '$lib/server/core/events';
+import type { UnitChoice } from '$lib/units';
 import { listAreas } from '$lib/server/repo/areas';
 import { listCollections } from '$lib/server/repo/collections';
 import { getSettings, saveSettings } from '$lib/server/settings';
@@ -31,7 +39,7 @@ const blank = (): TaskForm => ({
 	restTimerSeconds: 90,
 	tags: [],
 	metrics: [],
-	subtasks: [],
+	parts: [],
 	areaId: null,
 	collectionIds: []
 });
@@ -71,10 +79,17 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		areas: listAreas(accountId),
 		collections: listCollections(accountId).filter((c) => !c.filter),
 		types: [...BUILTIN_TASK_TYPES, ...settings.taskTypes],
-		usage: isNew ? null : (taskUsage(accountId).get(params.id) ?? { habits: [], lastLogged: null, timesLogged: 0 }),
+		usage: isNew ? null : (taskUsage(accountId).get(params.id) ?? { habits: [], inside: [], lastLogged: null, timesLogged: 0 }),
+		/** Fields with logged values, parts with logs under them and options picked: the history policies guard their edits. */
+		logged: isNew ? { metrics: [] as string[], parts: [] as string[], options: [] as string[] } : taskLoggedLists(params.id),
+		/** Library Tasks that can go inside this one, with what the part editor needs of each. */
+		library: libraryForParts(accountId, isNew ? null : params.id),
 		history: isNew ? null : taskHistory(accountId, params.id, cookies.get('tz'))
 	};
 };
+
+/** The editor's pick per Metric id for a unit change on a field with logged values. */
+const unitChoice = z.record(z.string().uuid(), z.enum(['convert', 'relabel']));
 
 const savedType = z.object({
 	name: z.string().trim().min(1).max(40),
@@ -93,11 +108,13 @@ const savedType = z.object({
 });
 
 export const actions: Actions = {
-	save: async ({ request, locals, params, url }) => {
-		const raw = (await request.formData()).get('payload');
+	save: async ({ request, locals, params, url, cookies }) => {
+		const form = await request.formData();
 		let json: unknown;
+		let unitChoices: Record<string, UnitChoice> = {};
 		try {
-			json = JSON.parse(String(raw));
+			json = JSON.parse(String(form.get('payload')));
+			unitChoices = unitChoice.parse(JSON.parse(String(form.get('units') ?? '{}')));
 		} catch {
 			return fail(400, { error: 'Could not read the form.' });
 		}
@@ -108,8 +125,28 @@ export const actions: Actions = {
 		parsed.data = checked.form;
 		const accountId = locals.account!.id;
 		if (parsed.data.areaId && !listAreas(accountId).some((a) => a.id === parsed.data.areaId)) parsed.data.areaId = null;
-		const id = saveTask(accountId, params.id === 'new' ? null : params.id, parsed.data);
+		const editing = params.id === 'new' ? null : params.id;
+		const links = checkTaskLinks(accountId, editing, parsed.data);
+		if (links) return fail(400, { error: links });
+		// History policies: edits that would change what is already logged are refused or ask first.
+		const past = editing ? checkTaskEdit(accountId, editing, parsed.data, unitChoices) : null;
+		if (editing && !past) error(404, 'Task not found');
+		if (past?.errors[0]) return fail(400, { error: past.errors[0].reason });
+		let id: string | null;
+		try {
+			id = saveTask(accountId, editing, parsed.data, undefined, { units: unitChoices });
+		} catch (e) {
+			if (e instanceof PastEditError) return fail(400, { error: e.message });
+			throw e;
+		}
 		if (!id) error(404, 'Task not found');
+		// The event log says when past values were converted or relabeled, so readers of older
+		// value events know which unit they were in.
+		const actor = appActor(accountId, cookies.get('tz'));
+		for (const u of past?.units ?? [])
+			emit(actor, 'metric.unit_changed', {
+				data: { taskId: id, metricId: u.metricId, from: u.from, to: u.to, converted: u.choice === 'convert', factor: u.choice === 'convert' && u.change.kind === 'convertible' ? u.change.factor : 1 }
+			});
 		const back = url.searchParams.get('back');
 		redirect(303, back && back.startsWith('/') && !back.startsWith('//') ? back : '/library');
 	},

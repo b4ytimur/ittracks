@@ -7,6 +7,7 @@ import { normalize } from '$lib/rules/core';
 import { computeCard, drill, unitOf, type Prepared } from '$lib/stats/engine';
 import { statCtx, type Catalog } from '$lib/stats/catalog';
 import { BOARD_TEMPLATES, boardTemplate, habitCards, type BoardTemplateId } from '$lib/stats/auto';
+import { manualOrder } from '$lib/views';
 import { board, boardFilter, customMeasure, MAX_BOARDS, MAX_CARDS, newId, rangeValue, SHARE_MEASURES, statCard, statsSettings, type StatCard, type StatsSettings } from '$lib/stats/model';
 import type { RequestHandler } from './$types';
 
@@ -24,7 +25,8 @@ const body = z.discriminatedUnion('op', [
 	z.object({ op: z.literal('board.restore'), board, index: z.number().int().min(0).max(MAX_BOARDS) }),
 	z.object({ op: z.literal('card.save'), where, card: statCard, index: z.number().int().min(0).max(MAX_CARDS).optional() }),
 	z.object({ op: z.literal('card.delete'), where, id }),
-	z.object({ op: z.literal('card.move'), where, id, dir: z.union([z.literal(-1), z.literal(1)]) }),
+	/** Put the cards in this order (a drag in edit mode). Cards not listed keep their order after these. */
+	z.object({ op: z.literal('card.order'), where, ids: z.array(id).max(MAX_CARDS) }),
 	z.object({ op: z.literal('habit.reset'), habit: id }),
 	z.object({ op: z.literal('open'), value: id }),
 	z.object({ op: z.literal('last'), id }),
@@ -96,7 +98,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 		return json({ result: computeCard(card, P, ctx), issues: checkCard(card, sc), card });
 	}
 
-	const needsData = ['board.add', 'card.save', 'card.delete', 'card.move', 'habit.reset', 'headline'].includes(b.op);
+	const needsData = ['board.add', 'card.save', 'card.delete', 'card.order', 'habit.reset', 'headline'].includes(b.op);
 	const P: Prepared | null = needsData ? statsContext(accountId, tz).P : null;
 	let s = P ? boardsOf(accountId, P) : getStats(accountId);
 	let added: string | undefined;
@@ -182,9 +184,9 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 			if ('habit' in b.where) syncHeadline(b.where.habit, left);
 			break;
 		}
-		case 'card.move': {
+		case 'card.order': {
 			const [cards, put] = cardsAt(b.where);
-			put(move(cards, cards.findIndex((c) => c.id === b.id), b.dir));
+			put(manualOrder(cards, b.ids, (c) => c.id));
 			break;
 		}
 		case 'habit.reset': {

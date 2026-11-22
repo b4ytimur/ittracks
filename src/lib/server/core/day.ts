@@ -10,6 +10,7 @@ import { occurrenceOn, planOfToday, replanToday, windowFor } from '../backfill';
 import { isRealDate } from '$lib/engine/backfill';
 import { pauseOn } from '$lib/engine/pause';
 import type { ScheduleForm } from '$lib/forms';
+import { isGroup, type Schedule } from '$lib/engine/schedule';
 import { ActionError, canSeeHabit, type Actor } from './actor';
 
 export type HabitRow = typeof habit.$inferSelect;
@@ -76,6 +77,7 @@ export interface Day {
 export function buildDay(actor: Actor, habitRef: string, date?: string | null): Day {
 	const h = findHabit(actor, habitRef);
 	if (h.direction !== 'build' || !h.schedule) throw new ActionError('invalid', `${h.name} is a break habit: log a slip instead.`);
+	if (isGroup(h.schedule as Schedule)) throw new ActionError('invalid', `${h.name} is a group: its day comes from the habits inside it. Log one of those instead.`);
 	if (h.archived) throw new ActionError('invalid', `${h.name} is archived.`);
 	const d = dayOf(actor, date);
 	if (d.date < h.startDate) throw new ActionError('invalid', `${h.name} started on ${h.startDate}.`);

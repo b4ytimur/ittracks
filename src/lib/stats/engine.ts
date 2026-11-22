@@ -7,6 +7,9 @@ import { chainCells } from '../engine/chain';
 import { withinOn, withinStreak, usedIn, limitOn, type Limit } from '../engine/limit';
 import { compile, evaluate, FormulaError } from './formula';
 import { excerpt } from '../markdown';
+import { convert, convertible, effectiveUnit, findUnit } from '../units';
+import { parentPath, parsePath, withoutRounds } from '../engine/parts';
+import { optionName, scoresOn, type ChoiceOption, type EarlierScores, type Scores } from '../options';
 import {
 	ADDS_UP,
 	SHARE_MEASURES,
@@ -37,6 +40,8 @@ export interface DsHabit {
 	minimumCounts: boolean;
 	/** Reduce mode: slips are allowed up to a daily or weekly limit. */
 	limit: Limit | null;
+	/** A group: its days are worked out from the habits inside it, so they'd count twice in a total. */
+	group?: boolean;
 }
 export interface DsTask {
 	id: string;
@@ -54,9 +59,12 @@ export interface DsMetric {
 	type: string;
 	unit: string | null;
 	repeats: boolean;
-	choices: string[] | null;
-	/** Choice fields: a number per option, for averages (J5). */
-	scores?: Record<string, number> | null;
+	/** Choice fields: the options. Logs store an option's id. */
+	choices: ChoiceOption[] | null;
+	/** Choice fields: a number per option id, for averages (J5). */
+	scores?: Scores | null;
+	/** Numbers an edit replaced, with the last day each applied. */
+	earlierScores?: EarlierScores[] | null;
 }
 export interface DsVariant {
 	id: string;
@@ -84,12 +92,27 @@ export interface DsOcc {
 	time: string | null;
 	/** The targets each Slot had, kept when they changed later. */
 	goals?: Record<string, { sets: number | null; targets: Record<string, number> | null }> | null;
+	/** A group's day: how many habits inside were done, of how many that counted. */
+	rollup?: { done: number; total: number } | null;
 }
 export interface DsEntry {
 	occurrenceId: string;
 	taskId: string;
 	values: Values;
 	sortOrder: number;
+	/** Where it sits in the log (engine/parts.ts); null from before paths. */
+	path?: string | null;
+}
+/** A Task inside a Task (engine/parts.ts). */
+export interface DsPart {
+	id: string;
+	taskId: string;
+	childTaskId: string;
+	sets: number | null;
+	targets: Record<string, number> | null;
+	minTargets: Record<string, number> | null;
+	stretchTargets: Record<string, number> | null;
+	archived: boolean;
 }
 export interface DsSlip {
 	habitId: string;
@@ -116,9 +139,15 @@ export interface Dataset {
 	entries: DsEntry[];
 	slips: DsSlip[];
 	cravings: DsCraving[];
+	/** Tasks inside Tasks. */
+	parts?: DsPart[];
 }
 
-/** One Task inside one finished Occurrence: its sets, its once-per-log values and its sub-task ticks. */
+/**
+ * One Task in one place of one log: its sets, its once-per-log values, and how many of the
+ * parts inside it have anything logged. A Task inside another gets its own Log too (a private
+ * step only counts in its parent), with its part as its `slot`, so its targets are judged.
+ */
 export interface Log {
 	occ: DsOcc;
 	habit: DsHabit;
@@ -149,6 +178,8 @@ export interface Prepared {
 	logs: Log[];
 	logsByTask: Map<string, Log[]>;
 	roles: Map<string, Roles>;
+	/** The parts inside each Task (archived ones left out). */
+	partsOf: Map<string, DsPart[]>;
 	/** First date anything was logged. */
 	earliest: ISODate;
 }
@@ -196,41 +227,76 @@ export function prepare(ds: Dataset): Prepared {
 		(o) => o.habitId
 	);
 	const occs = new Map(ds.occurrences.map((o) => [o.id, o]));
-	const subsOf = group(
-		ds.tasks.filter((t) => t.parentTaskId && !t.archived),
-		(t) => t.parentTaskId!
+	const partsOf = group(
+		(ds.parts ?? []).filter((p) => !p.archived),
+		(p) => p.taskId
 	);
+	const partById = new Map((ds.parts ?? []).map((p) => [p.id, p]));
+	const slotById = new Map(ds.slots.map((s) => [s.id, s]));
 
-	// One Log per Slot: a Variant can use the same Task twice (reading in the morning and at
-	// night). Entries come in Slot order, each Slot's sets before its once-per-log values, so
-	// once a Log has those values the next entry of the same Task starts the next Slot's Log.
+	// One Log per place. An Entry with a path says where it sits; rounds of a Circuit share
+	// one Log per Task. Before paths, a Variant could use the same Task twice (reading in the
+	// morning and at night): Entries came in Slot order, each Slot's sets before its
+	// once-per-log values, so once a Log has those values the next entry starts the next Slot's.
 	const logsByKey = new Map<string, Log>();
 	const nth = new Map<string, number>();
 	const sealed = new Set<string>();
-	const logFor = (o: DsOcc, t: DsTask, n: number) => {
-		const k = `${o.id}|${t.id}|${n}`;
+	const mkLog = (o: DsOcc, t: DsTask, k: string, slot: DsSlot | null) => {
 		let l = logsByKey.get(k);
 		if (!l) {
-			const slots = (o.variantId ? (slotsByVariant.get(o.variantId) ?? []) : []).filter((s) => (o.picks?.[s.id] ?? s.taskId) === t.id);
-			l = {
-				occ: o,
-				habit: habits.get(o.habitId)!,
-				task: t,
-				sets: [],
-				single: {},
-				subsTotal: subsOf.get(t.id)?.length ?? 0,
-				subsDone: 0,
-				slot: slots[n] ?? slots[0] ?? null
-			};
+			l = { occ: o, habit: habits.get(o.habitId)!, task: t, sets: [], single: {}, subsTotal: partsOf.get(t.id)?.length ?? 0, subsDone: 0, slot };
 			logsByKey.set(k, l);
 		}
 		return l;
 	};
+	const logFor = (o: DsOcc, t: DsTask, n: number) => {
+		const slots = (o.variantId ? (slotsByVariant.get(o.variantId) ?? []) : []).filter((s) => (o.picks?.[s.id] ?? s.taskId) === t.id);
+		return mkLog(o, t, `${o.id}|${t.id}|${n}`, slots[n] ?? slots[0] ?? null);
+	};
+	/** The Task at a place in a log, and what it aims for there: its Slot, or its part as one. */
+	const placeOf = (o: DsOcc, path: string): { task: DsTask; slot: DsSlot | null } | null => {
+		const segs = parsePath(path);
+		const top = slotById.get(segs[0].id);
+		let taskId = top ? (o.picks?.[top.id] ?? top.taskId) : null;
+		let slot: DsSlot | null = top ?? null;
+		for (const seg of segs.slice(1)) {
+			const p = partById.get(seg.id);
+			if (!p) return null;
+			taskId = p.childTaskId;
+			slot = { id: p.id, variantId: '', taskId: p.childTaskId, sets: p.sets, targets: p.targets, minTargets: p.minTargets, stretchTargets: p.stretchTargets };
+		}
+		const task = taskId ? tasks.get(taskId) : undefined;
+		return task ? { task, slot } : null;
+	};
+	const partsDone = new Map<string, Set<string>>();
 	for (const e of [...ds.entries].sort((a, b) => a.sortOrder - b.sortOrder)) {
 		const o = occs.get(e.occurrenceId);
 		const t = tasks.get(e.taskId);
 		// Every log's values count, done or not: a partial day's minutes are still minutes.
 		if (!o || !t || o.status === 'skipped' || !habits.has(o.habitId)) continue;
+		if (e.path) {
+			// Each Task it sits inside has one more part with something logged.
+			for (let at = e.path, up = parentPath(at); up; at = up, up = parentPath(at)) {
+				const outer = placeOf(o, up);
+				if (!outer) break;
+				const k = `${o.id}|@${withoutRounds(up)}`;
+				const done = partsDone.get(k) ?? new Set<string>();
+				const part = parsePath(at).at(-1)!.id;
+				if (!done.has(part)) {
+					done.add(part);
+					mkLog(o, outer.task, k, outer.slot).subsDone++;
+				}
+				partsDone.set(k, done);
+			}
+			// A private step only counts in its parent.
+			if (t.parentTaskId) continue;
+			const here = placeOf(o, e.path);
+			const l = mkLog(o, t, `${o.id}|@${withoutRounds(e.path)}`, here?.task.id === t.id ? here.slot : null);
+			const isSet = !e.values._summary && Object.keys(e.values).some((k) => (metrics.get(k)?.repeats ?? false));
+			if (isSet) l.sets.push(e.values);
+			else Object.assign(l.single, e.values);
+			continue;
+		}
 		if (t.parentTaskId) {
 			const parent = tasks.get(t.parentTaskId);
 			if (parent) logFor(o, parent, nth.get(`${o.id}|${parent.id}`) ?? 0).subsDone++;
@@ -267,59 +333,21 @@ export function prepare(ds: Dataset): Prepared {
 		logs,
 		logsByTask: group(logs, (l) => l.task.id),
 		roles,
+		partsOf,
 		earliest: dates[0] ?? addDays(ds.today, -29)
 	};
 }
 
 // ---------- units ----------
-
-const UNITS: Record<string, { dim: string; f: number }> = {
-	s: { dim: 't', f: 1 / 60 },
-	sec: { dim: 't', f: 1 / 60 },
-	secs: { dim: 't', f: 1 / 60 },
-	seconds: { dim: 't', f: 1 / 60 },
-	min: { dim: 't', f: 1 },
-	mins: { dim: 't', f: 1 },
-	minute: { dim: 't', f: 1 },
-	minutes: { dim: 't', f: 1 },
-	h: { dim: 't', f: 60 },
-	hr: { dim: 't', f: 60 },
-	hrs: { dim: 't', f: 60 },
-	hour: { dim: 't', f: 60 },
-	hours: { dim: 't', f: 60 },
-	g: { dim: 'w', f: 0.001 },
-	kg: { dim: 'w', f: 1 },
-	lb: { dim: 'w', f: 0.45359237 },
-	lbs: { dim: 'w', f: 0.45359237 },
-	m: { dim: 'd', f: 0.001 },
-	km: { dim: 'd', f: 1 },
-	mi: { dim: 'd', f: 1.609344 },
-	mile: { dim: 'd', f: 1.609344 },
-	miles: { dim: 'd', f: 1.609344 }
-};
-const unitKey = (u: string | null) => (u ?? '').trim().toLowerCase();
+// The table itself is the app's unit registry (src/lib/units.ts).
 
 /** A field's unit: what it names, or minutes for a duration that names none (as the log screen shows it). */
-export const unitOfMetric = (m: Pick<DsMetric, 'unit' | 'type'>): string | null =>
-	m.unit && m.unit.trim() ? m.unit : m.type === 'duration' ? 'min' : null;
+export const unitOfMetric = (m: Pick<DsMetric, 'unit' | 'type'>): string | null => effectiveUnit(m) || null;
 
 /** Is this a unit of time (s, min, h…)? Times add up in minutes and show as hours and minutes. */
-const isTimeUnit = (u: string | null) => UNITS[unitKey(u)]?.dim === 't';
+const isTimeUnit = (u: string | null) => findUnit(u)?.dimension === 'time';
 
-/** Can values in `a` be added to values in `b`? Same unit, or both known units of one kind. */
-export function convertible(a: string | null, b: string | null): boolean {
-	const x = unitKey(a);
-	const y = unitKey(b);
-	if (x === y) return true;
-	return !!UNITS[x] && !!UNITS[y] && UNITS[x].dim === UNITS[y].dim;
-}
-
-export function convert(v: number, from: string | null, to: string | null): number {
-	const x = UNITS[unitKey(from)];
-	const y = UNITS[unitKey(to)];
-	if (!x || !y || x.dim !== y.dim || unitKey(from) === unitKey(to)) return v;
-	return (v * x.f) / y.f;
-}
+export { convertible, convert };
 
 // ---------- ranges and buckets ----------
 
@@ -484,7 +512,9 @@ export function scope(card: StatCard, P: Prepared, ctx: Ctx) {
 	const cf = card.filter;
 	const areas = [bf.areas, cf.areas].filter((a) => a.length);
 	const tags = [...new Set([...bf.tags, ...cf.tags])].map((t) => t.toLowerCase());
+	// A group is only counted when it is picked: in "all habits" its days would count twice.
 	const habitOk = (h: DsHabit) =>
+		(!h.group || bf.habit === h.id || cf.habits.includes(h.id)) &&
 		(!bf.habit || h.id === bf.habit) &&
 		(!cf.habits.length || cf.habits.includes(h.id)) &&
 		(!bf.identity || h.identities.includes(bf.identity)) &&
@@ -623,7 +653,7 @@ export function targetMetOfLog(l: Log, P: Prepared): number | null {
 const metOf = (r: number | null): number | null => (r === null ? null : r === 1 ? 1 : 0);
 
 /** A Yes or no Task: nothing to fill in and no steps, so a tick is its whole target. */
-const isYesNo = (P: Prepared, taskId: string) => !(P.metricsByTask.get(taskId)?.length) && !P.ds.tasks.some((t) => t.parentTaskId === taskId);
+const isYesNo = (P: Prepared, taskId: string) => !(P.metricsByTask.get(taskId)?.length) && !P.partsOf.has(taskId);
 
 /**
  * Whether a day met its target: 1 when every Slot reached its Target (every number and set,
@@ -653,7 +683,7 @@ export function targetMetOfOcc(o: DsOcc, P: Prepared): number | null {
 		const kept = o.goals?.[s.id];
 		const targets = (kept ?? s).targets ?? {};
 		const hasTargets = Object.keys(targets).some((mid) => P.metrics.get(mid)?.taskId === taskId);
-		const hasSubs = P.ds.tasks.some((t) => t.parentTaskId === taskId);
+		const hasSubs = P.partsOf.has(taskId);
 		if ((hasTargets || hasSubs) && mine.length <= n) rs.push(0);
 	}
 	if (!rs.length) return null;
@@ -847,9 +877,21 @@ export function pointsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range): 
 					if (card.perLog === 'ticked') {
 						push(raw === true ? 1 : 0, series);
 					} else if (card.perLog === 'option') {
-						if (typeof raw === 'string' && raw) push(1, card.split === 'option' || card.split === 'none' ? [{ key: `o:${raw}`, label: raw, w: 1, order: m.choices?.indexOf(raw) ?? 0 }] : tagsFor(base));
+						// Grouped by the option's name now: a renamed option keeps its past logs, and an
+						// archived option and a new one of the same name count together.
+						const name = optionName(m.choices, raw)?.toLowerCase();
+						// Shown as the option offered now, when one has that name.
+						const at = name ? (m.choices ?? []).findIndex((o) => !o.archived && o.name.toLowerCase() === name) : -1;
+						const label = at >= 0 ? m.choices![at].name : optionName(m.choices, raw);
+						if (name && label)
+							push(
+								1,
+								card.split === 'option' || card.split === 'none'
+									? [{ key: `o:${name}`, label, w: 1, order: at >= 0 ? at : (m.choices ?? []).findIndex((o) => o.id === raw) }]
+									: tagsFor(base)
+							);
 					} else if (card.perLog === 'score') {
-						const sc = typeof raw === 'string' ? m.scores?.[raw] : undefined;
+						const sc = typeof raw === 'string' ? scoresOn(m.scores, m.earlierScores, l.occ.date)[raw] : undefined;
 						if (typeof sc === 'number') push(sc, series);
 					} else if (card.perLog === 'present') {
 						if (filled(raw)) push(1, series);
@@ -1429,6 +1471,7 @@ export function describeLog(l: Log, P: Prepared): string {
 		if (!filled(v)) return null;
 		// A text field can hold a whole journal entry: its start is enough here.
 		if (m.type === 'text' && typeof v === 'string') return excerpt(v, 80);
+		if (m.type === 'choice') return optionName(m.choices, v);
 		return `${v}${m.unit ? ` ${m.unit}` : ''}`;
 	};
 	const parts: string[] = [];
@@ -1449,7 +1492,7 @@ export function describeLog(l: Log, P: Prepared): string {
 	}
 	const singles = single.map((m) => fmt(m, l.single[m.id])).filter(Boolean);
 	if (singles.length) parts.push(singles.join(' · '));
-	if (l.subsTotal) parts.push(`${l.subsDone} of ${l.subsTotal} ${l.subsTotal === 1 ? 'step' : 'steps'}`);
+	if (l.subsTotal) parts.push(`${Math.min(l.subsDone, l.subsTotal)} of ${l.subsTotal} ${l.subsTotal === 1 ? 'step' : 'steps'}`);
 	return parts.join(' · ') || 'Done';
 }
 

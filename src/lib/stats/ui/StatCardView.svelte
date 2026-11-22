@@ -1,7 +1,8 @@
 <script lang="ts">
 	// One card on a board: its title, the range it covers, the chart, and what you can do with it.
+	// Moving, resizing and removing while editing belong to the grid around it (CardGrid).
 	import type { CardResult } from '../engine';
-	import { rangeLabel, SIZES, type Size, type StatCard } from '../model';
+	import { rangeLabel, type StatCard } from '../model';
 	import Chart from './Chart.svelte';
 	import DataTable from './DataTable.svelte';
 
@@ -11,14 +12,10 @@
 		title,
 		rangeKey,
 		warnings = [],
-		customizing = false,
-		first = false,
-		last = false,
+		editing = false,
 		csvHref,
 		onedit,
 		onremove,
-		onmove,
-		onresize,
 		ondrill,
 		onheadline,
 		headline = false
@@ -28,14 +25,11 @@
 		title: string;
 		rangeKey: string;
 		warnings?: string[];
-		customizing?: boolean;
-		first?: boolean;
-		last?: boolean;
+		/** While the grid is in edit mode the card leaves out its menu. */
+		editing?: boolean;
 		csvHref?: string;
 		onedit?: () => void;
 		onremove?: () => void;
-		onmove?: (dir: -1 | 1) => void;
-		onresize?: (size: Size) => void;
 		ondrill?: (from: string, to: string, series: string | null) => void;
 		onheadline?: () => void;
 		headline?: boolean;
@@ -54,12 +48,7 @@
 			<h3>{title}</h3>
 			<div class="muted sub">{sub}</div>
 		</div>
-		{#if customizing}
-			<div class="tools">
-				<button type="button" class="small" onclick={() => onmove?.(-1)} disabled={first} aria-label="Move {title} earlier">↑</button>
-				<button type="button" class="small" onclick={() => onmove?.(1)} disabled={last} aria-label="Move {title} later">↓</button>
-			</div>
-		{:else}
+		{#if !editing}
 			<details class="menu" bind:this={menu}>
 				<summary aria-label="More for {title}">⋯</summary>
 				<div class="pop">
@@ -88,15 +77,6 @@
 		<p class="muted note">{n}</p>
 	{/each}
 
-	{#if customizing}
-		<footer class="row">
-			<select class="size" aria-label="Size of {title}" value={card.look.size} onchange={(e) => onresize?.((e.currentTarget as HTMLSelectElement).value as Size)}>
-				{#each Object.entries(SIZES) as [k, label] (k)}<option value={k}>{label}</option>{/each}
-			</select>
-			<button type="button" class="small" onclick={onedit}>Edit</button>
-			<button type="button" class="small danger" onclick={onremove}>Remove</button>
-		</footer>
-	{/if}
 </article>
 
 <style>
@@ -124,11 +104,6 @@
 	}
 	.sub {
 		font-size: 0.75rem;
-	}
-	.tools {
-		display: flex;
-		gap: 0.25rem;
-		flex: none;
 	}
 	.menu {
 		position: relative;
@@ -188,15 +163,5 @@
 	.note {
 		font-size: 0.75rem;
 		margin: 0.4rem 0 0;
-	}
-	footer {
-		margin-top: auto;
-		padding-top: 0.6rem;
-		align-items: center;
-	}
-	.size {
-		padding: 0.25rem 0.4rem;
-		font-size: 0.85rem;
-		width: auto;
 	}
 </style>

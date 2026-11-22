@@ -9,6 +9,8 @@ import { matches, type FillRule } from '$lib/engine/fill';
 import { toTemplate, type ShareDetails, type TemplateFile } from '$lib/template';
 import { scheduleDays, type ShareCtx } from '$lib/share';
 import type { HabitForm, TaskForm } from '$lib/forms';
+import { isFollow, isGroup } from '$lib/engine/schedule';
+import { standaloneSchedule } from '$lib/engine/follow';
 
 /** Library Tasks an auto-filled Slot of this habit can pick, by id (Tasks already in a fixed Slot left out). */
 export function poolTaskIds(accountId: string, habit: HabitForm): string[] {
@@ -28,12 +30,22 @@ export interface ShareOptions extends ShareDetails {
 /** The template file for a habit, or null when it isn't the account's. */
 export function shareFile(accountId: string, habitId: string, opts: ShareOptions = {}): TemplateFile | null {
 	const habit = getHabitForm(accountId, habitId);
-	if (!habit) return null;
+	// A template is one habit; a group's days come from other habits, so it can't travel alone.
+	if (!habit || isGroup(habit.schedule)) return null;
+	// One that follows its routine travels with the routine's days as its own.
+	if (isFollow(habit.schedule)) {
+		const parent = habit.parentId ? getHabitForm(accountId, habit.parentId) : null;
+		habit.schedule = standaloneSchedule(parent?.schedule ?? null, habit.schedule, habit.startDate) as typeof habit.schedule;
+	}
+	habit.parentId = null;
 	const tasks = new Map<string, TaskForm>();
+	// A Task travels with the Library Tasks inside it.
 	const add = (id: string) => {
 		if (tasks.has(id)) return;
 		const t = getTaskForm(accountId, id);
-		if (t) tasks.set(id, t);
+		if (!t) return;
+		tasks.set(id, t);
+		for (const p of t.parts) if (p.kind === 'task') add(p.taskId);
 	};
 	for (const v of habit.variants) for (const s of v.slots) if (s.taskId) add(s.taskId);
 	// Without them, an auto-filled Slot finds nothing to pick on the other side.
@@ -66,7 +78,7 @@ export interface ShareMetric {
 /** What the Share page needs: the facts the form's rules read, the fields to ask about, and the pool. */
 export function shareContext(accountId: string, habitId: string) {
 	const habit = getHabitForm(accountId, habitId);
-	if (!habit) return null;
+	if (!habit || isGroup(habit.schedule)) return null;
 	const metrics: ShareMetric[] = [];
 	const seen = new Set<string>();
 	const withHowTo = new Set<string>();

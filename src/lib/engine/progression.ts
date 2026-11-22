@@ -5,9 +5,12 @@ import type { ISODate } from './dates';
 export interface Progression {
 	/** Occurrences in a row at Target or Stretch before suggesting a raise. */
 	after: number;
-	/** How much to raise: a percentage, or a fixed amount added to each target. */
+	/**
+	 * How much to raise: a percentage, or a number of steps. A step is each field's own +/-
+	 * step, in its own unit (2.5 kg, 1 rep, 5 min), so one raise fits every target in a Slot.
+	 */
 	by: number;
-	unit: 'percent' | 'amount';
+	unit: 'percent' | 'steps';
 }
 
 /** Done at Target or Stretch, in a row from the newest, since `since` (exclusive). */
@@ -26,12 +29,24 @@ export function hitsInARow(marks: Mark[], since: ISODate | null): number {
 export const shouldSuggest = (p: Progression, marks: Mark[], since: ISODate | null) =>
 	hitsInARow(marks, since) >= p.after;
 
-/** Raise a set of targets. Whole-number targets stay whole; others keep one decimal. */
-export function raise(targets: Record<string, number>, p: Progression): Record<string, number> {
+/**
+ * Raise a set of targets. By percent: whole-number targets stay whole; others keep one decimal.
+ * By steps: each target goes up by `by` of its own field's step (`steps`, by Metric id), so
+ * 60 kg and 5 reps become 62.5 kg and 6 reps. A target with no known step is left as it is.
+ * Old data says 'amount' for steps; anything that isn't percent is read as steps.
+ */
+export function raise(targets: Record<string, number>, p: Progression, steps: Record<string, number> = {}): Record<string, number> {
 	return Object.fromEntries(
 		Object.entries(targets).map(([k, v]) => {
-			const next = p.unit === 'percent' ? v * (1 + p.by / 100) : v + p.by;
-			const rounded = Number.isInteger(v) && p.unit === 'percent' ? Math.round(next) : Math.round(next * 10) / 10;
+			if (p.unit !== 'percent') {
+				const step = steps[k];
+				if (!step) return [k, v];
+				const next = Math.round((v + p.by * step) * 1000) / 1000;
+				// A count can't be 7.5: whole targets stay whole when the step is whole.
+				return [k, Number.isInteger(v) && Number.isInteger(step) ? Math.round(next) : next];
+			}
+			const next = v * (1 + p.by / 100);
+			const rounded = Number.isInteger(v) ? Math.round(next) : Math.round(next * 10) / 10;
 			return [k, rounded === v && p.by > 0 ? v + (Number.isInteger(v) ? 1 : 0.1) : rounded];
 		})
 	);

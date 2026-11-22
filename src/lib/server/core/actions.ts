@@ -14,6 +14,8 @@ import { analysisOptions, correlation, series } from './analysis';
 import { statsCompare, statsDescribe, statsGroups, statsTrend } from './statistics';
 import { listEvents, EVENT_TYPES } from './events';
 import { BUCKETS, OVER_TIME, SOURCES, SPLITS } from '$lib/stats/model';
+import { BULK, BULK_NAMES, bulkInput } from '$lib/bulk/catalog';
+import { runBulk, undoBulk } from '../bulk';
 
 export const API_VERSION = 1;
 
@@ -292,14 +294,15 @@ export const ACTIONS: ActionDef[] = [
 		scope: 'log',
 		title: "Log a Task's sets",
 		description:
-			'Log one Task of a habit\'s day: sets (e.g. [{"Weight": 80, "Reps": 8}, {"Weight": 80, "Reps": 8}]), once-per-log values, and ticks for its steps (sub-tasks). Field keys are ids or names. Replaces what was logged for that Task unless replace is false (then the sets are added). Finishes the habit when every Task is logged (finish: auto).',
+			'Log one Task of a habit\'s day: sets (e.g. [{"Weight": 80, "Reps": 8}, {"Weight": 80, "Reps": 8}]), once-per-log values, and ticks for the steps inside it. Field keys are ids or names. A Task inside another Task is named by its path, e.g. "Circuit › Push-ups"; when the Circuit repeats in rounds, round picks one (default: the first round with nothing logged for it yet). Replaces what was logged at that place unless replace is false (then the sets are added). Finishes the habit when every step is logged (finish: auto).',
 		input: z.object({
 			habit: habitRef,
 			date,
-			task: z.string().min(1).max(200),
+			task: z.string().min(1).max(400).describe('The Task by name, id, or path inside another Task ("Circuit › Push-ups").'),
+			round: z.number().int().min(1).max(50).optional().describe('For a Task inside a Circuit that repeats: which round, from 1.'),
 			sets: z.array(z.record(z.string(), fieldValue)).max(100).optional(),
 			values: z.record(z.string(), fieldValue).optional(),
-			ticks: z.array(z.string().max(200)).max(50).optional().describe('Steps (sub-tasks) to tick, by id or name.'),
+			ticks: z.array(z.string().max(200)).max(50).optional().describe('Steps inside the Task to tick, by id or name.'),
 			replace: z.boolean().optional(),
 			finish,
 			extra
@@ -339,7 +342,7 @@ export const ACTIONS: ActionDef[] = [
 			count: z.number().int().min(1).max(1000).optional(),
 			time: z.string().max(5).optional(),
 			place: z.string().max(120).optional(),
-			feeling: z.string().max(40).optional(),
+			feeling: z.string().max(40).optional().describe("One of the habit's feelings (describe lists them), by name or id."),
 			withWhom: z.string().max(120).optional(),
 			notes: z.string().max(20000).optional()
 		}),
@@ -377,6 +380,27 @@ export const ACTIONS: ActionDef[] = [
 		description: "Save the day's free Markdown note (Settings → Journal). append: true adds to it instead of replacing. Needs notes access.",
 		input: z.object({ date, text: z.string().max(20000), append: z.boolean().optional() }),
 		run: (a, i) => writeDayNote(a, i)
+	}),
+	// ---------- change many at once ----------
+	def({
+		name: 'bulk',
+		version: 1,
+		kind: 'write',
+		scope: 'log',
+		title: 'Change many at once',
+		description: `One change on many habits or Tasks: ${BULK_NAMES.map((n) => `${n} (${BULK[n].title}, on ${BULK[n].target}s${BULK[n].scope === 'edit' ? ', needs edit access' : ''}): ${BULK[n].description}`).join(' ')} Pick the items with ids (or names), or every item that matches a filter ({} is all). Without apply it only previews: what would change, and what would be left as it is and why. With apply: true it changes everything in one go and returns a batch id; bulk_undo with it puts everything back.`,
+		input: bulkInput,
+		run: (a, i) => runBulk(a, i)
+	}),
+	def({
+		name: 'bulk_undo',
+		version: 1,
+		kind: 'write',
+		scope: 'log',
+		title: 'Undo a bulk change',
+		description: 'Put back everything one bulk change did, by its batch id. Only the latest bulk change not undone yet; anything changed again since is kept as it is.',
+		input: z.object({ batch: z.string().min(1).max(80).describe('The batch id bulk returned.') }),
+		run: (a, i) => undoBulk(a, i.batch)
 	}),
 	def({
 		name: 'write_log_note',

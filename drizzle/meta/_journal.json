@@ -57,6 +57,41 @@
       "when": 1795304637873,
       "tag": "0007_round3_fixes",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1795340476503,
+      "tag": "0008_history_policy",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1795341354415,
+      "tag": "0009_habit_groups",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1795345459180,
+      "tag": "0010_option_ids",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1795347213467,
+      "tag": "0011_task_parts",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1795348584000,
+      "tag": "0012_bulk_batch",
+      "breakpoints": true
     }
   ]
 }

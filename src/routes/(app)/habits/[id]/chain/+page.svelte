@@ -86,7 +86,7 @@
 	{/each}
 </div>
 
-{#if data.canBackfill}<p class="muted small-text tip">Tap a day to log it or change it.</p>{/if}
+{#if data.canBackfill}<p class="muted small-text tip">{'group' in data && data.group ? 'Tap a day to log the habits inside it.' : 'Tap a day to log it or change it.'}</p>{/if}
 
 <div class="legend small-text">
 	{#if data.direction === 'break'}

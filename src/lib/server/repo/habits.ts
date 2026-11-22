@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray, isNull, lt, notInArray } from 'drizzle-orm';
 import { db } from '../db';
-import { area, entry, habit, habitIdentity, identity, metric, occurrence, slot, variant } from '../db/schema';
+import { area, entry, habit, habitIdentity, identity, metric, occurrence, slot, taskPart, variant } from '../db/schema';
 import {
 	DEFAULT_TRIGGERS,
 	defaultLevels,
@@ -11,10 +11,14 @@ import {
 } from '$lib/forms';
 import { makesLoop } from '$lib/engine/stack';
 import { keepEarlier, sameSchedule, scheduleStartBy, type EarlierSchedule } from '$lib/engine/unlogged';
-import type { Schedule } from '$lib/engine/schedule';
+import { isFollow, isGroup, type Schedule } from '$lib/engine/schedule';
+import { standaloneSchedule } from '$lib/engine/follow';
+import { makesCycle } from '$lib/engine/tree';
 import { keepGoals, rejudge } from '../progress';
 import type { StreakRule } from '$lib/engine/streak';
-import { checkHabit, type HabitCheck, type HabitCtx } from '$lib/rules/habit';
+import { checkHabit, checkHabitPast, removedTriggers, type HabitCheck, type HabitCtx } from '$lib/rules/habit';
+import { feelingsUsed, habitLogged, PastEditError } from '../history';
+import { activeOptions, mergeOptions } from '$lib/options';
 
 /** What the habit rules need to know from the database. */
 export function habitCtx(f: HabitForm): HabitCtx {
@@ -24,12 +28,25 @@ export function habitCtx(f: HabitForm): HabitCtx {
 			? db
 					.select({ taskId: metric.taskId })
 					.from(metric)
-					.where(and(inArray(metric.taskId, ids), eq(metric.repeats, true)))
+					.where(and(inArray(metric.taskId, ids), eq(metric.repeats, true), eq(metric.archived, false)))
 					.all()
 					.map((r) => r.taskId)
 			: []
 	);
-	return { taskRepeats: (id) => (ids.includes(id) ? repeating.has(id) : undefined) };
+	const withParts = new Set(
+		ids.length
+			? db
+					.select({ taskId: taskPart.taskId })
+					.from(taskPart)
+					.where(and(inArray(taskPart.taskId, ids), eq(taskPart.archived, false)))
+					.all()
+					.map((r) => r.taskId)
+			: []
+	);
+	return {
+		taskRepeats: (id) => (ids.includes(id) ? repeating.has(id) : undefined),
+		taskHasParts: (id) => (ids.includes(id) ? withParts.has(id) : undefined)
+	};
 }
 
 /** Clean and check a habit against the conflict rules (src/lib/rules). */
@@ -46,7 +63,8 @@ export function listHabits(accountId: string, opts: { archived?: boolean } = {})
 			cue: habit.cue,
 			areaId: habit.areaId,
 			archived: habit.archived,
-			createdAt: habit.createdAt
+			createdAt: habit.createdAt,
+			parentId: habit.parentId
 		})
 		.from(habit)
 		.where(and(eq(habit.accountId, accountId), opts.archived ? undefined : eq(habit.archived, false)))
@@ -108,7 +126,8 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 			.all()
 			.map((r) => r.id),
 		ifThen,
-		triggers: h.triggers ?? DEFAULT_TRIGGERS,
+		// Archived feelings stay with past slips; the editor offers the rest.
+		triggers: activeOptions(h.triggers ?? DEFAULT_TRIGGERS).map(({ id, name }) => ({ id, name })),
 		reframe: h.reframe ?? '',
 		bundle: h.bundle ?? { reward: '', strict: false },
 		prep: h.prep ?? [],
@@ -117,6 +136,7 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 		limit: h.limit ? { ...h.limit, taper: h.limit.taper ? { floor: 0, ...h.limit.taper } : null } : null,
 		progression: h.progression ?? null,
 		areaId: h.areaId,
+		parentId: h.parentId && exists(h.parentId) ? h.parentId : null,
 		unlogged: h.unlogged,
 		variants: variants.map((v) => ({
 			id: v.id,
@@ -139,10 +159,30 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 /** A Habit's links to other rows must point at this account's rows, and stacking can't loop. */
 export function checkLinks(accountId: string, id: string | null, f: HabitForm): string | null {
 	const others = db
-		.select({ id: habit.id, cue: habit.cue, direction: habit.direction })
+		.select({ id: habit.id, cue: habit.cue, direction: habit.direction, schedule: habit.schedule, parentId: habit.parentId, archived: habit.archived })
 		.from(habit)
 		.where(eq(habit.accountId, accountId))
 		.all();
+	const parent = f.parentId ? others.find((o) => o.id === f.parentId) : undefined;
+	if (f.parentId) {
+		// A group, or a routine: a habit with its own schedule and no Tasks of its own.
+		if (!parent || parent.direction !== 'build' || !parent.schedule) return 'Pick a group or a routine to put this habit in';
+		if (!isGroup(parent.schedule as Schedule) && hasSlots(parent.id))
+			return 'That habit has Tasks of its own, so it can’t hold habits yet. Pick a group or a habit with no Tasks';
+		if (parent.archived && others.find((o) => o.id === id)?.parentId !== f.parentId) return 'That habit is archived. Pick another one';
+		if (id && makesCycle(others, id, f.parentId)) return "A habit can't sit inside itself or a habit inside it";
+		// A routine's Done marks what is inside it, and a group can't be marked: it is judged.
+		if (isGroup(f.schedule) && !isGroup(parent.schedule as Schedule)) return 'A group can only sit inside another group for now';
+	}
+	if (isFollow(f.schedule)) {
+		if (!parent || isGroup(parent.schedule as Schedule | null))
+			return 'A habit can only follow a routine it sits in. Put it in a routine, or give it a schedule of its own';
+		const theirs = new Set(db.select({ id: variant.id }).from(variant).where(eq(variant.habitId, parent.id)).all().map((v) => v.id));
+		if (f.schedule.on && !f.schedule.on.some((v) => theirs.has(v))) return `Pick at least one of the routine's Variants`;
+	}
+	// A routine's Tasks are the habits inside it, for now.
+	if (id && f.variants.some((v) => v.slots.length) && !isGroup(f.schedule) && others.some((o) => o.parentId === id && o.direction === 'build'))
+		return 'This habit has habits inside it, so it has no Tasks of its own for now. Put these Tasks in a habit inside it';
 	const after = f.cue.afterHabitId;
 	if (after) {
 		if (!others.some((o) => o.id === after && o.direction === 'build') || after === id)
@@ -243,7 +283,28 @@ function settledAfter(
 		: {};
 }
 
-/** Create or update a Habit with its Variants and Slots. Returns its id, or null if not found. */
+/** Edits of a saved habit its history policies refuse (build or break, once something is logged). */
+export function checkHabitEdit(accountId: string, id: string, f: HabitForm): string | null {
+	const before = getHabitForm(accountId, id);
+	if (!before) return null;
+	// A group's days are worked out from the habits inside it, so a habit's own logs can't become a group's.
+	const wasGroup = isGroup(before.schedule);
+	if (!wasGroup && isGroup(f.schedule) && habitLogged(id))
+		return 'This habit has logs, and a group gets its days from the habits inside it. Make a new habit for the group instead';
+	if (wasGroup && !isGroup(f.schedule) && db.select({ id: habit.id }).from(habit).where(eq(habit.parentId, id)).get())
+		return 'Move the habits inside this group out of it first';
+	// A group has no days of its own for the habits inside to follow.
+	if (!wasGroup && isGroup(f.schedule) && followers(id).length)
+		return 'Habits inside this one follow its schedule. Give them a schedule of their own first';
+	// Guarded fields changed: only then is it worth asking whether anything is logged.
+	const issues = checkHabitPast(before, f, true);
+	return issues.length && habitLogged(id) ? issues[0].reason : null;
+}
+
+/**
+ * Create or update a Habit with its Variants and Slots. Returns its id, or null if not found.
+ * An edit its history policies refuse (switching build and break once logged) throws PastEditError.
+ */
 export function saveHabit(
 	accountId: string,
 	id: string | null,
@@ -253,6 +314,8 @@ export function saveHabit(
 ): string | null {
 	// Values that can't apply (Levels on a break habit, a reminder with no time) are cleared.
 	f = checkHabitForm(f).form;
+	const refused = id ? checkHabitEdit(accountId, id, f) : null;
+	if (refused) throw new PastEditError(refused);
 	let judgeAgain = false;
 	const saved = db.transaction((tx) => {
 		// A changed limit or taper applies from today, so past days keep the limit they had.
@@ -298,6 +361,7 @@ export function saveHabit(
 			limit: isBreak ? f.limit : null,
 			progression: isBreak ? null : f.progression,
 			areaId: f.areaId,
+			parentId: isBreak ? null : f.parentId,
 			unlogged: isBreak ? ('missed' as const) : (f.unlogged ?? 'missed')
 		};
 		if (id) {
@@ -309,13 +373,25 @@ export function saveHabit(
 					schedule: habit.schedule,
 					earlierSchedules: habit.earlierSchedules,
 					minimumCounts: habit.minimumCounts,
-					levels: habit.levels
+					levels: habit.levels,
+					triggers: habit.triggers
 				})
 				.from(habit)
 				.where(and(eq(habit.id, id), eq(habit.accountId, accountId)))
 				.get();
 			if (!owned) return null;
-			const sched = scheduleAfter(tx, id, owned, values, opts.scheduleApplies ?? 'today', today);
+			// A feeling removed after a slip used it is archived, so that slip keeps its word.
+			if (isBreak) {
+				const gone = removedTriggers({ triggers: activeOptions(owned.triggers) }, f, feelingsUsed(id, tx));
+				values.triggers = mergeOptions(owned.triggers, f.triggers, gone.archive);
+			}
+			// Becoming a group, or a group becoming a habit: nothing logged by hand crosses over
+			// (checkHabitEdit refuses that), so the days written for the old kind go.
+			const kindChanged = isGroup(owned.schedule as Schedule | null) !== isGroup(values.schedule as Schedule | null);
+			if (kindChanged) tx.delete(occurrence).where(eq(occurrence.habitId, id)).run();
+			const sched = kindChanged
+				? { earlierSchedules: null, settledThrough: null }
+				: scheduleAfter(tx, id, owned, values, opts.scheduleApplies ?? 'today', today);
 			const settled = settledAfter(tx, id, owned, values, sched.settledThrough === null);
 			tx.update(habit).set({ ...values, ...sched, ...settled }).where(eq(habit.id, id)).run();
 			// The rule for what counts changed: past logs are judged again by it.
@@ -365,7 +441,9 @@ export function saveHabit(
 			v.slots.forEach((s, j) => {
 				const taskId = s.fillRule ? null : s.taskId;
 				// Targets only for fields of the Slot's Task: a Task swapped out leaves none behind.
-				const own = taskId ? new Set(tx.select({ id: metric.id }).from(metric).where(eq(metric.taskId, taskId)).all().map((m) => m.id)) : null;
+				const own = taskId
+					? new Set(tx.select({ id: metric.id }).from(metric).where(and(eq(metric.taskId, taskId), eq(metric.archived, false))).all().map((m) => m.id))
+					: null;
 				const keep = (t: Record<string, number>) => (own ? Object.fromEntries(Object.entries(t ?? {}).filter(([k]) => own.has(k))) : (t ?? {}));
 				const targets = keep(s.targets);
 				const minTargets = keep(s.minTargets);
@@ -393,10 +471,42 @@ export function saveHabit(
 }
 
 export function deleteHabit(accountId: string, id: string) {
-	db.delete(habit)
-		.where(and(eq(habit.id, id), eq(habit.accountId, accountId)))
-		.run();
+	const gone = db.select({ id: habit.id }).from(habit).where(and(eq(habit.id, id), eq(habit.accountId, accountId))).get();
+	if (!gone) return;
+	const days = daysOf(id);
+	db.transaction((tx) => {
+		// The habits inside move to the top level. One that followed this habit gets its days.
+		for (const k of followers(id))
+			tx.update(habit)
+				.set({ schedule: standaloneSchedule(days, k.schedule as Extract<Schedule, { kind: 'follow' }>, k.startDate) })
+				.where(eq(habit.id, k.id))
+				.run();
+		tx.delete(habit)
+			.where(and(eq(habit.id, id), eq(habit.accountId, accountId)))
+			.run();
+	});
 }
+
+/** A habit's days as a schedule of its own: a routine that follows another one takes that one's days. */
+function daysOf(id: string, depth = 0): Schedule | null {
+	const h = db.select({ schedule: habit.schedule, parentId: habit.parentId, startDate: habit.startDate }).from(habit).where(eq(habit.id, id)).get();
+	const s = (h?.schedule ?? null) as Schedule | null;
+	if (!h || !isFollow(s)) return s;
+	const above = h.parentId && depth < 20 ? daysOf(h.parentId, depth + 1) : null;
+	return standaloneSchedule(above, s, h.startDate);
+}
+
+/** The habits inside this one that follow its schedule. */
+const followers = (id: string) =>
+	db
+		.select({ id: habit.id, schedule: habit.schedule, startDate: habit.startDate })
+		.from(habit)
+		.where(eq(habit.parentId, id))
+		.all()
+		.filter((k) => isFollow(k.schedule as Schedule | null));
+
+const hasSlots = (habitId: string) =>
+	!!db.select({ id: slot.id }).from(slot).innerJoin(variant, eq(slot.variantId, variant.id)).where(eq(variant.habitId, habitId)).get();
 
 export function setHabitArchived(accountId: string, id: string, archived: boolean) {
 	db.update(habit)

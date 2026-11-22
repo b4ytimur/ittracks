@@ -17,7 +17,9 @@ import {
 	taskTag,
 	variant
 } from './db/schema';
-import { dueOn, nextInRotation, type Done, type Schedule } from '$lib/engine/schedule';
+import { dueOn, isFollow, isGroup, nextInRotation, rollupRuleOf, type Done, type ParentDue, type Schedule } from '$lib/engine/schedule';
+import { followDue, parentDueFor, syncParents } from './rollup';
+import { depthOf } from '$lib/engine/tree';
 import { pickTask, type Candidate, type FillRule } from '$lib/engine/fill';
 import {
 	daysSinceSlip,
@@ -33,6 +35,7 @@ import { addDays, weekStart } from '$lib/engine/dates';
 import { limitOn, nextDrop, usedIn, withinStreak } from '$lib/engine/limit';
 import { hitsInARow, raise, type Progression } from '$lib/engine/progression';
 import { DEFAULT_TRIGGERS, type ScheduleForm } from '$lib/forms';
+import { activeOptions, optionName } from '$lib/options';
 import { identitiesByHabit } from './repo/identities';
 import { getSettings } from './settings';
 import { dayOrder, logicalDate } from '$lib/engine/day';
@@ -41,8 +44,10 @@ import { carriesOver, lastTimeFor } from '$lib/engine/backfill';
 import { missedDaysOver, recountFrom, scheduleOn, type EarlierSchedule, type Unlogged } from '$lib/engine/unlogged';
 import { habitStats, type HabitStats } from '$lib/engine/stats';
 import type { Progress } from '$lib/engine/progress';
-import { finishAs, progressFor, verdictsFor } from './progress';
-import { isTick, slotGroups as groupsOf } from '$lib/engine/groups';
+import { finishAs, progressFor, stepsOf, verdictsFor } from './progress';
+import { isTick } from '$lib/engine/groups';
+import { place, slotOfPath, type Position } from '$lib/engine/parts';
+import { partIdsIn, positionsOf } from './positions';
 
 /**
  * Today's date in the user's time zone, as YYYY-MM-DD. Before `dayStart` (HH:MM)
@@ -182,6 +187,12 @@ export const scheduleAt = (h: { schedule: unknown; earlierSchedules: EarlierSche
 
 const hasEntries = (id: string) => !!db.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, id)).get();
 
+/** For a habit that follows its parent now or did before: what the parent had due each day. */
+function followsAt(h: Pick<Settling, 'id' | 'earlierSchedules'>, schedule: unknown, today: string): ParentDue | undefined {
+	const follows = isFollow(schedule as Schedule) || !!h.earlierSchedules?.some((e) => isFollow(e.schedule));
+	return follows ? parentDueFor(h.id, today) : undefined;
+}
+
 /**
  * Past logs with something in them are judged by the habit's rule once their day is over: a
  * log left open is done when it counts and missed when it falls short, and so is a finished
@@ -221,7 +232,10 @@ function judgeEnded(h: Settling, today: string, paused: (d: string) => boolean) 
  * their misses are counted per missed session instead.
  */
 function settlePast(h: Settling, schedule: ScheduleForm, today: string, pauses: Pause[]) {
+	// A group's days are written from the habits inside it (see rollup.ts), never settled here.
+	if (isGroup(schedule)) return;
 	const habitId = h.id;
+	const pd = followsAt(h, schedule, today);
 	judgeEnded(h, today, (d) => !!pauseOn(pauses, habitId, d));
 	// Due days that fell in a pause simply go away: they were never due.
 	if (pauses.length) {
@@ -253,19 +267,19 @@ function settlePast(h: Settling, schedule: ScheduleForm, today: string, pauses: 
 			.filter(
 				(o) =>
 					!hasEntries(o.id) &&
-					(h.unlogged === 'ignore' ? !o.notes : !dueOn(scheduleOn(schedule as Schedule, h.earlierSchedules, o.date), history(habitId, o.date), o.date))
+					(h.unlogged === 'ignore' ? !o.notes : !dueOn(scheduleOn(schedule as Schedule, h.earlierSchedules, o.date), history(habitId, o.date), o.date, pd))
 			);
 		if (gone.length) db.delete(occurrence).where(inArray(occurrence.id, gone.map((o) => o.id))).run();
 		db.update(occurrence).set({ status: 'missed' }).where(stale).run();
 	}
 	const yesterday = addDays(today, -1);
-	if (h.unlogged === 'missed') fillMisses(h, schedule, yesterday, pauses);
+	if (h.unlogged === 'missed') fillMisses(h, schedule, yesterday, pauses, pd);
 	if (!h.settledThrough || h.settledThrough < yesterday)
 		db.update(habit).set({ settledThrough: yesterday }).where(eq(habit.id, habitId)).run();
 }
 
 /** Write a miss for every due day nobody logged since the habit was last settled. */
-function fillMisses(h: Settling, schedule: ScheduleForm, yesterday: string, pauses: Pause[]) {
+function fillMisses(h: Settling, schedule: ScheduleForm, yesterday: string, pauses: Pause[], pd?: ParentDue) {
 	const from = h.settledThrough ? addDays(h.settledThrough, 1) : h.startDate;
 	if (from > yesterday) return;
 	const rows = db
@@ -273,7 +287,7 @@ function fillMisses(h: Settling, schedule: ScheduleForm, yesterday: string, paus
 		.from(occurrence)
 		.where(eq(occurrence.habitId, h.id))
 		.all();
-	const misses = missedDaysOver(schedule as Schedule, h.earlierSchedules, rows, h.startDate, from, yesterday, (d) => !!pauseOn(pauses, h.id, d));
+	const misses = missedDaysOver(schedule as Schedule, h.earlierSchedules, rows, h.startDate, from, yesterday, (d) => !!pauseOn(pauses, h.id, d), pd);
 	if (!misses.length) return;
 	const variants = new Set(db.select({ id: variant.id }).from(variant).where(eq(variant.habitId, h.id)).all().map((v) => v.id));
 	// Auto-filled Slots get their Tasks, so a missed day can be opened and logged like any other.
@@ -332,9 +346,19 @@ export function ensurePicks(occurrenceId: string): Record<string, string> | null
 
 /** Settle a habit's past days without creating today's Occurrence. */
 export function settle(accountId: string, habitId: string, schedule: ScheduleForm, today: string) {
+	if (isGroup(schedule)) return settleTree(accountId, today, false);
 	const h = settlingOf(habitId);
 	if (h) settlePast(h, schedule, today, pausesForHabit(accountId, habitId));
+	if (inTree(habitId)) settleTree(accountId, today, false);
 }
+
+/** Does this habit sit inside another, or hold habits inside it? Then its parents are counted again. */
+const inTree = (habitId: string) =>
+	!!db
+		.select({ id: habit.id })
+		.from(habit)
+		.where(or(and(eq(habit.id, habitId), isNotNull(habit.parentId)), eq(habit.parentId, habitId)))
+		.get();
 
 /**
  * A past day changed: count the misses of a schedule that carries over again from where they
@@ -342,6 +366,7 @@ export function settle(accountId: string, habitId: string, schedule: ScheduleFor
  * in them are the counted ones; anything else stays.
  */
 export function recount(accountId: string, habitId: string, schedule: ScheduleForm, date: string, today: string) {
+	if (isGroup(schedule)) return settleTree(accountId, today, false);
 	const h = settlingOf(habitId);
 	if (!h) return;
 	const from = recountFrom(scheduleOn(schedule as Schedule, h.earlierSchedules, date), date);
@@ -361,6 +386,7 @@ export function recount(accountId: string, habitId: string, schedule: ScheduleFo
 		h.settledThrough = back;
 	}
 	settlePast(h, schedule, today, pausesForHabit(accountId, habitId));
+	if (inTree(habitId)) settleTree(accountId, today, false);
 }
 
 /**
@@ -417,11 +443,19 @@ export function unarchived(habitId: string, today: string) {
  * something logged or a note in them stay.
  */
 export function repaused(accountId: string, habitId: string | null, start: string, end: string, today: string) {
-	const rows = db
-		.select({ id: habit.id, schedule: habit.schedule })
+	// A habit that follows the paused one (or follows one that does) has no days while it is
+	// paused either. The paused habit is counted first, then those following it, level by level.
+	const all = db
+		.select({ id: habit.id, schedule: habit.schedule, parentId: habit.parentId })
 		.from(habit)
-		.where(and(eq(habit.accountId, accountId), eq(habit.direction, 'build'), habitId ? eq(habit.id, habitId) : undefined))
+		.where(and(eq(habit.accountId, accountId), eq(habit.direction, 'build')))
 		.all();
+	let rows = all;
+	if (habitId) {
+		rows = all.filter((r) => r.id === habitId);
+		for (let i = 0; i < rows.length && i < all.length; i++)
+			rows.push(...all.filter((r) => r.parentId === rows[i].id && isFollow(r.schedule as Schedule | null)));
+	}
 	const last = end < today ? end : addDays(today, -1);
 	for (const r of rows) {
 		if (!r.schedule) continue;
@@ -441,16 +475,87 @@ export function repaused(accountId: string, habitId: string | null, start: strin
 
 /** Settle every build habit of an account, so pages that read the past (Stats, the chain) see every miss. */
 export function settleAll(accountId: string, today: string) {
-	const rows = db
-		.select({ id: habit.id, schedule: habit.schedule })
-		.from(habit)
-		.where(and(eq(habit.accountId, accountId), eq(habit.archived, false), eq(habit.direction, 'build')))
-		.all();
-	for (const r of rows) if (r.schedule) settle(accountId, r.id, r.schedule as ScheduleForm, today);
+	settleTree(accountId, today, false);
 }
 
-/** Create today's Occurrence for a build habit if one is due and none exists yet. */
+/** The account's build habits, each after the habit it sits in, so a routine settles before the habits that follow it. */
+function treeOrder(accountId: string) {
+	const rows = db
+		.select({ id: habit.id, schedule: habit.schedule, parentId: habit.parentId, archived: habit.archived })
+		.from(habit)
+		.where(and(eq(habit.accountId, accountId), eq(habit.direction, 'build')))
+		.all();
+	const depth = new Map(rows.map((r) => [r.id, depthOf(rows, r.id)]));
+	return rows.filter((r) => !r.archived).sort((a, b) => depth.get(a.id)! - depth.get(b.id)!);
+}
+
+/**
+ * Settle every build habit, parents before the habits inside them, then write every group's
+ * and routine's days from them. With `withToday`, today's Occurrences are made first, so the
+ * parents' today is counted too.
+ */
+function settleTree(accountId: string, today: string, withToday: boolean) {
+	for (const r of treeOrder(accountId)) {
+		if (!r.schedule || isGroup(r.schedule as Schedule)) continue;
+		if (withToday) ensureOwnToday(accountId, r.id, r.schedule as ScheduleForm, today);
+		else {
+			const h = settlingOf(r.id);
+			if (h) settlePast(h, r.schedule as ScheduleForm, today, pausesForHabit(accountId, r.id));
+		}
+	}
+	syncParents(accountId, today, pausesOf(accountId));
+}
+
+/** A group's Occurrence today, as last written by syncParents: none on a paused day still open. */
+function groupToday(accountId: string, habitId: string, today: string) {
+	const existing = db
+		.select()
+		.from(occurrence)
+		.where(and(eq(occurrence.habitId, habitId), eq(occurrence.date, today)))
+		.get();
+	if (!existing) return null;
+	return existing.status === 'due' && pauseOn(pausesForHabit(accountId, habitId), habitId, today) ? null : existing;
+}
+
+/**
+ * Create today's Occurrence for a build habit if one is due and none exists yet. A group's
+ * comes from the habits inside it: they are brought up to date, and the group's is returned.
+ * So is a routine's, once the habits inside it have counted.
+ */
 export function ensureToday(accountId: string, habitId: string, schedule: ScheduleForm, today: string) {
+	if (isGroup(schedule)) {
+		settleTree(accountId, today, true);
+		return groupToday(accountId, habitId, today);
+	}
+	const own = ensureOwnToday(accountId, habitId, schedule, today);
+	if (!inTree(habitId)) return own;
+	settleTree(accountId, today, true);
+	return db
+		.select()
+		.from(occurrence)
+		.where(and(eq(occurrence.habitId, habitId), eq(occurrence.date, today)))
+		.get() ?? null;
+}
+
+/** Habits whose today is being made, so a loop in old parent links can't recurse forever. */
+const ensuring = new Set<string>();
+
+/**
+ * Today's Occurrence from the habit's own schedule, without counting any parent again. A habit
+ * that follows its parent needs the parent's today first.
+ */
+function ensureOwnToday(accountId: string, habitId: string, schedule: ScheduleForm, today: string) {
+	if (isFollow(schedule)) {
+		const parent = parentRow(habitId);
+		if (parent?.schedule && !isGroup(parent.schedule as Schedule) && !ensuring.has(parent.id)) {
+			ensuring.add(parent.id);
+			try {
+				ensureOwnToday(accountId, parent.id, parent.schedule as ScheduleForm, today);
+			} finally {
+				ensuring.delete(parent.id);
+			}
+		}
+	}
 	const pauses = pausesForHabit(accountId, habitId);
 	const h = settlingOf(habitId);
 	if (!h) return null;
@@ -465,10 +570,16 @@ export function ensureToday(accountId: string, habitId: string, schedule: Schedu
 	const paused = !!pauseOn(pauses, habitId, today);
 	if (existing) return paused && existing.status === 'due' ? null : existing;
 	if (paused) return null;
-	const variantId = dueOn(schedule as Schedule, history(habitId, today), today);
+	const variantId = dueOn(schedule as Schedule, history(habitId, today), today, followDue(habitId, schedule, today));
 	if (!variantId) return null;
 	return createOccurrence(accountId, habitId, variantId, today);
 }
+
+/** The habit this one sits in. */
+const parentRow = (habitId: string) => {
+	const c = db.select({ parentId: habit.parentId }).from(habit).where(eq(habit.id, habitId)).get();
+	return c?.parentId ? db.select({ id: habit.id, schedule: habit.schedule }).from(habit).where(eq(habit.id, c.parentId)).get() : undefined;
+};
 
 export function createOccurrence(
 	accountId: string,
@@ -489,7 +600,8 @@ export function createOccurrence(
 		finishedAt: null,
 		level: null,
 		extra,
-		goals: null
+		goals: null,
+		rollup: null
 	};
 	db.insert(occurrence).values(row).run();
 	return row;
@@ -527,7 +639,7 @@ export interface TodayItem {
 	bundle: { reward: string; strict: boolean } | null;
 	reward: { celebrate: boolean; message: string; jar: { total: number; unit: string; goal: string } | null } | null;
 	/** Targets have been hit this many times in a row; suggest raising them. */
-	progression: { hits: number; by: number; unit: 'percent' | 'amount'; changes: string[] } | null;
+	progression: { hits: number; by: number; unit: 'percent' | 'steps'; changes: string[] } | null;
 	/** Started on the log screen and saved, not finished yet. */
 	inProgress: boolean;
 	/** A finished log exists to copy with "Same as last time". */
@@ -538,6 +650,14 @@ export interface TodayItem {
 	stats: HabitStats;
 	/** How far along today's log is: "3 of 6 glasses" (with +1 on Today) or "2 of 4 steps". */
 	progress: Progress | null;
+	/** The group this habit sits in, when that group is active. */
+	parentId: string | null;
+	/**
+	 * For a group, or a routine on a day the habits inside it count: its rule, today's count,
+	 * and the habits inside it (shown on Today or not). A routine can be marked done or skipped
+	 * as a whole, which marks the habits inside.
+	 */
+	group: { routine: boolean; target: number | null; minimum: number | null; done: number; total: number; kids: string[] } | null;
 }
 
 export interface PrepItem {
@@ -557,7 +677,8 @@ export interface BreakItem {
 	longest: number;
 	slippedToday: number;
 	ifThen: { when: string; then: string; habit: string | null } | null;
-	triggers: string[];
+	/** Feelings a slip can be logged with: the form sends the id. */
+	triggers: { id: string; name: string }[];
 	places: string[];
 	top: Trigger[];
 	resistedThisWeek: number;
@@ -593,6 +714,26 @@ export function loadToday(accountId: string, today: string) {
 	const dayStart = settings.dayStart ?? '00:00';
 	const rangeStart = new Map(settings.ranges.map((r) => [r.name, r.start]));
 	const allPauses = pausesOf(accountId);
+	// Habits first, then the groups they sit in: a group's day is counted from theirs.
+	const groupIds = new Set(habits.filter((h) => h.direction === 'build' && isGroup(h.schedule as Schedule | null)).map((h) => h.id));
+	// A routine: a habit with its own schedule and habits inside it. It is judged from them too.
+	const hasKids = new Set(habits.filter((h) => h.direction === 'build' && h.parentId).map((h) => h.parentId!));
+	const routineIds = new Set(
+		habits.filter((h) => h.direction === 'build' && h.schedule && hasKids.has(h.id) && !isGroup(h.schedule as Schedule)).map((h) => h.id)
+	);
+	const todayOf = new Map<string, ReturnType<typeof ensureToday>>();
+	for (const h of habits)
+		if (h.direction === 'build' && h.schedule && !groupIds.has(h.id))
+			todayOf.set(h.id, ensureOwnToday(accountId, h.id, h.schedule as ScheduleForm, today));
+	if (groupIds.size || routineIds.size) {
+		syncParents(accountId, today, allPauses);
+		for (const id of groupIds) todayOf.set(id, groupToday(accountId, id, today));
+		// What the habits inside did today is in the routine's day now.
+		for (const id of routineIds) if (todayOf.get(id)) todayOf.set(id, db.select().from(occurrence).where(eq(occurrence.id, todayOf.get(id)!.id)).get() ?? null);
+	}
+	const isParent = (id: string | null): id is string => !!id && (groupIds.has(id) || routineIds.has(id));
+	const kidsOf = new Map<string, string[]>();
+	for (const h of habits) if (isParent(h.parentId)) kidsOf.set(h.parentId, [...(kidsOf.get(h.parentId) ?? []), h.id]);
 
 	for (const h of habits) {
 		if (h.direction === 'break') {
@@ -626,9 +767,10 @@ export function loadToday(accountId: string, today: string) {
 							habit: habits.find((x) => x.id === h.ifThen?.habitId)?.name ?? null
 						}
 					: null,
-				triggers: h.triggers ?? DEFAULT_TRIGGERS,
+				triggers: activeOptions(h.triggers ?? DEFAULT_TRIGGERS).map(({ id, name }) => ({ id, name })),
 				places: [...new Set(slips.map((s) => s.place).filter((p): p is string => !!p))],
-				top: topTriggers(slips),
+				// Slips store the feeling's id: counted by its name now, so a renamed feeling keeps its slips.
+				top: topTriggers(slips.map((s) => ({ ...s, feeling: optionName(h.triggers ?? DEFAULT_TRIGGERS, s.feeling) }))),
 				resistedThisWeek: db
 					.select({ date: craving.date })
 					.from(craving)
@@ -673,7 +815,9 @@ export function loadToday(accountId: string, today: string) {
 		const schedule = h.schedule as ScheduleForm | null;
 		if (!schedule) continue;
 
-		const occ = ensureToday(accountId, h.id, schedule, today);
+		const occ = todayOf.get(h.id) ?? null;
+		// A routine shows as a parent on days the habits inside it count.
+		const group = isGroup(schedule) ? schedule : routineIds.has(h.id) && occ?.rollup ? rollupRuleOf(schedule as Schedule) : null;
 		const variants = db.select().from(variant).where(eq(variant.habitId, h.id)).all();
 		const marks = db
 			.select({ date: occurrence.date, status: occurrence.status, level: occurrence.level })
@@ -749,7 +893,18 @@ export function loadToday(accountId: string, today: string) {
 			areaId: h.areaId,
 			pausedUntil: pauseOn(allPauses, h.id, today)?.end ?? null,
 			stats: habitStats(marks, today),
-			progress: null
+			progress: null,
+			parentId: isParent(h.parentId) ? h.parentId : null,
+			group: group
+				? {
+						routine: routineIds.has(h.id),
+						target: group.target,
+						minimum: group.minimum,
+						done: occ?.rollup?.done ?? 0,
+						total: occ?.rollup?.total ?? 0,
+						kids: kidsOf.get(h.id) ?? []
+					}
+				: null
 		};
 		if (occ) {
 			build.push(item);
@@ -788,7 +943,8 @@ export function weekStrip(accountId: string, today: string) {
 		.select({ date: occurrence.date, status: occurrence.status })
 		.from(occurrence)
 		.innerJoin(habit, eq(occurrence.habitId, habit.id))
-		.where(and(eq(habit.accountId, accountId), gte(occurrence.date, monday), lte(occurrence.date, addDays(monday, 6))))
+		// A group's day is already counted in the habits inside it.
+		.where(and(eq(habit.accountId, accountId), isNull(occurrence.rollup), gte(occurrence.date, monday), lte(occurrence.date, addDays(monday, 6))))
 		.all();
 	return Array.from({ length: 7 }, (_, i) => {
 		const date = addDays(monday, i);
@@ -802,7 +958,7 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 /** Entries that log a Slot's targets at a level (falling back to Target). */
 function targetEntries(
 	tx: Tx,
-	s: typeof slot.$inferSelect,
+	s: Pick<Position, 'sets' | 'targets' | 'minTargets' | 'stretchTargets'>,
 	taskId: string,
 	level: Level | null
 ): Record<string, unknown>[] {
@@ -810,7 +966,7 @@ function targetEntries(
 		...(s.targets ?? {}),
 		...((level === 'minimum' ? s.minTargets : level === 'stretch' ? s.stretchTargets : null) ?? {})
 	};
-	const metrics = tx.select().from(metric).where(eq(metric.taskId, taskId)).all();
+	const metrics = tx.select().from(metric).where(and(eq(metric.taskId, taskId), eq(metric.archived, false))).all();
 	const repeating = metrics.filter((m) => m.repeats && targets[m.id] !== undefined);
 	const single = metrics.filter((m) => !m.repeats && targets[m.id] !== undefined);
 	const sets = repeating.length ? Math.max(1, s.sets ?? 1) : 0;
@@ -856,9 +1012,9 @@ function previewRaise(p: Progression, variantIds: string[]): string[] {
 	for (const s of slots) {
 		const t = db.select({ name: task.name }).from(task).where(eq(task.id, s.taskId!)).get();
 		const names = new Map(
-			db.select({ id: metric.id, name: metric.name }).from(metric).where(eq(metric.taskId, s.taskId!)).all().map((m) => [m.id, m.name])
+			db.select({ id: metric.id, name: metric.name }).from(metric).where(and(eq(metric.taskId, s.taskId!), eq(metric.archived, false))).all().map((m) => [m.id, m.name])
 		);
-		const next = raise(s.targets!, p);
+		const next = raise(s.targets!, p, stepsOf(Object.keys(s.targets!)));
 		const parts = Object.entries(s.targets!)
 			.filter(([k]) => names.has(k))
 			.map(([k, v]) => `${names.get(k)} ${v}→${next[k]}`);
@@ -888,7 +1044,7 @@ export function loadPrep(accountId: string, today: string): PrepItem[] {
 			.where(and(eq(occurrence.habitId, h.id), eq(occurrence.date, today)))
 			.get();
 		if (todayOcc?.status === 'due') past.push({ date: today, variantId: todayOcc.variantId, status: 'done' });
-		if (!dueOn(h.schedule as Schedule, past, tomorrow)) continue;
+		if (!dueOn(h.schedule as Schedule, past, tomorrow, followDue(h.id, h.schedule, today))) continue;
 		const ticks = new Set(
 			db
 				.select({ item: prepTick.item })
@@ -921,23 +1077,24 @@ export function missingRequired(occurrenceId: string): string[] {
 	const entries = db.select().from(entry).where(eq(entry.occurrenceId, occ.id)).all();
 	const empty = (v: unknown) => v === undefined || v === null || v === '' || v === false;
 	const out: string[] = [];
-	for (const { taskId } of slotsOf(occ)) {
-		if (!taskId) continue;
+	const positions = positionsOf(occ);
+	const { at } = place(positions, entries);
+	for (const p of positions) {
 		const required = db
 			.select()
 			.from(metric)
-			.where(and(eq(metric.taskId, taskId), eq(metric.required, true)))
+			.where(and(eq(metric.taskId, p.taskId), eq(metric.required, true), eq(metric.archived, false)))
 			.all();
 		if (!required.length) continue;
-		const name = db.select({ name: task.name }).from(task).where(eq(task.id, taskId)).get()?.name ?? '';
-		const mine = entries.filter((e) => e.taskId === taskId);
+		const name = db.select({ name: task.name }).from(task).where(eq(task.id, p.taskId)).get()?.name ?? '';
+		const mine = at.get(p.path) ?? [];
 		const sets = mine.filter((e) => !(e.values as Record<string, unknown>)._summary);
 		const summary = (mine.find((e) => (e.values as Record<string, unknown>)._summary)?.values ?? {}) as Record<string, unknown>;
 		for (const m of required) {
 			const bad = m.repeats
 				? !sets.length || sets.some((e) => empty((e.values as Record<string, unknown>)[m.id]))
 				: empty(summary[m.id]) && !sets.some((e) => !empty((e.values as Record<string, unknown>)[m.id]));
-			if (bad) out.push(`${name}: ${m.name}`);
+			if (bad && !out.includes(`${name}: ${m.name}`)) out.push(`${name}: ${m.name}`);
 		}
 	}
 	return out;
@@ -950,14 +1107,9 @@ function needsInput(occurrenceId: string): boolean {
 	return true;
 }
 
-/**
- * What a one-tap Done ticks for a Task: its sub-tasks, or the Task itself when it is a plain
- * Yes or no (no fields and no sub-tasks). Ticks are Entries with `{ done: true }`.
- */
-function ticksFor(tx: Tx, taskId: string): string[] {
-	const subs = tx.select({ id: task.id, archived: task.archived }).from(task).where(eq(task.parentTaskId, taskId)).all().filter((t) => !t.archived);
-	if (subs.length) return subs.map((t) => t.id);
-	return tx.select({ id: metric.id }).from(metric).where(eq(metric.taskId, taskId)).get() ? [] : [taskId];
+/** A Yes or no Task or a step: no fields and nothing inside, so logging it is a tick. */
+function isTickOnly(tx: Tx, p: Pick<Position, 'taskId' | 'kids'>): boolean {
+	return !p.kids && !tx.select({ id: metric.id }).from(metric).where(and(eq(metric.taskId, p.taskId), eq(metric.archived, false))).get();
 }
 
 /** One tap: done at a level with its targets. Returns 'needsInput' when a required field is still empty. */
@@ -968,16 +1120,14 @@ export function quickDone(occurrenceId: string, level: Level | null): 'done' | '
 	db.transaction((tx) => {
 		// One tap logs that level's targets, replacing anything an earlier tap or log left behind.
 		tx.delete(entry).where(eq(entry.occurrenceId, occ.id)).run();
-		{
-			let order = 0;
-			for (const { slot: s, taskId } of slotsOf(occ)) {
-				if (!taskId) continue;
-				for (const values of targetEntries(tx, s, taskId, level))
-					tx.insert(entry).values({ id: randomUUID(), occurrenceId: occ.id, taskId, values, sortOrder: order++ }).run();
-				// "Done" means every step: tick a Yes or no Task, and each sub-task.
-				for (const id of ticksFor(tx, taskId))
-					tx.insert(entry).values({ id: randomUUID(), occurrenceId: occ.id, taskId: id, values: { done: true }, sortOrder: order++ }).run();
-			}
+		let order = 0;
+		// Every place in the log, parts and rounds included. "Done" means every step: a Yes or
+		// no Task and each step inside a Task is ticked.
+		for (const p of positionsOf(occ, { q: tx })) {
+			const add = (values: Record<string, unknown>) =>
+				tx.insert(entry).values({ id: randomUUID(), occurrenceId: occ.id, taskId: p.taskId, path: p.path, values, sortOrder: order++ }).run();
+			for (const values of targetEntries(tx, p, p.taskId, level)) add(values);
+			if (isTickOnly(tx, p)) add({ done: true });
 		}
 		tx.update(occurrence)
 			.set({ status: 'done', finishedAt: new Date(), level: level === 'target' ? null : level })
@@ -987,32 +1137,32 @@ export function quickDone(occurrenceId: string, level: Level | null): 'done' | '
 	return needsInput(occ.id) ? 'needsInput' : 'done';
 }
 
-/** Fields set to start blank: a reading such as today's weight is never copied from an old day. */
+/**
+ * Fields set to start blank: a reading such as today's weight is never copied from an old day.
+ * Archived fields aren't either: they are kept for History, not logged again.
+ */
 function blankMetricIds(tx: Tx, taskId: string): Set<string> {
 	return new Set(
 		tx
-			.select({ id: metric.id, prefill: metric.prefill })
+			.select({ id: metric.id, prefill: metric.prefill, archived: metric.archived })
 			.from(metric)
 			.where(eq(metric.taskId, taskId))
 			.all()
-			.filter((m) => m.prefill === 'blank')
+			.filter((m) => m.prefill === 'blank' || m.archived)
 			.map((m) => m.id)
 	);
 }
 
 type Values = Record<string, unknown>;
 
-/** A log's Entries of one Task, one group per Slot (see engine/groups.ts), as values. */
-const slotGroups = (entries: { taskId: string; values: Values }[], taskId: string): Values[][] =>
-	groupsOf(entries, taskId).map((g) => g.map((e) => e.values));
-
 /**
  * "Same as last time": copy the last finished log (of the same Variant when there is one, and
  * from before this day) and finish. Everything comes from that one log, so values from
- * different days never mix: sets, single values, tick boxes, sub-task ticks, and the Task an
- * auto-filled Slot used. A Task that log didn't have takes its own last log, then the targets.
- * Fields set to start blank are never copied. Tasks already logged here are kept as they are,
- * so a half-done workout only gets the rest filled in.
+ * different days never mix: sets, single values, tick boxes, ticked steps, and the Task an
+ * auto-filled Slot used. Places are matched by Task and how many times it came before, so
+ * round 2 of a Circuit copies round 2. A place that log didn't have takes its Task's own last
+ * log, then the targets. Fields set to start blank are never copied. Places already logged
+ * here are kept as they are, so a half-done workout only gets the rest filled in.
  * Returns 'needsInput', with the Occurrence back to due, when a required field is still empty
  * or a Task got nothing to log, so the quick log can ask for it.
  */
@@ -1034,7 +1184,7 @@ export function sameAsLast(occurrenceId: string): 'done' | 'needsInput' | 'gone'
 	const lastLevel = source?.level ?? null;
 	const from = source
 		? db
-				.select({ taskId: entry.taskId, values: entry.values })
+				.select({ taskId: entry.taskId, path: entry.path, values: entry.values })
 				.from(entry)
 				.where(eq(entry.occurrenceId, source.id))
 				.orderBy(asc(entry.sortOrder))
@@ -1061,58 +1211,48 @@ export function sameAsLast(occurrenceId: string): 'done' | 'needsInput' | 'gone'
 	let empty = false;
 	db.transaction((tx) => {
 		const have = tx
-			.select({ taskId: entry.taskId, values: entry.values, sortOrder: entry.sortOrder })
+			.select({ taskId: entry.taskId, path: entry.path, values: entry.values, sortOrder: entry.sortOrder })
 			.from(entry)
 			.where(eq(entry.occurrenceId, occ!.id))
 			.orderBy(asc(entry.sortOrder))
 			.all();
-		// Slots already logged, per Task: with the same Task twice, only the first may be done.
-		const logged = (taskId: string) => slotGroups(have, taskId).length;
+		const positions = positionsOf(occ!, { q: tx });
+		const here = place(positions, have).at;
+		// The places of that log, by Task and how many times the Task came before.
+		const keyed = (ps: Position[]) => {
+			const n = new Map<string, number>();
+			return ps.map((p) => {
+				const k = n.get(p.taskId) ?? 0;
+				n.set(p.taskId, k + 1);
+				return { p, key: `${p.taskId}|${k}` };
+			});
+		};
+		const srcPositions = source ? positionsOf(source, { q: tx, keep: partIdsIn(from) }) : [];
+		const srcAt = place(srcPositions, from).at;
+		const inSource = new Map(keyed(srcPositions).map(({ p, key }) => [key, (srcAt.get(p.path) ?? []).map((e) => e.values)]));
 		let order = have.reduce((n, e) => Math.max(n, e.sortOrder + 1), 0);
-		const add = (taskId: string, values: Values) =>
-			tx.insert(entry).values({ id: randomUUID(), occurrenceId: occ!.id, taskId, values, sortOrder: order++ }).run();
-		const nth = new Map<string, number>();
-		const slots = slotsOf(occ!);
-		// Sub-tasks already ticked here: they are kept, never ticked a second time.
-		const ticked = new Set(have.map((e) => e.taskId));
-		for (const { slot: s, taskId } of slots) {
-			if (!taskId) continue;
-			const n = nth.get(taskId) ?? 0;
-			nth.set(taskId, n + 1);
-			const subs = tx.select({ id: task.id }).from(task).where(eq(task.parentTaskId, taskId)).all();
-			const inSource = from.some((e) => e.taskId === taskId);
-			// A Task made only of sub-tasks is in that log when any of its steps is.
-			const subsInSource = inSource || from.some((e) => subs.some((x) => x.id === e.taskId));
+		for (const { p, key } of keyed(positions)) {
+			// Logged here already: kept, never filled a second time.
+			if (here.get(p.path)?.length) continue;
+			const add = (values: Values) =>
+				tx.insert(entry).values({ id: randomUUID(), occurrenceId: occ!.id, taskId: p.taskId, path: p.path, values, sortOrder: order++ }).run();
+			// From the one log above; a place it didn't have falls back to its Task's own last log.
+			const prev = inSource.get(key) ?? lastEntries(p.taskId, occ!.id, p.path);
+			if (isTickOnly(tx, p)) {
+				if (prev.some(isTick)) add({ done: true });
+				continue;
+			}
+			const blank = blankMetricIds(tx, p.taskId);
 			let wrote = 0;
-			if (n === 0)
-				for (const sub of subs) {
-					if (ticked.has(sub.id)) continue;
-					const ticks = subsInSource ? from.filter((e) => e.taskId === sub.id).map((e) => e.values) : lastEntries(sub.id, occ!.id);
-					for (const values of ticks.slice(0, 1)) {
-						add(sub.id, values);
-						wrote++;
-					}
-				}
-			if (n < logged(taskId)) continue;
-			// From the one log above; a Task it didn't have falls back to its own last log.
-			const prevAll = inSource ? from : lastEntries(taskId, occ!.id).map((values) => ({ taskId, values }));
-			const prev = slotGroups(prevAll, taskId)[n] ?? [];
-			const blank = blankMetricIds(tx, taskId);
-			// The same Task in two Slots: each Slot's sets are closed by its own group end.
-			const twice = slots.filter((x) => x.taskId === taskId).length > 1;
-			let sets = 0;
-			for (const values of prev.length ? prev : targetEntries(tx, s, taskId, lastLevel)) {
+			for (const values of prev.length ? prev : targetEntries(tx, p, p.taskId, lastLevel)) {
 				const kept = Object.fromEntries(Object.entries(values).filter(([k]) => !blank.has(k)));
 				if (Object.keys(kept).some((k) => k !== '_summary')) {
-					add(taskId, kept);
+					add(kept);
 					wrote++;
-					if (kept._summary) sets = 0;
-					else if (!isTick(kept)) sets++;
 				}
 			}
-			if (twice && sets) add(taskId, { _summary: true });
 			// Nothing to copy: ask on the quick log, if it has a field to ask with.
-			if (!wrote && tx.select({ id: metric.id }).from(metric).where(and(eq(metric.taskId, taskId), or(eq(metric.quick, true), eq(metric.required, true)))).get())
+			if (!wrote && tx.select({ id: metric.id }).from(metric).where(and(eq(metric.taskId, p.taskId), eq(metric.archived, false), or(eq(metric.quick, true), eq(metric.required, true)))).get())
 				empty = true;
 		}
 		tx.update(occurrence)
@@ -1138,8 +1278,12 @@ export function reopen(occurrenceId: string, clear: boolean) {
 	});
 }
 
-/** The most recent Entries of a Task before a given Occurrence, used to prefill. */
-export function lastEntries(taskId: string, beforeOccurrenceId: string) {
+/**
+ * The most recent Entries of a Task before a given Occurrence, used to prefill. With a `path`,
+ * the ones from the same place last time (round 2 of a Circuit prefills round 2), else the
+ * first place it had there, so rounds and Slots don't run together.
+ */
+export function lastEntries(taskId: string, beforeOccurrenceId: string, path?: string) {
 	const occ = db
 		.select({ id: occurrence.id, date: occurrence.date })
 		.from(occurrence)
@@ -1156,11 +1300,16 @@ export function lastEntries(taskId: string, beforeOccurrenceId: string) {
 		occ
 	);
 	if (!prev) return [];
-	return db
-		.select({ values: entry.values })
+	const rows = db
+		.select({ values: entry.values, path: entry.path })
 		.from(entry)
 		.where(and(eq(entry.occurrenceId, prev.id), eq(entry.taskId, taskId)))
 		.orderBy(asc(entry.sortOrder))
-		.all()
-		.map((e) => e.values);
+		.all();
+	const placed = rows.filter((r) => r.path);
+	if (!path || !placed.length) return rows.map((e) => e.values);
+	// The place below the Slot: Slots differ between Variants, the parts and rounds don't.
+	const tail = (p: string) => p.slice(slotOfPath(p).length);
+	const same = placed.filter((r) => tail(r.path!) === tail(path));
+	return (same.length ? same : placed.filter((r) => r.path === placed[0].path)).map((e) => e.values);
 }

@@ -4,10 +4,64 @@ import { addDays, daysBetween, toDays, weekday, weekStart, type ISODate } from '
 
 /** Weekdays are 0 = Monday ... 6 = Sunday. */
 export type Schedule =
-	| { kind: 'weekly'; days: Partial<Record<string, string>> }
-	| { kind: 'frequency'; times: number; period: 'week' | 'month'; variantId: string }
-	| Rotation
-	| { kind: 'interval'; every: number; start: ISODate; variantId: string };
+	| ({ kind: 'weekly'; days: Partial<Record<string, string>> } & Routine)
+	| ({ kind: 'frequency'; times: number; period: 'week' | 'month'; variantId: string } & Routine)
+	| (Rotation & Routine)
+	| ({ kind: 'interval'; every: number; start: ISODate; variantId: string } & Routine)
+	| GroupRule
+	| Follow;
+
+/**
+ * How a habit with habits inside it judges its day from theirs (see engine/rollup.ts):
+ * `target` null means all of them; `minimum` is how many make a day done at the Minimum, or
+ * null for no Minimum.
+ */
+export interface RollupRule {
+	target: number | null;
+	minimum: number | null;
+}
+
+/**
+ * A group of habits has no days of its own: it is due when a habit inside it is due, and done
+ * when enough of them are done.
+ */
+export interface GroupRule extends RollupRule {
+	kind: 'group';
+}
+
+/**
+ * A routine is a habit with its own schedule and habits inside it: on its days, it is judged
+ * from theirs by this rule. Absent means all of them, with no Minimum.
+ */
+interface Routine {
+	rollup?: RollupRule;
+}
+
+/**
+ * A habit inside a routine that is due whenever the routine is: on every one of its days, or
+ * only when the routine's Variant is one of `on`. It logs its own Variant, `variantId`.
+ */
+export interface Follow {
+	kind: 'follow';
+	variantId: string;
+	on: string[] | null;
+}
+
+export const isGroup = (s: { kind: string } | null | undefined): s is GroupRule => s?.kind === 'group';
+export const isFollow = (s: { kind: string } | null | undefined): s is Follow => s?.kind === 'follow';
+
+/** The rule a habit with habits inside it judges its day by. */
+export function rollupRuleOf(s: Schedule | null | undefined): RollupRule {
+	if (!s || isFollow(s)) return { target: null, minimum: null };
+	if (isGroup(s)) return { target: s.target, minimum: s.minimum };
+	return s.rollup ?? { target: null, minimum: null };
+}
+
+/**
+ * For a habit that follows its parent: the Variant the parent has due on a date, or null when
+ * nothing of it is due then. An empty string means due, with no Variant known.
+ */
+export type ParentDue = (date: ISODate) => string | null;
 
 /**
  * Rotation by Variant: Variants in order, each followed by its rest days.
@@ -32,8 +86,11 @@ export interface Done {
 	extra?: boolean;
 }
 
-/** The Variant due on `date`, or null when nothing is due. */
-export function dueOn(schedule: Schedule, history: Done[], date: ISODate): string | null {
+/**
+ * The Variant due on `date`, or null when nothing is due. A habit that follows its parent
+ * needs `parentDue`; without it, it is never due.
+ */
+export function dueOn(schedule: Schedule, history: Done[], date: ISODate, parentDue?: ParentDue): string | null {
 	switch (schedule.kind) {
 		case 'weekly':
 			return schedule.days[weekday(date)] ?? null;
@@ -55,6 +112,16 @@ export function dueOn(schedule: Schedule, history: Done[], date: ISODate): strin
 			return schedule.step === 'week'
 				? weekRotationDue(schedule, date)
 				: variantRotationDue(schedule, history, date);
+
+		case 'group':
+			// Its days come from the habits inside it, never from the schedule.
+			return null;
+
+		case 'follow': {
+			const p = parentDue?.(date) ?? null;
+			if (p === null) return null;
+			return !schedule.on || schedule.on.includes(p) ? schedule.variantId : null;
+		}
 	}
 }
 

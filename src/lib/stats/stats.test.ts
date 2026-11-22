@@ -75,7 +75,7 @@ function dataset(): Dataset {
 			{ id: 'pages', taskId: 'book', name: 'Pages', type: 'count', unit: null, repeats: false, choices: null },
 			{ id: 'smins', taskId: 'spanish', name: 'Minutes', type: 'duration', unit: 'h', repeats: false, choices: null },
 			{ id: 'pmins', taskId: 'podcast', name: 'Minutes', type: 'count', unit: null, repeats: false, choices: null },
-			{ id: 'mood', taskId: 'journal', name: 'Mood', type: 'choice', unit: null, repeats: false, choices: ['good', 'ok', 'bad'] },
+			{ id: 'mood', taskId: 'journal', name: 'Mood', type: 'choice', unit: null, repeats: false, choices: [{ id: 'good', name: 'good' }, { id: 'ok', name: 'ok' }, { id: 'bad', name: 'bad' }] },
 			{ id: 'stretch', taskId: 'journal', name: 'Stretched', type: 'checkbox', unit: null, repeats: false, choices: null }
 		],
 		variants: [
@@ -326,6 +326,30 @@ describe('fields', () => {
 		// Automatic cards chart the average next to the counts.
 		const auto = taskCards(P, P.ds.tasks.find((t) => t.id === 'journal')!);
 		expect(auto.filter((c) => c.what.metrics.includes('mood')).map((c) => c.perLog)).toEqual(['score', 'option']);
+	});
+
+	it('counts a renamed option under its new name, and reads each day by the numbers it had then', () => {
+		const ds = dataset();
+		ds.metrics = ds.metrics.map((m) =>
+			m.id === 'mood'
+				? {
+						...m,
+						// "good" was renamed Great; "ok" was removed after it was logged and a new "OK" added.
+						choices: [{ id: 'good', name: 'Great' }, { id: 'ok2', name: 'OK' }, { id: 'ok', name: 'ok', archived: true }],
+						scores: { good: 10, ok2: 6, ok: 6 },
+						// Before the 18th the scale was 5 to 1.
+						earlierScores: [{ until: '2026-11-17', scores: { good: 5, ok: 3 } }]
+					}
+				: m
+		);
+		const P = prepare(ds);
+		const r = run({ what: { source: 'field', metrics: ['mood'] }, perLog: 'option', overTime: 'count', split: 'option', look: { chart: 'breakdown' } }, P);
+		expect(r.breakdown!.map((x) => [x.label, x.value])).toEqual([
+			['Great', 1],
+			['OK', 1]
+		]);
+		// 15 Nov reads 5 (the old scale), 20 Nov reads 6 (today's).
+		expect(run({ what: { source: 'field', metrics: ['mood'] }, perLog: 'score', overTime: 'avg' }, P).total).toBe(5.5);
 	});
 
 	it('shows a checkbox as the share of logs ticked', () => {

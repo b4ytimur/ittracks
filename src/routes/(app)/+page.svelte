@@ -11,9 +11,13 @@
 	import { viewOp } from '$lib/viewclient';
 	import { headlineText } from '$lib/engine/stats';
 	import { isPartial, progressText } from '$lib/engine/progress';
+	import { rollupDay, rollupText } from '$lib/engine/rollup';
 	import { invalidateAll } from '$app/navigation';
 	import { addDays } from '$lib/engine/dates';
 	import DayNote from '$lib/DayNote.svelte';
+	import EditableList from '$lib/ui/EditableList.svelte';
+	import EditButton from '$lib/ui/EditButton.svelte';
+	import { reorderFrom } from '$lib/ui/list';
 	import {
 		DONE_MODES,
 		LINES,
@@ -166,15 +170,32 @@
 		views.today = { ...views.today, ...patch };
 		viewOp({ op: 'patch', today: patch });
 	}
-	const move = <T,>(list: T[], i: number, by: number): T[] => {
-		const j = i + by;
-		if (j < 0 || j >= list.length) return list;
-		const next = [...list];
-		[next[i], next[j]] = [next[j], next[i]];
-		return next;
-	};
 	const sections = $derived(sectionOrder(views));
 	const toggleIn = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+
+	// ----- Edit mode: the same page, with widgets, sections and habits to drag, hide and show -----
+	let editing = $state(false);
+	/** Every widget, the shown ones first in their order. */
+	const allWidgets = $derived([...views.today.widgets, ...(Object.keys(WIDGETS) as WidgetKey[]).filter((w) => !views.today.widgets.includes(w))]);
+	const reorderWidgets = (order: string[]) => setToday({ widgets: (order as WidgetKey[]).filter((w) => views.today.widgets.includes(w)) });
+	const reorderSections = (order: string[]) => setToday({ sections: order.map((k) => sections.find((s) => s.key === k)!) });
+	const toggleSection = (k: SectionKey) => setToday({ sections: sections.map((x) => (x.key === k ? { ...x, show: !x.show } : x)) });
+	/** A list of habits was reordered: it goes into the one habit order (My order), shared with the Habits page. */
+	function reorderHabits(part: string[]) {
+		const ids = [...data.build, ...data.resting].map((b) => b.habitId);
+		const all = [...views.today.order, ...ids.filter((id) => !views.today.order.includes(id))];
+		setToday({ order: reorderFrom(all, shownBuild.map((b) => b.habitId), part, view.sort === 'manual') });
+		if (view.sort !== 'manual') {
+			view.sort = 'manual';
+			showToast('Sorted by My order, shared with the Habits page.');
+		}
+	}
+	function setHeadline(habitId: string, v: string) {
+		const next = { ...views.today.headlineFor };
+		if (v) next[habitId] = v as StatKey;
+		else delete next[habitId];
+		setToday({ headlineFor: next });
+	}
 
 	// The time of day, for the time-aware view. Ticks once a minute.
 	let now = $state(nowTimeInit());
@@ -190,7 +211,8 @@
 	const partOf = (b: Item) => b.cue.range ?? (b.cue.time ? partAt(data.ranges, b.cue.time) : null);
 	let showAll = $state(false);
 
-	const sorted = $derived.by(() => {
+	/** Every habit the view lets through, groups and the habits inside them alike. */
+	const filtered = $derived.by(() => {
 		let list = data.build.filter((b) => passes(view, { ...b, direction: 'build' }));
 		if (view.status === 'due') list = list.filter((b) => statusOf(b.occurrence!) === 'due');
 		if (view.status === 'done') list = list.filter((b) => statusOf(b.occurrence!) !== 'due');
@@ -199,6 +221,20 @@
 		if (view.sort === 'streak') list = [...list].sort((a, b) => Number(b.atRisk) - Number(a.atRisk));
 		return list;
 	});
+	// A habit whose group is shown sits inside the group's card; the rest stand on their own.
+	const shownIds = $derived(new Set(filtered.map((b) => b.habitId)));
+	const sorted = $derived(filtered.filter((b) => !b.parentId || !shownIds.has(b.parentId)));
+	const kidsOf = (id: string) => filtered.filter((b) => b.parentId === id);
+	/** A group's count today, live: habits done offline count at once. */
+	const groupNow = (item: Item) => {
+		const g = item.group!;
+		// A routine marked Done or Skip offline: it shows as marked until it syncs.
+		if (g.routine && statusOf(item.occurrence!) !== item.occurrence!.status) return { done: g.done, total: g.total, status: statusOf(item.occurrence!) };
+		const kids = data.build.filter((b) => b.parentId === item.habitId && b.occurrence);
+		if (!kids.length) return { done: g.done, total: g.total, status: statusOf(item.occurrence!) };
+		const day = rollupDay(kids.map((k) => ({ status: statusOf(k.occurrence!) as 'due' | 'done' | 'skipped' | 'missed' })), g, { past: false });
+		return day ? { done: day.done, total: day.total, status: day.status } : { done: g.done, total: g.total, status: statusOf(item.occurrence!) };
+	};
 	/** The time-aware view keeps what fits now, what's still due from earlier, and anything without a time. */
 	const timeHidden = $derived.by(() => {
 		if (!views.today.timeAware || showAll || !currentPart) return new Set<string>();
@@ -237,7 +273,8 @@
 	const showSection = (k: SectionKey) =>
 		view.direction === 'build' ? k !== 'breaking' : view.direction === 'break' ? k === 'breaking' : true;
 	const identityNames = $derived([...new Set([...data.build, ...data.breaking].flatMap((b) => b.identities))].sort());
-	const doneCount = $derived(data.build.filter(isDone).length);
+	// A group is counted through the habits inside it.
+	const doneCount = $derived(data.build.filter((b) => !b.group && isDone(b)).length);
 	const atRiskItems = $derived(data.build.filter((b) => b.atRisk && !isDone(b)));
 	const weekdayShort = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'narrow' });
 
@@ -359,23 +396,65 @@
 		statuses={TODAY_STATUSES}
 		direction={data.breaking.length > 0}
 	>
-		{@render layoutOptions()}
+		{#snippet end()}<EditButton bind:editing look="chip" />{/snippet}
 	</ViewBar>
 
-	{#each views.today.widgets as w (w)}
-		{@render widget(w)}
+	{#if editing}
+		{@render layoutPanel()}
+		<EditableList
+			layout="block"
+			items={allWidgets}
+			key={(w) => w}
+			label={(w) => WIDGETS[w]}
+			editing
+			ariaLabel="Widgets at the top"
+			onmove={(_, order) => reorderWidgets(order)}
+			onremove={(w) => setToday({ widgets: toggleIn(views.today.widgets, w) })}
+			removeLabel={(w) => (views.today.widgets.includes(w) ? 'Hide' : 'Show')}
+		>
+			{#snippet title(w)}Widget: {WIDGETS[w]}{views.today.widgets.includes(w) ? '' : ' (hidden)'}{/snippet}
+			{#snippet row(w)}
+				{#if views.today.widgets.includes(w)}{@render widget(w)}{/if}
+			{/snippet}
+		</EditableList>
+	{:else}
+		{#each views.today.widgets as w (w)}
+			{@render widget(w)}
+		{/each}
+	{/if}
+{/if}
+
+{#if editing}
+	<EditableList
+		class="sections"
+		layout="block"
+		items={sections}
+		key={(s) => s.key}
+		label={(s) => SECTIONS[s.key]}
+		editing
+		ariaLabel="Sections of Today"
+		onmove={(_, order) => reorderSections(order)}
+		onremove={(s) => toggleSection(s.key)}
+		removeLabel={(s) => (s.show ? 'Hide' : 'Show')}
+	>
+		{#snippet title(sec)}{sec.key === 'breaking' && !limiting ? 'Breaking' : SECTIONS[sec.key]}{sec.show ? '' : ' (hidden)'}{/snippet}
+		{#snippet row(sec)}
+			{#if sec.show && showSection(sec.key)}{@render section(sec.key)}{/if}
+		{/snippet}
+	</EditableList>
+{:else}
+	{#each sections as sec (sec.key)}
+		{#if sec.show && showSection(sec.key)}{@render section(sec.key)}{/if}
 	{/each}
 {/if}
 
-{#each sections as sec (sec.key)}
-	{#if sec.show && showSection(sec.key)}
-		{#if sec.key === 'due'}{@render dueSection()}
-		{:else if sec.key === 'breaking'}{@render breakingSection()}
-		{:else if sec.key === 'prep'}{@render prepSection()}
-		{:else if sec.key === 'paused'}{@render pausedSection()}
-		{:else}{@render restingSection()}{/if}
-	{/if}
-{/each}
+{#snippet section(key: SectionKey)}
+	{#if key === 'due'}{@render dueSection()}
+	{:else if key === 'breaking'}{@render breakingSection()}
+	{:else if key === 'prep'}{@render prepSection()}
+	{:else if key === 'paused'}{@render pausedSection()}
+	{:else}{@render restingSection()}{/if}
+{/snippet}
 
 {#snippet widget(w: WidgetKey)}
 	{#if w === 'progress' && data.build.length}
@@ -419,108 +498,69 @@
 	{/if}
 {/snippet}
 
-{#snippet layoutOptions()}
-	<details>
-		<summary class="small-text">Layout of Today</summary>
-		<div class="stack" style="margin-top: 0.5rem">
-			<fieldset>
-				<legend class="small-text">Sections</legend>
-				{#each sections as sec, i (sec.key)}
-					<div class="row option">
-						<label class="grow" style="color: var(--text)"
-							><input
-								type="checkbox"
-								checked={sec.show}
-								onchange={() => setToday({ sections: sections.map((x) => (x.key === sec.key ? { ...x, show: !x.show } : x)) })}
-							/>
-							{SECTIONS[sec.key]}</label
-						>
-						<button class="small" disabled={i === 0} onclick={() => setToday({ sections: move(sections, i, -1) })} aria-label="Move {SECTIONS[sec.key]} up">↑</button>
-						<button class="small" disabled={i === sections.length - 1} onclick={() => setToday({ sections: move(sections, i, 1) })} aria-label="Move {SECTIONS[sec.key]} down">↓</button>
-					</div>
-				{/each}
-			</fieldset>
-			<label
+{#snippet layoutPanel()}
+	<div class="card stack layout">
+		<p class="muted small-text" style="margin: 0">
+			Drag ⠿ to move widgets, sections and habits; Hide or Show each one. Moving habits changes My order, shared with the Habits page.
+		</p>
+		<div class="row">
+			<label class="grow"
 				>Done items
 				<select value={views.today.done} onchange={(e) => setToday({ done: e.currentTarget.value as keyof typeof DONE_MODES })}>
 					{#each Object.entries(DONE_MODES) as [k, label] (k)}<option value={k}>{label}</option>{/each}
 				</select>
 			</label>
-			<label style="color: var(--text)"
-				><input
-					type="checkbox"
-					checked={views.today.timeAware}
-					disabled={!data.ranges.length}
-					onchange={() => setToday({ timeAware: !views.today.timeAware })}
-				/>
-				Only show what fits the current part of the day{data.ranges.length ? '' : ' (add parts of your day in Settings first)'}</label
-			>
-			<fieldset>
-				<legend class="small-text">Widgets at the top</legend>
-				{#each Object.entries(WIDGETS) as [k, label] (k)}
-					<label style="color: var(--text)"
-						><input
-							type="checkbox"
-							checked={views.today.widgets.includes(k as WidgetKey)}
-							onchange={() => setToday({ widgets: toggleIn(views.today.widgets, k as WidgetKey) })}
-						/>
-						{label}</label
-					>
-				{/each}
-			</fieldset>
-			<fieldset>
-				<legend class="small-text">Lines on each habit</legend>
-				{#each Object.entries(LINES) as [k, label] (k)}
-					{@const f = featureOf[k as LineKey]}
-					{#if !f || !hidden(f)}
-						<label style="color: var(--text)"
-							><input
-								type="checkbox"
-								checked={views.today.lines.includes(k as LineKey)}
-								onchange={() => setToday({ lines: toggleIn(views.today.lines, k as LineKey) })}
-							/>
-							{label}</label
-						>
-					{/if}
-				{/each}
-			</fieldset>
-			<label
+			<label class="grow"
 				>Headline number
 				<select value={views.today.headline} onchange={(e) => setToday({ headline: e.currentTarget.value as StatKey })}>
 					{#each Object.entries(STATS) as [k, label] (k)}<option value={k}>{label}</option>{/each}
 				</select>
 			</label>
-			{#if data.build.length || data.resting.length}
-				<details>
-					<summary class="small-text">Per habit: headline number and order</summary>
-					<p class="muted small-text">The order is used when Sort is "My order". A number from a habit's Stats tab can take the place of its headline: open the number's menu there and pick Show on Today.</p>
-					{#each manualOrder([...data.build, ...data.resting], views.today.order, (b) => b.habitId) as b, i (b.habitId)}
-						{@const all = manualOrder([...data.build, ...data.resting], views.today.order, (x) => x.habitId).map((x) => x.habitId)}
-						<div class="row option">
-							<span class="grow small-text">{b.name}</span>
-							<select
-								aria-label="Headline number for {b.name}"
-								value={views.today.headlineFor[b.habitId] ?? ''}
-								onchange={(e) => {
-									const v = e.currentTarget.value;
-									const next = { ...views.today.headlineFor };
-									if (v) next[b.habitId] = v as StatKey;
-									else delete next[b.habitId];
-									setToday({ headlineFor: next });
-								}}
-							>
-								<option value="">Default</option>
-								{#each Object.entries(STATS) as [k, label] (k)}<option value={k}>{label}</option>{/each}
-							</select>
-							<button class="small" disabled={i === 0} onclick={() => setToday({ order: move(all, i, -1) })} aria-label="Move {b.name} up">↑</button>
-							<button class="small" disabled={i === all.length - 1} onclick={() => setToday({ order: move(all, i, 1) })} aria-label="Move {b.name} down">↓</button>
-						</div>
-					{/each}
-				</details>
-			{/if}
-			<p class="muted small-text">To switch template, go to <a href="/settings/views">Settings, Views</a>. To hide whole features, go to <a href="/settings/features">Settings, Features</a>.</p>
 		</div>
-	</details>
+		<label style="color: var(--text)"
+			><input
+				type="checkbox"
+				checked={views.today.timeAware}
+				disabled={!data.ranges.length}
+				onchange={() => setToday({ timeAware: !views.today.timeAware })}
+			/>
+			Only show what fits the current part of the day{data.ranges.length ? '' : ' (add parts of your day in Settings first)'}</label
+		>
+		<div>
+			<span class="muted small-text">Lines on each habit</span>
+			<div class="chips" role="group" aria-label="Lines on each habit">
+				{#each Object.entries(LINES) as [k, label] (k)}
+					{@const f = featureOf[k as LineKey]}
+					{#if !f || !hidden(f)}
+						<button
+							type="button"
+							class="chip small"
+							class:on={views.today.lines.includes(k as LineKey)}
+							aria-pressed={views.today.lines.includes(k as LineKey)}
+							onclick={() => setToday({ lines: toggleIn(views.today.lines, k as LineKey) })}>{label}</button
+						>
+					{/if}
+				{/each}
+			</div>
+		</div>
+		<p class="muted small-text" style="margin: 0">To switch template, go to <a href="/settings/views">Settings, Views</a>. To hide whole features, go to <a href="/settings/features">Settings, Features</a>.</p>
+	</div>
+{/snippet}
+
+{#snippet habitList(items: Item[], name: string)}
+	<EditableList {items} key={(b) => b.habitId} label={(b) => b.name} {editing} ariaLabel={name} onmove={(_, order) => reorderHabits(order)}>
+		{#snippet row(item)}{@render card(item)}{/snippet}
+	</EditableList>
+{/snippet}
+
+{#snippet headlinePick(item: Item)}
+	<label class="headline-pick small-text"
+		>Headline
+		<select value={views.today.headlineFor[item.habitId] ?? ''} onchange={(e) => setHeadline(item.habitId, e.currentTarget.value)}>
+			<option value="">Default ({STATS[views.today.headline]})</option>
+			{#each Object.entries(STATS) as [k, label] (k)}<option value={k}>{label}</option>{/each}
+		</select>
+	</label>
 {/snippet}
 
 {#snippet dueSection()}
@@ -528,11 +568,7 @@
 		{#if g.label}
 			<h2 class="area" style="--area: {g.color ?? 'var(--border)'}">{g.label}</h2>
 		{/if}
-		<ul class="list">
-			{#each g.items as item (item.habitId)}
-				{@render card(item)}
-			{/each}
-		</ul>
+		{@render habitList(g.items, g.label || 'Due today')}
 	{/each}
 	{#if timeHidden.size}
 		<p class="muted small-text">
@@ -545,9 +581,7 @@
 		{#if views.today.done === 'collapse'}
 			<button class="link small-text" aria-expanded={showDone} onclick={() => (showDone = !showDone)}>Done ({doneFolded.length})</button>
 			{#if showDone}
-				<ul class="list" style="margin-top: 0.5rem">
-					{#each doneFolded as item (item.habitId)}{@render card(item)}{/each}
-				</ul>
+				<div style="margin-top: 0.5rem">{@render habitList(doneFolded, 'Done today')}</div>
 			{/if}
 		{:else}
 			<p class="muted small-text">{doneFolded.length} done today, hidden.</p>
@@ -556,10 +590,70 @@
 {/snippet}
 
 {#snippet card(item: Item)}
+	{#if item.group}
+		{@render groupCard(item)}
+	{:else}
+		{@render habitCard(item)}
+	{/if}
+{/snippet}
+
+{#snippet groupCard(item: Item)}
+	{@const g = groupNow(item)}
+	{@const kids = kidsOf(item.habitId)}
+	<div class="card group" class:stacked={!!item.afterHabitId}>
+		<div class="row" class:finished={g.status !== 'due'}>
+			<div class="grow">
+				<a class="name" href="/habits/{item.habitId}/chain"><strong>{item.name}</strong></a>
+				{#if line('cue') && cueLine(item.cue)}<div class="muted small-text">{cueLine(item.cue)}</div>{/if}
+				<div class="muted small-text">
+					{#if g.status === 'done'}Done{#if item.occurrence?.level === 'minimum'}&nbsp;at Minimum{/if}{:else if g.status === 'skipped'}Skipped{:else}Due{/if}
+					{#if g.total}<span class="progress">· {rollupText(g)}</span>{/if}
+					{#if headlineOf(item)}· {headlineOf(item)}{/if}
+				</div>
+				{#if g.status === 'due' && g.total}
+					<progress class="bar" max={g.total} value={g.done} aria-label="{item.name}: {rollupText(g)}"></progress>
+				{/if}
+				{#if item.atRisk && g.status === 'due'}
+					<div class="warn small-text">You missed last time. Don't miss twice.</div>
+				{/if}
+				{#if item.reframe && line('reframe')}<div class="reframe small-text">{item.reframe}</div>{/if}
+			</div>
+			{#if item.group?.routine && item.occurrence && !editing}
+				{@const o = item.occurrence}
+				<!-- A routine is done or skipped as a whole: the habits inside it are marked with it. -->
+				{#if g.status === 'due'}
+					<a class="button primary" href="/routine/{o.id}" aria-label="Start {item.name}">Start</a>
+					<form method="POST" action="?/done" use:enhance={quick(o.id, item.name)}>
+						<input type="hidden" name="occurrence" value={o.id} />
+						<button title="Mark every habit inside done" aria-label="Done: {item.name}">Done</button>
+					</form>
+					<form method="POST" action="?/skip" use:enhance={quick(o.id, item.name, 'skipped')}>
+						<input type="hidden" name="occurrence" value={o.id} />
+						<button aria-label="Skip {item.name}">Skip</button>
+					</form>
+				{:else if !pending[o.id]}
+					<a class="button" href="/routine/{o.id}">View</a>
+					<form method="POST" action="?/undo" use:enhance>
+						<input type="hidden" name="occurrence" value={o.id} />
+						<button class="link" aria-label="Undo {item.name}">Undo</button>
+					</form>
+				{/if}
+			{/if}
+		</div>
+		{#if kids.length}
+			<div class="inside">{@render habitList(kids, `Inside ${item.name}`)}</div>
+		{/if}
+		{#if item.identities.length && line('identities')}
+			<div class="votes small-text">Vote for: {item.identities.join(' · ')}</div>
+		{/if}
+	</div>
+{/snippet}
+
+{#snippet habitCard(item: Item)}
 	{@const o = item.occurrence!}
 	{@const st = statusOf(o)}
 	{@const levels = item.levels}
-	<li class="card" class:finished={st !== 'due'} class:stacked={!!item.afterHabitId} class:next={item.upNext}>
+	<div class="card" class:finished={st !== 'due'} class:stacked={!!item.afterHabitId} class:next={item.upNext}>
 		<div class="row">
 			<div class="grow">
 				<a class="name" href="/habits/{item.habitId}/chain"><strong>{item.name}</strong></a>
@@ -602,7 +696,9 @@
 					</div>
 				{/if}
 			</div>
-			{#if st === 'due'}
+			{#if editing}
+				<!-- Edit mode is for the layout: the buttons for logging come back when it's done. -->
+			{:else if st === 'due'}
 				{#if item.progress?.kind === 'amount' && !pending[o.id]}
 					<form method="POST" action="?/plus" use:enhance={plus(o.id, item.name)}>
 						<input type="hidden" name="occurrence" value={o.id} />
@@ -660,7 +756,7 @@
 			{@const p = item.progression}
 			<div class="suggest">
 				<span class="small-text"
-					>You've hit your targets {p.hits} times in a row. Raise them by {p.by}{p.unit === 'percent' ? '%' : ''}?</span
+					>You've hit your targets {p.hits} times in a row. Raise them by {p.by}{p.unit === 'percent' ? '%' : p.by === 1 ? ' step' : ' steps'}?</span
 					>
 					{#each p.changes as line (line)}<div class="muted small-text">{line}</div>{/each}
 				<div class="row">
@@ -679,12 +775,13 @@
 		{#if item.identities.length && line('identities')}
 			<div class="votes small-text">Vote for: {item.identities.join(' · ')}</div>
 		{/if}
-	</li>
+		{#if editing}{@render headlinePick(item)}{/if}
+	</div>
 {/snippet}
 
 {#snippet breakingSection()}
 	{#if breakingShown.length}
-		<h2>{limiting ? 'Breaking and limiting' : 'Breaking'}</h2>
+		{#if !editing}<h2>{limiting ? 'Breaking and limiting' : 'Breaking'}</h2>{/if}
 		<ul class="list">
 			{#each breakingShown as b (b.habitId)}
 				{@const plan = b.ifThen}
@@ -778,8 +875,8 @@
 								<span class="muted small-text">How were you feeling? (optional)</span>
 								<input type="hidden" name="feeling" value={feeling} />
 								<div class="chips">
-									{#each b.triggers as t (t)}
-										<button type="button" class="chip" class:on={feeling === t} onclick={() => (feeling = feeling === t ? '' : t)}>{t}</button>
+									{#each b.triggers as t (t.id)}
+										<button type="button" class="chip" class:on={feeling === t.id} onclick={() => (feeling = feeling === t.id ? '' : t.id)}>{t.name}</button>
 									{/each}
 								</div>
 							</div>
@@ -801,7 +898,7 @@
 
 {#snippet prepSection()}
 	{#if data.prep.length && !hidden('prep')}
-		<h2>Prepare for tomorrow</h2>
+		{#if !editing}<h2>Prepare for tomorrow</h2>{/if}
 		<ul class="list">
 			{#each data.prep as p (p.habitId)}
 				<li class="card">
@@ -824,7 +921,7 @@
 
 {#snippet pausedSection()}
 	{#if data.paused.length}
-		<h2>Paused</h2>
+		{#if !editing}<h2>Paused</h2>{/if}
 		<ul class="list">
 			{#each data.paused as item (item.habitId)}
 				<li class="card row">
@@ -841,7 +938,7 @@
 
 {#snippet restingSection()}
 	{#if data.resting.length}
-		<h2>Not due today</h2>
+		{#if !editing}<h2>Not due today</h2>{/if}
 		<ul class="list">
 			{#each data.resting as item (item.habitId)}
 				<li class="card row">
@@ -878,6 +975,19 @@
 <style>
 	.widget {
 		margin-bottom: 0.75rem;
+	}
+	/* Edit mode: each widget and section is a block with a title bar (see EditableList layout="block"). */
+	.layout {
+		margin-bottom: 0.75rem;
+	}
+	:global(.elist.block .widget) {
+		margin-bottom: 0;
+	}
+	:global(.elist.sections) {
+		margin-top: 0.75rem;
+	}
+	.headline-pick {
+		margin-top: 0.5rem;
 	}
 	.widget progress {
 		width: 100%;
@@ -917,9 +1027,6 @@
 	.week .full span:last-child {
 		color: var(--accent);
 	}
-	.option {
-		align-items: center;
-	}
 	.tpl {
 		display: flex;
 		gap: 0.5rem;
@@ -931,6 +1038,10 @@
 	}
 	.finished {
 		opacity: 0.7;
+	}
+	/* The habits inside a group sit in its card, each faded on its own when finished. */
+	.inside {
+		margin-top: 0.6rem;
 	}
 	.stacked {
 		margin-left: 1rem;

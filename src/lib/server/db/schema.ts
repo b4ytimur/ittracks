@@ -1,11 +1,12 @@
 // Database schema. Terms follow the vocabulary doc:
 // Habit > Variant > Slot > Task (from the Library) > Metric,
 // Schedule -> Occurrence -> Log -> Entry, and Slips for break habits.
-import { sqliteTable, text, integer, real, primaryKey, index } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, primaryKey, index, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type { Level, StreakRule } from '../../engine/streak';
 import type { Limit } from '../../engine/limit';
 import type { Progression } from '../../engine/progression';
 import type { EarlierSchedule } from '../../engine/unlogged';
+import type { ChoiceOption, EarlierScores, Scores } from '../../options';
 
 /** Temptation bundling: something you want, paired with the habit. */
 export interface Bundle {
@@ -97,7 +98,10 @@ export const task = sqliteTable('task', {
 		.references(() => account.id, { onDelete: 'cascade' }),
 	name: text('name').notNull(),
 	notes: text('notes'),
-	/** Sub-tasks point at their parent; one level deep in the MVP. */
+	/**
+	 * A private step belongs to this Task: hidden from the Library, used only inside it. Where
+	 * a step sits (and any Library Task inside another) is a task_part row.
+	 */
 	parentTaskId: text('parent_task_id'),
 	restTimerEnabled: integer('rest_timer_enabled', { mode: 'boolean' }).notNull().default(false),
 	restTimerSeconds: integer('rest_timer_seconds').notNull().default(90),
@@ -143,8 +147,8 @@ export const metric = sqliteTable('metric', {
 	type: text('type', { enum: metricTypes }).notNull(),
 	/** Free text chosen by the user: kg, lb, min, pages... */
 	unit: text('unit'),
-	/** Options for the "choice" type. */
-	choices: text('choices', { mode: 'json' }).$type<string[]>(),
+	/** Options for the "choice" type. Logs store an option's id, so a rename keeps past values. */
+	choices: text('choices', { mode: 'json' }).$type<ChoiceOption[]>(),
 	/** Repeating metrics are logged once per Entry (e.g. once per gym set). */
 	repeats: integer('repeats', { mode: 'boolean' }).notNull().default(false),
 	sortOrder: integer('sort_order').notNull().default(0),
@@ -163,9 +167,40 @@ export const metric = sqliteTable('metric', {
 	/** Long text field: one prompt shows each day and is saved with the answer. */
 	prompts: text('prompts', { mode: 'json' }).$type<string[]>(),
 	promptOrder: text('prompt_order', { enum: ['order', 'random'] }).notNull().default('order'),
-	/** Choice field: a number per option, so Stats can average it (mood 1 to 5). */
-	scores: text('scores', { mode: 'json' }).$type<Record<string, number>>()
+	/** Choice field: a number per option id, so Stats can average it (mood 1 to 5). */
+	scores: text('scores', { mode: 'json' }).$type<Scores>(),
+	/** Numbers an edit replaced, each with the last day it applied, so past days keep theirs. */
+	earlierScores: text('earlier_scores', { mode: 'json' }).$type<EarlierScores[]>(),
+	/** Removed from its Task after it was logged: hidden from new logs, kept for History and Stats. */
+	archived: integer('archived', { mode: 'boolean' }).notNull().default(false)
 });
+
+/**
+ * A Task inside a Task: the same kind of position as a Slot, one level down. The child is a
+ * Library Task (reused under any number of Tasks) or a private step of this Task. Sets on a
+ * Task with parts and no per-set fields are rounds: a Circuit with 3 sets logs its parts 3 times.
+ * Targets are by the child's Metric ids, shared by every habit that uses the parent.
+ */
+export const taskPart = sqliteTable(
+	'task_part',
+	{
+		id: id(),
+		taskId: text('task_id')
+			.notNull()
+			.references(() => task.id, { onDelete: 'cascade' }),
+		childTaskId: text('child_task_id')
+			.notNull()
+			.references(() => task.id, { onDelete: 'cascade' }),
+		sets: integer('sets'),
+		targets: text('targets', { mode: 'json' }).$type<Record<string, number>>(),
+		minTargets: text('min_targets', { mode: 'json' }).$type<Record<string, number>>(),
+		stretchTargets: text('stretch_targets', { mode: 'json' }).$type<Record<string, number>>(),
+		sortOrder: integer('sort_order').notNull().default(0),
+		/** Removed after it was logged: hidden from new logs, kept so past logs still show it. */
+		archived: integer('archived', { mode: 'boolean' }).notNull().default(false)
+	},
+	(t) => [index('task_part_task_idx').on(t.taskId), index('task_part_child_idx').on(t.childTaskId)]
+);
 
 /** A top-level group with a color and icon, for Habits and Tasks: Fitness, Learning... */
 export const area = sqliteTable('area', {
@@ -243,8 +278,8 @@ export const habit = sqliteTable('habit', {
 	/** Push a reminder at the cue time. */
 	remind: integer('remind', { mode: 'boolean' }).notNull().default(false),
 	ifThen: text('if_then', { mode: 'json' }).$type<IfThen>(),
-	/** Feelings offered when logging a Slip; user-editable. */
-	triggers: text('triggers', { mode: 'json' }).$type<string[]>(),
+	/** Break habit: feelings a slip can be logged with, user-editable. A slip stores the feeling's id. */
+	triggers: text('triggers', { mode: 'json' }).$type<ChoiceOption[]>(),
 	/** "I get to train today": shown on the card. */
 	reframe: text('reframe'),
 	bundle: text('bundle', { mode: 'json' }).$type<Bundle>(),
@@ -266,7 +301,12 @@ export const habit = sqliteTable('habit', {
 	 * Schedules from before an edit that applied from a later day on, oldest first: each one
 	 * still decides which days up to its `until` were due (see engine/unlogged.ts).
 	 */
-	earlierSchedules: text('earlier_schedules', { mode: 'json' }).$type<EarlierSchedule[]>()
+	earlierSchedules: text('earlier_schedules', { mode: 'json' }).$type<EarlierSchedule[]>(),
+	/**
+	 * The group this habit sits in: another build habit whose Schedule is a group. Groups can
+	 * sit in groups. Deleting a group moves what was inside it to the top level.
+	 */
+	parentId: text('parent_id').references((): AnySQLiteColumn => habit.id, { onDelete: 'set null' })
 });
 
 /** A pause for one Habit, or for all of them when habitId is null. Dates are inclusive. */
@@ -369,7 +409,9 @@ export const occurrence = sqliteTable('occurrence', {
 	 * The targets each Slot had, kept when they changed later (Raise, an edit), so a log is
 	 * always judged against what it aimed for. Null: the Slots' targets now still apply.
 	 */
-	goals: text('goals', { mode: 'json' }).$type<Record<string, SlotGoals>>()
+	goals: text('goals', { mode: 'json' }).$type<Record<string, SlotGoals>>(),
+	/** A group's day: how many habits inside it were done, of how many that counted. */
+	rollup: text('rollup', { mode: 'json' }).$type<{ done: number; total: number }>()
 });
 
 /** One Slot's targets as they were: Target, Minimum and Stretch values by Metric id, and sets. */
@@ -392,7 +434,13 @@ export const entry = sqliteTable('entry', {
 		.references(() => task.id, { onDelete: 'cascade' }),
 	/** { metricId: value } */
 	values: text('values', { mode: 'json' }).notNull().$type<Record<string, unknown>>(),
-	sortOrder: integer('sort_order').notNull().default(0)
+	sortOrder: integer('sort_order').notNull().default(0),
+	/**
+	 * Where in the log it sits: the Slot id, then each part id from the top down, with the
+	 * round of a repeating parent ("slot#2/part"). See engine/parts.ts. Null on Entries from
+	 * before paths, which are placed by their Task and order.
+	 */
+	path: text('path')
 });
 
 export const slip = sqliteTable('slip', {
@@ -404,7 +452,7 @@ export const slip = sqliteTable('slip', {
 	count: real('count').notNull().default(1),
 	notes: text('notes'),
 	createdAt: createdAt(),
-	/** Slip context, all optional: HH:MM, where, the feeling, and who was there. */
+	/** Slip context, all optional: HH:MM, where, the feeling (its id in the habit's triggers), and who was there. */
 	time: text('time'),
 	place: text('place'),
 	feeling: text('feeling'),
@@ -525,4 +573,31 @@ export const event = sqliteTable(
 		data: text('data', { mode: 'json' }).notNull().$type<Record<string, unknown>>()
 	},
 	(t) => [index('event_account_seq').on(t.accountId, t.seq)]
+);
+
+// ---------- Bulk editing ----------
+
+/**
+ * One bulk change (src/lib/server/bulk): what was asked, a one-line summary, and how to undo
+ * it. The events the change wrote carry its id as `batch`, so Undo reverts the whole batch.
+ * Undo state only: not part of exports, and an import clears it.
+ */
+export const bulkBatch = sqliteTable(
+	'bulk_batch',
+	{
+		id: id(),
+		accountId: text('account_id')
+			.notNull()
+			.references(() => account.id, { onDelete: 'cascade' }),
+		/** The bulk action's name, from src/lib/bulk/catalog.ts. */
+		action: text('action').notNull(),
+		/** The action's input and the ids it ran on. */
+		request: text('request', { mode: 'json' }).notNull().$type<Record<string, unknown>>(),
+		summary: text('summary').notNull(),
+		/** What Undo puts back (src/lib/server/bulk/undo.ts). */
+		undo: text('undo', { mode: 'json' }).notNull().$type<unknown[]>(),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+		undoneAt: integer('undone_at', { mode: 'timestamp_ms' })
+	},
+	(t) => [index('bulk_batch_account_idx').on(t.accountId, t.createdAt)]
 );

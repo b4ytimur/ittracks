@@ -5,9 +5,12 @@
 	import { enhance } from '$app/forms';
 	import { noteDefaults, type MetricForm, type TaskForm } from '$lib/forms';
 	import NoteBox from '$lib/NoteBox.svelte';
+	import OptionList from '$lib/OptionList.svelte';
 	import { defaultStep, metricsFromType, type TaskType } from '$lib/task-types';
 	import { blocked } from '$lib/rules/core';
-	import { checkTask, metricRules, taskRules } from '$lib/rules/task';
+	import { checkTask, checkTaskPast, metricPast, metricRules, taskRules } from '$lib/rules/task';
+	import { allowedNow, lockedNow } from '$lib/rules/history';
+	import { UNITS, type UnitChoice } from '$lib/units';
 	import { promptFor } from '$lib/journal';
 
 	let { data, form } = $props();
@@ -24,12 +27,49 @@
 	const longBlock = (m: MetricForm) => blocked(metricRules, m, 'long', undefined);
 	const repeatsBlock = (m: MetricForm) => blocked(metricRules, m, 'repeats', undefined);
 	const today = new Date().toISOString().slice(0, 10);
+
+	// History policies (src/lib/rules/history.ts): what an edit may do to data already logged.
+	let unitChoices = $state<Record<string, UnitChoice>>({});
+	const past = $derived(data.isNew ? null : checkTaskPast(data.task, t, data.logged, unitChoices));
+	const isLogged = (id: string) => data.logged.metrics.includes(id);
+	/** A part with anything logged under it: removing it archives it, so past logs keep their place. */
+	const partLogged = (id: string) => data.logged.parts.includes(id);
+	const choiceOf = (id: string) => data.library.find((l) => l.id === id);
+	const numericType = (type: string) => type === 'number' || type === 'count' || type === 'duration';
+	let addPart = $state('');
+	function addLibraryPart(taskId: string) {
+		if (!taskId) return;
+		t.parts.push({ kind: 'task', id: crypto.randomUUID(), taskId, sets: null, targets: {}, minTargets: {}, stretchTargets: {} });
+		addPart = '';
+	}
+	function setPartTarget(map: Record<string, number>, id: string, v: string) {
+		if (v === '' || !Number.isFinite(Number(v))) delete map[id];
+		else map[id] = Number(v);
+	}
+	/** Sets on this Task repeat what's inside it, unless it has fields of its own logged per set. */
+	const roundsHere = $derived(t.parts.length > 0 && !t.metrics.some((m) => m.repeats));
+	const savedMetric = (id: string) => data.task.metrics.find((x) => x.id === id);
+	/** May this field switch to `type` now? Logged numbers can only become another kind of number. */
+	const typeOk = (m: MetricForm, type: string) => {
+		const was = savedMetric(m.id);
+		return !was || allowedNow(metricPast, 'type', isLogged(m.id), was.type, type);
+	};
+	const typeLocked = (m: MetricForm) => (savedMetric(m.id) ? lockedNow(metricPast, 'type', isLogged(m.id)) : null);
+	const repeatsLocked = (m: MetricForm) => (savedMetric(m.id) ? lockedNow(metricPast, 'repeats', isLogged(m.id)) : null);
+	const unitEdit = (m: MetricForm) => past?.units.find((u) => u.metricId === m.id) ?? null;
+	/** 100 kg as lb, for the "convert" choice: two decimals are enough to read. */
+	const sample = (f: number) => Math.round(100 * f * 100) / 100;
+	// Only choices for unit changes still in the form are sent.
+	const unitsPayload = $derived(
+		JSON.stringify(Object.fromEntries((past?.units ?? []).filter((u) => u.choice).map((u) => [u.metricId, u.choice])))
+	);
 	/** Numbers per option are on while any option has one. */
 	const scored = (m: MetricForm) => Object.keys(m.scores).length > 0;
 	function toggleScores(m: MetricForm, on: boolean) {
 		// A falling scale by default: the first option is the best (Great = 5 ... Bad = 1).
-		m.scores = on ? Object.fromEntries(m.choices.map((c, i) => [c, m.choices.length - i])) : {};
+		m.scores = on ? Object.fromEntries(m.choices.map((c, i) => [c.id, m.choices.length - i])) : {};
 	}
+	/** Set or clear the number of option `c` (its id). */
 	function setScore(m: MetricForm, c: string, v: string) {
 		const n = Number(v);
 		const next = { ...m.scores };
@@ -122,6 +162,9 @@
 		{:else}
 			Not used in any habit.
 		{/if}
+		{#if data.usage.inside.length}
+			Inside {#each data.usage.inside as p, i (p.id)}{i ? ', ' : ''}<a href="/library/{p.id}">{p.name}</a>{/each}.
+		{/if}
 		{#if data.usage.lastLogged}Logged {data.usage.timesLogged} {data.usage.timesLogged === 1 ? 'time' : 'times'}, last on {ago(data.usage.lastLogged)}.{/if}
 	</p>
 {/if}
@@ -158,6 +201,7 @@
 
 <form method="POST" action="?/save" class="stack">
 	<input type="hidden" name="payload" value={JSON.stringify(t)} />
+	<input type="hidden" name="units" value={unitsPayload} />
 
 	<label>Name <input bind:value={t.name} placeholder="Bench press" required /></label>
 	<label
@@ -204,6 +248,9 @@
 		</select>
 		<button type="button" onclick={addTag}>Add</button>
 	</div>
+	<datalist id="known-units">
+		{#each UNITS as u (u.key)}<option value={u.key}></option>{/each}
+	</datalist>
 	<datalist id="all-tags">
 		{#each data.allTags as name (name)}<option value={name}></option>{/each}
 	</datalist>
@@ -218,38 +265,63 @@
 				<label class="grow">Name <input bind:value={m.name} placeholder="Weight" required /></label>
 				<label class="grow"
 					>Type
-					<select bind:value={m.type}>
-						{#each metricTypes as type (type)}<option value={type}>{typeLabels[type]}</option>{/each}
+					<select bind:value={m.type} title={typeLocked(m) ?? undefined}>
+						{#each metricTypes as type (type)}<option value={type} disabled={!typeOk(m, type)}>{typeLabels[type]}</option>{/each}
 					</select>
 				</label>
 				{#if m.type === 'number' || m.type === 'count' || m.type === 'duration'}
-					<label style="width: 6rem">Unit <input bind:value={m.unit} placeholder="kg" /></label>
+					<label style="width: 6rem">Unit <input bind:value={m.unit} placeholder={m.type === 'duration' ? 'min' : 'kg'} list="known-units" /></label>
 				{/if}
 			</div>
+			{#if typeLocked(m)}
+				<p class="muted small-text" style="margin: 0">
+					{isNumeric(m) ? 'Has logged values, so it can only switch between number, count and duration.' : 'Has logged values, so its type is fixed.'}
+				</p>
+			{/if}
+			{#if unitEdit(m)}
+				{@const u = unitEdit(m)!}
+				<fieldset class="card past">
+					<legend class="muted">Values {m.name || 'this field'} already has, in {u.from || 'no unit'}</legend>
+					{#if u.change.kind === 'convertible'}
+						<label style="color: var(--text)"
+							><input type="radio" name="unit-{m.id}" checked={u.choice === 'convert'} onchange={() => (unitChoices[m.id] = 'convert')} /> Convert them: 100 {u.from} becomes {sample(u.change.factor)} {u.to}</label
+						>
+					{/if}
+					<label style="color: var(--text)"
+						><input type="radio" name="unit-{m.id}" checked={u.choice === 'relabel'} onchange={() => (unitChoices[m.id] = 'relabel')} /> Keep the numbers: they were already in {u.to || 'no unit'}</label
+					>
+					<p class="muted small-text" style="margin: 0.25rem 0 0">
+						{u.choice === 'convert'
+							? 'Every logged value, Slot target and the targets kept with past logs are converted when you save.'
+							: u.choice === 'relabel'
+								? 'Nothing is converted: 100 stays 100, now read as ' + (u.to || 'no unit') + '.'
+								: u.change.kind === 'convertible'
+									? 'Pick one to save.'
+									: `${u.from || 'No unit'} and ${u.to || 'no unit'} don't convert, so the numbers can only be kept. Pick it to save.`}
+					</p>
+				</fieldset>
+			{/if}
 			{#if m.type === 'choice'}
-				<label
-					>Options, separated by commas
-					<input
-						value={m.choices.join(', ')}
-						oninput={(e) =>
-							(m.choices = e.currentTarget.value
-								.split(',')
-								.map((s) => s.trim())
-								.filter(Boolean))}
-						placeholder="wide, narrow"
-					/>
-				</label>
+				<span class="small-text muted">Options</span>
+				<OptionList
+					bind:options={m.choices}
+					used={(id) => data.logged.options.includes(id)}
+					label="Option"
+					addLabel="Add option"
+					placeholder="e.g. Great"
+					usedTitle="Picked in past logs: they keep it, and a rename shows there too"
+				>
+					{#snippet after(o: { id: string; name: string })}
+						{#if scored(m)}
+							<input class="score" type="number" step="any" value={m.scores[o.id] ?? ''} oninput={(e) => setScore(m, o.id, e.currentTarget.value)} aria-label="Number for {o.name || 'this option'}" />
+						{/if}
+					{/snippet}
+				</OptionList>
 				{#if m.choices.length >= 2}
 					<label style="color: var(--text)"
 						><input type="checkbox" checked={scored(m)} onchange={(e) => toggleScores(m, e.currentTarget.checked)} /> Give each option a number, so Stats can chart it (mood 5 to 1)</label
 					>
-					{#if scored(m)}
-						<div class="scores">
-							{#each m.choices as c (c)}
-								<label class="score">{c} <input type="number" step="any" value={m.scores[c] ?? ''} oninput={(e) => setScore(m, c, e.currentTarget.value)} aria-label="Number for {c}" /></label>
-							{/each}
-						</div>
-					{/if}
+					{#if scored(m) && isLogged(m.id)}<p class="muted small-text" style="margin: 0">A changed number counts from today on: past days keep the numbers they had.</p>{/if}
 				{/if}
 			{/if}
 			{#if m.type === 'text'}
@@ -322,13 +394,18 @@
 				{#if m.required}<p class="muted small-text" style="margin: 0">{quickBlock({ ...m, quick: false })?.reason}.</p>{/if}
 			</details>
 			<div class="row">
-				<label class="grow" style="color: var(--text)" title={repeatsBlock(m)?.reason}
-					><input type="checkbox" bind:checked={m.repeats} disabled={!!repeatsBlock(m) && !m.repeats} /> Log per set</label
+				<label class="grow" style="color: var(--text)" title={repeatsLocked(m) ?? repeatsBlock(m)?.reason}
+					><input type="checkbox" bind:checked={m.repeats} disabled={!!repeatsLocked(m) || (!!repeatsBlock(m) && !m.repeats)} /> Log per set</label
 				>
 				<button type="button" class="small" onclick={() => move(t.metrics, i, -1)} aria-label="Move up">↑</button>
 				<button type="button" class="small" onclick={() => move(t.metrics, i, 1)} aria-label="Move down">↓</button>
-				<button type="button" class="small danger" onclick={() => t.metrics.splice(i, 1)}>Remove</button>
+				{#if isLogged(m.id)}
+					<button type="button" class="small danger" title="It has logged values: they stay in History and Stats" onclick={() => t.metrics.splice(i, 1)}>Archive</button>
+				{:else}
+					<button type="button" class="small danger" onclick={() => t.metrics.splice(i, 1)}>Remove</button>
+				{/if}
 			</div>
+			{#if repeatsLocked(m)}<p class="muted small-text" style="margin: 0">Has logged values, so “Log per set” is fixed.</p>{/if}
 		</div>
 	{/each}
 	<div class="row">
@@ -336,17 +413,68 @@
 		<button type="button" onclick={() => applyType(data.types[0])}>Use weight and reps per set</button>
 	</div>
 
-	<h2>Sub-tasks</h2>
-	<p class="muted">Smaller steps ticked off as a checklist, like "warm-up set".</p>
-	{#each t.subtasks as s, i (s.id)}
-		<div class="row">
-			<input class="grow" bind:value={s.name} aria-label="Sub-task name" required />
-			<button type="button" class="small danger" onclick={() => t.subtasks.splice(i, 1)}>Remove</button>
+	<h2>Inside this Task</h2>
+	<p class="muted">
+		Steps you tick off, like "warm-up set", and Tasks from your Library that are logged inside this one, like the exercises of
+		a circuit. A Task can sit inside several others.
+		{#if roundsHere}Sets on this Task, in a habit, repeat everything inside it as rounds.{/if}
+	</p>
+	{#each t.parts as p, i (p.id)}
+		<div class="part stack">
+			<div class="row">
+				{#if p.kind === 'step'}
+					<input class="grow" bind:value={p.name} aria-label="Step name" placeholder="Step" required />
+				{:else}
+					{@const c = choiceOf(p.taskId)}
+					<a class="grow" href="/library/{p.taskId}">{c?.name ?? 'A Task'}</a>
+				{/if}
+				<button type="button" class="small" onclick={() => move(t.parts, i, -1)} aria-label="Move up">↑</button>
+				<button type="button" class="small" onclick={() => move(t.parts, i, 1)} aria-label="Move down">↓</button>
+				{#if partLogged(p.id)}
+					<button type="button" class="small danger" title="It has logs: they keep their place" onclick={() => t.parts.splice(i, 1)}>Archive</button>
+				{:else}
+					<button type="button" class="small danger" onclick={() => t.parts.splice(i, 1)}>Remove</button>
+				{/if}
+			</div>
+			{#if p.kind === 'task'}
+				{@const c = choiceOf(p.taskId)}
+				{@const nums = (c?.metrics ?? []).filter((m) => numericType(m.type))}
+				{#if c && (c.hasParts || c.metrics.some((m) => m.repeats))}
+					<label class="sets-input"
+						>{c.metrics.some((m) => m.repeats) ? 'Sets' : 'Rounds'}
+						<input type="number" min="0" max="50" value={p.sets ?? ''} oninput={(e) => (p.sets = e.currentTarget.value ? Number(e.currentTarget.value) : null)} />
+					</label>
+				{/if}
+				{#if nums.length}
+					<table class="targets">
+						<thead><tr><th></th><th>Minimum</th><th>Target</th><th>Stretch</th></tr></thead>
+						<tbody>
+							{#each nums as m (m.id)}
+								<tr>
+									<td>{m.name}{m.unit ? ` (${m.unit})` : ''}</td>
+									<td><input type="number" step="any" inputmode="decimal" value={p.minTargets[m.id] ?? ''} oninput={(e) => setPartTarget(p.minTargets, m.id, e.currentTarget.value)} aria-label="{m.name} minimum" /></td>
+									<td><input type="number" step="any" inputmode="decimal" value={p.targets[m.id] ?? ''} oninput={(e) => setPartTarget(p.targets, m.id, e.currentTarget.value)} aria-label="{m.name} target" /></td>
+									<td><input type="number" step="any" inputmode="decimal" value={p.stretchTargets[m.id] ?? ''} oninput={(e) => setPartTarget(p.stretchTargets, m.id, e.currentTarget.value)} aria-label="{m.name} stretch" /></td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				{/if}
+			{/if}
 		</div>
 	{/each}
-	<button type="button" onclick={() => t.subtasks.push({ id: crypto.randomUUID(), name: '' })}
-		>Add sub-task</button
-	>
+	{#if t.parts.some((p) => p.kind === 'task')}
+		<p class="muted small-text" style="margin: 0 0 0.5rem">
+			Targets set here apply in every habit that uses this Task. Minimum and Stretch count in habits with levels on.
+		</p>
+	{/if}
+	<div class="row">
+		<button type="button" onclick={() => t.parts.push({ kind: 'step', id: crypto.randomUUID(), name: '' })}>Add a step</button>
+		<select class="grow" bind:value={addPart} onchange={() => addLibraryPart(addPart)} aria-label="Add a Task from your Library">
+			<option value="">Add a Task from your Library…</option>
+			{#each data.library as l (l.id)}<option value={l.id}>{l.name}</option>{/each}
+		</select>
+	</div>
 
 	<h2>Rest timer</h2>
 	<div class="row">
@@ -361,7 +489,7 @@
 		{/if}
 	</div>
 
-	{#each [...new Set(ruleCheck.errors.map((i) => i.reason))] as reason (reason)}<p class="error">{reason}</p>{/each}
+	{#each [...new Set([...ruleCheck.errors, ...(past?.errors ?? [])].map((i) => i.reason))] as reason (reason)}<p class="error">{reason}</p>{/each}
 	{#each [...new Set(ruleCheck.warnings.map((i) => i.reason))] as reason (reason)}<p class="muted small-text">{reason}.</p>{/each}
 	{#if form?.error}<p class="error">{form.error}</p>{/if}
 
@@ -395,13 +523,8 @@
 {/if}
 
 <style>
-	.scores {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-	}
 	.score {
-		width: 6.5rem;
+		width: 4rem;
 	}
 	.log-settings summary {
 		cursor: pointer;
@@ -412,6 +535,26 @@
 	}
 	.small-text {
 		font-size: 0.85rem;
+	}
+	.past {
+		margin: 0;
+	}
+	.part {
+		border-left: 3px solid var(--border);
+		padding: 0.25rem 0 0.25rem 0.6rem;
+		margin-bottom: 0.5rem;
+	}
+	.sets-input {
+		width: 7rem;
+	}
+	.targets input {
+		width: 5rem;
+	}
+	.targets th {
+		text-align: left;
+		font-size: 0.8rem;
+		color: var(--muted);
+		font-weight: 500;
 	}
 	.archived {
 		margin-bottom: 1rem;

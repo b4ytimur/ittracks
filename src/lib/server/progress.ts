@@ -3,7 +3,8 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray, isNull, lt } from 'drizzle-orm';
 import { db } from './db';
-import { entry, habit, metric, occurrence, slot, task, type SlotGoals } from './db/schema';
+import { entry, habit, metric, occurrence, slot, type SlotGoals } from './db/schema';
+import { positionsFor } from './positions';
 import { amountTarget, loggedValue, progressOf, verdict, type Progress, type ProgressMetric, type ProgressSlot, type Verdict } from '$lib/engine/progress';
 import { defaultStep } from '$lib/task-types';
 import type { Level } from '$lib/engine/streak';
@@ -32,54 +33,36 @@ export function targetsAt(s: Goals, level: Level | null): Record<string, number>
 export const goalsOf = (s: typeof slot.$inferSelect, o: { goals?: Record<string, SlotGoals> | null }): Goals => o.goals?.[s.id] ?? s;
 
 /**
- * The Slots of each Occurrence, with the Task each one uses that day and what it has.
- * `level` measures against another level than the one logged (null is Target).
+ * The places in each Occurrence's log (each Slot's Task and the parts inside it), with what
+ * each one has and aims for. `level` measures against another level than the one logged
+ * (null is Target).
  */
 function slotsFor(occs: OccRow[], level?: (o: OccRow) => Level | null): Map<string, ProgressSlot[]> {
-	const variantIds = [...new Set(occs.map((o) => o.variantId).filter((v): v is string => !!v))];
-	const slots = variantIds.length
-		? db.select().from(slot).where(inArray(slot.variantId, variantIds)).orderBy(asc(slot.sortOrder)).all()
-		: [];
-	const taskIds = [
-		...new Set([...slots.map((s) => s.taskId), ...occs.flatMap((o) => Object.values(o.picks ?? {}))].filter((t): t is string => !!t))
-	];
+	const positions = positionsFor(occs);
+	const taskIds = [...new Set([...positions.values()].flat().map((p) => p.taskId))];
 	const metrics = taskIds.length
 		? db
 				.select({ id: metric.id, taskId: metric.taskId, name: metric.name, type: metric.type, unit: metric.unit, repeats: metric.repeats, step: metric.step })
 				.from(metric)
-				.where(inArray(metric.taskId, taskIds))
+				// A log is measured by the fields it asks for: archived ones are kept for History only.
+				.where(and(inArray(metric.taskId, taskIds), eq(metric.archived, false)))
 				.orderBy(asc(metric.sortOrder))
 				.all()
 		: [];
-	const subs = taskIds.length
-		? db
-				.select({ id: task.id, parent: task.parentTaskId, archived: task.archived })
-				.from(task)
-				.where(inArray(task.parentTaskId, taskIds))
-				.all()
-				.filter((t) => !t.archived)
-		: [];
 	const metricsOf = new Map<string, ProgressMetric[]>();
 	for (const m of metrics) metricsOf.set(m.taskId, [...(metricsOf.get(m.taskId) ?? []), m]);
-	const subsOf = new Map<string, string[]>();
-	for (const s of subs) subsOf.set(s.parent!, [...(subsOf.get(s.parent!) ?? []), s.id]);
 	const out = new Map<string, ProgressSlot[]>();
-	for (const o of occs) {
+	for (const o of occs)
 		out.set(
 			o.id,
-			slots
-				.filter((s) => s.variantId === o.variantId)
-				.map((s) => {
-					const taskId = o.picks?.[s.id] ?? s.taskId;
-					return {
-						taskId,
-						metrics: taskId ? (metricsOf.get(taskId) ?? []) : [],
-						subtaskIds: taskId ? (subsOf.get(taskId) ?? []) : [],
-						targets: targetsAt(goalsOf(s, o), level ? level(o) : o.level)
-					};
-				})
+			(positions.get(o.id) ?? []).map((p) => ({
+				path: p.path,
+				taskId: p.taskId,
+				metrics: metricsOf.get(p.taskId) ?? [],
+				kids: p.kids,
+				targets: targetsAt(p, level ? level(o) : o.level)
+			}))
 		);
-	}
 	return out;
 }
 
@@ -89,7 +72,7 @@ export function progressFor(occs: OccRow[]): Map<string, Progress> {
 	if (!occs.length) return out;
 	const slots = slotsFor(occs);
 	const entries = db
-		.select({ occurrenceId: entry.occurrenceId, taskId: entry.taskId, values: entry.values })
+		.select({ occurrenceId: entry.occurrenceId, taskId: entry.taskId, path: entry.path, values: entry.values })
 		.from(entry)
 		.where(inArray(entry.occurrenceId, occs.map((o) => o.id)))
 		.orderBy(asc(entry.sortOrder))
@@ -151,10 +134,10 @@ export function verdictsFor(ids: string[]): Map<string, Verdict> {
 	// Measured against the Target whatever level was logged, and against the Minimum.
 	const atTarget = slotsFor(logged, () => null);
 	const atMinimum = slotsFor(logged, () => 'minimum');
-	const entriesOf = new Map<string, { taskId: string; values: Record<string, unknown> }[]>();
+	const entriesOf = new Map<string, { taskId: string; path: string | null; values: Record<string, unknown> }[]>();
 	for (let i = 0; i < logged.length; i += 900)
 		for (const e of db
-			.select({ occurrenceId: entry.occurrenceId, taskId: entry.taskId, values: entry.values })
+			.select({ occurrenceId: entry.occurrenceId, taskId: entry.taskId, path: entry.path, values: entry.values })
 			.from(entry)
 			.where(inArray(entry.occurrenceId, logged.slice(i, i + 900).map((o) => o.id)))
 			.orderBy(asc(entry.sortOrder))
@@ -211,6 +194,19 @@ export function rejudge(habitId: string, before: string) {
 export const plusStep = (m: { type: string; unit: string | null; step: number | null }) =>
 	m.step ?? defaultStep(m.type, m.unit);
 
+/** Each Metric's step by id, for a raise by steps (engine/progression.ts). */
+export function stepsOf(metricIds: string[], q: Pick<typeof db, 'select'> = db): Record<string, number> {
+	if (!metricIds.length) return {};
+	return Object.fromEntries(
+		q
+			.select({ id: metric.id, type: metric.type, unit: metric.unit, step: metric.step })
+			.from(metric)
+			.where(inArray(metric.id, [...new Set(metricIds)]))
+			.all()
+			.map((m) => [m.id, plusStep(m)])
+	);
+}
+
 /**
  * +1 from Today, for a habit with one number to reach: add one step to the value logged so
  * far (or take one away with `by: -1`). Reaching the target finishes the log; dropping
@@ -222,7 +218,8 @@ export function plusOne(occurrenceId: string, by: 1 | -1 = 1): { value: number; 
 	const slots = slotsFor([o]).get(o.id) ?? [];
 	const amount = amountTarget(slots);
 	if (!amount) return null;
-	const taskId = amount.slot.taskId!;
+	const taskId = amount.slot.taskId;
+	const path = amount.slot.path;
 	const m = amount.metric;
 	const mine = db
 		.select()
@@ -236,10 +233,10 @@ export function plusOne(occurrenceId: string, by: 1 | -1 = 1): { value: number; 
 	const done = value >= amount.target;
 	db.transaction((tx) => {
 		const summary = mine.find((e) => e.taskId === taskId && e.values._summary);
-		if (summary) tx.update(entry).set({ values: { ...summary.values, [m.id]: value } }).where(eq(entry.id, summary.id)).run();
+		if (summary) tx.update(entry).set({ values: { ...summary.values, [m.id]: value }, path }).where(eq(entry.id, summary.id)).run();
 		else
 			tx.insert(entry)
-				.values({ id: randomUUID(), occurrenceId: o.id, taskId, values: { [m.id]: value, _summary: true }, sortOrder: mine.length })
+				.values({ id: randomUUID(), occurrenceId: o.id, taskId, path, values: { [m.id]: value, _summary: true }, sortOrder: mine.length })
 				.run();
 		if (done && o.status !== 'done') tx.update(occurrence).set({ status: 'done', finishedAt: new Date() }).where(eq(occurrence.id, o.id)).run();
 		if (!done && o.status === 'done' && by < 0) tx.update(occurrence).set({ status: 'due', finishedAt: null }).where(eq(occurrence.id, o.id)).run();

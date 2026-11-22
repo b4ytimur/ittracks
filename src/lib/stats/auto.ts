@@ -45,14 +45,14 @@ export function habitTasks(P: Prepared, habitId: string): DsTask[] {
 }
 
 /** A Yes or no Task: nothing to fill in and no steps, so its tick is the target. */
-const isYesNo = (P: Prepared, taskId: string) => !P.metricsByTask.get(taskId)?.length && !P.ds.tasks.some((t) => t.parentTaskId === taskId);
+const isYesNo = (P: Prepared, taskId: string) => !P.metricsByTask.get(taskId)?.length && !P.partsOf.has(taskId);
 
 const hasTargets = (P: Prepared, habitId: string) =>
 	P.ds.variants
 		.filter((v) => v.habitId === habitId)
 		.some((v) =>
 			(P.slotsByVariant.get(v.id) ?? []).some(
-				(s) => (s.targets && Object.keys(s.targets).length) || (s.taskId && (P.ds.tasks.some((t) => t.parentTaskId === s.taskId) || isYesNo(P, s.taskId)))
+				(s) => (s.targets && Object.keys(s.targets).length) || (s.taskId && (P.partsOf.has(s.taskId) || isYesNo(P, s.taskId)))
 			)
 		);
 
