@@ -97,7 +97,10 @@ export const task = sqliteTable('task', {
 		.references(() => account.id, { onDelete: 'cascade' }),
 	name: text('name').notNull(),
 	notes: text('notes'),
-	/** Sub-tasks point at their parent; one level deep in the MVP. */
+	/**
+	 * A private step belongs to this Task: hidden from the Library, used only inside it. Where
+	 * a step sits (and any Library Task inside another) is a task_part row.
+	 */
 	parentTaskId: text('parent_task_id'),
 	restTimerEnabled: integer('rest_timer_enabled', { mode: 'boolean' }).notNull().default(false),
 	restTimerSeconds: integer('rest_timer_seconds').notNull().default(90),
@@ -168,6 +171,33 @@ export const metric = sqliteTable('metric', {
 	/** Removed from its Task after it was logged: hidden from new logs, kept for History and Stats. */
 	archived: integer('archived', { mode: 'boolean' }).notNull().default(false)
 });
+
+/**
+ * A Task inside a Task: the same kind of position as a Slot, one level down. The child is a
+ * Library Task (reused under any number of Tasks) or a private step of this Task. Sets on a
+ * Task with parts and no per-set fields are rounds: a Circuit with 3 sets logs its parts 3 times.
+ * Targets are by the child's Metric ids, shared by every habit that uses the parent.
+ */
+export const taskPart = sqliteTable(
+	'task_part',
+	{
+		id: id(),
+		taskId: text('task_id')
+			.notNull()
+			.references(() => task.id, { onDelete: 'cascade' }),
+		childTaskId: text('child_task_id')
+			.notNull()
+			.references(() => task.id, { onDelete: 'cascade' }),
+		sets: integer('sets'),
+		targets: text('targets', { mode: 'json' }).$type<Record<string, number>>(),
+		minTargets: text('min_targets', { mode: 'json' }).$type<Record<string, number>>(),
+		stretchTargets: text('stretch_targets', { mode: 'json' }).$type<Record<string, number>>(),
+		sortOrder: integer('sort_order').notNull().default(0),
+		/** Removed after it was logged: hidden from new logs, kept so past logs still show it. */
+		archived: integer('archived', { mode: 'boolean' }).notNull().default(false)
+	},
+	(t) => [index('task_part_task_idx').on(t.taskId), index('task_part_child_idx').on(t.childTaskId)]
+);
 
 /** A top-level group with a color and icon, for Habits and Tasks: Fitness, Learning... */
 export const area = sqliteTable('area', {
@@ -401,7 +431,13 @@ export const entry = sqliteTable('entry', {
 		.references(() => task.id, { onDelete: 'cascade' }),
 	/** { metricId: value } */
 	values: text('values', { mode: 'json' }).notNull().$type<Record<string, unknown>>(),
-	sortOrder: integer('sort_order').notNull().default(0)
+	sortOrder: integer('sort_order').notNull().default(0),
+	/**
+	 * Where in the log it sits: the Slot id, then each part id from the top down, with the
+	 * round of a repeating parent ("slot#2/part"). See engine/parts.ts. Null on Entries from
+	 * before paths, which are placed by their Task and order.
+	 */
+	path: text('path')
 });
 
 export const slip = sqliteTable('slip', {

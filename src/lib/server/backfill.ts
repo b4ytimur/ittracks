@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { db } from './db';
 import { entry, habit, occurrence, slip, slot, task, variant } from './db/schema';
+import { PATH_RE } from '$lib/engine/parts';
 import { dueOn, isGroup, type Schedule } from '$lib/engine/schedule';
 import { carriesOver, dependsOnHistory, isRealDate, logWindow, variantFor, type LogWindow } from '$lib/engine/backfill';
 import { scheduleStartBy } from '$lib/engine/unlogged';
@@ -263,7 +264,9 @@ const snapshotSchema = z.object({
 			picks: z.record(z.string(), z.string()).nullable(),
 			finishedAt: z.number().nullable(),
 			extra: z.boolean().default(false),
-			entries: z.array(z.object({ taskId: z.string().uuid(), values: z.record(z.string(), z.unknown()) })).max(1000)
+			entries: z
+				.array(z.object({ taskId: z.string().uuid(), path: z.string().regex(PATH_RE).nullable().default(null), values: z.record(z.string(), z.unknown()) }))
+				.max(1000)
 		})
 		.nullable()
 });
@@ -285,7 +288,7 @@ export function snapshot(habitId: string, date: string): Snapshot {
 					finishedAt: occ.finishedAt ? occ.finishedAt.getTime() : null,
 					extra: occ.extra,
 					entries: db
-						.select({ taskId: entry.taskId, values: entry.values })
+						.select({ taskId: entry.taskId, path: entry.path, values: entry.values })
 						.from(entry)
 						.where(eq(entry.occurrenceId, occ.id))
 						.orderBy(asc(entry.sortOrder))
@@ -336,7 +339,7 @@ export function restore(accountId: string, raw: unknown): boolean {
 			tx.insert(occurrence).values({ id, habitId: h.id, date: snap.date, ...fields }).run();
 		}
 		o.entries.forEach((e, i) =>
-			tx.insert(entry).values({ id: randomUUID(), occurrenceId: id!, taskId: e.taskId, values: e.values, sortOrder: i }).run()
+			tx.insert(entry).values({ id: randomUUID(), occurrenceId: id!, taskId: e.taskId, path: e.path, values: e.values, sortOrder: i }).run()
 		);
 	});
 	return true;

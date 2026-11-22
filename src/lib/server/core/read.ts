@@ -5,7 +5,8 @@
 // Notes, journal entries and text fields need the notes scope; without it they are left out.
 import { and, asc, eq, gte, inArray, lte } from 'drizzle-orm';
 import { db } from '../db';
-import { area, dayNote, entry, habit, metric, occurrence, slip, slot, tag, task, taskTag, variant } from '../db/schema';
+import { area, dayNote, entry, habit, metric, occurrence, slip, slot, tag, task, taskPart, taskTag, variant } from '../db/schema';
+import { parsePath } from '$lib/engine/parts';
 import { getSettings } from '../settings';
 import { getStats, loadDataset } from '../stats';
 import { ensureToday, settleAll, userToday } from '../today';
@@ -81,8 +82,24 @@ export function describe(actor: Actor) {
 		? db.select().from(slot).where(inArray(slot.variantId, variants.map((v) => v.id))).orderBy(asc(slot.sortOrder)).all()
 		: [];
 	const allTasks = db.select().from(task).where(eq(task.accountId, actor.accountId)).orderBy(asc(task.sortOrder), asc(task.name)).all();
-	// A key limited to some habits sees only the Tasks those habits use.
+	const allParts = db
+		.select({ p: taskPart })
+		.from(taskPart)
+		.innerJoin(task, eq(taskPart.taskId, task.id))
+		.where(and(eq(task.accountId, actor.accountId), eq(taskPart.archived, false)))
+		.orderBy(asc(taskPart.sortOrder))
+		.all()
+		.map((r) => r.p);
+	// A key limited to some habits sees only the Tasks those habits use, and what is inside them.
 	const used = new Set(slotRows.map((x) => x.taskId).filter((x): x is string => !!x));
+	for (let grew = true; grew; ) {
+		grew = false;
+		for (const p of allParts)
+			if (used.has(p.taskId) && !used.has(p.childTaskId)) {
+				used.add(p.childTaskId);
+				grew = true;
+			}
+	}
 	const tasks = actor.habitIds ? allTasks.filter((t) => used.has(t.id) || (t.parentTaskId && used.has(t.parentTaskId))) : allTasks;
 	const taskIds = tasks.map((t) => t.id);
 	const metrics = taskIds.length ? db.select().from(metric).where(inArray(metric.taskId, taskIds)).orderBy(asc(metric.sortOrder)).all() : [];
@@ -155,7 +172,23 @@ export function describe(actor: Actor) {
 			ref: `task:${t.id}`,
 			id: t.id,
 			name: t.name,
+			// A step: private to the Task it is inside.
 			parent: t.parentTaskId ? (taskName.get(t.parentTaskId) ?? null) : null,
+			// What sits inside it, in order: steps, and Library Tasks with their sets (rounds, on a
+			// Task without per-set fields of its own) and targets. Log them as "Task › Part".
+			...(allParts.some((p) => p.taskId === t.id)
+				? {
+						inside: allParts
+							.filter((p) => p.taskId === t.id)
+							.map((p) => ({
+								taskId: p.childTaskId,
+								task: taskName.get(p.childTaskId) ?? null,
+								step: p.id === p.childTaskId,
+								sets: p.sets,
+								targets: Object.fromEntries(Object.entries(p.targets ?? {}).map(([k, v]) => [metrics.find((m) => m.id === k)?.name ?? k, v]))
+							}))
+					}
+				: {}),
 			area: t.areaId ? (areaName.get(t.areaId) ?? null) : null,
 			archived: t.archived,
 			tags: tags.filter((x) => x.taskId === t.id).map((x) => `${x.name} (${levelName[x.level] ?? x.level})`),
@@ -303,9 +336,12 @@ export interface ValueRow {
 	variant: string | null;
 	level: string | null;
 	taskId: string;
+	/** The Task, or for a Task inside another its place: "Circuit › Push-ups". */
 	task: string;
 	/** 1, 2, 3… for a value logged per set; null for one logged once per log. */
 	set: number | null;
+	/** The round of a Circuit it was logged in, from 1; null outside rounds. */
+	round: number | null;
 	fieldId: string;
 	field: string;
 	type: string;
@@ -361,6 +397,29 @@ export function listValues(
 	const variants = new Map(
 		hs.length ? db.select().from(variant).where(inArray(variant.habitId, hs.map((h) => h.id))).all().map((v) => [v.id, v.name]) : []
 	);
+	const parts = new Map(
+		db
+			.select({ p: taskPart })
+			.from(taskPart)
+			.innerJoin(task, eq(taskPart.taskId, task.id))
+			.where(eq(task.accountId, actor.accountId))
+			.all()
+			.map((r) => [r.p.id, r.p])
+	);
+	/** Where an Entry sits, in words, and its round: "Circuit › Push-ups", 2. */
+	const placeOf = (e: { taskId: string; path: string | null }): { name: string; round: number | null; inside: string[] } => {
+		const t = tasks.get(e.taskId);
+		const segs = e.path ? parsePath(e.path) : [];
+		const round = segs.find((x) => x.round)?.round ?? null;
+		const chain = segs.slice(1).map((x) => parts.get(x.id));
+		if (chain.length && chain.every(Boolean)) {
+			const ids = [chain[0]!.taskId, ...chain.map((p) => p!.childTaskId)];
+			return { name: ids.map((id) => tasks.get(id)?.name ?? '').join(' › '), round, inside: ids.slice(0, -1) };
+		}
+		// A step ticked before paths: under the Task it belongs to.
+		if (t?.parentTaskId) return { name: `${tasks.get(t.parentTaskId)?.name ?? ''} › ${t.name}`, round, inside: [t.parentTaskId] };
+		return { name: t?.name ?? '', round, inside: [] };
+	};
 	const matchTask = input.tasks?.length ? input.tasks.map((t) => t.toLowerCase()) : null;
 	const matchField = input.fields?.length ? input.fields.map((f) => f.toLowerCase()) : null;
 	const taskOk = (id: string, name: string) => !matchTask || matchTask.includes(id.toLowerCase()) || matchTask.includes(name.toLowerCase());
@@ -384,18 +443,20 @@ export function listValues(
 			variant: o.variantId ? (variants.get(o.variantId) ?? null) : null,
 			level: o.level ?? (o.status === 'done' ? 'target' : null)
 		};
-		// A sub-task tick, or a plain Yes or no Task.
+		const at = placeOf(e);
+		// A Task asked for by name also brings what is logged inside it.
+		const asked = taskOk(t.id, t.name) || at.inside.some((id) => taskOk(id, tasks.get(id)?.name ?? ''));
+		// A ticked step, or a plain Yes or no Task.
 		if (values.done === true && Object.keys(values).length === 1) {
-			const name = t.parentTaskId ? `${tasks.get(t.parentTaskId)?.name ?? ''} › ${t.name}` : t.name;
-			if (taskOk(t.id, t.name) || (t.parentTaskId && taskOk(t.parentTaskId, tasks.get(t.parentTaskId)?.name ?? '')))
-				if (fieldOk('done', 'done')) rows.push({ ...base, taskId: t.id, task: name, set: null, fieldId: 'done', field: 'Done', type: 'tick', unit: null, value: true, score: null });
+			if (asked && fieldOk('done', 'done'))
+				rows.push({ ...base, taskId: t.id, task: at.name, set: null, round: at.round, fieldId: 'done', field: 'Done', type: 'tick', unit: null, value: true, score: null });
 			continue;
 		}
-		if (!taskOk(t.id, t.name)) continue;
+		if (!asked) continue;
 		const isSet = !values._summary;
 		let n: number | null = null;
 		if (isSet) {
-			const k = `${o.id}|${t.id}`;
+			const k = `${o.id}|${e.path ?? t.id}`;
 			n = (setNo.get(k) ?? 0) + 1;
 			setNo.set(k, n);
 		}
@@ -409,8 +470,9 @@ export function listValues(
 			rows.push({
 				...base,
 				taskId: t.id,
-				task: t.name,
+				task: at.name,
 				set: isSet ? n : null,
+				round: at.round,
 				fieldId: m.id,
 				field: m.name,
 				type: m.type,
@@ -422,7 +484,7 @@ export function listValues(
 	}
 	const out = page(rows, input, { from, to }, 5000);
 	if (input.format === 'csv') {
-		const cols: (keyof ValueRow)[] = ['ref', 'date', 'weekday', 'habit', 'status', 'variant', 'level', 'task', 'set', 'field', 'type', 'unit', 'value', 'score'];
+		const cols: (keyof ValueRow)[] = ['ref', 'date', 'weekday', 'habit', 'status', 'variant', 'level', 'task', 'set', 'round', 'field', 'type', 'unit', 'value', 'score'];
 		const cell = (v: unknown) => {
 			const s = v === null || v === undefined ? '' : String(v);
 			return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;

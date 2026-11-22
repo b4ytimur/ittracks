@@ -32,10 +32,13 @@ export function shareFile(accountId: string, habitId: string, opts: ShareOptions
 	// A template is one habit; a group's days come from other habits, so it can't travel alone.
 	if (!habit || isGroup(habit.schedule)) return null;
 	const tasks = new Map<string, TaskForm>();
+	// A Task travels with the Library Tasks inside it.
 	const add = (id: string) => {
 		if (tasks.has(id)) return;
 		const t = getTaskForm(accountId, id);
-		if (t) tasks.set(id, t);
+		if (!t) return;
+		tasks.set(id, t);
+		for (const p of t.parts) if (p.kind === 'task') add(p.taskId);
 	};
 	for (const v of habit.variants) for (const s of v.slots) if (s.taskId) add(s.taskId);
 	// Without them, an auto-filled Slot finds nothing to pick on the other side.

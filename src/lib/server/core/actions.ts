@@ -292,14 +292,15 @@ export const ACTIONS: ActionDef[] = [
 		scope: 'log',
 		title: "Log a Task's sets",
 		description:
-			'Log one Task of a habit\'s day: sets (e.g. [{"Weight": 80, "Reps": 8}, {"Weight": 80, "Reps": 8}]), once-per-log values, and ticks for its steps (sub-tasks). Field keys are ids or names. Replaces what was logged for that Task unless replace is false (then the sets are added). Finishes the habit when every Task is logged (finish: auto).',
+			'Log one Task of a habit\'s day: sets (e.g. [{"Weight": 80, "Reps": 8}, {"Weight": 80, "Reps": 8}]), once-per-log values, and ticks for the steps inside it. Field keys are ids or names. A Task inside another Task is named by its path, e.g. "Circuit › Push-ups"; when the Circuit repeats in rounds, round picks one (default: the first round with nothing logged for it yet). Replaces what was logged at that place unless replace is false (then the sets are added). Finishes the habit when every step is logged (finish: auto).',
 		input: z.object({
 			habit: habitRef,
 			date,
-			task: z.string().min(1).max(200),
+			task: z.string().min(1).max(400).describe('The Task by name, id, or path inside another Task ("Circuit › Push-ups").'),
+			round: z.number().int().min(1).max(50).optional().describe('For a Task inside a Circuit that repeats: which round, from 1.'),
 			sets: z.array(z.record(z.string(), fieldValue)).max(100).optional(),
 			values: z.record(z.string(), fieldValue).optional(),
-			ticks: z.array(z.string().max(200)).max(50).optional().describe('Steps (sub-tasks) to tick, by id or name.'),
+			ticks: z.array(z.string().max(200)).max(50).optional().describe('Steps inside the Task to tick, by id or name.'),
 			replace: z.boolean().optional(),
 			finish,
 			extra

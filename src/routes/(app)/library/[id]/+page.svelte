@@ -31,7 +31,22 @@
 	let unitChoices = $state<Record<string, UnitChoice>>({});
 	const past = $derived(data.isNew ? null : checkTaskPast(data.task, t, data.logged, unitChoices));
 	const isLogged = (id: string) => data.logged.metrics.includes(id);
-	const tickedSub = (id: string) => data.logged.subtasks.includes(id);
+	/** A part with anything logged under it: removing it archives it, so past logs keep their place. */
+	const partLogged = (id: string) => data.logged.parts.includes(id);
+	const choiceOf = (id: string) => data.library.find((l) => l.id === id);
+	const numericType = (type: string) => type === 'number' || type === 'count' || type === 'duration';
+	let addPart = $state('');
+	function addLibraryPart(taskId: string) {
+		if (!taskId) return;
+		t.parts.push({ kind: 'task', id: crypto.randomUUID(), taskId, sets: null, targets: {}, minTargets: {}, stretchTargets: {} });
+		addPart = '';
+	}
+	function setPartTarget(map: Record<string, number>, id: string, v: string) {
+		if (v === '' || !Number.isFinite(Number(v))) delete map[id];
+		else map[id] = Number(v);
+	}
+	/** Sets on this Task repeat what's inside it, unless it has fields of its own logged per set. */
+	const roundsHere = $derived(t.parts.length > 0 && !t.metrics.some((m) => m.repeats));
 	const savedMetric = (id: string) => data.task.metrics.find((x) => x.id === id);
 	/** May this field switch to `type` now? Logged numbers can only become another kind of number. */
 	const typeOk = (m: MetricForm, type: string) => {
@@ -144,6 +159,9 @@
 			Used in {#each data.usage.habits as h, i (h.id)}{i ? ', ' : ''}<a href="/habits/{h.id}">{h.name}</a>{/each}.
 		{:else}
 			Not used in any habit.
+		{/if}
+		{#if data.usage.inside.length}
+			Inside {#each data.usage.inside as p, i (p.id)}{i ? ', ' : ''}<a href="/library/{p.id}">{p.name}</a>{/each}.
 		{/if}
 		{#if data.usage.lastLogged}Logged {data.usage.timesLogged} {data.usage.timesLogged === 1 ? 'time' : 'times'}, last on {ago(data.usage.lastLogged)}.{/if}
 	</p>
@@ -396,21 +414,63 @@
 		<button type="button" onclick={() => applyType(data.types[0])}>Use weight and reps per set</button>
 	</div>
 
-	<h2>Sub-tasks</h2>
-	<p class="muted">Smaller steps ticked off as a checklist, like "warm-up set".</p>
-	{#each t.subtasks as s, i (s.id)}
-		<div class="row">
-			<input class="grow" bind:value={s.name} aria-label="Sub-task name" required />
-			{#if tickedSub(s.id)}
-				<button type="button" class="small danger" title="It was ticked before: its past ticks stay" onclick={() => t.subtasks.splice(i, 1)}>Archive</button>
-			{:else}
-				<button type="button" class="small danger" onclick={() => t.subtasks.splice(i, 1)}>Remove</button>
+	<h2>Inside this Task</h2>
+	<p class="muted">
+		Steps you tick off, like "warm-up set", and Tasks from your Library that are logged inside this one, like the exercises of
+		a circuit. A Task can sit inside several others.
+		{#if roundsHere}Sets on this Task, in a habit, repeat everything inside it as rounds.{/if}
+	</p>
+	{#each t.parts as p, i (p.id)}
+		<div class="part stack">
+			<div class="row">
+				{#if p.kind === 'step'}
+					<input class="grow" bind:value={p.name} aria-label="Step name" placeholder="Step" required />
+				{:else}
+					{@const c = choiceOf(p.taskId)}
+					<a class="grow" href="/library/{p.taskId}">{c?.name ?? 'A Task'}</a>
+					{#if c && (c.hasParts || c.metrics.some((m) => m.repeats))}
+						<label class="sets-input"
+							>{c.metrics.some((m) => m.repeats) ? 'Sets' : 'Rounds'}
+							<input type="number" min="0" max="50" value={p.sets ?? ''} oninput={(e) => (p.sets = e.currentTarget.value ? Number(e.currentTarget.value) : null)} />
+						</label>
+					{/if}
+				{/if}
+				<button type="button" class="small" onclick={() => move(t.parts, i, -1)} aria-label="Move up">↑</button>
+				<button type="button" class="small" onclick={() => move(t.parts, i, 1)} aria-label="Move down">↓</button>
+				{#if partLogged(p.id)}
+					<button type="button" class="small danger" title="It has logs: they keep their place" onclick={() => t.parts.splice(i, 1)}>Archive</button>
+				{:else}
+					<button type="button" class="small danger" onclick={() => t.parts.splice(i, 1)}>Remove</button>
+				{/if}
+			</div>
+			{#if p.kind === 'task'}
+				{@const nums = (choiceOf(p.taskId)?.metrics ?? []).filter((m) => numericType(m.type))}
+				{#if nums.length}
+					<table class="targets">
+						<thead><tr><th></th><th>Minimum</th><th>Target</th><th>Stretch</th></tr></thead>
+						<tbody>
+							{#each nums as m (m.id)}
+								<tr>
+									<td>{m.name}{m.unit ? ` (${m.unit})` : ''}</td>
+									<td><input type="number" step="any" inputmode="decimal" value={p.minTargets[m.id] ?? ''} oninput={(e) => setPartTarget(p.minTargets, m.id, e.currentTarget.value)} aria-label="{m.name} minimum" /></td>
+									<td><input type="number" step="any" inputmode="decimal" value={p.targets[m.id] ?? ''} oninput={(e) => setPartTarget(p.targets, m.id, e.currentTarget.value)} aria-label="{m.name} target" /></td>
+									<td><input type="number" step="any" inputmode="decimal" value={p.stretchTargets[m.id] ?? ''} oninput={(e) => setPartTarget(p.stretchTargets, m.id, e.currentTarget.value)} aria-label="{m.name} stretch" /></td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+					<p class="muted small-text" style="margin: 0">Every habit that uses this Task aims for these. Minimum and Stretch count in habits with levels on.</p>
+				{/if}
 			{/if}
 		</div>
 	{/each}
-	<button type="button" onclick={() => t.subtasks.push({ id: crypto.randomUUID(), name: '' })}
-		>Add sub-task</button
-	>
+	<div class="row">
+		<button type="button" onclick={() => t.parts.push({ kind: 'step', id: crypto.randomUUID(), name: '' })}>Add a step</button>
+		<select class="grow" bind:value={addPart} onchange={() => addLibraryPart(addPart)} aria-label="Add a Task from your Library">
+			<option value="">Add a Task from your Library…</option>
+			{#each data.library as l (l.id)}<option value={l.id}>{l.name}</option>{/each}
+		</select>
+	</div>
 
 	<h2>Rest timer</h2>
 	<div class="row">
@@ -479,6 +539,23 @@
 	}
 	.past {
 		margin: 0;
+	}
+	.part {
+		border-left: 3px solid var(--border);
+		padding: 0.25rem 0 0.25rem 0.6rem;
+		margin-bottom: 0.5rem;
+	}
+	.sets-input {
+		width: 6rem;
+	}
+	.targets input {
+		width: 5rem;
+	}
+	.targets th {
+		text-align: left;
+		font-size: 0.8rem;
+		color: var(--muted);
+		font-weight: 500;
 	}
 	.archived {
 		margin-bottom: 1rem;

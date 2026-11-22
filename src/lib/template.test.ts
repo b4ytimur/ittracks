@@ -23,7 +23,7 @@ const bench: TaskForm = {
 		{ id: M1, name: 'Weight', type: 'number', unit: 'kg', repeats: true, choices: [], prefill: 'last', step: 2.5, required: true, quick: true, ...noteDefaults() },
 		{ id: M2, name: 'Reps', type: 'count', unit: '', repeats: true, choices: [], prefill: 'target', step: null, required: false, quick: false, ...noteDefaults() }
 	],
-	subtasks: [{ id: '00000000-0000-4000-8000-000000000008', name: 'Warm-up set' }],
+	parts: [{ kind: 'step', id: '00000000-0000-4000-8000-000000000008', name: 'Warm-up set' }],
 	areaId: null,
 	collectionIds: []
 };
@@ -131,7 +131,7 @@ describe('templates', () => {
 
 		expect(tasks).toHaveLength(1);
 		expect(tasks[0].form.name).toBe('Bench press');
-		expect(tasks[0].form.subtasks[0].name).toBe('Warm-up set');
+		expect(tasks[0].form.parts[0]).toMatchObject({ kind: 'step', name: 'Warm-up set' });
 		expect(habitForm.safeParse(habit).success).toBe(true);
 
 		// Slots point at the new Task, targets at its new Metric, and the schedule at the new Variants.
@@ -157,13 +157,39 @@ describe('templates', () => {
 		expect([r.prefill, r.step, r.required, r.quick]).toEqual(['target', null, false, false]);
 	});
 
+	it('carries Tasks inside Tasks with their steps, sets and targets (version 6)', () => {
+		const C = '00000000-0000-4000-8000-0000000000c1';
+		const circuit: TaskForm = {
+			...bench,
+			name: 'Circuit',
+			restTimerEnabled: false,
+			metrics: [],
+			parts: [
+				{ kind: 'step', id: '00000000-0000-4000-8000-0000000000c2', name: 'Warm up' },
+				{ kind: 'task', id: '00000000-0000-4000-8000-0000000000c3', taskId: T1, sets: 2, targets: { [M2]: 10 }, minTargets: {}, stretchTargets: {} }
+			]
+		};
+		const one = { ...gym, variants: [{ ...gym.variants[0], slots: [{ ...gym.variants[0].slots[0], taskId: C, targets: {}, minTargets: {}, stretchTargets: {} }] }], schedule: { kind: 'frequency' as const, times: 7, period: 'week' as const, variantId: VA } };
+		const file = templateFile.parse(JSON.parse(JSON.stringify(toTemplate(one, new Map([[C, circuit], [T1, bench]])))));
+		expect(file.tasks[0].subtasks).toEqual(['Warm up']);
+		const { tasks } = fromTemplate(file, '2026-12-01');
+		const back = tasks.find((t) => t.form.name === 'Circuit')!.form;
+		const benchBack = tasks.find((t) => t.form.name === 'Bench press')!;
+		expect(back.parts[0]).toMatchObject({ kind: 'step', name: 'Warm up' });
+		const reps = benchBack.form.metrics.find((m) => m.name === 'Reps')!;
+		expect(back.parts[1]).toMatchObject({ kind: 'task', taskId: benchBack.id, sets: 2, targets: { [reps.id]: 10 } });
+		// A version 5 file lists steps by name only.
+		const v5 = templateFile.parse({ ...file, version: 5, tasks: file.tasks.map((t) => ({ ...t, parts: undefined })) });
+		expect(fromTemplate(v5, '2026-12-01').tasks.find((t) => t.form.name === 'Circuit')!.form.parts).toMatchObject([{ kind: 'step', name: 'Warm up' }]);
+	});
+
 	it('carries long text fields, prompts and scored choices (version 5)', () => {
 		const journal: TaskForm = {
 			...bench,
 			name: 'Journal',
 			notes: '## How\nWrite **anything**.',
 			restTimerEnabled: false,
-			subtasks: [],
+			parts: [],
 			metrics: [
 				{ ...bench.metrics[0], repeats: false, type: 'text', unit: '', step: null, prefill: 'blank', required: false, long: true, starter: '## Wins\n\n## Lessons', prompts: ['What went well?', 'What did you learn?'], promptOrder: 'random', scores: {} },
 				{ ...bench.metrics[1], repeats: false, type: 'choice', choices: ['Great', 'Okay', 'Bad'], prefill: 'blank', scores: { Great: 5, Okay: 3, Bad: 1 } }
@@ -171,7 +197,7 @@ describe('templates', () => {
 		};
 		const one = { ...gym, variants: [{ ...gym.variants[0], slots: [{ ...gym.variants[0].slots[0], targets: {}, minTargets: {}, stretchTargets: {} }] }], schedule: { kind: 'frequency' as const, times: 7, period: 'week' as const, variantId: VA } };
 		const file = templateFile.parse(JSON.parse(JSON.stringify(toTemplate(one, new Map([[T1, journal]])))));
-		expect(file.version).toBe(5);
+		expect(file.version).toBe(TEMPLATE_VERSION);
 		const back = fromTemplate(file, '2026-12-01').tasks[0].form;
 		expect(back.notes).toBe(journal.notes);
 		expect(back.metrics[0]).toMatchObject({ long: true, starter: '## Wins\n\n## Lessons', prompts: ['What went well?', 'What did you learn?'], promptOrder: 'random' });
@@ -262,7 +288,7 @@ describe('template questions', () => {
 describe('sharing without losing anything (version 5)', () => {
 	const AREA = '00000000-0000-4000-8000-000000000020';
 	const SKULL = '00000000-0000-4000-8000-000000000021';
-	const skull: TaskForm = { ...bench, name: 'Skull crusher', tags: [{ name: 'triceps', level: 3 }], subtasks: [], areaId: AREA };
+	const skull: TaskForm = { ...bench, name: 'Skull crusher', tags: [{ name: 'triceps', level: 3 }], parts: [], areaId: AREA };
 	const names = { areas: new Map([[AREA, 'Fitness']]) };
 
 	it('carries the Area of the habit and of each Task by name, and the pool Tasks it is given', () => {

@@ -19,6 +19,8 @@ export type SlotForm = HabitForm['variants'][number]['slots'][number];
 export interface HabitCtx {
 	/** Does this Task log anything per set? Unknown Tasks are given the benefit of the doubt. */
 	taskRepeats?: (taskId: string) => boolean | undefined;
+	/** Does this Task have Tasks inside it? Then its sets are rounds. */
+	taskHasParts?: (taskId: string) => boolean | undefined;
 }
 
 const build = (h: HabitForm) => h.direction === 'build';
@@ -180,11 +182,11 @@ export const slotRules = defineRules<SlotForm, SlotCtx>({
 			'warn'
 		)
 	],
-	// F4: sets need something logged per set.
+	// F4: sets need something logged per set, or Tasks inside to repeat in rounds.
 	sets: [
 		onlyWhen(
-			(s, c) => !s.taskId || c.taskRepeats?.(s.taskId) !== false,
-			'Sets need a Task that logs something per set',
+			(s, c) => !s.taskId || c.taskRepeats?.(s.taskId) !== false || c.taskHasParts?.(s.taskId) === true,
+			'Sets need a Task that logs something per set, or has Tasks inside it to repeat in rounds',
 			null
 		)
 	],

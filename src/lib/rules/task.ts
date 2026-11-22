@@ -60,7 +60,9 @@ export const taskRules = defineRules<TaskForm>({
 	notes: independent,
 	tags: independent,
 	metrics: independent, // each Metric is checked with metricRules
-	subtasks: independent,
+	// Loops (a Task inside itself) and the depth cap need the account's other Tasks: checked
+	// on save against all of them (repo/tasks.ts checkTaskLinks, engine/parts.ts checkParts).
+	parts: [check((t) => t.parts.some((p) => p.kind === 'step' && !p.name.trim()), 'Give every step a name')],
 	areaId: independent,
 	collectionIds: independent,
 	// M4: a rest between sets needs sets.
@@ -123,17 +125,18 @@ export const taskPast = definePolicies<TaskForm>({
 	notes: display(),
 	tags: display('Past days keep the Tasks Fill rules picked for them'),
 	metrics: archive('A field removed after it was logged is archived: its values stay in History and Stats'),
-	subtasks: archive('A sub-task removed after it was ticked is archived: its past ticks stay'),
+	// Past logs keep their place; their targets are read from the part as it is now.
+	parts: archive('A step or Task removed after it was logged is archived: its past logs keep their place'),
 	areaId: display(),
 	collectionIds: display(),
 	restTimerEnabled: display(),
 	restTimerSeconds: display()
 });
 
-/** What has data logged against it: Metric ids with a value, sub-task ids with a tick. */
+/** What has data logged against it: Metric ids with a value, part ids with anything logged under them. */
 export interface TaskLogged {
 	metrics: Set<string> | string[];
-	subtasks: Set<string> | string[];
+	parts: Set<string> | string[];
 }
 
 const has = (s: Set<string> | string[], id: string) => (Array.isArray(s) ? s.includes(id) : s.has(id));
@@ -154,8 +157,8 @@ export interface TaskPast {
 	errors: Issue[];
 	/** Unit changes that need (or have) the user's choice. */
 	units: UnitEdit[];
-	/** Metrics and sub-tasks the edit removes: archived when logged, deleted otherwise. */
-	removed: Record<'metrics' | 'subtasks', { archive: string[]; drop: string[] }>;
+	/** Metrics and parts the edit removes: archived when logged, deleted otherwise. */
+	removed: Record<'metrics' | 'parts', { archive: string[]; drop: string[] }>;
 }
 
 /**
@@ -187,6 +190,6 @@ export function checkTaskPast(before: TaskForm, after: TaskForm, logged: TaskLog
 				errors.push({ path: issue.path, reason: `${from || 'No unit'} can't be converted to ${to || 'no unit'}. Keep the numbers, or add a new field`, severity: 'block', rule: 'check' });
 		}
 	});
-	const removed = removedItems(taskPast, before, after, (path, id) => has(path === 'metrics' ? logged.metrics : logged.subtasks, id));
-	return { errors, units, removed: { metrics: removed.metrics, subtasks: removed.subtasks } };
+	const removed = removedItems(taskPast, before, after, (path, id) => has(path === 'metrics' ? logged.metrics : logged.parts, id));
+	return { errors, units, removed: { metrics: removed.metrics, parts: removed.parts } };
 }

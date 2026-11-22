@@ -6,8 +6,9 @@ import { db } from '$lib/server/db';
 import { entry, metric, occurrence, slot, task, variant } from '$lib/server/db/schema';
 import { groupOfOccurrence, ownedOccurrence } from '$lib/server/owned';
 import { candidates, ensurePicks, lastEntries, recount, userToday } from '$lib/server/today';
-import { finishAs, goalsOf } from '$lib/server/progress';
-import { slotGroups } from '$lib/engine/groups';
+import { finishAs } from '$lib/server/progress';
+import { PATH_RE, place, startsRound } from '$lib/engine/parts';
+import { partIdsIn, positionsOf } from '$lib/server/positions';
 import { getSettings } from '$lib/server/settings';
 import { recapFor } from '$lib/server/stats';
 import { planOfToday, replanToday, windowFor } from '$lib/server/backfill';
@@ -17,8 +18,17 @@ import { appActor } from '$lib/server/core/actor';
 import { emit } from '$lib/server/core/events';
 import type { Actions, PageServerLoad } from './$types';
 
+/** One place in the log (see engine/parts.ts): a Slot's Task, or a Task inside it. */
 export interface LogTask {
+	path: string;
 	slotId: string;
+	/** 0 for a Slot's own Task; parts sit deeper. */
+	depth: number;
+	/** Parts inside it, which follow it in the list. */
+	kids: number;
+	/** "Circuit · round 2 of 3", above the first place of each round. */
+	roundHead: string | null;
+	/** An auto-filled Slot: can be rerolled. Only a Slot's own Task can be rerolled or swapped. */
 	open: boolean;
 	sets: number | null;
 	targets: Record<string, number>;
@@ -47,17 +57,14 @@ export interface LogTask {
 		}[];
 		/** Markdown: shown as a collapsible "How to" on the log screen. */
 		notes: string;
-		subtasks: { id: string; name: string }[];
 	} | null;
 	saved: Record<string, unknown>[];
 	previous: Record<string, unknown>[];
-	/** Sub-tasks ticked last time. */
-	previousSubs: string[];
 }
 
 /**
- * A Task as the log screen shows it. Archived fields and sub-tasks are left out, except those
- * this log already has a value or tick for (`kept`), so a past log shows and saves them as they are.
+ * A Task as the log screen shows it. Archived fields are left out, except those this log
+ * already has a value for (`kept`), so a past log shows and saves them as they are.
  */
 function loadTask(id: string, kept: Set<string>) {
 	const t = db.select().from(task).where(eq(task.id, id)).get();
@@ -90,15 +97,7 @@ function loadTask(id: string, kept: Set<string>) {
 				starter: starter ?? '',
 				prompts: prompts ?? [],
 				promptOrder
-			})),
-		subtasks: db
-			.select({ id: task.id, name: task.name, archived: task.archived })
-			.from(task)
-			.where(eq(task.parentTaskId, id))
-			.orderBy(asc(task.sortOrder))
-			.all()
-			.filter((x) => !x.archived || kept.has(x.id))
-			.map(({ id, name }) => ({ id, name }))
+			}))
 	};
 }
 
@@ -132,35 +131,47 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		.orderBy(asc(entry.sortOrder))
 		.all();
 
-	// Fields and sub-tasks this log already holds: shown even when archived since.
-	const kept = new Set(entries.flatMap((e) => [e.taskId, ...Object.keys(e.values ?? {})]));
-	// The same Task in two Slots: each Slot gets its own group of Entries, not both.
-	const nth = new Map<string, number>();
-	const items: LogTask[] = slots.map((s) => {
-		const taskId = picks[s.id] ?? s.taskId;
-		const t = taskId ? loadTask(taskId, kept) : null;
-		const n = taskId ? (nth.get(taskId) ?? 0) : 0;
-		if (taskId) nth.set(taskId, n + 1);
-		const twice = !!taskId && slots.filter((x) => (picks[x.id] ?? x.taskId) === taskId).length > 1;
-		const mine = entries.filter((e) => e.taskId === taskId);
-		// What this log aimed for: the targets kept with it when they changed later.
-		const g = goalsOf(s, o.occ);
+	// Fields and parts this log already holds: shown even when archived since.
+	const kept = new Set(entries.flatMap((e) => Object.keys(e.values ?? {})));
+	const positions = positionsOf({ ...o.occ, picks }, { keep: partIdsIn(entries) });
+	const placed = place(positions, entries);
+	const tasks = new Map<string, ReturnType<typeof loadTask>>();
+	const taskOf = (id: string) => (tasks.has(id) ? tasks.get(id)! : tasks.set(id, loadTask(id, kept)).get(id)!);
+	const byPath = new Map(positions.map((p) => [p.path, p]));
+	const items: LogTask[] = positions.map((p, i) => {
+		const s = slots.find((x) => x.id === p.slotId);
+		const t = taskOf(p.taskId);
+		const head = startsRound(positions, i) && p.parent ? `${taskOf(byPath.get(p.parent)!.taskId)?.name ?? ''} · round ${p.round!.n} of ${p.round!.of}` : null;
 		return {
-			slotId: s.id,
-			open: !!s.fillRule,
-			sets: o.occ.goals?.[s.id]?.sets ?? s.sets,
-			targets: g.targets ?? {},
-			minTargets: g.minTargets ?? {},
-			stretchTargets: g.stretchTargets ?? {},
+			path: p.path,
+			slotId: p.slotId,
+			depth: p.depth,
+			kids: p.kids,
+			roundHead: head,
+			open: p.depth === 0 && !!s?.fillRule,
+			sets: p.sets,
+			targets: p.targets ?? {},
+			minTargets: p.minTargets ?? {},
+			stretchTargets: p.stretchTargets ?? {},
 			task: t,
-			saved: (twice ? (slotGroups(mine, taskId!)[n] ?? []) : mine).map((e) => e.values).filter((v) => !(v._summary === true && Object.keys(v).length === 1)),
-			previous: taskId ? lastEntries(taskId, o.occ.id) : [],
-			previousSubs: (t?.subtasks ?? []).filter((sub) => lastEntries(sub.id, o.occ.id).length).map((sub) => sub.id)
+			saved: (placed.at.get(p.path) ?? []).map((e) => e.values).filter((v) => !(v._summary === true && Object.keys(v).length === 1)),
+			previous: lastEntries(p.taskId, o.occ.id, p.path)
 		};
 	});
-
-	// Sub-task ticks are saved as Entries of the sub-task itself.
-	const subDone = Object.fromEntries(entries.map((e) => [e.taskId, true]));
+	// An auto-filled Slot with no Task to match: shown, so it can be swapped.
+	for (const s of slots)
+		if (!(picks[s.id] ?? s.taskId)) {
+			const at = items.findIndex((it) => slots.findIndex((x) => x.id === it.slotId) > slots.indexOf(s));
+			const empty: LogTask = { path: s.id, slotId: s.id, depth: 0, kids: 0, roundHead: null, open: !!s.fillRule, sets: s.sets, targets: {}, minTargets: {}, stretchTargets: {}, task: null, saved: [], previous: [] };
+			if (at < 0) items.push(empty);
+			else items.splice(at, 0, empty);
+		}
+	// What this log holds that no place in it shows now (a part removed, a Slot swapped):
+	// sent back with every save, so it is never lost.
+	const orphans = placed.orphans.map((e) => ({ taskId: e.taskId, path: e.path, values: e.values }));
+	const orphanNames = [...new Set(orphans.map((e) => e.taskId))]
+		.map((id) => db.select({ name: task.name }).from(task).where(eq(task.id, id)).get()?.name)
+		.filter((n): n is string => !!n);
 
 	return {
 		occurrence: {
@@ -181,7 +192,8 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		levels: o.habit.levels?.enabled ? o.habit.levels : null,
 		variantName: v?.name ?? null,
 		items,
-		subDone,
+		orphans,
+		orphanNames,
 		/** "Last time … · best …" per Task. */
 		recap: recapFor(
 			accountId,
@@ -208,7 +220,12 @@ const savePayload = z.object({
 	/** Where to go after Finish on a past day. */
 	back: z.string().max(200).nullish(),
 	entries: z.array(
-		z.object({ taskId: z.string().uuid(), values: z.record(z.string(), z.unknown()) })
+		z.object({
+			taskId: z.string().uuid(),
+			/** Where it sits in the log (engine/parts.ts); null for one kept from before paths. */
+			path: z.string().regex(PATH_RE).nullable().default(null),
+			values: z.record(z.string(), z.unknown())
+		})
 	)
 });
 
@@ -248,7 +265,7 @@ export const actions: Actions = {
 			p.entries.forEach((e, i) =>
 				tx
 					.insert(entry)
-					.values({ id: randomUUID(), occurrenceId: o.occ.id, taskId: e.taskId, values: e.values, sortOrder: i })
+					.values({ id: randomUUID(), occurrenceId: o.occ.id, taskId: e.taskId, path: e.path, values: e.values, sortOrder: i })
 					.run()
 			);
 			tx.update(occurrence)

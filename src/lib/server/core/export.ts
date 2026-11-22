@@ -18,6 +18,7 @@ import { ActionError, requireScope, type Actor } from './actor';
 import { emit } from './events';
 import { listLogs, listValues, type LogRow, type ValueRow } from './read';
 import { depthOf } from '$lib/engine/tree';
+import { PATH_RE } from '$lib/engine/parts';
 
 export const EXPORT_FORMAT = 'ittracks-export';
 export const EXPORT_VERSION = 1;
@@ -30,6 +31,7 @@ const TABLES = {
 	task: s.task,
 	taskTag: s.taskTag,
 	metric: s.metric,
+	taskPart: s.taskPart,
 	collection: s.collection,
 	collectionTask: s.collectionTask,
 	identity: s.identity,
@@ -72,6 +74,7 @@ function accountRows(accountId: string): Rows {
 		task: db.select().from(s.task).where(taskOf).all(),
 		taskTag: by(s.taskTag, db.select({ r: s.taskTag }).from(s.taskTag).innerJoin(s.task, eq(s.taskTag.taskId, s.task.id)).where(taskOf).all()),
 		metric: by(s.metric, db.select({ r: s.metric }).from(s.metric).innerJoin(s.task, eq(s.metric.taskId, s.task.id)).where(taskOf).all()),
+		taskPart: by(s.taskPart, db.select({ r: s.taskPart }).from(s.taskPart).innerJoin(s.task, eq(s.taskPart.taskId, s.task.id)).where(taskOf).all()),
 		collection: db.select().from(s.collection).where(eq(s.collection.accountId, accountId)).all(),
 		collectionTask: by(
 			s.collectionTask,
@@ -184,8 +187,9 @@ day start. To restore an account, use the JSON export instead: these files can't
 | status | done, missed, skipped or due (still open) |
 | variant | Which version of the habit (e.g. Day A) |
 | level | minimum, target or stretch, when finished |
-| task | The Task; a step (sub-task) shows as \`Task › Step\` |
+| task | The Task; a step or a Task inside another shows where it sits, as \`Circuit › Push-ups\` |
 | set | 1, 2, 3… for a value logged per set; empty for one logged once per log |
+| round | The round of a Circuit (a Task whose parts repeat) it was logged in; empty outside rounds |
 | field | The field's name; \`Done\` for a ticked step or Yes/no Task |
 | type | number, count, duration, checkbox, choice, text, or tick |
 | unit | kg, min, pages…; durations without a unit are minutes |
@@ -224,7 +228,7 @@ export function exportCsvZip(actor: Actor): { body: Uint8Array; today: string } 
 		{ name: 'ittracks-export/README.md', text: README(notes, username, today) },
 		{
 			name: 'ittracks-export/values.csv',
-			text: csvOf(['ref', 'date', 'weekday', 'habit', 'status', 'variant', 'level', 'task', 'set', 'field', 'type', 'unit', 'value', 'score'], values.rows as unknown as Record<string, unknown>[])
+			text: csvOf(['ref', 'date', 'weekday', 'habit', 'status', 'variant', 'level', 'task', 'set', 'round', 'field', 'type', 'unit', 'value', 'score'], values.rows as unknown as Record<string, unknown>[])
 		},
 		{
 			name: 'ittracks-export/logs.csv',
@@ -313,7 +317,7 @@ export function readExport(raw: unknown): { file: z.infer<typeof exportFile>; pr
 }
 
 /** Tables whose rows have their own id, which an import may need to renumber. */
-const WITH_ID: TableName[] = ['area', 'tag', 'task', 'metric', 'collection', 'identity', 'habit', 'variant', 'slot', 'pause', 'occurrence', 'entry', 'slip', 'craving'];
+const WITH_ID: TableName[] = ['area', 'tag', 'task', 'metric', 'taskPart', 'collection', 'identity', 'habit', 'variant', 'slot', 'pause', 'occurrence', 'entry', 'slip', 'craving'];
 
 /**
  * Columns that point at another row, and the table that row is in. An import may only point
@@ -325,6 +329,7 @@ const REFS: Partial<Record<TableName, Record<string, { to: TableName; loose?: bo
 	task: { areaId: { to: 'area' }, parentTaskId: { to: 'task', loose: true } },
 	taskTag: { taskId: { to: 'task' }, tagId: { to: 'tag' } },
 	metric: { taskId: { to: 'task' } },
+	taskPart: { taskId: { to: 'task' }, childTaskId: { to: 'task' } },
 	collection: { parentId: { to: 'collection', loose: true } },
 	collectionTask: { collectionId: { to: 'collection' }, taskId: { to: 'task' } },
 	habit: { areaId: { to: 'area' }, parentId: { to: 'habit', loose: true } },
@@ -360,8 +365,33 @@ function checkRefs(name: TableName, row: Record<string, unknown>, i: number, kno
 		row.picks = Object.fromEntries(
 			Object.entries(row.picks as Record<string, unknown>).filter(([slotId, taskId]) => known.get('slot')?.has(slotId) && known.get('task')?.has(String(taskId)))
 		);
+	// A path is ids and round numbers only; anything else is dropped, and the Entry is placed by its Task.
+	if (name === 'entry' && row.path != null && (typeof row.path !== 'string' || !PATH_RE.test(row.path))) row.path = null;
 	// Keys belong to one server and are never exported.
 	if (name === 'event') row.tokenId = null;
+}
+
+/** An Entry's path with each id in it renumbered. */
+const remapPath = (path: unknown, ids: Map<string, string>) =>
+	typeof path === 'string'
+		? path
+				.split('/')
+				.map((seg) => {
+					const [id, r] = seg.split('#');
+					return (ids.get(id) ?? id) + (r ? `#${r}` : '');
+				})
+				.join('/')
+		: path;
+
+/**
+ * An export from before Tasks had parts lists steps only as Tasks with a parent: they become
+ * parts, as the migration did (a step's part takes its id).
+ */
+function partsFromSteps(tasks: Record<string, unknown>[]): Record<string, unknown>[] {
+	const ids = new Set(tasks.map((t) => String(t.id ?? '')));
+	return tasks
+		.filter((t) => t.parentTaskId && ids.has(String(t.parentTaskId)))
+		.map((t) => ({ id: t.id, taskId: t.parentTaskId, childTaskId: t.id, sortOrder: t.sortOrder ?? 0, archived: t.archived ?? false }));
 }
 
 /** Replace every string (and object key) that is an old id with its new one, all the way down. */
@@ -404,7 +434,8 @@ export function importReplace(actor: Actor, raw: unknown): { counts: Record<stri
 	if (actor.source !== 'app') throw new ActionError('forbidden', 'Importing replaces everything, so it can only be done in the app.');
 	const r = readExport(raw);
 	if ('error' in r) throw new ActionError('invalid', r.error);
-	const tables = r.file.tables as Rows;
+	const tables = { ...(r.file.tables as Rows) };
+	if (!tables.taskPart) tables.taskPart = partsFromSteps(tables.task ?? []);
 	const accountId = actor.accountId;
 	const counts: Record<string, number> = {};
 	let renumbered = false;
@@ -434,7 +465,9 @@ export function importReplace(actor: Actor, raw: unknown): { counts: Record<stri
 			const rows = name === 'habit' ? parentsFirst(tables[name] ?? []) : (tables[name] ?? []);
 			counts[name] = rows.length;
 			for (let i = 0; i < rows.length; i++) {
-				const row = rowFor(table, (renumbered ? remap(rows[i], ids) : rows[i]) as Record<string, unknown>, accountId);
+				const raw = renumbered ? (remap(rows[i], ids) as Record<string, unknown>) : rows[i];
+				if (renumbered && name === 'entry') raw.path = remapPath(rows[i].path, ids);
+				const row = rowFor(table, raw, accountId);
 				checkRefs(name, row, i, known);
 				try {
 					tx.insert(table).values(row as never).run();

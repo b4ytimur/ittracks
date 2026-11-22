@@ -442,7 +442,18 @@
 							{#if newTaskError}<p class="error">{newTaskError}</p>{/if}
 						</div>
 					{/if}
-					{#if !s.taskId || repeating.has(s.taskId)}
+					{#if s.taskId && !repeating.has(s.taskId) && data.withParts.includes(s.taskId)}
+						<label style="width: 8rem" title="Everything inside this Task is logged once per round"
+							>Rounds
+							<input
+								type="number"
+								min="0"
+								max="50"
+								value={s.sets ?? ''}
+								oninput={(e) => (s.sets = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
+							/>
+						</label>
+					{:else if !s.taskId || repeating.has(s.taskId)}
 						<label style="width: 8rem"
 							>Target sets
 							<input
