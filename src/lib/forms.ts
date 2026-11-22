@@ -4,7 +4,8 @@ import { metricTypes } from './metric-types';
 import { optionForm, type ChoiceOption } from './options';
 
 const id = z.string().uuid();
-const name = z.string().trim().min(1, 'A name is required').max(120, 'Keep names to 120 characters or fewer');
+/** The rule for a name of a habit or Task, shared by the editors and rename in place. */
+export const name = z.string().trim().min(1, 'A name is required').max(120, 'Keep names to 120 characters or fewer');
 
 /** Notes are Markdown (src/lib/markdown.ts): room for real instructions or a journal entry. */
 export const NOTE_MAX = 20000;

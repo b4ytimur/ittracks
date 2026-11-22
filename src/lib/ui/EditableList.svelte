@@ -12,7 +12,7 @@
 	// The list knows nothing about what a row is: the page renders it with `row` and gets moves
 	// back as keys (see list.ts). Drops inside a row only happen where `canDrop` allows them.
 	import { tick, type Snippet } from 'svelte';
-	import { applyMove, dropPosition, rangeKeys, type Move, type Position, type RowContext } from './list';
+	import { applyMove, dropPosition, gridDrop, rangeKeys, type Move, type Position, type RowContext } from './list';
 
 	let {
 		items,
@@ -32,6 +32,8 @@
 		children,
 		empty,
 		layout = 'row',
+		axis = 'y',
+		itemClass,
 		ariaLabel,
 		class: klass = ''
 	}: {
@@ -64,6 +66,14 @@
 		 * for big items such as a page section that holds a list of its own.
 		 */
 		layout?: 'row' | 'block';
+		/**
+		 * "y" (the default): one item under another. "grid": items flow in a grid the page lays out
+		 * with CSS on `class` (and `itemClass` for spans); drops go before or after the nearest cell,
+		 * and every arrow key moves one place earlier or later. No drops inside a cell.
+		 */
+		axis?: 'y' | 'grid';
+		/** A class for each item's <li>, such as its size in a grid. */
+		itemClass?: (item: T) => string;
 		/**
 		 * What sits under a row, inside it: usually another EditableList for what the item holds.
 		 * It moves with the row when the row is dragged, and drops are worked out on the row itself.
@@ -107,9 +117,12 @@
 
 	let drag = $state<{
 		key: string;
+		startX: number;
 		startY: number;
 		startScroll: number;
+		x: number;
 		y: number;
+		dx: number;
 		dy: number;
 		over: string | null;
 		pos: Position | null;
@@ -122,7 +135,7 @@
 		if (e.button !== 0 || !onmove) return;
 		e.preventDefault();
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-		drag = { key: k, startY: e.clientY, startScroll: window.scrollY, y: e.clientY, dy: 0, over: null, pos: null };
+		drag = { key: k, startX: e.clientX, startY: e.clientY, startScroll: window.scrollY, x: e.clientX, y: e.clientY, dx: 0, dy: 0, over: null, pos: null };
 		// No text gets selected while a row is held.
 		window.getSelection()?.removeAllRanges();
 		document.documentElement.classList.add('el-dragging');
@@ -132,6 +145,7 @@
 
 	function follow(e: PointerEvent) {
 		if (!drag) return;
+		drag.x = e.clientX;
 		drag.y = e.clientY;
 		locate();
 	}
@@ -141,10 +155,18 @@
 		if (!drag) return;
 		const d = drag;
 		d.dy = d.y - d.startY + (window.scrollY - d.startScroll);
+		d.dx = axis === 'grid' ? d.x - d.startX : 0;
 		const others = rows().filter((r) => r.dataset.key !== d.key);
 		let over: string | null = null;
 		let pos: Position | null = null;
-		if (others.length) {
+		if (axis === 'grid') {
+			const cells = others.map((r) => ({ key: r.dataset.key!, box: r.getBoundingClientRect() }));
+			const hit = gridDrop(d.x, d.y, cells, list?.getBoundingClientRect().width ?? 0);
+			if (hit) {
+				const m = { key: d.key, target: hit.key, position: hit.position };
+				if (allowed(m) && changes(m)) [over, pos] = [hit.key, hit.position];
+			}
+		} else if (others.length) {
 			// The first row whose bottom is below the pointer; past the last row means after it.
 			const r = others.find((x) => x.getBoundingClientRect().bottom > d.y) ?? others[others.length - 1];
 			// Where on the row is worked out on its own line, not on what sits under it.
@@ -194,9 +216,11 @@
 	function keydown(e: KeyboardEvent, k: string) {
 		const i = keys.indexOf(k);
 		let m: Move | null = null;
-		if (e.key === 'ArrowUp' && i > 0) m = { key: k, target: keys[i - 1], position: 'before' };
-		else if (e.key === 'ArrowDown' && i < keys.length - 1) m = { key: k, target: keys[i + 1], position: 'after' };
-		else if (e.key === 'ArrowRight' && i > 0) m = { key: k, target: keys[i - 1], position: 'inside' };
+		const earlier = e.key === 'ArrowUp' || (axis === 'grid' && e.key === 'ArrowLeft');
+		const later = e.key === 'ArrowDown' || (axis === 'grid' && e.key === 'ArrowRight');
+		if (earlier && i > 0) m = { key: k, target: keys[i - 1], position: 'before' };
+		else if (later && i < keys.length - 1) m = { key: k, target: keys[i + 1], position: 'after' };
+		else if (axis !== 'grid' && e.key === 'ArrowRight' && i > 0) m = { key: k, target: keys[i - 1], position: 'inside' };
 		if (!m || !allowed(m)) return;
 		e.preventDefault();
 		commit(m, true);
@@ -236,7 +260,7 @@
 	}}
 />
 
-<ul class="list elist {klass}" class:block={layout === 'block'} class:editing class:selecting bind:this={list} aria-label={ariaLabel}>
+<ul class="list elist {klass}" class:grid={axis === 'grid'} class:block={layout === 'block'} class:editing class:selecting bind:this={list} aria-label={ariaLabel}>
 	{#each items as item, index (key(item))}
 		{@const k = key(item)}
 		{@const on = !!selected?.has(k)}
@@ -250,9 +274,11 @@
 			class:drop-before={drag?.over === k && drag.pos === 'before'}
 			class:drop-after={drag?.over === k && drag.pos === 'after'}
 			class:drop-inside={drag?.over === k && drag.pos === 'inside'}
-			style:transform={dragging ? `translateY(${drag?.dy ?? 0}px)` : null}
+			class={itemClass?.(item)}
+			style:transform={dragging ? `translate(${drag?.dx ?? 0}px, ${drag?.dy ?? 0}px)` : null}
 			onclickcapture={(e) => rowClick(e, k)}
 		>
+			{#if layout !== 'block' || editing || selecting}
 			<div class="head">
 				{#if selecting && selected}
 					<input
@@ -292,6 +318,7 @@
 					<button type="button" class="small remove" aria-label="{removeOf(item)} {nameOf(item)}" onclick={() => onremove(item)}>{removeOf(item)}</button>
 				{/if}
 			</div>
+			{/if}
 			{#if layout === 'block'}
 				<div class="body">
 					{@render row(item, ctx)}
@@ -374,13 +401,29 @@
 	.drop-after::after {
 		bottom: -0.32rem;
 	}
+	/* In a grid the line stands at the side of the cell the card lands on. */
+	.grid > .drop-before::before,
+	.grid > .drop-after::after {
+		top: 0;
+		bottom: 0;
+		width: 3px;
+		height: auto;
+		right: auto;
+	}
+	.grid > .drop-before::before {
+		left: -0.45rem;
+	}
+	.grid > .drop-after::after {
+		left: auto;
+		right: -0.45rem;
+	}
 	.drop-inside > .head > .body {
 		outline: 2px dashed var(--accent);
 		outline-offset: 2px;
 		border-radius: var(--radius);
 	}
 	/* Block layout: a framed item with a title bar. */
-	.block > li {
+	.block.editing > li {
 		border: 1px dashed var(--border);
 		border-radius: var(--radius);
 		padding: 0.35rem 0.5rem 0.5rem;
@@ -388,6 +431,8 @@
 	}
 	.block > li > .head {
 		min-height: 2rem;
+		flex-wrap: wrap;
+		row-gap: 0.3rem;
 	}
 	.block .title {
 		flex: 1;
@@ -396,7 +441,7 @@
 		font-weight: 600;
 		color: var(--muted);
 	}
-	.block > li > .body:not(:empty) {
+	.block.editing > li > .body:not(:empty) {
 		margin-top: 0.4rem;
 	}
 	.block > li.dragging {

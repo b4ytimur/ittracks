@@ -1,14 +1,15 @@
+import { fail } from '@sveltejs/kit';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { metric, task } from '$lib/server/db/schema';
 import { userToday } from '$lib/server/today';
 import { effectiveUnit } from '$lib/units';
-import { listTagNames, listTasks, taskUsage } from '$lib/server/repo/tasks';
+import { listTagNames, listTasks, renameTask, setTaskArchived, taskUsage } from '$lib/server/repo/tasks';
 import { listAreas } from '$lib/server/repo/areas';
 import { collectionTasks, listCollections } from '$lib/server/repo/collections';
 import { getViews } from '$lib/server/settings';
 import { initialState } from '$lib/views';
-import type { PageServerLoad } from './$types';
+import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ locals, url, cookies }) => {
 	const accountId = locals.account!.id;
@@ -46,4 +47,24 @@ export const load: PageServerLoad = ({ locals, url, cookies }) => {
 			.all()
 			.map((m) => ({ taskId: m.taskId, name: m.name, unit: effectiveUnit(m) }))
 	};
+};
+
+/** Edit mode on the list: rename and archive in place, the same as the Task editor does. */
+export const actions: Actions = {
+	rename: async ({ request, locals }) => {
+		const f = await request.formData();
+		const r = renameTask(locals.account!.id, String(f.get('id') ?? ''), String(f.get('name') ?? ''));
+		if ('error' in r) return fail(400, { error: r.error });
+		return { renamed: r.name };
+	},
+	archive: async ({ request, locals }) => {
+		const id = String((await request.formData()).get('id') ?? '');
+		if (!setTaskArchived(locals.account!.id, id, true)) return fail(404, { error: 'No such Task' });
+		return { archived: id };
+	},
+	unarchive: async ({ request, locals }) => {
+		const id = String((await request.formData()).get('id') ?? '');
+		if (!setTaskArchived(locals.account!.id, id, false)) return fail(404, { error: 'No such Task' });
+		return { unarchived: id };
+	}
 };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyMove, dropPosition, mergeOrder, moveBy, moveKey, rangeKeys, reorderFrom, selectionState } from './list';
+import { applyMove, dropPosition, gridDrop, mergeOrder, moveBy, moveKey, rangeKeys, reorderFrom, selectionState } from './list';
 
 const keys = ['a', 'b', 'c', 'd'];
 
@@ -101,5 +101,28 @@ describe('reorderFrom', () => {
 	it('starts from what is shown when the page is sorted another way', () => {
 		// Shown by name: d, c, b. The user drags b to the top.
 		expect(reorderFrom(order, ['d', 'c', 'b'], ['b', 'd', 'c'], false)).toEqual(['b', 'd', 'c', 'a']);
+	});
+});
+
+describe('gridDrop', () => {
+	// Two half-width cards on the first line, one full-width card under them.
+	const cells = [
+		{ key: 'a', box: { left: 0, top: 0, width: 190, height: 100 } },
+		{ key: 'b', box: { left: 210, top: 0, width: 190, height: 100 } },
+		{ key: 'c', box: { left: 0, top: 120, width: 400, height: 100 } }
+	];
+	it('splits a narrow cell left and right', () => {
+		expect(gridDrop(20, 50, cells, 400)).toEqual({ key: 'a', position: 'before' });
+		expect(gridDrop(180, 50, cells, 400)).toEqual({ key: 'a', position: 'after' });
+		expect(gridDrop(220, 10, cells, 400)).toEqual({ key: 'b', position: 'before' });
+	});
+	it('splits a full-width cell top and bottom', () => {
+		expect(gridDrop(390, 130, cells, 400)).toEqual({ key: 'c', position: 'before' });
+		expect(gridDrop(10, 210, cells, 400)).toEqual({ key: 'c', position: 'after' });
+	});
+	it('takes the nearest cell from a gap or past the end', () => {
+		expect(gridDrop(200, 50, cells, 400)?.key).toMatch(/a|b/);
+		expect(gridDrop(200, 500, cells, 400)).toEqual({ key: 'c', position: 'after' });
+		expect(gridDrop(0, 0, [], 400)).toBeNull();
 	});
 });

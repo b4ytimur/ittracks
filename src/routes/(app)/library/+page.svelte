@@ -5,11 +5,20 @@
 	import ViewBar from '$lib/ViewBar.svelte';
 	import EditableList from '$lib/ui/EditableList.svelte';
 	import EditButton from '$lib/ui/EditButton.svelte';
+	import InlineText from '$lib/ui/InlineText.svelte';
+	import { invalidateAll } from '$app/navigation';
+	import { runAction, showToast } from '$lib/toast.svelte';
 	import BulkBar from '$lib/bulk/BulkBar.svelte';
 	import { unitOptions } from '$lib/bulk/catalog';
 	import { groupBy } from '$lib/views';
 
 	let { data } = $props();
+
+	type Task = (typeof data.tasks)[number];
+	/** The list as shown, changed at once by edits here and refreshed from the server after. */
+	let tasks = $derived(data.tasks);
+	/** Edit mode is a flag on this same list: rename in place and archive. The Library has no order of its own to drag. */
+	let editing = $state(false);
 
 	// Search, filters and sort are a view: remembered between visits and savable by name.
 	let views = $state(untrack(() => data.views));
@@ -30,8 +39,9 @@
 	const shown = $derived.by(() => {
 		const inCollection = view.collection ? new Set(data.collections.find((c) => c.id === view.collection)?.taskIds ?? []) : null;
 		const q = view.query.trim().toLowerCase();
-		const list = data.tasks.filter(
+		const list = tasks.filter(
 			(t) =>
+				(data.showArchived || !t.archived) &&
 				(!q || t.name.toLowerCase().includes(q) || t.tags.some((g) => g.name.toLowerCase().includes(q))) &&
 				view.tags.every((g) => t.tags.some((x) => x.name === g)) &&
 				(!areaId || t.areaId === areaId) &&
@@ -75,6 +85,34 @@
 			.map((g) => ({ value: g.name, label: `${g.name} · ${g.tasks.size} ${g.tasks.size === 1 ? 'Task' : 'Tasks'} · ${[...g.units].join(', ')}` }));
 	}
 	const sources = (ids: string[]) => ({ fields: fieldsIn(ids), units: unitOptions() });
+
+	const patch = (id: string, change: Partial<Task>) => (tasks = tasks.map((x) => (x.id === id ? { ...x, ...change } : x)));
+	async function rename(t: Task, name: string) {
+		const before = t.name;
+		patch(t.id, { name });
+		const r = await runAction('?/rename', { id: t.id, name });
+		if (!r.ok) {
+			patch(t.id, { name: before });
+			return showToast(r.error ?? "Couldn't rename it. Are you online?");
+		}
+		showToast(`Renamed to “${name}”.`, async () => {
+			await runAction('?/rename', { id: t.id, name: before });
+			await invalidateAll();
+		});
+	}
+	async function archive(t: Task) {
+		const to = !t.archived;
+		patch(t.id, { archived: to });
+		const r = await runAction(to ? '?/archive' : '?/unarchive', { id: t.id });
+		if (!r.ok) {
+			patch(t.id, { archived: !to });
+			return showToast(r.error ?? "Couldn't change it. Are you online?");
+		}
+		showToast(to ? `Archived ${t.name}. Its logs are kept.` : `${t.name} is back.`, async () => {
+			await runAction(to ? '?/unarchive' : '?/archive', { id: t.id });
+			await invalidateAll();
+		});
+	}
 </script>
 
 <svelte:head><title>Library · ittracks</title></svelte:head>
@@ -85,7 +123,10 @@
 </header>
 
 <ViewBar page="library" bind:views bind:current={view}>
-	{#snippet end()}<EditButton bind:editing={selecting} label="Select" look="chip" />{/snippet}
+	{#snippet end()}
+		<EditButton bind:editing look="chip" onchange={(on) => on && (selecting = false)} />
+		<EditButton bind:editing={selecting} label="Select" look="chip" onchange={(on) => on && (editing = false)} />
+	{/snippet}
 </ViewBar>
 
 <input type="search" bind:value={view.query} placeholder="Search Tasks and tags" aria-label="Search" />
@@ -136,6 +177,9 @@
 	<p class="muted">Nothing matches. {#if filtering}<button class="link" onclick={clear}>Clear filters</button>{/if}</p>
 {/if}
 
+{#if editing}
+	<p class="muted small-text">Tap a name to rename it. Archived Tasks keep their logs and leave the pickers.</p>
+{/if}
 {#if selecting}
 	<BulkBar kind="task" {selected} visible={shown.map((t) => t.id)} today={data.today} {sources} />
 {/if}
@@ -144,12 +188,23 @@
 	{#if g.label}
 		<h2 class="area" style="--c: {g.color ?? 'var(--border)'}">{g.label}</h2>
 	{/if}
-	<EditableList items={g.items} key={(t) => t.id} label={(t) => t.name} {selecting} {selected} ariaLabel={g.label || 'Tasks'} class="tasks">
+	<EditableList
+		items={g.items}
+		key={(t) => t.id}
+		label={(t) => t.name}
+		{editing}
+		{selecting}
+		{selected}
+		onremove={archive}
+		removeLabel={(t) => (t.archived ? 'Unarchive' : 'Archive')}
+		ariaLabel={g.label || 'Tasks'}
+		class="tasks"
+	>
 		{#snippet row(t)}
 			{@const a = area(t.areaId)}
-			<a class="card task" href="/library/{t.id}" style="--c: {a?.color ?? 'transparent'}">
+			<svelte:element this={editing ? 'div' : 'a'} class="card task" href={editing ? undefined : `/library/${t.id}`} style="--c: {a?.color ?? 'transparent'}">
 				<div class="row" style="align-items: center">
-					<strong class="grow">{t.name}</strong>
+					<strong class="grow"><InlineText value={t.name} {editing} label="Name of {t.name}" maxlength={120} onsave={(v) => rename(t, v)} /></strong>
 					{#if t.archived}<span class="chip">Archived</span>{:else if !t.usedIn.length && !t.timesLogged}<span class="chip">Unused</span>{/if}
 				</div>
 				{#if t.usedIn.length}<div class="muted small-text">In {t.usedIn.join(', ')}</div>{/if}
@@ -158,7 +213,7 @@
 						{#each t.tags as tg (tg.name)}<span class="chip">{tg.name}: {levelWord[tg.level]}</span>{/each}
 					</div>
 				{/if}
-			</a>
+			</svelte:element>
 		{/snippet}
 	</EditableList>
 {/each}

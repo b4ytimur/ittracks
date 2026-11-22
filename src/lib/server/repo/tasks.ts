@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { and, asc, countDistinct, eq, inArray, isNull, max } from 'drizzle-orm';
 import { db } from '../db';
 import { collection, collectionTask, entry, habit, metric, occurrence, slot, tag, task, taskPart, taskTag, variant } from '../db/schema';
-import type { PartForm, TaskForm } from '$lib/forms';
+import { name as nameRule, type PartForm, type TaskForm } from '$lib/forms';
 import { checkParts, edgesOf } from '$lib/engine/parts';
 import { descendants } from '$lib/engine/tree';
 import { checkTaskPast, type TaskPast } from '$lib/rules/task';
@@ -462,11 +462,26 @@ export function deleteTask(accountId: string, id: string) {
 	});
 }
 
-export function setTaskArchived(accountId: string, id: string, archived: boolean) {
-	db.update(task)
+/** Archive or bring back a Library Task. False when there is no such Task. */
+export function setTaskArchived(accountId: string, id: string, archived: boolean): boolean {
+	const r = db
+		.update(task)
 		.set({ archived })
 		.where(and(eq(task.id, id), eq(task.accountId, accountId), isNull(task.parentTaskId)))
 		.run();
+	return r.changes > 0;
+}
+
+/** Rename a Library Task in place. Logs point at the Task, not its name, so history is untouched. */
+export function renameTask(accountId: string, id: string, value: string): { error: string } | { name: string } {
+	const parsed = nameRule.safeParse(value);
+	if (!parsed.success) return { error: parsed.error.issues[0].message };
+	const r = db
+		.update(task)
+		.set({ name: parsed.data })
+		.where(and(eq(task.id, id), eq(task.accountId, accountId), isNull(task.parentTaskId)))
+		.run();
+	return r.changes ? { name: parsed.data } : { error: 'No such Task' };
 }
 
 /** Copy a Task with its Tags, Metrics, parts and Collections. Returns the new id. Library Tasks inside it are shared, not copied. */

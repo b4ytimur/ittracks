@@ -96,3 +96,29 @@ export function reorderFrom(order: string[], shown: string[], part: string[], so
 	const base = sortedByOrder ? order : [...shown, ...order.filter((k) => !seen.has(k))];
 	return mergeOrder(base, part);
 }
+
+interface Box {
+	left: number;
+	top: number;
+	width: number;
+	height: number;
+}
+
+/**
+ * In a grid: the cell a point is over, or the nearest one when it is in a gap, and which side
+ * it lands on. A cell that fills most of a line splits top and bottom; a narrower one splits
+ * left and right, since its neighbours sit beside it.
+ */
+export function gridDrop(x: number, y: number, cells: { key: string; box: Box }[], lineWidth: number): { key: string; position: 'before' | 'after' } | null {
+	if (!cells.length) return null;
+	const dist = (b: Box) => {
+		const dx = x < b.left ? b.left - x : x > b.left + b.width ? x - b.left - b.width : 0;
+		const dy = y < b.top ? b.top - y : y > b.top + b.height ? y - b.top - b.height : 0;
+		return dx * dx + dy * dy;
+	};
+	const best = cells.reduce((a, c) => (dist(c.box) < dist(a.box) ? c : a));
+	const b = best.box;
+	const wide = lineWidth > 0 && b.width > lineWidth * 0.7;
+	const before = wide ? y < b.top + b.height / 2 : x < b.left + b.width / 2;
+	return { key: best.key, position: before ? 'before' : 'after' };
+}
