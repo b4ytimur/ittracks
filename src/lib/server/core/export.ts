@@ -206,7 +206,7 @@ feeling, place${notes ? ', notes' : ''}.
 
 ## habits.csv and fields.csv
 
-habits.csv: id, name, direction (build or break), area, schedule (in words), start_date, archived, group_id (the group the habit sits in; a group's own days are worked out from the habits inside it).
+habits.csv: id, name, direction (build or break), area, schedule (in words), start_date, archived, group_id (the group or routine the habit sits in; a group's days, and a routine's on days the habits inside are due, are worked out from them).
 fields.csv: one row per field of each Task: task_id, task, field_id, field, type, unit, per_set,
 options. Ids match the JSON export and the app's links.
 `;

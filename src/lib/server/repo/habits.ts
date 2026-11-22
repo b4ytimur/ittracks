@@ -11,7 +11,8 @@ import {
 } from '$lib/forms';
 import { makesLoop } from '$lib/engine/stack';
 import { keepEarlier, sameSchedule, scheduleStartBy, type EarlierSchedule } from '$lib/engine/unlogged';
-import { isGroup, type Schedule } from '$lib/engine/schedule';
+import { isFollow, isGroup, type Schedule } from '$lib/engine/schedule';
+import { standaloneSchedule } from '$lib/engine/follow';
 import { makesCycle } from '$lib/engine/tree';
 import { keepGoals, rejudge } from '../progress';
 import type { StreakRule } from '$lib/engine/streak';
@@ -162,13 +163,26 @@ export function checkLinks(accountId: string, id: string | null, f: HabitForm): 
 		.from(habit)
 		.where(eq(habit.accountId, accountId))
 		.all();
+	const parent = f.parentId ? others.find((o) => o.id === f.parentId) : undefined;
 	if (f.parentId) {
-		const parent = others.find((o) => o.id === f.parentId);
-		if (!parent || parent.direction !== 'build' || !isGroup(parent.schedule as Schedule | null))
-			return 'Pick a group to put this habit in';
-		if (parent.archived && others.find((o) => o.id === id)?.parentId !== f.parentId) return 'That group is archived. Pick another one';
-		if (id && makesCycle(others, id, f.parentId)) return "A group can't sit inside itself or a group inside it";
+		// A group, or a routine: a habit with its own schedule and no Tasks of its own.
+		if (!parent || parent.direction !== 'build' || !parent.schedule) return 'Pick a group or a routine to put this habit in';
+		if (!isGroup(parent.schedule as Schedule) && hasSlots(parent.id))
+			return 'That habit has Tasks of its own, so it can’t hold habits yet. Pick a group or a habit with no Tasks';
+		if (parent.archived && others.find((o) => o.id === id)?.parentId !== f.parentId) return 'That habit is archived. Pick another one';
+		if (id && makesCycle(others, id, f.parentId)) return "A habit can't sit inside itself or a habit inside it";
+		// A routine's Done marks what is inside it, and a group can't be marked: it is judged.
+		if (isGroup(f.schedule) && !isGroup(parent.schedule as Schedule)) return 'A group can only sit inside another group for now';
 	}
+	if (isFollow(f.schedule)) {
+		if (!parent || isGroup(parent.schedule as Schedule | null))
+			return 'A habit can only follow a routine it sits in. Put it in a routine, or give it a schedule of its own';
+		const theirs = new Set(db.select({ id: variant.id }).from(variant).where(eq(variant.habitId, parent.id)).all().map((v) => v.id));
+		if (f.schedule.on && !f.schedule.on.some((v) => theirs.has(v))) return `Pick at least one of the routine's Variants`;
+	}
+	// A routine's Tasks are the habits inside it, for now.
+	if (id && f.variants.some((v) => v.slots.length) && !isGroup(f.schedule) && others.some((o) => o.parentId === id && o.direction === 'build'))
+		return 'This habit has habits inside it, so it has no Tasks of its own for now. Put these Tasks in a habit inside it';
 	const after = f.cue.afterHabitId;
 	if (after) {
 		if (!others.some((o) => o.id === after && o.direction === 'build') || after === id)
@@ -279,6 +293,9 @@ export function checkHabitEdit(accountId: string, id: string, f: HabitForm): str
 		return 'This habit has logs, and a group gets its days from the habits inside it. Make a new habit for the group instead';
 	if (wasGroup && !isGroup(f.schedule) && db.select({ id: habit.id }).from(habit).where(eq(habit.parentId, id)).get())
 		return 'Move the habits inside this group out of it first';
+	// A group has no days of its own for the habits inside to follow.
+	if (!wasGroup && isGroup(f.schedule) && followers(id).length)
+		return 'Habits inside this one follow its schedule. Give them a schedule of their own first';
 	// Guarded fields changed: only then is it worth asking whether anything is logged.
 	const issues = checkHabitPast(before, f, true);
 	return issues.length && habitLogged(id) ? issues[0].reason : null;
@@ -454,10 +471,42 @@ export function saveHabit(
 }
 
 export function deleteHabit(accountId: string, id: string) {
-	db.delete(habit)
-		.where(and(eq(habit.id, id), eq(habit.accountId, accountId)))
-		.run();
+	const gone = db.select({ id: habit.id }).from(habit).where(and(eq(habit.id, id), eq(habit.accountId, accountId))).get();
+	if (!gone) return;
+	const days = daysOf(id);
+	db.transaction((tx) => {
+		// The habits inside move to the top level. One that followed this habit gets its days.
+		for (const k of followers(id))
+			tx.update(habit)
+				.set({ schedule: standaloneSchedule(days, k.schedule as Extract<Schedule, { kind: 'follow' }>, k.startDate) })
+				.where(eq(habit.id, k.id))
+				.run();
+		tx.delete(habit)
+			.where(and(eq(habit.id, id), eq(habit.accountId, accountId)))
+			.run();
+	});
 }
+
+/** A habit's days as a schedule of its own: a routine that follows another one takes that one's days. */
+function daysOf(id: string, depth = 0): Schedule | null {
+	const h = db.select({ schedule: habit.schedule, parentId: habit.parentId, startDate: habit.startDate }).from(habit).where(eq(habit.id, id)).get();
+	const s = (h?.schedule ?? null) as Schedule | null;
+	if (!h || !isFollow(s)) return s;
+	const above = h.parentId && depth < 20 ? daysOf(h.parentId, depth + 1) : null;
+	return standaloneSchedule(above, s, h.startDate);
+}
+
+/** The habits inside this one that follow its schedule. */
+const followers = (id: string) =>
+	db
+		.select({ id: habit.id, schedule: habit.schedule, startDate: habit.startDate })
+		.from(habit)
+		.where(eq(habit.parentId, id))
+		.all()
+		.filter((k) => isFollow(k.schedule as Schedule | null));
+
+const hasSlots = (habitId: string) =>
+	!!db.select({ id: slot.id }).from(slot).innerJoin(variant, eq(slot.variantId, variant.id)).where(eq(variant.habitId, habitId)).get();
 
 export function setHabitArchived(accountId: string, id: string, archived: boolean) {
 	db.update(habit)

@@ -8,6 +8,7 @@ import { history, pausesOf, scheduleAt } from '../today';
 import { snapshot } from '../backfill';
 import { getSettings } from '../settings';
 import { logSkip } from '../core/log';
+import { followDue } from '../rollup';
 import { ActionError } from '../core/actor';
 import { addDays } from '$lib/engine/dates';
 import { carriesOver, earliestLoggable } from '$lib/engine/backfill';
@@ -63,7 +64,7 @@ export const skipDays: Run<'skip_days'> = ({ actor, today, undo, report }, habit
 				already++;
 				continue;
 			}
-			if (!occ && (pauseOn(pauses, h.id, d) || !dueOn(scheduleAt(h, d), history(h.id, d), d))) continue;
+			if (!occ && (pauseOn(pauses, h.id, d) || !dueOn(scheduleAt(h, d), history(h.id, d), d, followDue(h.id, scheduleAt(h, d), today)))) continue;
 			const before = snapshot(h.id, d);
 			try {
 				logSkip(actor, { habit: h.id, date: d });

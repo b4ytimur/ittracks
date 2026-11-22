@@ -52,7 +52,7 @@
 	let times = $state(s0?.kind === 'frequency' ? s0.times : 3);
 	let period = $state<'week' | 'month'>(s0?.kind === 'frequency' ? s0.period : 'week');
 	let every = $state(s0?.kind === 'interval' ? s0.every : 1);
-	let singleVariant = $state(s0?.kind === 'frequency' || s0?.kind === 'interval' ? s0.variantId : '');
+	let singleVariant = $state(s0?.kind === 'frequency' || s0?.kind === 'interval' || s0?.kind === 'follow' ? s0.variantId : '');
 	let step_ = $state<'variant' | 'week'>(s0?.kind === 'rotation' ? s0.step : 'variant');
 	let onMiss = $state<'wait' | 'skip'>(s0?.kind === 'rotation' ? s0.onMiss : 'wait');
 	let restDays = $state<Record<string, number>>(
@@ -63,8 +63,10 @@
 		s0?.kind === 'rotation' || s0?.kind === 'interval' ? s0.start : savedStart
 	);
 	/** A group: done when all (null) or this many habits inside are done; the Minimum, or none. */
-	let groupTarget = $state<number | null>(s0?.kind === 'group' ? s0.target : null);
-	let groupMinimum = $state<number | null>(s0?.kind === 'group' ? s0.minimum : null);
+	let groupTarget = $state<number | null>(s0?.kind === 'group' ? s0.target : s0 && 'rollup' in s0 ? (s0.rollup?.target ?? null) : null);
+	let groupMinimum = $state<number | null>(s0?.kind === 'group' ? s0.minimum : s0 && 'rollup' in s0 ? (s0.rollup?.minimum ?? null) : null);
+	/** Following the routine it sits in: only on these of the routine's Variants, or null for all. */
+	let followOn = $state<string[] | null>(s0?.kind === 'follow' ? s0.on : null);
 	/** Why the group choice can't be saved as it stands, from what is logged or inside. */
 	const groupProblem = $derived(
 		kind === 'group' && data.ownLogs
@@ -75,6 +77,24 @@
 	);
 
 	const firstVariant = $derived(h.variants[0]?.id ?? '');
+
+	// ----- Routines: a habit with its own schedule and habits inside it -----
+	/** The habit this one sits in, as the Inside picker lists it. */
+	const parent = $derived(data.groups.find((g) => g.id === h.parentId) ?? null);
+	/** This habit holds habits and has days of its own: its day is judged from theirs too. */
+	const isRoutine = $derived(h.direction === 'build' && data.inside.length > 0 && kind !== 'group');
+	/** Following needs a routine to follow. Leaving it switches to a schedule of its own. */
+	$effect(() => {
+		if (kind === 'follow' && !parent?.routine) untrack(() => (kind = 'interval'));
+	});
+	function toggleFollowOn(id: string) {
+		const all = parent?.variants.map((v) => v.id) ?? [];
+		const now = followOn ?? all;
+		const next = now.includes(id) ? now.filter((x) => x !== id) : [...now, id];
+		followOn = next.length === all.length ? null : next;
+	}
+	/** A routine's rule, kept with its schedule only when it isn't the default (all, no Minimum). */
+	const routineRule = $derived(isRoutine && (groupTarget !== null || groupMinimum !== null) ? { rollup: { target: groupTarget, minimum: groupMinimum } } : {});
 
 	/**
 	 * A new start date for the habit. The schedule's own start follows: along with it when the
@@ -99,14 +119,16 @@
 			case 'weekly':
 				return {
 					kind,
-					days: Object.fromEntries(Object.entries(weeklyDays).filter(([, v]) => ids.has(v)))
+					days: Object.fromEntries(Object.entries(weeklyDays).filter(([, v]) => ids.has(v))),
+					...routineRule
 				};
 			case 'frequency':
-				return { kind, times, period, variantId: pick };
+				return { kind, times, period, variantId: pick, ...routineRule };
 			case 'interval':
-				return { kind, every, start, variantId: pick };
+				return { kind, every, start, variantId: pick, ...routineRule };
 			case 'rotation':
 				return {
+					...routineRule,
 					kind,
 					step: step_,
 					onMiss,
@@ -116,6 +138,8 @@
 				};
 			case 'group':
 				return { kind, target: groupTarget, minimum: groupMinimum };
+			case 'follow':
+				return { kind, variantId: pick, on: followOn };
 		}
 	});
 	/** A schedule edit on a habit with a past: from today on (the default), or past days too. */
@@ -487,6 +511,9 @@
 				</div>
 			{/each}
 
+			{#if isRoutine}
+				<p class="muted small-text" style="margin: 0">Its Tasks are the habits inside it, so it has none of its own for now.</p>
+			{:else}
 			<div class="row">
 				{#if tasks.length}
 					<button type="button" onclick={() => addSlot(v.slots, false)}>Add a Task</button>
@@ -495,7 +522,8 @@
 				{/if}
 				<button type="button" onclick={() => addSlot(v.slots, true)}>Add an auto-filled slot</button>
 			</div>
-			{#if !v.slots.length}
+			{/if}
+			{#if !v.slots.length && !isRoutine}
 				<p class="muted small-text" style="margin: 0">No Tasks means there's nothing to fill in: you just tick it off.</p>
 			{/if}
 		</div>
@@ -523,6 +551,7 @@
 			<option value="interval">Every few days</option>
 			<option value="rotation">Rotate through Variants</option>
 			<option value="group">From the habits inside it (a group)</option>
+			{#if parent?.routine}<option value="follow">Whenever {parent.name} is due</option>{/if}
 		</select>
 	</label>
 	{#if groupProblem}<p class="error small-text">{groupProblem}</p>{/if}
@@ -579,6 +608,19 @@
 			{/if}
 			On a day only some are due, "a number" means that many of the ones due.
 		</p>
+	{:else if kind === 'follow' && parent}
+		<p class="muted small-text" style="margin: 0">
+			Due on {parent.name}'s days{followOn ? ', with the Variants picked here' : ''}. On Today it shows inside {parent.name}, and marking
+			{parent.name} done marks this done too.
+		</p>
+		{#if parent.variants.length > 1}
+			<span class="muted small-text">Only when {parent.name} is on</span>
+			<div class="chips" role="group" aria-label="{parent.name}'s Variants">
+				{#each parent.variants as pv (pv.id)}
+					<button type="button" class="chip small" class:on={!followOn || followOn.includes(pv.id)} onclick={() => toggleFollowOn(pv.id)}>{pv.name}</button>
+				{/each}
+			</div>
+		{/if}
 	{:else if kind === 'interval'}
 		<div class="row">
 			<label style="width: 8rem">Every N days <input type="number" min="1" max="365" bind:value={every} /></label>
@@ -631,7 +673,36 @@
 		<label>Starting <input type="date" bind:value={start} /></label>
 	{/if}
 
-	{#if (kind === 'frequency' || kind === 'interval') && h.variants.length > 1}
+	{#if isRoutine}
+		<fieldset class="card">
+			<legend class="muted">On its days, judged from the habits inside</legend>
+			<label
+				>Done when
+				<select
+					value={groupTarget === null ? 'all' : 'some'}
+					onchange={(e) => (groupTarget = e.currentTarget.value === 'all' ? null : Math.max(1, Math.min(groupMinimum !== null ? groupMinimum + 1 : 2, 100)))}
+				>
+					<option value="all">Every habit inside that is due is done</option>
+					<option value="some">A number of them are done</option>
+				</select>
+			</label>
+			{#if groupTarget !== null}
+				<label style="width: 10rem">How many <input type="number" min="1" max="100" bind:value={groupTarget} /></label>
+			{/if}
+			<label style="color: var(--text)"
+				><input type="checkbox" checked={groupMinimum !== null} onchange={(e) => (groupMinimum = e.currentTarget.checked ? 1 : null)} /> A day with fewer done still counts at the Minimum</label
+			>
+			{#if groupMinimum !== null}
+				<label style="width: 10rem">Habits for the Minimum <input type="number" min="1" max="100" bind:value={groupMinimum} /></label>
+			{/if}
+			<p class="muted small-text" style="margin: 0">
+				Inside: {data.inside.map((x) => x.name + (x.archived ? ' (archived)' : '')).join(', ')}. Done on Today marks the ones due done; a day none of
+				them is due, you tick it off like any habit.
+			</p>
+		</fieldset>
+	{/if}
+
+	{#if (kind === 'frequency' || kind === 'interval' || kind === 'follow') && h.variants.length > 1}
 		<label
 			>Variant
 			<select bind:value={singleVariant}>
@@ -745,15 +816,33 @@
 
 {#snippet insidePart()}
 	{#if h.direction === 'build' && (data.groups.length || h.parentId)}
+		{@const groupsOnly = data.groups.filter((g) => !g.routine)}
+		<!-- A group is judged, never marked, so it can't sit in a routine (whose Done marks what is inside). -->
+		{@const routines = kind === 'group' ? [] : data.groups.filter((g) => g.routine)}
 		<label
 			>Inside
 			<select bind:value={h.parentId}>
-				<option value={null}>No group</option>
-				{#each data.groups as g (g.id)}<option value={g.id}>{g.name}{g.archived ? ' (archived)' : ''}</option>{/each}
+				<option value={null}>Not inside another habit</option>
+				{#if groupsOnly.length}
+					<optgroup label="Groups">
+						{#each groupsOnly as g (g.id)}<option value={g.id}>{g.name}{g.archived ? ' (archived)' : ''}</option>{/each}
+					</optgroup>
+				{/if}
+				{#if routines.length}
+					<optgroup label="Routines (habits with no Tasks of their own)">
+						{#each routines as g (g.id)}<option value={g.id}>{g.name}{g.archived ? ' (archived)' : ''}</option>{/each}
+					</optgroup>
+				{/if}
 			</select>
 		</label>
-		{#if h.parentId}
-			<p class="muted small-text" style="margin-top: -0.25rem">On Today it shows inside its group, and the group's days count it.</p>
+		{#if parent}
+			<p class="muted small-text" style="margin-top: -0.25rem">
+				{#if parent.routine}
+					On Today it shows inside {parent.name}, and {parent.name}'s days count it. Under How often it can follow {parent.name}'s days.
+				{:else}
+					On Today it shows inside its group, and the group's days count it.
+				{/if}
+			</p>
 		{/if}
 	{/if}
 {/snippet}

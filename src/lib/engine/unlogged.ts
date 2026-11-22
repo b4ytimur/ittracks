@@ -2,7 +2,7 @@
 // habit is set to ignore days you don't log. Pure functions, so the rules can be tested
 // without a database; the server writes the misses as Occurrences (see server/today.ts).
 import { addDays, daysBetween, weekStart, type ISODate } from './dates';
-import { dueOn, type Done, type Rotation, type Schedule } from './schedule';
+import { dueOn, type Done, type ParentDue, type Rotation, type Schedule } from './schedule';
 
 /** What a due day that ends with no log counts as. A per-habit setting. */
 export type Unlogged = 'missed' | 'ignore';
@@ -72,7 +72,9 @@ export function missedDays(
 	start: ISODate,
 	from: ISODate,
 	to: ISODate,
-	paused: (d: ISODate) => boolean = () => false
+	paused: (d: ISODate) => boolean = () => false,
+	/** For a habit that follows its parent: what the parent had due each day. */
+	parentDue?: ParentDue
 ): Miss[] {
 	if (from < start) from = start;
 	if (from > to) return [];
@@ -119,7 +121,7 @@ export function missedDays(
 		const v =
 			byVariant && !skipAhead
 				? waitingMiss(schedule as Rotation, last, d)
-				: dueOn(schedule, last ? [last] : [], d);
+				: dueOn(schedule, last ? [last] : [], d, parentDue);
 		if (v) out.push({ date: d, variantId: v });
 	}
 	return out;
@@ -204,10 +206,11 @@ export function missedDaysOver(
 	start: ISODate,
 	from: ISODate,
 	to: ISODate,
-	paused: (d: ISODate) => boolean = () => false
+	paused: (d: ISODate) => boolean = () => false,
+	parentDue?: ParentDue
 ): Miss[] {
 	return scheduleSpans(current, earlier, from < start ? start : from, to).flatMap((s) =>
-		missedDays(s.schedule, rows, start, s.from, s.to, paused)
+		missedDays(s.schedule, rows, start, s.from, s.to, paused, parentDue)
 	);
 }
 

@@ -16,6 +16,7 @@ import { NOTE_MAX, type ScheduleForm } from '$lib/forms';
 import { pickTask, type FillRule } from '$lib/engine/fill';
 import { appActor } from '$lib/server/core/actor';
 import { emit } from '$lib/server/core/events';
+import { isRoutine, kidsOn } from '$lib/server/rollup';
 import type { Actions, PageServerLoad } from './$types';
 
 /** One place in the log (see engine/parts.ts): a Slot's Task, or a Task inside it. */
@@ -115,6 +116,8 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		if (group) redirect(303, `/habits/${group}/chain`);
 		error(404, 'Not found');
 	}
+	// A routine's day with habits inside it is run from its own page.
+	if (isRoutine(o.habit.id) && kidsOn(o.habit.id, o.occ.date).some((k) => !k.occ.extra)) redirect(303, `/routine/${o.occ.id}`);
 	const today = userToday(accountId, cookies.get('tz'));
 	const past = o.occ.date < today;
 	const win = windowFor(accountId, o.occ.date, today);

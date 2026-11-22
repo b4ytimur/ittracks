@@ -39,7 +39,7 @@ const NOT_GROUP = "A group's days come from the habits inside it, so it doesn't 
 function timesPer(h: HabitForm, period: 'week' | 'month'): number | null {
 	const s = h.schedule;
 	if (!s) return null;
-	if (s.kind === 'group') return null;
+	if (s.kind === 'group' || s.kind === 'follow') return null;
 	const perWeek =
 		s.kind === 'weekly'
 			? Object.keys(s.days).length
@@ -66,13 +66,15 @@ export const habitRules = defineRules<HabitForm, HabitCtx>({
 	areaId: independent,
 	identityIds: independent,
 	reframe: independent,
-	// G1: only build habits sit in groups for now (break habits log slips, not days).
+	// G1: only build habits sit in groups and routines for now (break habits log slips, not days).
 	parentId: [onlyWhen(build, BUILD_ONLY, null)],
 
 	// B1: a break habit has no Schedule or Variants. G2: nor does a group; the habits inside it do.
 	variants: [onlyWhen(build, BUILD_ONLY, []), onlyWhen(notGroup, 'A group has no Tasks of its own; the habits inside it do', [])],
 	schedule: [
 		onlyWhen(build, BUILD_ONLY, null),
+		// R1: following a routine needs the routine it sits in.
+		check((h) => h.schedule?.kind === 'follow' && !h.parentId, 'Pick the routine it sits in, or give it a schedule of its own'),
 		// G3: the Minimum is fewer habits than the target.
 		check(
 			(h) => h.schedule?.kind === 'group' && h.schedule.minimum !== null && h.schedule.target !== null && h.schedule.minimum >= h.schedule.target,
@@ -249,7 +251,7 @@ export const habitPast = definePolicies<HabitForm>({
 	notes: display(),
 	startDate: recompute('Days before a later start stop counting; an earlier start counts the days in between'),
 	areaId: display(),
-	parentId: recompute("A group's past days are counted again from the habits inside it now"),
+	parentId: recompute("A group's or routine's past days are counted again from the habits inside it now"),
 	identityIds: recompute('Identity votes are counted again from the days done'),
 	reframe: display(),
 	variants: unguarded('Removing a Variant unlinks the days logged with it from it'),
