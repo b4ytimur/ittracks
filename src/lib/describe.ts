@@ -1,5 +1,5 @@
 import type { PlainScheduleForm, ScheduleForm } from './forms';
-import { phaseSpans, variantsIn, type Phases, type Schedule } from './engine/schedule';
+import { followVariant, phaseSpans, variantsIn, type Phases, type Schedule } from './engine/schedule';
 
 export const weekdayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -63,9 +63,18 @@ export function describeSchedule(
 			return groupRuleText(s);
 		case 'follow': {
 			const who = parent ? parent.name : 'the habit it sits in';
-			if (!s.on) return `Whenever ${who} is due`;
-			const names = s.on.map((id) => parent?.variants?.find((v) => v.id === id)?.name).filter((n): n is string => !!n);
-			return names.length ? `When ${who} is due with ${names.join(' or ')}` : `On some of the days ${who} is due`;
+			const names = s.on?.map((id) => parent?.variants?.find((v) => v.id === id)?.name).filter((n): n is string => !!n);
+			const when = !s.on ? `Whenever ${who} is due` : names?.length ? `When ${who} is due with ${names.join(' or ')}` : `On some of the days ${who} is due`;
+			// With a map: which of its own Variants each of the routine's brings up, by name.
+			if (!s.map || !Object.keys(s.map).length) return when;
+			const pairs = (s.on ?? parent?.variants?.map((v) => v.id) ?? Object.keys(s.map)).flatMap((p) => {
+				const pn = parent?.variants?.find((v) => v.id === p)?.name;
+				const cn = own?.find((v) => v.id === followVariant(s, p))?.name;
+				return pn && cn ? [{ pn, cn }] : [];
+			});
+			if (!pairs.length) return when;
+			if (pairs.every((x) => x.pn === x.cn)) return `${when}, with the Variant of the same name`;
+			return `${when} (${pairs.map((x) => `${x.cn} on ${x.pn}`).join(', ')})`;
 		}
 	}
 }

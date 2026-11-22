@@ -102,8 +102,10 @@ export function variantsIn(s: Schedule | null | undefined): string[] {
 			return [...new Set(Object.values(s.days).filter((v): v is string => !!v))];
 		case 'frequency':
 		case 'interval':
-		case 'follow':
 			return [s.variantId];
+		case 'follow':
+			// Only on these of the routine's Variants: what each maps to. Every day: any of them, or the rest.
+			return [...new Set(s.on ? s.on.map((p) => followVariant(s, p)) : [s.variantId, ...Object.values(s.map ?? {})])];
 		case 'rotation':
 			return [...new Set(s.order.map((o) => o.variantId))];
 		case 'phases':
@@ -141,16 +143,26 @@ interface Routine {
 
 /**
  * A habit inside a routine that is due whenever the routine is: on every one of its days, or
- * only when the routine's Variant is one of `on`. It logs its own Variant, `variantId`.
+ * only when the routine's Variant is one of `on`. Which of its own Variants it logs comes from
+ * the routine's Variant that day: `map` pairs a routine Variant with one of the habit's, and
+ * any other day (or a day with no Variant known) logs `variantId`. So the two go through their
+ * Variants in step: "Upper A" in the routine is always "Heavy" here, whatever the routine's
+ * own rotation does. `on` decides when, `map` decides which.
  */
 export interface Follow {
 	kind: 'follow';
 	variantId: string;
 	on: string[] | null;
+	/** Routine Variant id -> this habit's Variant id. Absent or empty: always `variantId`. */
+	map?: Record<string, string>;
 }
 
 export const isGroup = (s: { kind: string } | null | undefined): s is GroupRule => s?.kind === 'group';
 export const isFollow = (s: { kind: string } | null | undefined): s is Follow => s?.kind === 'follow';
+
+/** The Variant a habit that follows its routine logs on a day the routine has `routineVariant` due ('' = not known). */
+export const followVariant = (f: Pick<Follow, 'variantId' | 'map'>, routineVariant: string): string =>
+	(routineVariant && f.map?.[routineVariant]) || f.variantId;
 
 /** The rule a habit with habits inside it judges its day by. */
 export function rollupRuleOf(s: Schedule | null | undefined): RollupRule {
@@ -222,7 +234,7 @@ export function dueOn(schedule: Schedule, history: Done[], date: ISODate, parent
 		case 'follow': {
 			const p = parentDue?.(date) ?? null;
 			if (p === null) return null;
-			return !schedule.on || schedule.on.includes(p) ? schedule.variantId : null;
+			return !schedule.on || schedule.on.includes(p) ? followVariant(schedule, p) : null;
 		}
 
 		case 'phases': {

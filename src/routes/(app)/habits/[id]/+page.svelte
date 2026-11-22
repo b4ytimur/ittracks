@@ -9,7 +9,8 @@
 	import NoteBox from '$lib/NoteBox.svelte';
 	import { limitOn, nextDrop } from '$lib/engine/limit';
 	import { sameSchedule, scheduleStartBy, startMovedBack } from '$lib/engine/unlogged';
-	import { tidyPhases, type Schedule } from '$lib/engine/schedule';
+	import { tidyPhases, variantsIn, type Schedule } from '$lib/engine/schedule';
+	import { fitFollow, pairByName } from '$lib/engine/follow';
 	import ScheduleFields from '$lib/ui/ScheduleFields.svelte';
 	import EditableList from '$lib/ui/EditableList.svelte';
 	import { addPhase, fitVariants, isPlainKind, phaseDates, plainOfKind, removePhase, savedPlain, type PhaseRow } from '$lib/ui/schedule';
@@ -82,8 +83,10 @@
 	let groupMinimum = $state<number | null>(s0?.kind === 'group' ? s0.minimum : s0 && 'rollup' in s0 ? (s0.rollup?.minimum ?? null) : null);
 	/** Following the routine it sits in: only on these of the routine's Variants, or null for all. */
 	let followOn = $state<string[] | null>(s0?.kind === 'follow' ? s0.on : null);
-	/** The Variant a follower logs. */
-	let followVariant = $state(s0?.kind === 'follow' ? s0.variantId : '');
+	/** The Variant a follower logs on any day `followMap` doesn't pair. */
+	let followVariant = $state(s0?.kind === 'follow' ? s0.variantId : (untrack(() => data.habit.variants[0]?.id) ?? ''));
+	/** A follower's Variant for each of the routine's Variants (routine Variant id -> this habit's). */
+	let followMap = $state<Record<string, string>>(s0?.kind === 'follow' ? ({ ...(s0.map ?? {}) } as Record<string, string>) : {});
 	/** Why the group choice can't be saved as it stands, from what is logged or inside. */
 	const groupProblem = $derived(
 		kind === 'group' && data.ownLogs
@@ -104,6 +107,24 @@
 	$effect(() => {
 		if (kind === 'follow' && !parent?.routine) untrack(() => (kind = 'interval'));
 	});
+	/**
+	 * Starting to follow a routine (not the one it already followed when the page opened): its
+	 * Variants pair with this habit's of the same name, to change. Pairs already made stay.
+	 */
+	$effect(() => {
+		if (kind !== 'follow' || !parent) return;
+		const p = parent;
+		untrack(() => {
+			const already = s0?.kind === 'follow' && data.habit.parentId === p.id;
+			if (!already && !p.variants.some((pv) => pv.id in followMap)) followMap = { ...followMap, ...pairByName(p.variants, h.variants) };
+		});
+	});
+	/** The routine's Variants that bring this habit up, each with the Variant it logs then. */
+	const followRows = $derived(
+		(parent?.variants ?? [])
+			.filter((pv) => !followOn || followOn.includes(pv.id))
+			.map((pv) => ({ ...pv, logs: [followMap[pv.id], followVariant].find((id) => id && h.variants.some((v) => v.id === id)) ?? firstVariant }))
+	);
 	function toggleFollowOn(id: string) {
 		const all = parent?.variants.map((v) => v.id) ?? [];
 		const now = followOn ?? all;
@@ -147,11 +168,17 @@
 			case 'group':
 				return { kind, target: groupTarget, minimum: groupMinimum };
 			case 'follow':
-				return { kind, variantId: ids.has(followVariant) ? followVariant : firstVariant, on: followOn };
+				return fitFollow(
+					{ kind, variantId: ids.has(followVariant) ? followVariant : firstVariant, on: followOn, map: followMap },
+					h.variants.map((v) => v.id),
+					parent?.variants.map((v) => v.id)
+				);
 			default:
 				return { ...savedPlain(plain, h.variants, true), ...routineRule };
 		}
 	});
+	/** The routine and this habit each go through Variants on their own, so their days can drift apart. */
+	const drifts = $derived(!!parent?.routine && !!parent.rotates && kind !== 'follow' && kind !== 'group' && !!schedule && variantsIn(schedule as Schedule).length > 1);
 	/**
 	 * A schedule edit on a habit with a past: from today on (the default), or past days too.
 	 * Not asked for a habit with no past days yet, or when Started on only moved the
@@ -559,6 +586,12 @@
 		]}
 	/>
 	{#if groupProblem}<p class="error small-text">{groupProblem}</p>{/if}
+	{#if drifts && parent}
+		<p class="muted small-text" style="margin: 0">
+			{parent.name} goes through its own Variants too, so the two can drift apart. To keep them in step, pick "Whenever {parent.name} is due" and choose
+			this habit's Variant for each of {parent.name}'s.
+		</p>
+	{/if}
 
 	{#if kind === 'phases'}
 		<p class="muted small-text" style="margin: 0">
@@ -665,6 +698,30 @@
 				{/each}
 			</div>
 		{/if}
+		{#if h.variants.length > 1 && parent.variants.length > 1}
+			<fieldset class="card">
+				<legend class="muted">Variant on each of {parent.name}'s Variants</legend>
+				{#each followRows as row (row.id)}
+					<label
+						>{row.name}
+						<select value={row.logs} onchange={(e) => (followMap = { ...followMap, [row.id]: e.currentTarget.value })}>
+							{#each h.variants as v (v.id)}<option value={v.id}>{v.name}</option>{/each}
+						</select>
+					</label>
+				{/each}
+				{#if !followOn}
+					<label
+						>Any other day
+						<select bind:value={followVariant}>
+							{#each h.variants as v (v.id)}<option value={v.id}>{v.name}</option>{/each}
+						</select>
+					</label>
+				{/if}
+				<p class="muted small-text" style="margin: 0">
+					The two go through their Variants together: whenever {parent.name} is on one of these, this habit logs the Variant picked for it.
+				</p>
+			</fieldset>
+		{/if}
 	{/if}
 
 	{#if isRoutine}
@@ -696,7 +753,7 @@
 		</fieldset>
 	{/if}
 
-	{#if kind === 'follow' && h.variants.length > 1}
+	{#if kind === 'follow' && h.variants.length > 1 && (parent?.variants.length ?? 0) < 2}
 		<label
 			>Variant
 			<select bind:value={followVariant}>

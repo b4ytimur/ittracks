@@ -31,7 +31,7 @@ import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { metric, occurrence, pause, slot, taskPart, variant } from '$lib/server/db/schema';
-import { isGroup } from '$lib/engine/schedule';
+import { isGroup, variantsIn, type Schedule } from '$lib/engine/schedule';
 import { descendants } from '$lib/engine/tree';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -137,6 +137,8 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 			archived,
 			/** A routine has days of its own, so a habit inside it can follow them. */
 			routine: !isGroup(schedule),
+			/** Its days bring up more than one of its Variants, so a habit inside with its own rotation can drift from it. */
+			rotates: !isGroup(schedule) && variantsIn(schedule as Schedule).length > 1,
 			variants: isGroup(schedule) ? [] : db.select({ id: variant.id, name: variant.name }).from(variant).where(eq(variant.habitId, id)).orderBy(asc(variant.sortOrder)).all()
 		}));
 	return {
