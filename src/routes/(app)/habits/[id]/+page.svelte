@@ -38,9 +38,9 @@
 		return [...out];
 	});
 
-	// A build habit always has at least one Variant to put Slots in.
+	// A build habit always has at least one Variant to put Slots in. A group has none: the habits inside it do.
 	$effect(() => {
-		if (h.direction === 'build' && h.variants.length === 0) addVariant();
+		if (h.direction === 'build' && h.variants.length === 0 && kind !== 'group') addVariant();
 	});
 
 	// ----- Schedule editor state, seeded from the saved Schedule -----
@@ -60,6 +60,17 @@
 	let weekdays = $state<number[]>(s0?.kind === 'rotation' ? [...s0.weekdays] : [0, 2, 4]);
 	let start = $state(
 		s0?.kind === 'rotation' || s0?.kind === 'interval' ? s0.start : savedStart
+	);
+	/** A group: done when all (null) or this many habits inside are done; the Minimum, or none. */
+	let groupTarget = $state<number | null>(s0?.kind === 'group' ? s0.target : null);
+	let groupMinimum = $state<number | null>(s0?.kind === 'group' ? s0.minimum : null);
+	/** Why the group choice can't be saved as it stands, from what is logged or inside. */
+	const groupProblem = $derived(
+		kind === 'group' && data.ownLogs
+			? 'This habit has logs, and a group gets its days from the habits inside it. Make a new habit for the group instead.'
+			: kind !== 'group' && s0?.kind === 'group' && data.inside.length
+				? 'Move the habits inside this group out of it first.'
+				: null
 	);
 
 	const firstVariant = $derived(h.variants[0]?.id ?? '');
@@ -102,6 +113,8 @@
 					weekdays: step_ === 'week' ? [...weekdays].sort() : [],
 					order: h.variants.map((v) => ({ variantId: v.id, restDays: restDays[v.id] ?? 1 }))
 				};
+			case 'group':
+				return { kind, target: groupTarget, minimum: groupMinimum };
 		}
 	});
 	/** A schedule edit on a habit with a past: from today on (the default), or past days too. */
@@ -492,6 +505,7 @@
 {/snippet}
 
 {#snippet schedulePart()}
+	{#if kind !== 'group'}
 	<div class="chips" role="group" aria-label="Quick schedules">
 		<button type="button" class="chip" class:on={presetOn === 'daily'} onclick={() => applyPreset('daily')}>Every day</button>
 		<button type="button" class="chip" class:on={presetOn === 'weekdays'} onclick={() => applyPreset('weekdays')}>Weekdays</button>
@@ -499,6 +513,7 @@
 		<button type="button" class="chip" class:on={presetOn === 'three'} onclick={() => applyPreset('three')}>3 times a week</button>
 		<button type="button" class="chip" class:on={presetOn === 'ab'} onclick={() => applyPreset('ab')}>A/B with 1 rest day</button>
 	</div>
+	{/if}
 	<label
 		>How often
 		<select bind:value={kind}>
@@ -506,8 +521,10 @@
 			<option value="frequency">A number of times per week or month</option>
 			<option value="interval">Every few days</option>
 			<option value="rotation">Rotate through Variants</option>
+			<option value="group">From the habits inside it (a group)</option>
 		</select>
 	</label>
+	{#if groupProblem}<p class="error small-text">{groupProblem}</p>{/if}
 
 	{#if kind === 'weekly'}
 		{#each weekdayNames as day, d (day)}
@@ -530,6 +547,37 @@
 				</select>
 			</label>
 		</div>
+	{:else if kind === 'group'}
+		<p class="muted small-text" style="margin: 0">
+			A group has no Tasks of its own. It is due on days a habit inside it is due, and its streak counts the days enough of them were done.
+		</p>
+		<label
+			>Done when
+			<select
+				value={groupTarget === null ? 'all' : 'some'}
+				onchange={(e) => (groupTarget = e.currentTarget.value === 'all' ? null : Math.max(1, Math.min(groupMinimum !== null ? groupMinimum + 1 : 2, 100)))}
+			>
+				<option value="all">Every habit inside that is due is done</option>
+				<option value="some">A number of them are done</option>
+			</select>
+		</label>
+		{#if groupTarget !== null}
+			<label style="width: 10rem">How many <input type="number" min="1" max="100" bind:value={groupTarget} /></label>
+		{/if}
+		<label style="color: var(--text)"
+			><input type="checkbox" checked={groupMinimum !== null} onchange={(e) => (groupMinimum = e.currentTarget.checked ? 1 : null)} /> A day with fewer done still counts at the Minimum</label
+		>
+		{#if groupMinimum !== null}
+			<label style="width: 10rem">Habits for the Minimum <input type="number" min="1" max="100" bind:value={groupMinimum} /></label>
+		{/if}
+		<p class="muted small-text" style="margin: 0">
+			{#if data.inside.length}
+				Inside: {data.inside.map((x) => x.name + (x.archived ? ' (archived)' : '')).join(', ')}.
+			{:else}
+				Nothing inside yet. Open a habit and pick this group under Inside.
+			{/if}
+			On a day only some are due, "a number" means that many of the ones due.
+		</p>
 	{:else if kind === 'interval'}
 		<div class="row">
 			<label style="width: 8rem">Every N days <input type="number" min="1" max="365" bind:value={every} /></label>
@@ -691,6 +739,21 @@
 				{/each}
 			</div>
 		</div>
+	{/if}
+{/snippet}
+
+{#snippet insidePart()}
+	{#if h.direction === 'build' && (data.groups.length || h.parentId)}
+		<label
+			>Inside
+			<select bind:value={h.parentId}>
+				<option value={null}>No group</option>
+				{#each data.groups as g (g.id)}<option value={g.id}>{g.name}{g.archived ? ' (archived)' : ''}</option>{/each}
+			</select>
+		</label>
+		{#if h.parentId}
+			<p class="muted small-text" style="margin-top: -0.25rem">On Today it shows inside its group, and the group's days count it.</p>
+		{/if}
 	{/if}
 {/snippet}
 
@@ -872,7 +935,7 @@
 			<a href="/habits/{data.id}/chain">Chain</a>
 			<a href="/habits/{data.id}/stats">Stats</a>
 			<a href="/habits/new?from={data.id}" data-sveltekit-reload>Duplicate</a>
-			<a href="/habits/{data.id}/share">Share as template</a>
+			{#if s0?.kind !== 'group'}<a href="/habits/{data.id}/share">Share as template</a>{/if}
 		{/if}
 		<a href="/habits">Cancel</a>
 	</div>
@@ -955,12 +1018,15 @@
 
 	{@render typePart()}
 	{@render areaPart()}
+	{@render insidePart()}
 
 	{#if h.direction === 'break'}
 		{@render breakPart()}
 	{:else}
-		<h2>{h.variants.length > 1 ? 'Variants' : 'What you do'}</h2>
-		{@render whatYouDo()}
+		{#if kind !== 'group'}
+			<h2>{h.variants.length > 1 ? 'Variants' : 'What you do'}</h2>
+			{@render whatYouDo()}
+		{/if}
 
 		<h2>Schedule</h2>
 		{@render schedulePart()}
@@ -972,7 +1038,7 @@
 			{@render cuePart()}
 		{/if}
 
-		{#if open.levels && (!off('levels') || h.levels.enabled)}
+		{#if open.levels && kind !== 'group' && (!off('levels') || h.levels.enabled)}
 			<h2>Levels</h2>
 			<label style="color: var(--text)"
 				><input type="checkbox" bind:checked={h.levels.enabled} /> Use levels: a two-minute Minimum, your Target, and a Stretch</label
@@ -984,7 +1050,7 @@
 				<p class="muted small-text">Set numbers for each level per Task in the Slots above. Whether a Minimum day counts is under Streak.</p>
 			{/if}
 		{/if}
-		{#if h.variants.some((v) => v.slots.length)}
+		{#if kind !== 'group' && h.variants.some((v) => v.slots.length)}
 			<label style="color: var(--text)"
 				><input type="checkbox" bind:checked={h.quickDone} /> One-tap Done on Today (logs your targets)</label
 			>
@@ -1015,17 +1081,17 @@
 			{:else if h.streakRule.kind === 'consistency'}
 				<label style="width: 10rem">Over the last N days <input type="number" min="7" max="365" bind:value={h.streakRule.days} /></label>
 			{/if}
-			{#if h.direction === 'build'}
+			{#if h.direction === 'build' && (kind !== 'group' || groupMinimum !== null)}
 				<fieldset class="card">
 					<legend class="muted">A day that falls short of the target</legend>
 					<label style="color: var(--text)"
 						><input type="radio" bind:group={h.minimumCounts} value={true} />
-						{h.levels.enabled ? 'Counts once it reaches the Minimum' : 'Counts once anything is logged'}</label
+						{kind === 'group' ? `Counts once ${groupMinimum} inside are done` : h.levels.enabled ? 'Counts once it reaches the Minimum' : 'Counts once anything is logged'}</label
 					>
 					<label style="color: var(--text)"
 						><input type="radio" bind:group={h.minimumCounts} value={false} /> Only the full target counts</label
 					>
-					<p class="muted small-text" style="margin: 0.25rem 0 0">
+					<p class="muted small-text" style="margin: 0.25rem 0 0" hidden={kind === 'group'}>
 						{h.minimumCounts
 							? h.levels.enabled
 								? 'Doing the Minimum keeps the streak alive. Less than that is a miss once the day is over.'
@@ -1035,6 +1101,7 @@
 					</p>
 				</fieldset>
 			{/if}
+			{#if kind !== 'group'}
 			<fieldset class="card">
 				<legend class="muted">Days you don't log</legend>
 				<label style="color: var(--text)"
@@ -1049,6 +1116,7 @@
 						: 'Streaks, consistency, the chain and Stats treat a forgotten day as a miss. Log or skip it later to change that.'}
 				</p>
 			</fieldset>
+			{/if}
 		{/if}
 
 		<details class="extras" open={!!(h.bundle.reward || h.prep.length || h.reward.celebrate || h.reward.jar || h.progression)}>
@@ -1158,14 +1226,14 @@
 	{#if Object.values(open).some((x) => !x)}
 		<div class="chips add-more">
 			{#if h.direction === 'build' && !open.when}<button type="button" class="chip" onclick={() => (open.when = true)}>+ When and where</button>{/if}
-			{#if h.direction === 'build' && !open.levels && !off('levels')}<button type="button" class="chip" onclick={() => (open.levels = true)}>+ Levels</button>{/if}
+			{#if h.direction === 'build' && kind !== 'group' && !open.levels && !off('levels')}<button type="button" class="chip" onclick={() => (open.levels = true)}>+ Levels</button>{/if}
 			{#if h.direction === 'build' && !open.streak}<button type="button" class="chip" onclick={() => (open.streak = true)}>+ Streak and days you don't log</button>{/if}
 			{#if !open.identity && !off('identities')}<button type="button" class="chip" onclick={() => (open.identity = true)}>+ Identity</button>{/if}
 			{#if !open.notes}<button type="button" class="chip" onclick={() => (open.notes = true)}>+ Notes</button>{/if}
 		</div>
 	{/if}
 
-	{#if h.direction === 'build'}
+	{#if h.direction === 'build' && kind !== 'group'}
 		<label style="color: var(--text)"><input type="checkbox" bind:checked={pinned} /> Add to home screen shortcuts (long-press the app icon)</label>
 		{#if !data.isNew}
 			<p class="muted small-text" style="margin: 0">

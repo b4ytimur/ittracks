@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { describeSchedule } from '$lib/describe';
+	import { flatten } from '$lib/engine/tree';
 	import { enhance } from '$app/forms';
 	import { untrack } from 'svelte';
 	import ViewBar from '$lib/ViewBar.svelte';
@@ -119,9 +120,10 @@
 		<h2 class="area" style="--c: {g.color ?? 'var(--border)'}">{g.label}</h2>
 	{/if}
 	<ul class="list">
-		{#each g.items as h (h.id)}
+		<!-- A habit inside a group sits under it, indented; one whose group isn't listed sits at the top. -->
+		{#each flatten(g.items) as { node: h, depth } (h.id)}
 			{@const a = area(h.areaId)}
-			<li>
+			<li style:margin-left={depth ? `${depth * 1.25}rem` : null}>
 				<a class="card habit" href="/habits/{h.id}" data-sveltekit-reload style="--c: {a?.color ?? 'transparent'}">
 					<strong>{h.name}</strong>
 					{#if h.archived}<span class="chip">Archived</span>{/if}

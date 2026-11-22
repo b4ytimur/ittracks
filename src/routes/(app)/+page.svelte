@@ -11,6 +11,7 @@
 	import { viewOp } from '$lib/viewclient';
 	import { headlineText } from '$lib/engine/stats';
 	import { isPartial, progressText } from '$lib/engine/progress';
+	import { rollupDay, rollupText } from '$lib/engine/rollup';
 	import { invalidateAll } from '$app/navigation';
 	import { addDays } from '$lib/engine/dates';
 	import DayNote from '$lib/DayNote.svelte';
@@ -190,7 +191,8 @@
 	const partOf = (b: Item) => b.cue.range ?? (b.cue.time ? partAt(data.ranges, b.cue.time) : null);
 	let showAll = $state(false);
 
-	const sorted = $derived.by(() => {
+	/** Every habit the view lets through, groups and the habits inside them alike. */
+	const filtered = $derived.by(() => {
 		let list = data.build.filter((b) => passes(view, { ...b, direction: 'build' }));
 		if (view.status === 'due') list = list.filter((b) => statusOf(b.occurrence!) === 'due');
 		if (view.status === 'done') list = list.filter((b) => statusOf(b.occurrence!) !== 'due');
@@ -199,6 +201,18 @@
 		if (view.sort === 'streak') list = [...list].sort((a, b) => Number(b.atRisk) - Number(a.atRisk));
 		return list;
 	});
+	// A habit whose group is shown sits inside the group's card; the rest stand on their own.
+	const shownIds = $derived(new Set(filtered.map((b) => b.habitId)));
+	const sorted = $derived(filtered.filter((b) => !b.parentId || !shownIds.has(b.parentId)));
+	const kidsOf = (id: string) => filtered.filter((b) => b.parentId === id);
+	/** A group's count today, live: habits done offline count at once. */
+	const groupNow = (item: Item) => {
+		const g = item.group!;
+		const kids = data.build.filter((b) => b.parentId === item.habitId && b.occurrence);
+		if (!kids.length) return { done: g.done, total: g.total, status: statusOf(item.occurrence!) };
+		const day = rollupDay(kids.map((k) => ({ status: statusOf(k.occurrence!) as 'due' | 'done' | 'skipped' | 'missed' })), g, { past: false });
+		return day ? { done: day.done, total: day.total, status: day.status } : { done: g.done, total: g.total, status: statusOf(item.occurrence!) };
+	};
 	/** The time-aware view keeps what fits now, what's still due from earlier, and anything without a time. */
 	const timeHidden = $derived.by(() => {
 		if (!views.today.timeAware || showAll || !currentPart) return new Set<string>();
@@ -237,7 +251,8 @@
 	const showSection = (k: SectionKey) =>
 		view.direction === 'build' ? k !== 'breaking' : view.direction === 'break' ? k === 'breaking' : true;
 	const identityNames = $derived([...new Set([...data.build, ...data.breaking].flatMap((b) => b.identities))].sort());
-	const doneCount = $derived(data.build.filter(isDone).length);
+	// A group is counted through the habits inside it.
+	const doneCount = $derived(data.build.filter((b) => !b.group && isDone(b)).length);
 	const atRiskItems = $derived(data.build.filter((b) => b.atRisk && !isDone(b)));
 	const weekdayShort = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'narrow' });
 
@@ -556,6 +571,47 @@
 {/snippet}
 
 {#snippet card(item: Item)}
+	{#if item.group}
+		{@render groupCard(item)}
+	{:else}
+		{@render habitCard(item)}
+	{/if}
+{/snippet}
+
+{#snippet groupCard(item: Item)}
+	{@const g = groupNow(item)}
+	{@const kids = kidsOf(item.habitId)}
+	<li class="card group" class:stacked={!!item.afterHabitId}>
+		<div class="row" class:finished={g.status !== 'due'}>
+			<div class="grow">
+				<a class="name" href="/habits/{item.habitId}/chain"><strong>{item.name}</strong></a>
+				{#if line('cue') && cueLine(item.cue)}<div class="muted small-text">{cueLine(item.cue)}</div>{/if}
+				<div class="muted small-text">
+					{#if g.status === 'done'}Done{#if item.occurrence?.level === 'minimum'}&nbsp;at Minimum{/if}{:else if g.status === 'skipped'}Skipped{:else}Due{/if}
+					{#if g.total}<span class="progress">· {rollupText(g)}</span>{/if}
+					{#if headlineOf(item)}· {headlineOf(item)}{/if}
+				</div>
+				{#if g.status === 'due' && g.total}
+					<progress class="bar" max={g.total} value={g.done} aria-label="{item.name}: {rollupText(g)}"></progress>
+				{/if}
+				{#if item.atRisk && g.status === 'due'}
+					<div class="warn small-text">You missed last time. Don't miss twice.</div>
+				{/if}
+				{#if item.reframe && line('reframe')}<div class="reframe small-text">{item.reframe}</div>{/if}
+			</div>
+		</div>
+		{#if kids.length}
+			<ul class="list inside" aria-label="Inside {item.name}">
+				{#each kids as k (k.habitId)}{@render card(k)}{/each}
+			</ul>
+		{/if}
+		{#if item.identities.length && line('identities')}
+			<div class="votes small-text">Vote for: {item.identities.join(' · ')}</div>
+		{/if}
+	</li>
+{/snippet}
+
+{#snippet habitCard(item: Item)}
 	{@const o = item.occurrence!}
 	{@const st = statusOf(o)}
 	{@const levels = item.levels}
@@ -931,6 +987,10 @@
 	}
 	.finished {
 		opacity: 0.7;
+	}
+	/* The habits inside a group sit in its card, each faded on its own when finished. */
+	.inside {
+		margin-top: 0.6rem;
 	}
 	.stacked {
 		margin-left: 1rem;

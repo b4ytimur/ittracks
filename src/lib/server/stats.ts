@@ -15,6 +15,7 @@ import { checkCard } from '$lib/rules/stats';
 import { DEFAULT_STREAK_RULE } from '$lib/engine/streak';
 import { logicalDate } from '$lib/engine/day';
 import { value as formatValue } from '$lib/stats/format';
+import { isGroup, type Schedule } from '$lib/engine/schedule';
 
 export function loadDataset(accountId: string, tz?: string): Dataset {
 	const s = getSettings(accountId);
@@ -76,7 +77,8 @@ export function loadDataset(accountId: string, tz?: string): Dataset {
 			cost: h.cost ?? null,
 			streakRule: h.streakRule ?? DEFAULT_STREAK_RULE,
 			minimumCounts: h.minimumCounts,
-			limit: h.limit ?? null
+			limit: h.limit ?? null,
+			...(isGroup(h.schedule as Schedule | null) ? { group: true } : {})
 		})),
 		tasks: tasks.map((t) => ({
 			id: t.id,

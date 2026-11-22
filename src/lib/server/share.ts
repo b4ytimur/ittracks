@@ -9,6 +9,7 @@ import { matches, type FillRule } from '$lib/engine/fill';
 import { toTemplate, type ShareDetails, type TemplateFile } from '$lib/template';
 import { scheduleDays, type ShareCtx } from '$lib/share';
 import type { HabitForm, TaskForm } from '$lib/forms';
+import { isGroup } from '$lib/engine/schedule';
 
 /** Library Tasks an auto-filled Slot of this habit can pick, by id (Tasks already in a fixed Slot left out). */
 export function poolTaskIds(accountId: string, habit: HabitForm): string[] {
@@ -28,7 +29,8 @@ export interface ShareOptions extends ShareDetails {
 /** The template file for a habit, or null when it isn't the account's. */
 export function shareFile(accountId: string, habitId: string, opts: ShareOptions = {}): TemplateFile | null {
 	const habit = getHabitForm(accountId, habitId);
-	if (!habit) return null;
+	// A template is one habit; a group's days come from other habits, so it can't travel alone.
+	if (!habit || isGroup(habit.schedule)) return null;
 	const tasks = new Map<string, TaskForm>();
 	const add = (id: string) => {
 		if (tasks.has(id)) return;
@@ -66,7 +68,7 @@ export interface ShareMetric {
 /** What the Share page needs: the facts the form's rules read, the fields to ask about, and the pool. */
 export function shareContext(accountId: string, habitId: string) {
 	const habit = getHabitForm(accountId, habitId);
-	if (!habit) return null;
+	if (!habit || isGroup(habit.schedule)) return null;
 	const metrics: ShareMetric[] = [];
 	const seen = new Set<string>();
 	const withHowTo = new Set<string>();

@@ -8,6 +8,7 @@ import { settleAll, userToday } from '$lib/server/today';
 import { addDays } from '$lib/engine/dates';
 import { progressForIds } from '$lib/server/progress';
 import { isPartial, progressText } from '$lib/engine/progress';
+import { rollupText } from '$lib/engine/rollup';
 import { excerpt } from '$lib/markdown';
 import { isHidden } from '$lib/views';
 import type { PageServerLoad } from './$types';
@@ -31,7 +32,8 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 			habitId: habit.id,
 			habit: habit.name,
 			areaId: habit.areaId,
-			variant: variant.name
+			variant: variant.name,
+			rollup: occurrence.rollup
 		})
 		.from(occurrence)
 		.innerJoin(habit, eq(occurrence.habitId, habit.id))
@@ -97,11 +99,13 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		 * "3 of 6 glasses" or "2 of 4 steps" for logs that fell short, by Occurrence id: a done day
 		 * that counted at its Minimum, or a missed day that got part of the way.
 		 */
-		partial: Object.fromEntries(
-			[...progressForIds(occ.filter((o) => o.status === 'done' || (o.status === 'missed' && entryCounts[o.id])).map((o) => o.id))]
+		partial: Object.fromEntries([
+			...[...progressForIds(occ.filter((o) => o.status === 'done' || (o.status === 'missed' && entryCounts[o.id])).map((o) => o.id))]
 				.filter(([, p]) => isPartial(p))
-				.map(([id, p]) => [id, progressText(p)])
-		),
+				.map(([id, p]) => [id, progressText(p)]),
+			// A group's day: how many of the habits inside were done.
+			...occ.filter((o) => o.rollup && o.status !== 'skipped').map((o) => [o.id, rollupText(o.rollup!)])
+		]),
 		// What was logged, one line per Task, for "Show values" in History.
 		values: Object.fromEntries(occ.map((o) => [o.id, summarize(entries.filter((e) => e.occurrenceId === o.id), metrics)])),
 		habits: db

@@ -4,7 +4,7 @@ import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '$lib/server/db';
 import { entry, metric, occurrence, slot, task, variant } from '$lib/server/db/schema';
-import { ownedOccurrence } from '$lib/server/owned';
+import { groupOfOccurrence, ownedOccurrence } from '$lib/server/owned';
 import { candidates, ensurePicks, lastEntries, recount, userToday } from '$lib/server/today';
 import { finishAs, goalsOf } from '$lib/server/progress';
 import { slotGroups } from '$lib/engine/groups';
@@ -108,7 +108,12 @@ const safeBack = (v: string | null | undefined) => (v && /^\/(?!\/)[\w\-/.?=&%]*
 export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 	const accountId = locals.account!.id;
 	const o = ownedOccurrence(accountId, params.id);
-	if (!o) error(404, 'Not found');
+	if (!o) {
+		// A group's day has no log of its own: its page shows the days and the habits inside.
+		const group = groupOfOccurrence(accountId, params.id);
+		if (group) redirect(303, `/habits/${group}/chain`);
+		error(404, 'Not found');
+	}
 	const today = userToday(accountId, cookies.get('tz'));
 	const past = o.occ.date < today;
 	const win = windowFor(accountId, o.occ.date, today);

@@ -123,6 +123,9 @@ export function describe(actor: Actor) {
 				archived: h.archived,
 				startDate: h.startDate,
 				schedule: h.direction === 'build' ? describeSchedule(h.schedule as ScheduleForm | null) : 'Break habit: log slips',
+				// A group's days are worked out from the habits inside it; it can't be logged itself.
+				...(isGroup(h.schedule as Schedule | null) ? { group: { inside: habits.filter((x) => x.parentId === h.id).map((x) => x.name) } } : {}),
+				...(h.parentId ? { inGroup: habits.find((x) => x.id === h.parentId)?.name ?? null } : {}),
 				streakRule: (h.streakRule as StreakRule).kind,
 				variants: variants
 					.filter((v) => v.habitId === h.id)

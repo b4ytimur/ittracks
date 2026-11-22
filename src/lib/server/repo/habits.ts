@@ -48,7 +48,8 @@ export function listHabits(accountId: string, opts: { archived?: boolean } = {})
 			cue: habit.cue,
 			areaId: habit.areaId,
 			archived: habit.archived,
-			createdAt: habit.createdAt
+			createdAt: habit.createdAt,
+			parentId: habit.parentId
 		})
 		.from(habit)
 		.where(and(eq(habit.accountId, accountId), opts.archived ? undefined : eq(habit.archived, false)))
