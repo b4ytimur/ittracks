@@ -15,6 +15,9 @@ import { same } from './undo';
 import { plural } from './report';
 import type { Run } from './types';
 
+/** The habit column each bulk field is saved to. A new field without one is a type error. */
+const COLUMN = { areaId: 'areaId', remind: 'remind' } satisfies Record<HabitBulkField, keyof typeof habit.$inferInsert>;
+
 export const setFields: Run<'set'> = ({ actor, undo, report }, habits, input) => {
 	const areas = listAreas(actor.accountId);
 	// Values as stored: an Area named by the caller becomes its id.
@@ -58,8 +61,8 @@ export const setFields: Run<'set'> = ({ actor, undo, report }, habits, input) =>
 			report.skip(past[0].reason, line);
 			continue;
 		}
-		const before = Object.fromEntries(todo.map((k) => [k, get(form, k)]));
-		const after = Object.fromEntries(todo.map((k) => [k, values[k]]));
+		const before = Object.fromEntries(todo.map((k) => [COLUMN[k], get(form, k)]));
+		const after = Object.fromEntries(todo.map((k) => [COLUMN[k], values[k]]));
 		undo.row('habit', h.id, before, after);
 		db.update(habit).set(after as Partial<typeof habit.$inferInsert>).where(eq(habit.id, h.id)).run();
 		report.change({ ...line, detail });
