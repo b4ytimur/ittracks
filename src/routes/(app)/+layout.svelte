@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import { invalidateAll } from '$app/navigation';
 	import { dismissToast, showToast, toast } from '$lib/toast.svelte';
-	import { outbox, startOutbox } from '$lib/outbox.svelte';
+	import { discard, outbox, retry, startOutbox } from '$lib/outbox.svelte';
 
 	let { children } = $props();
 
@@ -18,6 +18,16 @@
 		href === '/'
 			? page.url.pathname === '/'
 			: page.url.pathname.startsWith(href) || (href === '/history' && page.url.pathname.startsWith('/journal'));
+
+	const waiting = $derived(outbox.items.filter((q) => !q.refused));
+	const refused = $derived(outbox.items.filter((q) => q.refused));
+	async function tryAgain(id: string) {
+		const n = await retry(id);
+		if (n) {
+			showToast(`Synced ${n} saved ${n === 1 ? 'change' : 'changes'}.`);
+			await invalidateAll();
+		}
+	}
 
 	let online = $state(true);
 	$effect(() => {
@@ -46,14 +56,21 @@
 </script>
 
 <div class="app">
-	{#if !online || outbox.items.length}
+	{#if !online || waiting.length}
 		<div class="offline" role="status">
 			{#if !online}Offline. Changes are saved on this device.{/if}
-			{#if outbox.items.length}
-				{outbox.items.length} waiting to sync{outbox.syncing ? '…' : '.'}
+			{#if waiting.length}
+				{waiting.length} waiting to sync{outbox.syncing ? '…' : '.'}
 			{/if}
 		</div>
 	{/if}
+	{#each refused as q (q.id)}
+		<div class="offline refused" role="alert">
+			Not saved: {q.label}. {q.refused}
+			<button class="small" onclick={() => tryAgain(q.id)}>Try again</button>
+			<button class="small" onclick={() => showToast(`Discarded a change to ${q.label}.`, discard(q.id))}>Discard</button>
+		</div>
+	{/each}
 	<main class="content">
 		{@render children()}
 	</main>
@@ -83,6 +100,10 @@
 		background: var(--surface);
 		border-bottom: 1px solid var(--border);
 		color: var(--muted);
+	}
+	.refused {
+		position: static;
+		color: var(--danger);
 	}
 	.toast {
 		position: fixed;

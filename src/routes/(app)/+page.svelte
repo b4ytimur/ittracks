@@ -67,6 +67,7 @@
 	const queuedDone = $derived(
 		new Set(
 			outbox.items.flatMap((q) => {
+				if (q.refused) return [];
 				const occ = q.fields.find(([k]) => k === 'occurrence')?.[1];
 				if (occ && !q.url.includes('undo')) return [occ];
 				const m = q.url.match(/^\/log\/([^/?]+)/);

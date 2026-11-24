@@ -6,7 +6,7 @@
 	import Timer from './Timer.svelte';
 	import Stepper from './Stepper.svelte';
 	import { defaultStep } from '$lib/task-types';
-	import { enqueue, isOffline } from '$lib/outbox.svelte';
+	import { enqueue, isOffline, save } from '$lib/outbox.svelte';
 	import { postAction, showToast } from '$lib/toast.svelte';
 	import NoteBox from '$lib/NoteBox.svelte';
 	import Markdown from '$lib/Markdown.svelte';
@@ -151,7 +151,8 @@
 
 	// ----- Autosave: every change is kept on this device at once, and on the server shortly after -----
 	let saveTimer: ReturnType<typeof setTimeout> | undefined;
-	let saveState = $state<'idle' | 'saving' | 'saved' | 'local'>('idle');
+	let saveState = $state<'idle' | 'saving' | 'saved' | 'local' | 'refused'>('idle');
+	let refusedWhy = $state('');
 	const snapshot = $derived(JSON.stringify({ log, notes, level }));
 	let primed = false;
 
@@ -200,17 +201,14 @@
 
 	async function autosave() {
 		saveTimer = undefined;
-		const body = payload(false, true);
+		const sent = snapshot;
 		saveState = 'saving';
-		try {
-			const res = await postAction(saveUrl(), { payload: body });
-			if (!res.ok) throw new Error('save failed');
-			writeDraft(true);
-			saveState = 'saved';
-		} catch (e) {
-			if (isOffline(e)) enqueue(saveUrl(), [['payload', body]], data.habitName);
-			saveState = 'local';
-		}
+		const a = await save(saveUrl(), [['payload', payload(false, true)]], data.habitName);
+		// Changed while it was being sent: the next save, already on its way, says how that went.
+		if (snapshot !== sent) return;
+		if (a.kind === 'saved') writeDraft(true);
+		refusedWhy = a.kind === 'refused' ? a.why : '';
+		saveState = a.kind === 'later' ? 'local' : a.kind;
 	}
 
 	// Leaving before the autosave ran (Back right after a tick): save first, then go, so the
@@ -405,18 +403,17 @@
 		dropAutosave();
 		if (pending || started) await autosave();
 		if (data.past) return sameAsLastPast();
-		const res = await postAction('/?/same', { occurrence: data.occurrence.id }).catch((e) => e);
-		if (res instanceof Error) {
-			if (isOffline(res)) {
-				enqueue('/?/same', [['occurrence', data.occurrence.id]], data.habitName);
-				clearDraft();
-				showToast(`Logged ${data.habitName}. It will sync when you're back online.`);
-				return goto(data.back);
-			}
-			problem = 'Could not save. Try again.';
+		const a = await save('/?/same', [['occurrence', data.occurrence.id]], data.habitName);
+		if (a.kind === 'refused') {
+			if (a.to) return goto(a.to);
+			problem = `Not saved. ${a.why}`;
 			return;
 		}
 		clearDraft();
+		if (a.kind === 'later') {
+			showToast(`Logged ${data.habitName}. It will sync when you're back online.`);
+			return goto(data.back);
+		}
 		goto(`/?did=${data.occurrence.id}${started ? '' : '&clear=1'}`);
 	}
 
@@ -462,7 +459,7 @@
 			{[data.variantName, dateLabel, data.occurrence.status !== 'due' ? data.occurrence.status : null]
 				.filter(Boolean)
 				.join(' · ')}
-			{#if saveState === 'saving'}· saving…{:else if saveState === 'saved'}· saved{:else if saveState === 'local'}· saved on this device{/if}
+			{#if saveState === 'saving'}· saving…{:else if saveState === 'saved'}· saved{:else if saveState === 'local'}· saved on this device{:else if saveState === 'refused'}· <span class="error">not saved: {refusedWhy}</span>{/if}
 		</div>
 	</div>
 	<a href={data.back}>Back</a>
