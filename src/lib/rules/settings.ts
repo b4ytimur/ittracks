@@ -75,6 +75,7 @@ export const settingsRules = defineRules<Settings, SettingsCtx>({
 	 * J3: the day note is part of the Journal feature. Switching a feature off keeps its data
 	 * and settings (FEATURES in views.ts), so this warns instead of clearing.
 	 */
+	detail: [],
 	dayNote: [check((s) => s.dayNote && journalOff(s), 'The Journal feature is switched off, so the day note stays hidden until you switch it back on', 'warn')]
 });
 

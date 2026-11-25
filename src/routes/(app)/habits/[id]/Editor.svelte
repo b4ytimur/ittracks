@@ -5,6 +5,9 @@
 	import { beforeNavigate } from '$app/navigation';
 	import type { ActionData, PageData } from './$types';
 	import SaidLine from '$lib/detail/SaidLine.svelte';
+	import { everySection, KINDS, movedSections, SECTIONS, type Kind, type Section } from '$lib/detail/sections';
+	import { saveSetting } from '$lib/settings/save';
+	import type { Mode } from '$lib/ui/list';
 	import * as W from '$lib/detail/words';
 	import EditChrome from '$lib/ui/EditChrome.svelte';
 	import GroupHeading from '$lib/ui/GroupHeading.svelte';
@@ -723,6 +726,32 @@
 		inside: { on: !!h.parentId || !!base.parentId, can: build && data.groups.length > 0, clear: () => (h.parentId = null), word: 'Inside a group or routine' }
 	});
 	const shows = (id: string) => optional[id].on || (added[id] && (optional[id].can || optional[id].on)) || (data.showAllSections && optional[id].can);
+	// The sections under the first card, in the order this kind of habit has them.
+	let arranging = $state<Mode>('use');
+	const pageKind = $derived<Kind>(!build ? 'break' : isGroupKind ? 'group' : 'build');
+	const order = $derived(everySection(data.detail[pageKind]));
+	const sections = $derived(
+		order.filter(
+			(x) =>
+				({
+					what: build && !isGroupKind,
+					counts: build && ['levels', 'streak', 'quick', 'raise'].some(shows),
+					slip: !build,
+					keeps: ['identity', 'treat', 'reward', 'prep', 'reframe'].some(shows),
+					about: true
+				})[x]
+		)
+	);
+	const sectionTitle = (x: Section) => (x === 'what' && h.variants.length > 1 ? 'Variants' : SECTIONS[x]);
+	const everyOne = $derived(`on every ${KINDS[pageKind]}`);
+	async function arrange(next: Section[] | undefined, said: string) {
+		const kinds = { ...data.detail };
+		if (next) kinds[pageKind] = next;
+		else delete kinds[pageKind];
+		const why = await saveSetting({ detail: kinds }, () => ({ detail: data.detail }), said);
+		if (why) showError(why);
+	}
+	const moveSection = (x: Section, shown: Section[]) => void arrange(movedSections(order, shown), `Moved ${sectionTitle(x)} to ${shown.indexOf(x) + 1} of ${shown.length}, ${everyOne}.`);
 	const toAdd = $derived(Object.keys(optional).filter((id) => optional[id].can && !shows(id)));
 	let morePills = $state(false);
 	function add(id: string) {
@@ -1553,6 +1582,43 @@
 	</SaidLine>
 {/snippet}
 
+{#snippet whatSection()}
+	{@render whatYouDo()}
+	{#if problems.what}<p class="error meta" role="alert">{problems.what}</p>{/if}
+{/snippet}
+{#snippet countsSection()}
+	<div class="card su-lines">
+		{#if shows('levels')}{@render line('levels', levelsPart)}{/if}
+		{#if shows('streak')}{@render line('streak', streakPart)}{/if}
+		{#if shows('quick')}{@render line('quick', quickPart)}{/if}
+		{#if shows('raise')}{@render line('raise', raisePart)}{/if}
+	</div>
+{/snippet}
+{#snippet slipSection()}
+	<div class="card su-lines">
+		{@render line('feelings', feelingsPart)}
+		{#if shows('cost')}{@render line('cost', costPart)}{/if}
+	</div>
+{/snippet}
+{#snippet keepsSection()}
+	<div class="card su-lines">
+		{#if shows('identity')}{@render line('identity', identityPart)}{/if}
+		{#if shows('treat')}{@render line('treat', treatPart)}{/if}
+		{#if shows('reward')}{@render line('reward', rewardPart)}{/if}
+		{#if shows('prep')}{@render line('prep', prepPart)}{/if}
+		{#if shows('reframe')}{@render line('reframe', reframePart)}{/if}
+	</div>
+{/snippet}
+{#snippet aboutSection()}
+	<div class="card su-lines">
+		{#if shows('notes')}{@render line('notes', notesPart)}{/if}
+		{#if data.areas.length}{@render line('area', areaPart)}{/if}
+		{#if shows('inside')}{@render line('inside', insidePart)}{/if}
+		{@render line('started', startField, { question: appliesQuestion })}
+		{@render line('kind', typePart)}
+	</div>
+{/snippet}
+
 {#snippet lines()}
 	<div class="card su-lines">
 		{@render line('name', namePart, { lead: true })}
@@ -1565,49 +1631,12 @@
 		{#if shows('instead')}{@render line('instead', insteadPart)}{/if}
 	</div>
 
-	{#if build && !isGroupKind}
-		<GroupHeading title={h.variants.length > 1 ? 'Variants' : 'What you do'} />
-		{@render whatYouDo()}
-		{#if problems.what}<p class="error meta" role="alert">{problems.what}</p>{/if}
-	{/if}
-
-	{#if build && ['levels', 'streak', 'quick', 'raise'].some(shows)}
-		<GroupHeading title="How it counts" />
-		<div class="card su-lines">
-			{#if shows('levels')}{@render line('levels', levelsPart)}{/if}
-			{#if shows('streak')}{@render line('streak', streakPart)}{/if}
-			{#if shows('quick')}{@render line('quick', quickPart)}{/if}
-			{#if shows('raise')}{@render line('raise', raisePart)}{/if}
-		</div>
-	{/if}
-
-	{#if !build}
-		<GroupHeading title="When you slip" />
-		<div class="card su-lines">
-			{@render line('feelings', feelingsPart)}
-			{#if shows('cost')}{@render line('cost', costPart)}{/if}
-		</div>
-	{/if}
-
-	{#if ['identity', 'treat', 'reward', 'prep', 'reframe'].some(shows)}
-		<GroupHeading title="What keeps you at it" />
-		<div class="card su-lines">
-			{#if shows('identity')}{@render line('identity', identityPart)}{/if}
-			{#if shows('treat')}{@render line('treat', treatPart)}{/if}
-			{#if shows('reward')}{@render line('reward', rewardPart)}{/if}
-			{#if shows('prep')}{@render line('prep', prepPart)}{/if}
-			{#if shows('reframe')}{@render line('reframe', reframePart)}{/if}
-		</div>
-	{/if}
-
-	<GroupHeading title="About" />
-	<div class="card su-lines">
-		{#if shows('notes')}{@render line('notes', notesPart)}{/if}
-		{#if data.areas.length}{@render line('area', areaPart)}{/if}
-		{#if shows('inside')}{@render line('inside', insidePart)}{/if}
-		{@render line('started', startField, { question: appliesQuestion })}
-		{@render line('kind', typePart)}
-	</div>
+	<EditableList items={sections} key={(x) => x} label={sectionTitle} mode={arranging} layout="bare" class="sections" ariaLabel="Sections" onmove={(m, order) => moveSection(m.key as Section, order as Section[])}>
+		{#snippet row(x, ctx)}
+			<GroupHeading title={sectionTitle(x)} mode={arranging} grip={ctx.grip} />
+			<div>{@render { what: whatSection, counts: countsSection, slip: slipSection, keeps: keepsSection, about: aboutSection }[x]()}</div>
+		{/snippet}
+	</EditableList>
 
 	{#if toAdd.length}
 		<div class="chips add-more" role="group" aria-label="Add to this habit">
@@ -1658,8 +1687,11 @@
 <EditChrome
 	title={data.isNew ? (data.copiedFrom ? `Copy of ${data.copiedFrom}` : 'New habit') : h.name || 'Habit'}
 	back={{ href: '/habits', label: 'Habits' }}
-	modes={['use']}
-	hints={data.isNew ? {} : { use: `${now.days && build ? now.days : now.limit} ${heldIds.length ? 'A change isn’t saved yet.' : ''}`.trim() }}
+	bind:mode={arranging}
+	modes={data.isNew ? ['use'] : ['use', 'edit']}
+	onreset={data.isNew ? undefined : () => void arrange(undefined, `Reset the order of sections, ${everyOne}.`)}
+	atDefault={!data.detail[pageKind]}
+	hints={data.isNew ? {} : { edit: `Drag ⠿ to move a section, ${everyOne}.`,  use: `${now.days && build ? now.days : now.limit} ${heldIds.length ? 'A change isn’t saved yet.' : ''}`.trim() }}
 >
 	{#snippet actions()}{#if menu.length}<span class="menu-at"><MenuButton class="hit" label="More for {h.name}" items={menu} /></span>{/if}{/snippet}
 </EditChrome>
@@ -1790,6 +1822,11 @@
 <style>
 	p {
 		margin: 0;
+	}
+	/* Sections stand apart as their headings did on the page itself. */
+	:global(.elist.sections) {
+		--gap: var(--space-section);
+		margin-block-start: var(--space-section);
 	}
 	fieldset {
 		border: 1px solid var(--line);
