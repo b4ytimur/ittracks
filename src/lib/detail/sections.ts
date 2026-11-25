@@ -12,3 +12,10 @@ export function movedSections(full: Section[], shown: Section[]): Section[] {
 	let i = 0;
 	return full.map((s) => (shown.includes(s) ? shown[i++] : s));
 }
+
+/** The lines a habit's page shows once they hold something, per kind: each can be on every new one from the start. */
+export const LINES_FOR = {
+	build: ['when', 'remind', 'levels', 'streak', 'quick', 'raise', 'identity', 'treat', 'reward', 'prep', 'reframe', 'notes', 'inside'],
+	group: ['when', 'streak', 'identity', 'treat', 'reward', 'prep', 'reframe', 'notes', 'inside'],
+	break: ['instead', 'cost', 'identity', 'reframe', 'notes']
+} as const satisfies Record<Kind, readonly string[]>;

@@ -234,10 +234,6 @@
 			<label class="check"><input type="checkbox" class="pick" checked={s.guidedSetup} aria-describedby="guided-h" onchange={(e) => save('newhabits', { guidedSetup: e.currentTarget.checked }, e.currentTarget.checked ? 'New habits ask how to start.' : 'New habits open the full page.')} /> Ask how to start</label>
 			<p class="field-hint meta" id="guided-h">From the Gallery, step by step, as a copy, or blank.</p>
 		</div>
-		<div class="option-row">
-			<label class="check"><input type="checkbox" class="pick" checked={s.showAllSections} aria-describedby="all-h" onchange={(e) => save('newhabits', { showAllSections: e.currentTarget.checked }, e.currentTarget.checked ? 'A habit’s page shows every section.' : 'A habit’s page shows the sections in use.')} /> Show every section of a habit</label>
-			<p class="field-hint meta" id="all-h">Otherwise a habit's page shows what it uses, and + Add brings the rest.</p>
-		</div>
 	{:else if id === 'units'}
 		<Units kinds={s.units} used={data.usedUnits} bind:problem={() => problem.units ?? '', (v) => (problem.units = v)} onsave={(units, said, renames) => save('units', { units }, said, {}, renames)} />
 	{:else if id === 'measures'}

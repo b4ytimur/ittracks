@@ -77,6 +77,7 @@ export const settingsRules = defineRules<Settings, SettingsCtx>({
 	 */
 	detail: [],
 	logLayouts: [],
+	newLines: [],
 	dayNote: [check((s) => s.dayNote && journalOff(s), 'The Journal feature is switched off, so the day note stays hidden until you switch it back on', 'warn')]
 });
 

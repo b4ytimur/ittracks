@@ -1,3 +1,4 @@
+import { LINES_FOR, type Kind } from '$lib/detail/sections';
 import { and, eq, isNotNull } from 'drizzle-orm';
 import { db } from './db';
 import { settings, tag } from './db/schema';
@@ -24,8 +25,10 @@ export interface Settings {
 	ranges: DayRange[];
 	/** New habits open in the guided setup instead of the full editor. */
 	guidedSetup: boolean;
-	/** The habit editor shows every section, not just the ones in use. */
+	/** Read only for accounts from before `newLines`: every line on every new habit. */
 	showAllSections: boolean;
+	/** Lines every new habit of a kind shows from the start (src/lib/detail/sections.ts). */
+	newLines?: Partial<Record<Kind, string[]>>;
 	/** Before views: Today, Habits and the Library group by Area. Now only seeds the Standard view. */
 	groupByArea: boolean;
 	/** Filters, sorts, layout and the view template. Unset until first saved (reads as Standard). */
@@ -74,6 +77,9 @@ function newViews(): ViewSettings {
 	const v = readViews(undefined);
 	return { ...v, today: { ...v.today, lines: v.today.lines.filter((l) => l !== 'identities') }, own: {} };
 }
+
+/** Lines every new habit shows. Before it was per line there was one switch for all of them. */
+export const getNewLines = (s: Settings): Partial<Record<Kind, string[]>> => s.newLines ?? (s.showAllSections ? structuredClone(LINES_FOR) as unknown as Record<Kind, string[]> : {});
 
 export function getSettings(accountId: string): Settings {
 	const row = db.select().from(settings).where(eq(settings.accountId, accountId)).get();
