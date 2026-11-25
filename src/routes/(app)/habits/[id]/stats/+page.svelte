@@ -4,7 +4,8 @@
 	import { statsOp } from '$lib/stats/client';
 	import type { StatCard } from '$lib/stats/model';
 	import CardGrid from '$lib/stats/ui/CardGrid.svelte';
-	import EditButton from '$lib/ui/EditButton.svelte';
+	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import RecordTabs from '$lib/detail/RecordTabs.svelte';
 
 	let { data } = $props();
 	/** Edit mode is a flag on this same page: the grid shows handles, sizes and Edit on each card. */
@@ -29,17 +30,15 @@
 <svelte:head><title>{data.habit.name} stats · ittracks</title></svelte:head>
 
 <div class="stats-page">
-	<header class="bar">
-		<div>
-			<h1>{data.habit.name}</h1>
-			<div class="muted">Stats{data.customized ? ' · customized' : ''}</div>
-		</div>
-		<div class="row" style="align-items: center">
-			<a href="/habits/{data.habit.id}/chain">Chain</a>
-			<a href="/habits/{data.habit.id}">Edit</a>
-			<EditButton bind:editing label="Customize" onchange={() => (adding = false)} />
-		</div>
-	</header>
+	<EditChrome
+		title={data.habit.name}
+		back={{ href: '/habits', label: 'Habits' }}
+		mode={editing ? 'edit' : 'use'}
+		modes={['use', 'edit']}
+		hints={{ use: data.customized ? 'Your own cards' : 'Made from what it logs', edit: 'Drag a card to move it.' }}
+		onmode={(m) => ((editing = m === 'edit'), (adding = false))}
+	/>
+	<RecordTabs habit={data.habit.id} at="stats" />
 
 	{#if editing}
 		<div class="row tools">

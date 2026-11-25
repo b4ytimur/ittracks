@@ -19,6 +19,16 @@ Go to **Habits → New habit**. You choose how to start:
 
 To skip this choice and always open the full editor, untick **New habits ask how to start** in **Settings → New habits and units**. Tick **Show every section in the habit editor** there to see all sections without pressing the **+** buttons.
 
+## A habit's page
+
+A habit's page is one page of lines. Each line says what it means ("Weekly on Mon, Wed, Fri."); press it and it opens where it stands. **Details**, **Chain** and **Stats** are its three tabs.
+
+- What you change saves by itself, with **Undo** in the line above the tabs.
+- A change that would rewrite past days (the days, the start, Levels, the streak, a limit, what it sits inside) waits: the line says **not saved**, what it was and what saving does, with **Save** and **Cancel**. Left unsaved, it is kept on your device and is there when you come back. Its Undo puts back exactly what it replaced; what you logged since stays. It can be taken back for a day, as long as the habit wasn't changed again.
+- If another device changed the same line in the meantime, nothing is saved over it: choose **Show it** or **Keep mine**.
+- Lines that hold nothing aren't shown: add them with the buttons at the end.
+- Tasks and Variants are moved by their ⠿ handle, with the mouse, a finger or the arrow keys.
+
 ## What you do: Variants, Slots and targets
 
 A build habit holds one or more **Variants**. Most habits have one. Add more with **Add another Variant (for A/B plans)** when you alternate plans, like Push day A and Pull day B. Each Variant can be renamed, moved, duplicated or removed.
@@ -65,13 +75,13 @@ Under **+ Streak and days you don't log**: how the streak counts, whether a shor
 - **Reward**: **Celebrate when I finish** with your own message, and **Fill a jar toward a reward**: a pretend jar that adds an amount each time ("2 € toward new running shoes").
 - **Progression**: **Suggest raising my targets when I keep hitting them**. After a number of logs in a row at Target or better, Today offers to raise them by a percentage or by steps (each field's own +/− step). Press **Raise** or **Not yet**. Nothing changes until you accept, and past logs keep the targets they aimed for.
 
-Also on the editor:
+Also on the page:
 
 - **Reframe**: a line to see on the card ("I get to do this today").
 - **Identity**: who this habit makes you ("I am a runner"). Each done day is a vote for it. Manage them on the **Identities** page.
 - **Notes**: Markdown. See [Notes and journal](notes-and-journal.md).
 - **One-tap Done on Today (logs your targets)**, for habits with Tasks.
-- **Add to home screen shortcuts**: the habit appears when you long-press the app icon.
+- **In the app icon's menu**: the habit appears when you long-press the app icon. The menu holds four.
 - The habit's **quick-log link**. See [Integrations](integrations.md#quick-log-links).
 
 Features you never use can be hidden app-wide in **Settings → Features**. See [Views](views-and-edit-mode.md#switch-features-off).
