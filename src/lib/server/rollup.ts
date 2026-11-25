@@ -239,7 +239,7 @@ export function hasOwnTasks(habitId: string): boolean {
 		.select({ id: slot.id })
 		.from(slot)
 		.innerJoin(variant, eq(slot.variantId, variant.id))
-		.where(eq(variant.habitId, habitId))
+		.where(and(eq(variant.habitId, habitId), eq(variant.archived, false)))
 		.get();
 }
 

@@ -113,7 +113,7 @@ export function occurrenceFor(actor: Actor, day: Day, opts: { extra?: boolean; v
 
 /** A Variant of the habit by id or name. */
 function variantOf(habitId: string, ref: string): string {
-	const rows = db.select({ id: variant.id, name: variant.name }).from(variant).where(eq(variant.habitId, habitId)).all();
+	const rows = db.select({ id: variant.id, name: variant.name }).from(variant).where(and(eq(variant.habitId, habitId), eq(variant.archived, false))).all();
 	const v = rows.find((x) => x.id === ref) ?? rows.find((x) => x.name.toLowerCase() === ref.toLowerCase());
 	if (!v) throw new ActionError('not_found', `No Variant called “${ref}”. Pick one of: ${rows.map((x) => x.name).join(', ')}.`);
 	return v.id;

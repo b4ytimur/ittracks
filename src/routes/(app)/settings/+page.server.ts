@@ -32,7 +32,7 @@ function numberFields(habitIds: string[]): Record<string, string[]> {
 		.from(slot)
 		.innerJoin(variant, eq(slot.variantId, variant.id))
 		.innerJoin(metric, eq(metric.taskId, slot.taskId))
-		.where(and(inArray(variant.habitId, habitIds), isNotNull(slot.taskId), inArray(metric.type, ['number', 'count', 'duration'])))
+		.where(and(inArray(variant.habitId, habitIds), eq(variant.archived, false), isNotNull(slot.taskId), inArray(metric.type, ['number', 'count', 'duration'])))
 		.orderBy(asc(slot.sortOrder), asc(metric.sortOrder))
 		.all();
 	const out: Record<string, string[]> = {};

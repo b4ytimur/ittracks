@@ -413,6 +413,18 @@
 	const shortDate = (d: string) =>
 		new Date(d + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 
+	/** Archived Variants, with those archived on this visit. */
+	let archivedVariants = $state(untrack(() => data.archivedVariants));
+	const usedVariant = (id: string) => data.usedVariants.includes(id);
+	function removeVariant(v: HabitForm['variants'][number]) {
+		if (usedVariant(v.id)) archivedVariants.push($state.snapshot(v) as typeof v);
+		h.variants = h.variants.filter((x) => x.id !== v.id);
+	}
+	function bringBack(v: HabitForm['variants'][number]) {
+		archivedVariants = archivedVariants.filter((x) => x.id !== v.id);
+		h.variants.push($state.snapshot(v) as typeof v);
+	}
+
 	function addVariant() {
 		const letter = String.fromCharCode(65 + h.variants.length);
 		h.variants.push({ id: crypto.randomUUID(), name: letter, slots: [] });
@@ -775,7 +787,7 @@
 						<div class="slot">{@render ctx.grip?.()}</div>
 						<div class="content"><input class="grow" aria-label="Name of the Variant" bind:value={v.name} required maxlength="120" /></div>
 						<div class="verb">
-							<MenuButton class="hit" label="More for {v.name}" items={[{ label: 'Duplicate', onselect: () => duplicateVariant(h.variants.indexOf(v)) }, { label: 'Remove', value: data.hasLogs ? 'What was logged on it stays.' : undefined, onselect: () => (h.variants = h.variants.filter((x) => x !== v)) }]} />
+							<MenuButton class="hit" label="More for {v.name}" items={[{ label: 'Duplicate', onselect: () => duplicateVariant(h.variants.indexOf(v)) }, { label: usedVariant(v.id) ? 'Archive' : 'Remove', value: usedVariant(v.id) ? 'Past days keep it.' : undefined, onselect: () => removeVariant(v) }]} />
 						</div>
 					</div>
 				{/if}
@@ -916,6 +928,9 @@
 		{/snippet}
 	</EditableList>
 	<button type="button" class="small" onclick={addVariant}>{h.variants.length > 1 ? '+ Variant' : '+ Another Variant (for A/B plans)'}</button>
+	{#each archivedVariants as v (v.id)}
+		<p class="meta muted archived">{v.name} is archived. <button type="button" class="quiet hit" aria-label="Bring back {v.name}" onclick={() => bringBack(v)}>Bring back</button></p>
+	{/each}
 {/snippet}
 
 {#snippet schedulePart()}

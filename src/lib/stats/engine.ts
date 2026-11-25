@@ -4,7 +4,7 @@
 import { addDays, daysBetween, toDays, fromDays, weekStart, weekday, type ISODate } from '../engine/dates';
 import { daysSinceSlip, longestRun, streak, type Level, type Mark, type StreakRule } from '../engine/streak';
 import { chainCells } from '../engine/chain';
-import { withinOn, withinStreak, usedIn, limitOn, type Limit } from '../engine/limit';
+import { withinOn, withinStreak, periodWithin, type Limit } from '../engine/limit';
 import { canRead, compile, countsSets, evaluate, FormulaError, type Lookup } from './formula';
 import { excerpt } from '../markdown';
 import { inReadingOrder, joinRow } from '../rowtext';
@@ -1581,7 +1581,7 @@ function streaksFor(card: StatCard, P: Prepared, ctx: Ctx): NonNullable<CardResu
 			let best = 0;
 			let run = 0;
 			for (let d = l.period === 'week' ? weekStart(h.startDate) : h.startDate; d <= ctx.today; d = addDays(d, step)) {
-				run = usedIn(l, slips, d) > limitOn(l, d) ? 0 : run + 1;
+				run = periodWithin(l, slips, d) ? run + 1 : 0;
 				best = Math.max(best, run);
 			}
 			const slipDays = new Set(slips.map((s) => s.date));

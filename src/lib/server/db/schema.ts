@@ -385,7 +385,9 @@ export const variant = sqliteTable('variant', {
 		.notNull()
 		.references(() => habit.id, { onDelete: 'cascade' }),
 	name: text('name').notNull(),
-	sortOrder: integer('sort_order').notNull().default(0)
+	sortOrder: integer('sort_order').notNull().default(0),
+	/** Removed after something was logged on it: past days keep their plan, nothing new uses it. */
+	archived: integer('archived', { mode: 'boolean' }).notNull().default(false)
 });
 
 /** A Slot is fixed to a Task, or open with a Fill rule (see src/lib/engine/fill.ts). */

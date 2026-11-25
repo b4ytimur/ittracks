@@ -299,7 +299,7 @@ describe('streak labels', () => {
 
 // ---------- P2 additions ----------
 import { chainCells, forgivenMisses } from './chain';
-import { limitOn, nextDrop, usedIn, withinOn, withinStreak, type Limit } from './limit';
+import { changeLimit, limitOn, nextDrop, usedIn, withinOn, withinStreak, type Limit } from './limit';
 import { hitsInARow, raise } from './progression';
 
 describe('chain view', () => {
@@ -344,6 +344,24 @@ describe('reduce mode', () => {
 		expect(nextDrop(l, MON)).toEqual({ date: '2026-11-30', max: 2 });
 		expect(nextDrop(floored, '2026-12-07')).toBeNull();
 		expect(nextDrop({ ...l, taper: null }, MON)).toBeNull();
+	});
+
+	it('a changed limit leaves the days before it as they were', () => {
+		const five = changeLimit(null, { max: 5, period: 'day', taper: null }, '2026-11-02');
+		const three = changeLimit(five, { max: 3, period: 'day', taper: null }, '2026-11-20');
+		expect([limitOn(three, '2026-11-19'), limitOn(three, '2026-11-20')]).toEqual([5, 3]);
+		const slips = [{ date: '2026-11-18', count: 5 }, { date: '2026-11-21', count: 3 }];
+		expect(withinStreak(three, slips, '2026-11-02', '2026-11-22')).toBe(21);
+		expect(withinStreak(three, [...slips, { date: '2026-11-21', count: 1 }], '2026-11-02', '2026-11-22')).toBe(1);
+		// Saved again unchanged, or changed back the same day: nothing new to remember.
+		expect(changeLimit(three, { max: 3, period: 'day', taper: null }, '2026-11-25')).toBe(three);
+		expect(changeLimit(three, { max: 5, period: 'day', taper: null }, '2026-11-20')).toEqual(five);
+		expect(changeLimit(three, { max: 4, period: 'day', taper: null }, '2026-11-20')).toEqual({ ...three, max: 4 });
+		// Per week from a Wednesday on: the days before are judged one by one, the rest by the week.
+		const week = changeLimit(five, { max: 6, period: 'week', taper: null }, '2026-11-25');
+		expect(withinOn(week, [{ date: '2026-11-24', count: 6 }], '2026-11-24')).toBe(false);
+		expect(withinStreak(week, [{ date: '2026-11-23', count: 5 }, { date: '2026-11-24', count: 2 }], '2026-11-16', '2026-11-26')).toBe(0);
+		expect(withinStreak(week, [{ date: '2026-11-17', count: 5 }, { date: '2026-11-18', count: 5 }], '2026-11-16', '2026-11-26')).toBe(2);
 	});
 
 	it('counts days within the limit, back from today', () => {

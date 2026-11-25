@@ -145,7 +145,7 @@ export const actions: Actions = {
 		const p = h.progression;
 		const today = userToday(locals.account!.id, cookies.get('tz'));
 		db.transaction((tx) => {
-			const variants = tx.select({ id: variant.id }).from(variant).where(eq(variant.habitId, h.id)).all();
+			const variants = tx.select({ id: variant.id }).from(variant).where(and(eq(variant.habitId, h.id), eq(variant.archived, false))).all();
 			// Logs before the raise keep the targets they aimed for.
 			keepGoals(tx, variants.map((v) => v.id));
 			for (const v of variants)
@@ -219,7 +219,7 @@ export const actions: Actions = {
 		const v = db
 			.select()
 			.from(variant)
-			.where(and(eq(variant.id, field(f, 'variant')), eq(variant.habitId, h?.id ?? '')))
+			.where(and(eq(variant.id, field(f, 'variant')), eq(variant.habitId, h?.id ?? ''), eq(variant.archived, false)))
 			.get();
 		if (!h || !v) error(404);
 		createOccurrence(locals.account!.id, h.id, v.id, userToday(locals.account!.id, cookies.get('tz')));

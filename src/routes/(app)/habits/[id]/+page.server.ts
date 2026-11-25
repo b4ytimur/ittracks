@@ -16,7 +16,9 @@ import {
 	copyHabitForm,
 	getHabitForm,
 	listHabits,
-	saveHabit
+	saveHabit,
+	variantForms,
+	variantsLogged
 } from '$lib/server/repo/habits';
 import { feelingsUsed, habitLogged, PastEditError } from '$lib/server/history';
 import { identityFor, listIdentities } from '$lib/server/repo/identities';
@@ -122,7 +124,7 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 	// archived, so the form shows where it is.
 	const withArchived = listHabits(accountId, { archived: true });
 	const below = isNew ? new Set<string>() : descendants(withArchived, params.id);
-	const withSlots = new Set(db.select({ habitId: variant.habitId }).from(slot).innerJoin(variant, eq(slot.variantId, variant.id)).all().map((r) => r.habitId));
+	const withSlots = new Set(db.select({ habitId: variant.habitId }).from(slot).innerJoin(variant, eq(slot.variantId, variant.id)).where(eq(variant.archived, false)).all().map((r) => r.habitId));
 	const groups = withArchived
 		.filter(
 			(x) =>
@@ -141,7 +143,7 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 			routine: !isGroup(schedule),
 			/** Its days bring up more than one of its Variants, so a habit inside with its own rotation can drift from it. */
 			rotates: !isGroup(schedule) && variantsIn(schedule as Schedule).length > 1,
-			variants: isGroup(schedule) ? [] : db.select({ id: variant.id, name: variant.name }).from(variant).where(eq(variant.habitId, id)).orderBy(asc(variant.sortOrder)).all()
+			variants: isGroup(schedule) ? [] : db.select({ id: variant.id, name: variant.name }).from(variant).where(and(eq(variant.habitId, id), eq(variant.archived, false))).orderBy(asc(variant.sortOrder)).all()
 		}));
 	return {
 		id: params.id,
@@ -189,6 +191,9 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		directionLocked: !isNew && habitLogged(params.id),
 		/** Feelings past slips were logged with: removing one archives it. */
 		usedFeelings: isNew ? [] : [...feelingsUsed(params.id)],
+		/** Variants something was logged on (removing one archives it), and the archived ones, to bring back. */
+		usedVariants: isNew ? [] : [...variantsLogged(params.id)],
+		archivedVariants: isNew ? [] : variantForms(params.id, true),
 		/** Something was logged already: a rotation's plan has days to keep when the start moves. */
 		hasLogs:
 			!isNew &&
