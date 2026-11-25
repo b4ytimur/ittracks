@@ -79,7 +79,7 @@ export function describe(actor: Actor) {
 	const today = userToday(actor.accountId, actor.tz);
 	const habits = visibleHabits(actor, { archived: true });
 	const ids = habits.map((h) => h.id);
-	const variants = ids.length ? db.select().from(variant).where(inArray(variant.habitId, ids)).orderBy(asc(variant.sortOrder)).all() : [];
+	const variants = ids.length ? db.select().from(variant).where(and(inArray(variant.habitId, ids), eq(variant.archived, false))).orderBy(asc(variant.sortOrder)).all() : [];
 	const slotRows = variants.length
 		? db.select().from(slot).where(inArray(slot.variantId, variants.map((v) => v.id))).orderBy(asc(slot.sortOrder)).all()
 		: [];

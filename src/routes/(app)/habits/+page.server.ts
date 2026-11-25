@@ -5,7 +5,7 @@ import { identitiesByHabit } from '$lib/server/repo/identities';
 import { habitStats } from '$lib/engine/stats';
 import { db } from '$lib/server/db';
 import { habit, occurrence, slot, variant } from '$lib/server/db/schema';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { userToday } from '$lib/server/today';
 import { initialState, templateById } from '$lib/views';
 import { fail } from '@sveltejs/kit';
@@ -33,7 +33,7 @@ export const load: PageServerLoad = ({ locals, url, cookies }) => {
 			.from(slot)
 			.innerJoin(variant, eq(slot.variantId, variant.id))
 			.innerJoin(habit, eq(variant.habitId, habit.id))
-			.where(eq(habit.accountId, accountId))
+			.where(and(eq(habit.accountId, accountId), eq(variant.archived, false)))
 			.all()
 			.map((r) => r.id)
 	);
@@ -43,7 +43,7 @@ export const load: PageServerLoad = ({ locals, url, cookies }) => {
 		.select({ id: variant.id, name: variant.name, habitId: variant.habitId })
 		.from(variant)
 		.innerJoin(habit, eq(variant.habitId, habit.id))
-		.where(eq(habit.accountId, accountId))
+		.where(and(eq(habit.accountId, accountId), eq(variant.archived, false)))
 		.orderBy(asc(variant.sortOrder))
 		.all())
 		variantsOf.set(v.habitId, [...(variantsOf.get(v.habitId) ?? []), { id: v.id, name: v.name }]);

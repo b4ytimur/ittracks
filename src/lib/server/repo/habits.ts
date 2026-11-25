@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, inArray, isNull, lt, notInArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, lt, notInArray, or } from 'drizzle-orm';
 import { db } from '../db';
-import { area, entry, habit, habitIdentity, identity, metric, occurrence, slot, taskPart, variant } from '../db/schema';
+import { area, entry, habit, habitIdentity, identity, metric, occurrence, slot, task, taskPart, variant } from '../db/schema';
 import {
 	DEFAULT_TRIGGERS,
 	defaultLevels,
@@ -9,6 +9,7 @@ import {
 	type HabitForm,
 	type ScheduleForm
 } from '$lib/forms';
+import { changeLimit } from '$lib/engine/limit';
 import { makesLoop } from '$lib/engine/stack';
 import { keepEarlier, sameSchedule, scheduleStartBy, startMovedBack, type EarlierSchedule } from '$lib/engine/unlogged';
 import { isFollow, isGroup, type Schedule } from '$lib/engine/schedule';
@@ -89,25 +90,6 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 	if (cue.afterHabitId && !exists(cue.afterHabitId)) cue.afterHabitId = null;
 	const ifThen = h.ifThen ?? { when: '', then: '', habitId: null };
 	if (ifThen.habitId && !exists(ifThen.habitId)) ifThen.habitId = null;
-	const variants = db
-		.select()
-		.from(variant)
-		.where(eq(variant.habitId, id))
-		.orderBy(asc(variant.sortOrder))
-		.all();
-	const slots = variants.length
-		? db
-				.select()
-				.from(slot)
-				.where(
-					inArray(
-						slot.variantId,
-						variants.map((v) => v.id)
-					)
-				)
-				.orderBy(asc(slot.sortOrder))
-				.all()
-		: [];
 	return {
 		name: h.name,
 		direction: h.direction,
@@ -134,27 +116,62 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 		prep: h.prep ?? [],
 		reward: h.reward ?? { celebrate: false, message: '', jar: null },
 		cost: h.cost ?? null,
-		limit: h.limit ? { ...h.limit, taper: h.limit.taper ? { floor: 0, ...h.limit.taper } : null } : null,
+		limit: h.limit ? { max: h.limit.max, period: h.limit.period, start: h.limit.start, taper: h.limit.taper ? { floor: 0, ...h.limit.taper } : null } : null,
 		progression: h.progression ?? null,
 		areaId: h.areaId,
 		parentId: h.parentId && exists(h.parentId) ? h.parentId : null,
 		unlogged: h.unlogged,
-		variants: variants.map((v) => ({
-			id: v.id,
-			name: v.name,
-			slots: slots
-				.filter((s) => s.variantId === v.id)
-				.map((s) => ({
-					id: s.id,
-					taskId: s.taskId,
-					fillRule: s.fillRule as HabitForm['variants'][number]['slots'][number]['fillRule'],
-					sets: s.sets,
-					targets: s.targets ?? {},
-					minTargets: s.minTargets ?? {},
-					stretchTargets: s.stretchTargets ?? {}
-				}))
-		}))
+		variants: variantForms(id)
 	};
+}
+
+/** A habit's Variants as its page has them: the ones in use, or the archived ones. */
+export function variantForms(habitId: string, archived = false): HabitForm['variants'] {
+	const variants = db
+		.select()
+		.from(variant)
+		.where(and(eq(variant.habitId, habitId), eq(variant.archived, archived)))
+		.orderBy(asc(variant.sortOrder))
+		.all();
+	const slots = variants.length
+		? db
+				.select()
+				.from(slot)
+				.where(
+					inArray(
+						slot.variantId,
+						variants.map((v) => v.id)
+					)
+				)
+				.orderBy(asc(slot.sortOrder))
+				.all()
+		: [];
+	return variants.map((v) => ({
+		id: v.id,
+		name: v.name,
+		slots: slots
+			.filter((s) => s.variantId === v.id)
+			.map((s) => ({
+				id: s.id,
+				taskId: s.taskId,
+				fillRule: s.fillRule as HabitForm['variants'][number]['slots'][number]['fillRule'],
+				sets: s.sets,
+				targets: s.targets ?? {},
+				minTargets: s.minTargets ?? {},
+				stretchTargets: s.stretchTargets ?? {}
+			}))
+	}));
+}
+
+/** The Variants something was logged on: removing one archives it. */
+export function variantsLogged(habitId: string, tx: Tx | typeof db = db): Set<string> {
+	const rows = tx
+		.selectDistinct({ id: occurrence.variantId })
+		.from(occurrence)
+		.leftJoin(entry, eq(entry.occurrenceId, occurrence.id))
+		.where(and(eq(occurrence.habitId, habitId), or(inArray(occurrence.status, ['done', 'skipped']), isNotNull(occurrence.notes), isNotNull(entry.id))))
+		.all();
+	return new Set(rows.flatMap((r) => (r.id ? [r.id] : [])));
 }
 
 /** A Habit's links to other rows must point at this account's rows, and stacking can't loop. */
@@ -164,6 +181,18 @@ export function checkLinks(accountId: string, id: string | null, f: HabitForm): 
 		.from(habit)
 		.where(eq(habit.accountId, accountId))
 		.all();
+	// Ids come from a page: never another habit's Variant or Slot, nor another account's Task.
+	const ids = f.variants.map((v) => v.id);
+	const slots = f.variants.flatMap((v) => v.slots);
+	const fixed = [...new Set(slots.flatMap((s) => (s.taskId ? [s.taskId] : [])))];
+	if (
+		(ids.length && db.select({ habitId: variant.habitId }).from(variant).where(inArray(variant.id, ids)).all().some((v) => v.habitId !== id)) ||
+		(slots.length &&
+			db.select({ habitId: variant.habitId }).from(slot).innerJoin(variant, eq(slot.variantId, variant.id)).where(inArray(slot.id, slots.map((s) => s.id))).all().some((v) => v.habitId !== id))
+	)
+		return 'A Variant here belongs to another habit. Reload the page and try again';
+	if (fixed.length && db.select({ id: task.id }).from(task).where(and(inArray(task.id, fixed), eq(task.accountId, accountId))).all().length !== fixed.length)
+		return 'A Task here is not in your Library any more. Pick another one';
 	const parent = f.parentId ? others.find((o) => o.id === f.parentId) : undefined;
 	if (f.parentId) {
 		// A group, or a routine: a habit with its own schedule and no Tasks of its own.
@@ -178,7 +207,7 @@ export function checkLinks(accountId: string, id: string | null, f: HabitForm): 
 	if (isFollow(f.schedule)) {
 		if (!parent || isGroup(parent.schedule as Schedule | null))
 			return 'A habit can only follow a routine it sits in. Put it in a routine, or give it a schedule of its own';
-		const theirs = new Set(db.select({ id: variant.id }).from(variant).where(eq(variant.habitId, parent.id)).all().map((v) => v.id));
+		const theirs = new Set(variantIdsOf(parent.id));
 		if (f.schedule.on && !f.schedule.on.some((v) => theirs.has(v))) return `Pick at least one of the routine's Variants`;
 	}
 	// A routine's Tasks are the habits inside it, for now.
@@ -331,17 +360,7 @@ export function saveHabit(
 	let judgeAgain = false;
 	const saved = db.transaction((tx) => {
 		// A changed limit or taper applies from today, so past days keep the limit they had.
-		if (f.limit) {
-			const before = id
-				? tx.select({ limit: habit.limit }).from(habit).where(eq(habit.id, id)).get()?.limit
-				: null;
-			const same =
-				before &&
-				before.max === f.limit.max &&
-				before.period === f.limit.period &&
-				JSON.stringify(before.taper ?? null) === JSON.stringify(f.limit.taper ?? null);
-			f = { ...f, limit: { ...f.limit, start: same ? before.start : today } };
-		}
+		const limit = f.limit && changeLimit(id ? tx.select({ limit: habit.limit }).from(habit).where(eq(habit.id, id)).get()?.limit : null, f.limit, today);
 		const habitId = id ?? randomUUID();
 		const isBreak = f.direction === 'break';
 		const cue = {
@@ -370,7 +389,7 @@ export function saveHabit(
 			prep: !isBreak && f.prep.length ? f.prep : null,
 			reward: !isBreak && (f.reward.celebrate || f.reward.message || f.reward.jar) ? f.reward : null,
 			cost: isBreak ? f.cost : null,
-			limit: isBreak ? f.limit : null,
+			limit: isBreak ? limit : null,
 			progression: isBreak ? null : f.progression,
 			areaId: f.areaId,
 			parentId: isBreak ? null : f.parentId,
@@ -424,18 +443,18 @@ export function saveHabit(
 
 		// Break habits have no Variants. Keep ids stable so past Occurrences still point at them.
 		const variants = isBreak ? [] : f.variants;
-		const variantIds = variants.map((v) => v.id);
-		tx.delete(variant)
-			.where(
-				variantIds.length
-					? and(eq(variant.habitId, habitId), notInArray(variant.id, variantIds))
-					: eq(variant.habitId, habitId)
-			)
-			.run();
+		const kept = new Set(variants.map((v) => v.id));
+		// One with logs is archived, so past days keep their plan and their name.
+		const logged = id ? variantsLogged(id, tx) : new Set<string>();
+		for (const v of tx.select().from(variant).where(eq(variant.habitId, habitId)).all()) {
+			if (kept.has(v.id) || v.archived) continue;
+			if (logged.has(v.id)) tx.update(variant).set({ archived: true }).where(eq(variant.id, v.id)).run();
+			else tx.delete(variant).where(eq(variant.id, v.id)).run();
+		}
 		variants.forEach((v, i) => {
 			tx.insert(variant)
 				.values({ id: v.id, habitId, name: v.name, sortOrder: i })
-				.onConflictDoUpdate({ target: variant.id, set: { name: v.name, sortOrder: i } })
+				.onConflictDoUpdate({ target: variant.id, set: { name: v.name, sortOrder: i, archived: false } })
 				.run();
 			const slotIds = v.slots.map((s) => s.id);
 			// Logs made against targets that change keep the ones they aimed for.
@@ -515,8 +534,9 @@ function daysOf(id: string, depth = 0): Schedule | null {
 	return standaloneSchedule(above, s, h.startDate);
 }
 
-/** A habit's Variant ids. */
-const variantIdsOf = (habitId: string) => db.select({ id: variant.id }).from(variant).where(eq(variant.habitId, habitId)).all().map((v) => v.id);
+/** The ids of the Variants a habit has now. */
+const variantIdsOf = (habitId: string) =>
+	db.select({ id: variant.id }).from(variant).where(and(eq(variant.habitId, habitId), eq(variant.archived, false))).all().map((v) => v.id);
 
 /** The habits inside this one that follow its schedule. */
 const followers = (id: string) =>
@@ -528,7 +548,7 @@ const followers = (id: string) =>
 		.filter((k) => isFollow(k.schedule as Schedule | null));
 
 const hasSlots = (habitId: string) =>
-	!!db.select({ id: slot.id }).from(slot).innerJoin(variant, eq(slot.variantId, variant.id)).where(eq(variant.habitId, habitId)).get();
+	!!db.select({ id: slot.id }).from(slot).innerJoin(variant, eq(slot.variantId, variant.id)).where(and(eq(variant.habitId, habitId), eq(variant.archived, false))).get();
 
 export function setHabitArchived(accountId: string, id: string, archived: boolean) {
 	// Brought back, however: it is not about to be deleted any more.

@@ -539,7 +539,7 @@ export function taskUsage(accountId: string): Map<string, TaskUsage> {
 		.from(slot)
 		.innerJoin(variant, eq(slot.variantId, variant.id))
 		.innerJoin(habit, eq(variant.habitId, habit.id))
-		.where(eq(habit.accountId, accountId))
+		.where(and(eq(habit.accountId, accountId), eq(variant.archived, false)))
 		.all();
 	for (const u of uses) {
 		if (!u.taskId) continue;

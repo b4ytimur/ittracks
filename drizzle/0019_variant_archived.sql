@@ -1,0 +1,1 @@
+ALTER TABLE `variant` ADD `archived` integer DEFAULT false NOT NULL;

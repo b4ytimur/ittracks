@@ -6,7 +6,8 @@ import { asc, eq } from 'drizzle-orm';
 import { db } from './db';
 import { entry, habit, occurrence, task } from './db/schema';
 import { createAccount } from './auth';
-import { saveHabit } from './repo/habits';
+import { saveHabit, variantForms } from './repo/habits';
+import { occurrenceOn } from './backfill';
 import { saveTask } from './repo/tasks';
 import { currentForm, habitPatch, patchHabit } from './habit-patch';
 import { restoreSnapshot, withSnapshot } from './snapshot';
@@ -67,6 +68,45 @@ describe('a change to one line', () => {
 		expect(patch({ variants }, { variants: form().variants })).toHaveProperty('form');
 		expect(form().variants[0].slots.map((s) => s.taskId)).toEqual([t]);
 		expect(db.select().from(task).where(eq(task.id, t)).get()).toBeTruthy();
+	});
+});
+
+describe('Variants', () => {
+	const slotOf = (taskId: string) => ({ id: crypto.randomUUID(), taskId, fillRule: null, sets: 3, targets: {}, minTargets: {}, stretchTargets: {} });
+	const library = (who: string) => saveTask(who, null, taskForm.parse({ name: `Row ${crypto.randomUUID()}`, restTimerEnabled: false, restTimerSeconds: 90, tags: [], metrics: [], parts: [] }))!;
+
+	it('are archived when something was logged on them, deleted when not, and can come back', () => {
+		const t = library(me);
+		const [b, c] = [crypto.randomUUID(), crypto.randomUUID()];
+		const three = [...form().variants, { id: b, name: 'B', slots: [slotOf(t)] }, { id: c, name: 'C', slots: [] }];
+		patch({ variants: three }, { variants: form().variants });
+		const day = days().at(-1)!;
+		db.update(occurrence).set({ variantId: b, status: 'done' }).where(eq(occurrence.id, day.id)).run();
+		const r = patch({ variants: [three[0]] }, { variants: form().variants }, { keep: true }) as { undo: string };
+		expect(form().variants.map((x) => x.name)).toEqual(['Main']);
+		expect(variantForms(id, true).map((x) => [x.name, x.slots.length])).toEqual([['B', 1]]);
+		expect(days().find((o) => o.id === day.id)!.variantId).toBe(b);
+		// Not offered for a new log, but a past day of its keeps it.
+		expect(occurrenceOn(me, db.select().from(habit).where(eq(habit.id, id)).get()!, day.date, null)!.variantId).toBe(b);
+		expect(restoreSnapshot(me, r.undo)).toBe(true);
+		expect(form().variants.map((x) => x.name)).toEqual(['Main', 'B', 'C']);
+		patch({ variants: [three[0]] }, { variants: form().variants });
+		patch({ variants: [three[0], ...variantForms(id, true)] }, { variants: form().variants });
+		expect(form().variants.map((x) => [x.name, x.slots.length])).toEqual([['Main', 0], ['B', 1]]);
+		expect(variantForms(id, true)).toEqual([]);
+	});
+
+	it("are never another habit's, and their Tasks are this account's", () => {
+		const own = crypto.randomUUID();
+		const theirs = saveHabit(other, null, habitForm.parse({ name: 'Theirs', direction: 'build', startDate: '2026-11-01', variants: [{ id: own, name: 'Mine', slots: [slotOf(library(other))] }], schedule: { ...daily(), variantId: own } }), today)!;
+		const [their] = variantForms(theirs);
+		const was = { variants: form().variants };
+		const main = was.variants[0];
+		expect(patch({ variants: [main, { ...their, name: 'Taken', slots: [] }] }, was)).toHaveProperty('error');
+		expect(patch({ variants: [{ ...main, slots: [their.slots[0]] }] }, was)).toHaveProperty('error');
+		expect(patch({ variants: [{ ...main, slots: [slotOf(their.slots[0].taskId!)] }] }, was)).toHaveProperty('error');
+		expect(variantForms(theirs)).toEqual([their]);
+		expect(form().variants).toEqual(was.variants);
 	});
 });
 
@@ -133,7 +173,8 @@ describe('taking back a change that rewrote past days', () => {
 		db.update(occurrence).set({ variantId: b, status: 'done' }).where(eq(occurrence.id, o.id)).run();
 		const one = [form().variants[0]];
 		const r = patch({ variants: one }, { variants: form().variants }, { keep: true }) as { undo: string };
-		expect(days()[3].variantId).toBeNull();
+		expect(days()[3].variantId).toBe(b);
+	expect(form().variants.map((x) => x.id)).toEqual([v]);
 		expect(restoreSnapshot(me, r.undo)).toBe(true);
 		expect(form().variants.map((x) => x.id)).toEqual([v, b]);
 		expect(days()[3].variantId).toBe(b);

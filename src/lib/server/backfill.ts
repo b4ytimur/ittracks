@@ -13,7 +13,7 @@ import { parentOn } from '$lib/engine/tree';
 import { carriesOver, dependsOnHistory, isRealDate, logWindow, variantFor, type LogWindow } from '$lib/engine/backfill';
 import { scheduleStartBy } from '$lib/engine/unlogged';
 import { pauseOn } from '$lib/engine/pause';
-import { limitOn, usedIn } from '$lib/engine/limit';
+import { limitOn, planOn, usedIn } from '$lib/engine/limit';
 import type { Level } from '$lib/engine/streak';
 import { DEFAULT_TRIGGERS, type ScheduleForm } from '$lib/forms';
 import { optionName } from '$lib/options';
@@ -102,7 +102,7 @@ export function loadDay(accountId: string, date: string, today: string) {
 				slips: all
 					.filter((s) => s.date === date)
 					.map((s) => ({ id: s.id, count: s.count, time: s.time, feeling: optionName(h.triggers ?? DEFAULT_TRIGGERS, s.feeling) })),
-				limit: h.limit ? { used: usedIn(h.limit, all, date), max: limitOn(h.limit, date), period: h.limit.period } : null
+				limit: h.limit ? { used: usedIn(h.limit, all, date), max: limitOn(h.limit, date), period: planOn(h.limit, date).period } : null
 			});
 			continue;
 		}
@@ -118,14 +118,16 @@ export function loadDay(accountId: string, date: string, today: string) {
 		const sAt = scheduleAt(h, date);
 		const pd = followDue(h.id, sAt, today);
 		const wasDue = !paused && !!dueOn(sAt, past, date, pd);
-		const variants = db
-			.select({ id: variant.id, name: variant.name })
+		const all = db
+			.select({ id: variant.id, name: variant.name, archived: variant.archived })
 			.from(variant)
 			.where(eq(variant.habitId, h.id))
 			.orderBy(asc(variant.sortOrder))
 			.all();
 		const variantId =
-			occ?.variantId ?? variantFor(sAt, past, date, variants.map((v) => v.id), pd);
+			occ?.variantId ?? variantFor(sAt, past, date, all.filter((v) => !v.archived).map((v) => v.id), pd);
+		// The day's own Variant stays in the list when it is archived since.
+		const variants = all.filter((v) => !v.archived || v.id === variantId).map(({ id, name }) => ({ id, name }));
 		const item: PastItem = {
 			habitId: h.id,
 			name: h.name,
@@ -162,7 +164,7 @@ export function startFrom(h: HabitRow, date: string) {
 			earlierSchedules: earlier,
 			// Count the days before the old start too.
 			settledThrough: null,
-			limit: h.limit && h.limit.start > date ? { ...h.limit, start: date } : h.limit
+			limit: h.limit && !h.limit.earlier && h.limit.start > date ? { ...h.limit, start: date } : h.limit
 		})
 		.where(eq(habit.id, h.id))
 		.run();
@@ -203,7 +205,7 @@ export function unloggedOn(accountId: string, date: string): string[] {
  */
 export function occurrenceOn(accountId: string, h: HabitRow, date: string, chosen: string | null) {
 	const schedule = scheduleAt(h, date);
-	const ids = db.select({ id: variant.id }).from(variant).where(eq(variant.habitId, h.id)).orderBy(asc(variant.sortOrder)).all().map((v) => v.id);
+	const ids = db.select({ id: variant.id }).from(variant).where(and(eq(variant.habitId, h.id), eq(variant.archived, false))).orderBy(asc(variant.sortOrder)).all().map((v) => v.id);
 	const pick = chosen && ids.includes(chosen) ? chosen : null;
 	const existing = rowOn(h.id, date);
 	if (existing) {

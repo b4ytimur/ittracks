@@ -958,7 +958,8 @@ export function loadToday(accountId: string, today: string) {
 		const occ = todayOf.get(h.id) ?? null;
 		// A routine shows as a parent on days the habits inside it count.
 		const group = isGroup(schedule) ? schedule : routineIds.has(h.id) && occ?.rollup ? rollupRuleOf(schedule as Schedule) : null;
-		const variants = db.select().from(variant).where(eq(variant.habitId, h.id)).all();
+		const everyVariant = db.select().from(variant).where(eq(variant.habitId, h.id)).all();
+		const variants = everyVariant.filter((v) => !v.archived);
 		const marks = db
 			.select({ date: occurrence.date, status: occurrence.status, level: occurrence.level })
 			.from(occurrence)
@@ -976,7 +977,7 @@ export function loadToday(accountId: string, today: string) {
 				? {
 						id: occ.id,
 						status: occ.status,
-						variantName: variants.find((v) => v.id === occ.variantId)?.name ?? null,
+						variantName: everyVariant.find((v) => v.id === occ.variantId)?.name ?? null,
 						slotCount: occ.variantId
 							? db.select({ id: slot.id }).from(slot).where(eq(slot.variantId, occ.variantId)).all()
 									.length
