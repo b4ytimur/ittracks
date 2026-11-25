@@ -220,13 +220,17 @@
 		const mine = sending(body);
 		const a = await save(saveUrl(), [['payload', body]], data.habitName);
 		// The server holds exactly this now; what was sent after it may be there next.
-		if (a.kind === 'saved') bases = bases.slice(bases.indexOf(mine));
+		if (a.kind === 'saved') {
+			bases = bases.slice(bases.indexOf(mine));
+			theirs = null;
+		}
 		if (a.kind === 'refused' && a.stale) changedElsewhere(a.stale, 'autosave');
 		// Changed while it was being sent: the next save, already on its way, says how that went.
-		if (snapshot !== sent) return;
+		if (snapshot !== sent) return a;
 		if (a.kind === 'saved') writeDraft(true);
 		refusedWhy = a.kind === 'refused' ? a.why : '';
 		saveState = a.kind === 'later' ? 'local' : a.kind;
+		return a;
 	}
 
 	/** What is being sent may be on the server before its answer is here: later saves may grow from it. */
@@ -478,7 +482,8 @@
 		// What is ticked here is saved first, so it is kept.
 		const pending = saveTimer !== undefined;
 		dropAutosave();
-		if (pending || started) await autosave();
+		// Refused: filling and finishing the server's copy would lose what is here.
+		if ((pending || started) && (await autosave()).kind === 'refused') return;
 		if (data.past) return sameAsLastPast();
 		const a = await save('/?/same', [['occurrence', data.occurrence.id]], data.habitName);
 		if (a.kind === 'refused') {
