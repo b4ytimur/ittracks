@@ -1,5 +1,5 @@
 import { listGallery } from '$lib/gallery';
-import { getSettings } from '$lib/server/settings';
+import { getUnits } from '$lib/server/settings';
 import { listSavedTemplates } from '$lib/server/repo/saved-templates';
 import type { TemplateFile } from '$lib/template';
 import type { PageServerLoad } from './$types';
@@ -23,6 +23,6 @@ export const load: PageServerLoad = ({ locals }) => {
 	return {
 		/** Saved from your own habits, newest first. */
 		yours: listSavedTemplates(accountId).map((s) => card(s.id, s.template)),
-		items: listGallery(getSettings(accountId).weightUnit).map(({ slug, template }) => card(slug, template))
+		items: listGallery(getUnits(accountId)).map(({ slug, template }) => card(slug, template))
 	};
 };

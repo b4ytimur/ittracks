@@ -7,7 +7,7 @@ import { and, asc, eq, gte, inArray, lte } from 'drizzle-orm';
 import { db } from '../db';
 import { area, dayNote, entry, habit, metric, occurrence, slip, slot, tag, task, taskPart, taskTag, variant } from '../db/schema';
 import { parsePath } from '$lib/engine/parts';
-import { getSettings } from '../settings';
+import { getSettings, getUnits } from '../settings';
 import { getStats, loadDataset } from '../stats';
 import { ensureToday, settleAll, userToday } from '../today';
 import { prepare, describeLog, type Dataset, type Prepared } from '$lib/stats/engine';
@@ -131,7 +131,7 @@ export function describe(actor: Actor) {
 		today,
 		timeZone: actor.tz ?? s.timeZone ?? null,
 		dayStart: s.dayStart ?? '00:00',
-		weightUnit: s.weightUnit,
+		weightUnit: getUnits(actor.accountId).shown('weight'),
 		data: { firstDay: dates[0] ?? null, lastDay: dates.at(-1) ?? null },
 		access: { scopes: [...actor.scopes], allHabits: !actor.habitIds },
 		privacy: actor.scopes.has('notes') ? 'Notes, journal entries and text fields are included.' : 'Notes, journal entries and text field values are left out (this key has no notes access).',

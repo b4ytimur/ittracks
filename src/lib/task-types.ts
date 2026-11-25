@@ -1,7 +1,7 @@
 // Starting points for a new Task: which Metrics it logs and whether it rests between sets.
 import type { MetricType } from './metric-types';
 import { noteDefaults } from './forms';
-import { effectiveUnit, stepOf } from './units';
+import { effectiveUnit, withShownUnits, type UnitTable } from './units';
 
 export interface TaskTypeMetric {
 	name: string;
@@ -19,7 +19,7 @@ export interface TaskType {
 	restTimerEnabled: boolean;
 }
 
-/** Built-in types. `{weight}` in a unit becomes the user's default weight unit. */
+/** Built-in types. `{weight}` in a unit becomes the unit that kind is shown in. */
 export const BUILTIN_TASK_TYPES: TaskType[] = [
 	{
 		key: 'strength',
@@ -81,17 +81,17 @@ export const BUILTIN_TASK_TYPES: TaskType[] = [
 	}
 ];
 
-/** Default plus and minus step for a Metric with no step of its own: the unit's, from the unit registry. */
-export function defaultStep(type: string, unit: string | null): number {
-	if (type === 'number') return stepOf(unit) ?? 1;
-	if (type === 'duration') return stepOf(effectiveUnit({ type, unit })) ?? 5;
+/** Default plus and minus step for a Metric with no step of its own: its unit's. */
+export function defaultStep(type: string, unit: string | null, units: UnitTable): number {
+	if (type === 'number') return units.stepOf(unit) ?? 1;
+	if (type === 'duration') return units.stepOf(effectiveUnit({ type, unit })) ?? 5;
 	return 1;
 }
 
-/** Metrics for a type, with fresh ids and the user's weight unit filled in. */
-export function metricsFromType(t: TaskType, weightUnit: string, newId: () => string = () => crypto.randomUUID()) {
+/** Metrics for a type, with fresh ids and the account's units filled in. */
+export function metricsFromType(t: TaskType, units: UnitTable, newId: () => string = () => crypto.randomUUID()) {
 	return t.metrics.map((m) => {
-		const unit = m.unit.replace('{weight}', weightUnit);
+		const unit = withShownUnits(m.unit, units);
 		return {
 			id: newId(),
 			name: m.name,

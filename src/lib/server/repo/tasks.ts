@@ -7,6 +7,7 @@ import { checkParts, edgesOf } from '$lib/engine/parts';
 import { descendants } from '$lib/engine/tree';
 import { checkTaskPast, type TaskPast } from '$lib/rules/task';
 import type { UnitChoice } from '$lib/units';
+import { getUnits } from '../settings';
 import { convertMetricValues, dropTargets, PastEditError, taskLogged } from '../history';
 import { activeOptions, keepEarlierScores, mergeOptions, type ChoiceOption, type Scores } from '$lib/options';
 import { addDays } from '$lib/engine/dates';
@@ -219,7 +220,7 @@ export function libraryForParts(accountId: string, selfId: string | null): PartC
  */
 export function checkTaskEdit(accountId: string, id: string, f: TaskForm, units: Record<string, UnitChoice> = {}): TaskPast | null {
 	const before = getTaskForm(accountId, id);
-	return before ? checkTaskPast(before, f, taskLogged(id), units) : null;
+	return before ? checkTaskPast(before, f, taskLogged(id), getUnits(accountId), units) : null;
 }
 
 /**

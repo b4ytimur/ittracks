@@ -38,6 +38,25 @@
 		after?: Snippet;
 	} = $props();
 	const id = $props.id();
+
+	// Pinned to the top while its group scrolls under it: over the rows then, and with a line.
+	let el = $state<HTMLElement>();
+	let stuck = $state(false);
+	$effect(() => {
+		const h = el;
+		if (!h) return;
+		void mode; // Editing pins the title line, and the headings under it.
+		let o: IntersectionObserver | undefined;
+		const frame = requestAnimationFrame(() => {
+			const top = parseFloat(getComputedStyle(h).top) || 0;
+			o = new IntersectionObserver(([e]) => (stuck = e.intersectionRatio < 1 && e.boundingClientRect.top <= top), { threshold: [0, 1], rootMargin: `-${top + 1}px 0px 0px 0px` });
+			o.observe(h);
+		});
+		return () => {
+			cancelAnimationFrame(frame);
+			o?.disconnect();
+		};
+	});
 </script>
 
 <svelte:element
@@ -45,6 +64,8 @@
 	class="group-heading {depth === 1 ? 'section-title' : 'card-title'}"
 	class:hidden-item={hidden}
 	class:struck
+	class:stuck
+	bind:this={el}
 	data-depth={depth}
 	data-mode={mode}
 >

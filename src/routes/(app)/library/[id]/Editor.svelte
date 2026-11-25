@@ -20,7 +20,8 @@
 	import { blocked } from '$lib/rules/core';
 	import { checkTask, checkTaskPast, metricPast, metricRules, taskRules } from '$lib/rules/task';
 	import { allowedNow, lockedNow } from '$lib/rules/history';
-	import { UNITS, type UnitChoice } from '$lib/units';
+	import type { UnitChoice } from '$lib/units';
+	import { units } from '$lib/units-here';
 	import { promptFor } from '$lib/journal';
 
 	let {
@@ -51,7 +52,7 @@
 
 	// History policies (src/lib/rules/history.ts): what an edit may do to data already logged.
 	let unitChoices = $state<Record<string, UnitChoice>>({});
-	const past = $derived(data.isNew ? null : checkTaskPast(data.task, t, data.logged, unitChoices));
+	const past = $derived(data.isNew ? null : checkTaskPast(data.task, t, data.logged, units(), unitChoices));
 	const isLogged = (id: string) => data.logged.metrics.includes(id);
 	/** A part with anything logged under it: removing it archives it, so past logs keep their place. */
 	const partLogged = (id: string) => data.logged.parts.includes(id);
@@ -139,7 +140,7 @@
 	let typeKey = $state('');
 	function applyType(type: TaskType) {
 		typeKey = type.key;
-		t.metrics = metricsFromType(type, data.weightUnit);
+		t.metrics = metricsFromType(type, units());
 		t.restTimerEnabled = type.restTimerEnabled;
 	}
 
@@ -546,7 +547,7 @@
 					{#if isNumeric(m)}
 						<label style="width: 7rem"
 							>+/− step
-							<input type="number" step="any" min="0" value={m.step ?? ''} placeholder={String(defaultStep(m.type, m.unit))}
+							<input type="number" step="any" min="0" value={m.step ?? ''} placeholder={String(defaultStep(m.type, m.unit, units()))}
 								oninput={(e) => (m.step = e.currentTarget.value && Number(e.currentTarget.value) > 0 ? Number(e.currentTarget.value) : null)} />
 						</label>
 					{/if}
@@ -691,7 +692,7 @@
 {/if}
 
 <datalist id="known-units">
-		{#each UNITS as u (u.key)}<option value={u.key}></option>{/each}
+		{#each units().names() as u (u)}<option value={u}></option>{/each}
 	</datalist>
 <datalist id="all-tags">
 		{#each data.allTags as name (name)}<option value={name}></option>{/each}

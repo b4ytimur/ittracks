@@ -6,7 +6,6 @@
 // row to select is one entry in TARGETS and its lookup in src/lib/server/bulk/select.ts.
 import { z } from 'zod';
 import { isRealDate } from '$lib/engine/backfill';
-import { UNITS } from '$lib/units';
 import { habitBulk, type BulkField, type HabitBulkField } from '$lib/rules/habit';
 import type { FieldSpec } from './fields';
 
@@ -209,4 +208,4 @@ export function buttonsFor(kind: TargetKind): BulkButton[] {
 }
 
 /** Units for the unit field's suggestions. */
-export const unitOptions = () => UNITS.map((u) => ({ value: u.key, label: u.key }));
+export const unitOptions = (names: string[]) => names.map((u) => ({ value: u, label: u }));

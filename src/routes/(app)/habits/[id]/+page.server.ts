@@ -21,7 +21,7 @@ import { feelingsUsed, habitLogged, PastEditError } from '$lib/server/history';
 import { identityFor, listIdentities } from '$lib/server/repo/identities';
 import { listTagNames, listTasks, saveTask } from '$lib/server/repo/tasks';
 import { listAreas } from '$lib/server/repo/areas';
-import { getViews, getSettings, saveSettings } from '$lib/server/settings';
+import { getViews, getSettings, getUnits, saveSettings } from '$lib/server/settings';
 import { repaused, userToday } from '$lib/server/today';
 import { ownedHabit } from '$lib/server/owned';
 import { trash } from '$lib/server/trash';
@@ -36,7 +36,8 @@ import { descendants } from '$lib/engine/tree';
 import type { Actions, PageServerLoad } from './$types';
 
 /** Numeric Metrics per Task, so Slots can set targets for each level. */
-function numericMetrics(taskIds: string[]) {
+function numericMetrics(accountId: string, taskIds: string[]) {
+	const units = getUnits(accountId);
 	if (!taskIds.length) return {};
 	const rows = db
 		.select({ id: metric.id, taskId: metric.taskId, name: metric.name, unit: metric.unit, type: metric.type, step: metric.step })
@@ -47,7 +48,7 @@ function numericMetrics(taskIds: string[]) {
 		.filter((m) => m.type === 'number' || m.type === 'count' || m.type === 'duration');
 	const out: Record<string, { id: string; name: string; unit: string; step: number }[]> = {};
 	for (const m of rows)
-		(out[m.taskId] ??= []).push({ id: m.id, name: m.name, unit: m.unit || (m.type === 'duration' ? 'min' : ''), step: m.step ?? defaultStep(m.type, m.unit) });
+		(out[m.taskId] ??= []).push({ id: m.id, name: m.name, unit: m.unit || (m.type === 'duration' ? 'min' : ''), step: m.step ?? defaultStep(m.type, m.unit, units) });
 	return out;
 }
 
@@ -149,7 +150,7 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		habit: form,
 		fixed,
 		tasks,
-		metrics: numericMetrics(tasks.map((t) => t.id)),
+		metrics: numericMetrics(accountId, tasks.map((t) => t.id)),
 		/** Tasks that log something per set: only their Slots can have Target sets. */
 		repeating: repeatingTasks(tasks.map((t) => t.id)),
 		/** Tasks with parts inside: their Slots can have rounds (when they log nothing per set). */
@@ -248,7 +249,8 @@ export const actions: Actions = {
 		const type =
 			[...BUILTIN_TASK_TYPES, ...settings.taskTypes].find((t) => t.key === String(f.get('type'))) ?? BUILTIN_TASK_TYPES.at(-1)!;
 		const areaId = String(f.get('areaId') ?? '');
-		const metrics = metricsFromType(type, settings.weightUnit, randomUUID);
+		const units = getUnits(accountId);
+		const metrics = metricsFromType(type, units, randomUUID);
 		const id = saveTask(accountId, null, {
 			name,
 			notes: '',
@@ -267,7 +269,7 @@ export const actions: Actions = {
 				repeats: metrics.some((m) => m.repeats),
 				metrics: metrics
 					.filter((m) => m.type === 'number' || m.type === 'count' || m.type === 'duration')
-					.map((m) => ({ id: m.id, name: m.name, unit: m.unit || (m.type === 'duration' ? 'min' : ''), step: m.step ?? defaultStep(m.type, m.unit) }))
+					.map((m) => ({ id: m.id, name: m.name, unit: m.unit || (m.type === 'duration' ? 'min' : ''), step: m.step ?? defaultStep(m.type, m.unit, units) }))
 			}
 		};
 	},

@@ -9,7 +9,7 @@ import { candidates, ensurePicks, lastEntries, recount, userToday } from '$lib/s
 import { finishAs } from '$lib/server/progress';
 import { PATH_RE, place, startsRound } from '$lib/engine/parts';
 import { partIdsIn, plannedSlots, positionsOf } from '$lib/server/positions';
-import { getSettings } from '$lib/server/settings';
+import { getSettings, getUnits } from '$lib/server/settings';
 import { recapFor } from '$lib/server/stats';
 import { planOfToday, replanToday, windowFor } from '$lib/server/backfill';
 import { NOTE_MAX, type ScheduleForm } from '$lib/forms';
@@ -199,7 +199,7 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		/** False for a past day outside the window in Settings: only a finished log can be changed. */
 		canLog: win === 'ok' || win === 'today',
 		back: safeBack(url.searchParams.get('back')) ?? (past ? `/day/${o.occ.date}` : '/'),
-		weightUnit: getSettings(accountId).weightUnit,
+		weightUnit: getUnits(accountId).shown('weight'),
 		levels: o.habit.levels?.enabled ? o.habit.levels : null,
 		variantName: v?.name ?? null,
 		items,
@@ -210,7 +210,7 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 			accountId,
 			items.flatMap((it) => (it.task ? [it.task.id] : [])),
 			o.occ.id,
-			getSettings(accountId).weightUnit,
+			getUnits(accountId).shown('weight'),
 			o.occ.date
 		),
 		library: db

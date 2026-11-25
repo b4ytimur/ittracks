@@ -2,7 +2,7 @@
 import type { MetricForm, TaskForm } from '../forms';
 import { check, defineRules, evaluate, exclusive, independent, normalize, onlyWhen, type Issue } from './core';
 import { archive, definePolicies, display, locked, migrate, pastIssues, removedItems, unguarded, versioned } from './history';
-import { effectiveUnit, findUnit, unitChange, type UnitChange, type UnitChoice } from '../units';
+import { effectiveUnit, STARTER, type UnitChange, type UnitChoice, type UnitTable } from '../units';
 import { repeatedName } from '../options';
 
 export const isNumericType = (type: string) => type === 'number' || type === 'count' || type === 'duration';
@@ -95,10 +95,13 @@ export function checkTask(input: TaskForm): { form: TaskForm; errors: Issue[]; w
 
 // ---------- history: what an edit may do to data already logged (rules/history.ts) ----------
 
-/** A field's unit as compared for a change: one key for every spelling ("lbs" is "lb"). */
+/**
+ * A field's unit as compared for a change. Which words mean the same is the account's table's to
+ * say (checkTaskPast): the starting spellings only save it the question.
+ */
 const unitKey = (m: Pick<MetricForm, 'type' | 'unit'>) => {
 	const u = effectiveUnit(m);
-	return findUnit(u)?.key ?? u.toLowerCase();
+	return STARTER.find(u)?.name ?? u.toLowerCase();
 };
 
 export const metricPast = definePolicies<MetricForm>({
@@ -172,7 +175,7 @@ export interface TaskPast {
  * Metric id for a unit change on a field with logged values. Used by the editor (to grey out
  * and ask) and the server (to refuse, archive and convert).
  */
-export function checkTaskPast(before: TaskForm, after: TaskForm, logged: TaskLogged, choices: Record<string, UnitChoice> = {}): TaskPast {
+export function checkTaskPast(before: TaskForm, after: TaskForm, logged: TaskLogged, table: UnitTable, choices: Record<string, UnitChoice> = {}): TaskPast {
 	const errors: Issue[] = [];
 	const units: UnitEdit[] = [];
 	const options: TaskPast['options'] = {};
@@ -189,7 +192,7 @@ export function checkTaskPast(before: TaskForm, after: TaskForm, logged: TaskLog
 		for (const issue of issues) {
 			const from = effectiveUnit(was);
 			const to = effectiveUnit(m);
-			const change = unitChange(from, to);
+			const change = table.change(from, to);
 			if (change.kind === 'same') continue;
 			const choice = choices[m.id] ?? null;
 			units.push({ metricId: m.id, name: m.name, from, to, change, choice });

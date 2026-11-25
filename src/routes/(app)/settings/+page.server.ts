@@ -14,9 +14,10 @@ import { publicKey, sendToAccount, subscriptionCount } from '$lib/server/push';
 import { listHabits } from '$lib/server/repo/habits';
 import { usedRanges } from '$lib/server/repo/ranges';
 import { listVacations } from '$lib/server/repo/vacations';
-import { getSettings, getViews } from '$lib/server/settings';
+import { getKinds, getSettings, getViews } from '$lib/server/settings';
 import { getStats } from '$lib/server/stats';
 import { repaused, userToday } from '$lib/server/today';
+import { unitWord } from '$lib/units';
 import { TEMPLATES } from '$lib/views';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -49,16 +50,27 @@ function formulaFields(accountId: string): { name: string; tasks: string[] }[] {
 	return [...fields.entries()].map(([name, tasks]) => ({ name, tasks })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/** How many fields are written in each unit, by its word. */
+function usedUnits(accountId: string): Record<string, number> {
+	const out: Record<string, number> = {};
+	for (const r of db.select({ unit: metric.unit }).from(metric).innerJoin(task, eq(metric.taskId, task.id)).where(and(eq(task.accountId, accountId), isNotNull(metric.unit))).all()) {
+		const w = unitWord(r.unit);
+		if (w) out[w] = (out[w] ?? 0) + 1;
+	}
+	return out;
+}
+
 export const load: PageServerLoad = ({ locals, cookies, url }) => {
 	const accountId = locals.account!.id;
-	const { dayStart, ranges, pastDays, nudgeYesterday, dayNote, guidedSetup, showAllSections, weightUnit } = getSettings(accountId);
+	const { dayStart, ranges, pastDays, nudgeYesterday, dayNote, guidedSetup, showAllSections } = getSettings(accountId);
 	const views = getViews(accountId);
 	const s = getStats(accountId);
 	const habits = listHabits(accountId).map((h) => ({ id: h.id, name: h.name, direction: h.direction }));
 	return {
 		username: locals.account!.username,
 		today: userToday(accountId, cookies.get('tz')),
-		settings: { dayStart: dayStart ?? null, ranges, pastDays, nudgeYesterday, dayNote, guidedSetup, showAllSections, weightUnit },
+		settings: { dayStart: dayStart ?? null, ranges, pastDays, nudgeYesterday, dayNote, guidedSetup, showAllSections, units: getKinds(accountId) },
+		usedUnits: usedUnits(accountId),
 		usedRanges: usedRanges(accountId),
 		vacations: listVacations(accountId),
 		views,

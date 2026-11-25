@@ -11,13 +11,20 @@ import { getSettings, saveSettings, type Settings } from './settings';
 import { patchSettings, type SettingsSet } from './settings-patch';
 import { habitForm } from '$lib/forms';
 import type { DayRange } from '$lib/engine/day';
+import { saveTask } from './repo/tasks';
+import { taskForm } from '$lib/forms';
+import { metric } from './db/schema';
+import { getKinds, getUnits } from './settings';
+import { metricsFromType } from '$lib/task-types';
+import { STARTER, STARTER_KINDS } from '$lib/units';
 
 let me: string;
 const now = () => getSettings(me);
-const patch = (set: Record<string, unknown>, was: Record<string, unknown>, renames = {}) => patchSettings(me, { set, was, renames });
+const patch = (set: Record<string, unknown>, was: Record<string, unknown>, renames = {}, unitRenames = {}) => patchSettings(me, { set, was, renames, unitRenames });
 const undo = (r: ReturnType<typeof patch>) => {
 	if (!('now' in r)) throw new Error(JSON.stringify(r));
-	return patch(r.was, r.now, Object.fromEntries(Object.entries(r.renames).map(([a, b]) => [b, a])));
+	const back = (m: Record<string, string>) => Object.fromEntries(Object.entries(m).map(([a, b]) => [b, a]));
+	return patch(r.was, r.now, back(r.renames), back(r.unitRenames));
 };
 const morning: DayRange = { name: 'Morning', start: '05:00', end: '11:00' };
 const evening: DayRange = { name: 'Evening', start: '17:00', end: '22:00' };
@@ -49,7 +56,7 @@ describe('a line of the settings', () => {
 		patch({ pastDays: 7 }, { pastDays: null });
 		expect(patch({ pastDays: 3 }, { pastDays: null })).toEqual({ moved: ['pastDays'] });
 		expect(now().pastDays).toBe(7);
-		expect(patch({ weightUnit: 'lb' }, { weightUnit: 'kg' })).toHaveProperty('now');
+		expect(patch({ dayNote: true }, { dayNote: false })).toHaveProperty('now');
 		expect(patch({ pastDays: 7 }, { pastDays: null })).toHaveProperty('now');
 	});
 	it('turning off past days takes the nudge with it, and Undo brings it back', () => {
@@ -65,11 +72,13 @@ describe('a line of the settings', () => {
 		['a part with no name', { ranges: [{ ...morning, name: ' ' }] }, 'Give each part of the day a name'],
 		['no time', { dayStart: '4' }, 'Pick a time like 04:00'],
 		['a bad limit', { pastDays: -1 }, 'Pick how many days back can be logged'],
-		['no unit', { weightUnit: ' ' }, 'Enter a weight unit, like kg or lb'],
+		['a unit in two kinds', { units: [...STARTER_KINDS, { id: 'x', name: 'Other', shown: 'kg', units: [{ id: 'x', name: 'kg', per: 1, step: 1 }] }] }, 'Two units are called “kg” (Weight and Other)'],
+		['no clocks', { units: STARTER_KINDS.slice(1) }, 'Time keeps s, min and h: the clocks need them'],
+		['a unit worth nothing', { units: [...STARTER_KINDS, { id: 'x', name: 'Other', shown: 'q', units: [{ id: 'x', name: 'q', per: 0, step: 1 }] }] }, 'One of it must be more than nothing'],
 		['a field that is not a setting', { pinned: [] }, '']
 	])('refuses %s and changes nothing', (_, set, why) => {
 		const before = now();
-		const r = patch(set, Object.fromEntries(Object.keys(set).map((k) => [k, before[k as keyof Settings] ?? null])));
+		const r = patch(set, Object.fromEntries(Object.keys(set).map((k) => [k, k === 'units' ? getKinds(me) : (before[k as keyof Settings] ?? null)])));
 		expect(r).toHaveProperty('error');
 		if (why) expect((r as { error: string }).error).toBe(why);
 		expect(now()).toEqual(before);
@@ -90,5 +99,35 @@ describe('a line of the settings', () => {
 		// A rename to a part that isn't there moves nothing.
 		patch({ ranges: [evening] }, { ranges: [morning, evening] }, { Morning: 'Nowhere' });
 		expect(part()).toBe('Morning');
+	});
+	it('a renamed unit keeps its fields and what it converts to, also through its Undo', () => {
+		const id = saveTask(me, null, taskForm.parse({ name: 'Press', restTimerEnabled: false, restTimerSeconds: 90, tags: [], parts: [], metrics: metricsFromType({ key: 'x', name: 'x', description: '', restTimerEnabled: false, metrics: ['lb', 'lbs'].map((unit) => ({ name: `In ${unit}`, type: 'number' as const, unit, repeats: true, step: null })) }, STARTER) }))!;
+		const other = () => db.select({ unit: metric.unit }).from(metric).where(eq(metric.taskId, id)).all().map((m) => m.unit);
+		const before = other();
+		const kinds = STARTER_KINDS.map((k) => ({ ...k, units: k.units.map((x) => (x.name === 'lb' ? { ...x, name: 'pound', also: ['lbs', 'lb'] } : x)) }));
+		const r = patch({ units: kinds }, { units: getKinds(me) }, {}, { lb: 'pound' });
+		expect(r).toHaveProperty('now');
+		expect(other().sort()).toEqual(['lbs', 'pound']);
+		for (const w of ['pound', 'lbs', 'lb']) expect(getUnits(me).factor(w, 'kg')).toBeCloseTo(0.45359237, 9);
+		undo(r);
+		expect(other()).toEqual(before);
+		expect(getKinds(me)).toEqual(STARTER_KINDS);
+		// A word another field already uses as its own is refused: the Undo would take that field along.
+		const own = saveTask(me, null, taskForm.parse({ name: 'Own', restTimerEnabled: false, restTimerSeconds: 90, tags: [], parts: [], metrics: metricsFromType({ key: 'x', name: 'x', description: '', restTimerEnabled: false, metrics: [{ name: 'Load', type: 'number', unit: 'plates', repeats: true, step: null }] }, STARTER) }))!;
+		const asPlates = STARTER_KINDS.map((k) => ({ ...k, units: k.units.map((x) => (x.name === 'lb' ? { ...x, name: 'plates', also: ['lbs', 'lb'] } : x)) }));
+		expect(patch({ units: asPlates }, { units: getKinds(me) }, {}, { lb: 'plates' })).toHaveProperty('error');
+		expect(getKinds(me)).toEqual(STARTER_KINDS);
+		expect(db.select({ unit: metric.unit }).from(metric).where(eq(metric.taskId, own)).get()!.unit).toBe('plates');
+		// A rename to a word that is no unit moves nothing.
+		patch({ units: kinds }, { units: getKinds(me) }, {}, { kg: 'nowhere' });
+		expect(getUnits(me).find('kg')).not.toBeNull();
+	});
+	it('the weight unit picked before units were stored is what Weight is shown in', () => {
+		saveSettings(me, { weightUnit: 'lbs' });
+		expect(getUnits(me).shown('weight')).toBe('lb');
+		const r = patch({ units: getKinds(me).map((k) => (k.id === 'weight' ? { ...k, shown: 'kg' } : k)) }, { units: getKinds(me) });
+		expect(getUnits(me).shown('weight')).toBe('kg');
+		undo(r);
+		expect(getUnits(me).shown('weight')).toBe('lb');
 	});
 });
