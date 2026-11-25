@@ -110,6 +110,14 @@ describe('taking back a change that rewrote past days', () => {
 		expect(days().find((o) => o.date === today)?.status).toBe('done');
 	});
 
+	it('is refused once a day was logged on a Variant that came with it', () => {
+		const extra = { id: crypto.randomUUID(), name: 'Short', slots: [] };
+		const r = patch({ variants: [...form().variants, extra] }, { variants: form().variants }, { keep: true }) as { undo: string };
+		db.insert(occurrence).values({ id: crypto.randomUUID(), habitId: id, variantId: extra.id, date: today, status: 'done', extra: true }).run();
+		expect(restoreSnapshot(me, r.undo)).toBe(false);
+		expect(days().some((o) => o.variantId === extra.id)).toBe(true);
+	});
+
 	it('is refused once the habit was changed again', () => {
 		const r = patch({ schedule: weekly() }, { schedule: form().schedule }, { applies: 'past', keep: true }) as { undo: string };
 		patch({ name: 'Other' }, { name: 'Read' });
