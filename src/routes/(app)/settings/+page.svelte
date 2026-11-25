@@ -15,11 +15,13 @@
 	import { ELSEWHERE, FEATURE_HIDES, featureName, matches, settingGroups, type Line } from '$lib/settings/lines';
 	import LogOut from '$lib/settings/LogOut.svelte';
 	import Measures from '$lib/settings/Measures.svelte';
+	import Packs from '$lib/settings/Packs.svelte';
 	import Parts from '$lib/settings/Parts.svelte';
 	import QuickLinks from '$lib/settings/QuickLinks.svelte';
 	import Reminders from '$lib/settings/Reminders.svelte';
 	import Restore from '$lib/settings/Restore.svelte';
 	import { NO_ANSWER, saveSetting } from '$lib/settings/save';
+	import TaskTypes from '$lib/settings/TaskTypes.svelte';
 	import Template from '$lib/settings/Template.svelte';
 	import Units from '$lib/settings/Units.svelte';
 	import Vacations from '$lib/settings/Vacations.svelte';
@@ -42,6 +44,7 @@
 			vacations: data.vacations,
 			journalOff: views.hidden.includes('journal'),
 			measures: data.stats.measures,
+			packs: data.packs,
 			startPage: PAGE_LABEL[views.startPage],
 			template: data.templates.find((t) => t.id === views.template)?.name ?? 'Custom',
 			own: ownChanges(views).length,
@@ -241,6 +244,10 @@
 		<Measures measures={data.stats.measures} fields={data.stats.fields} suggestions={data.stats.suggestions} />
 	{:else if id === 'groupings'}
 		<Groupings groupings={s.groupings} tags={data.tags} bind:problem={() => problem.groupings ?? '', (v) => (problem.groupings = v)} onsave={(groupings, said) => save('groupings', { groupings }, said)} />
+	{:else if id === 'types'}
+		<TaskTypes types={s.taskTypes} plain={data.plainTypes} bind:problem={() => problem.types ?? '', (v) => (problem.types = v)} onsave={(taskTypes, said) => save('types', { taskTypes }, said)} />
+	{:else if id === 'packs'}
+		<Packs packs={data.packs} bind:problem={() => problem.packs ?? '', (v) => (problem.packs = v)} />
 	{:else if id === 'startpage'}
 		<div class="chips" role="radiogroup" aria-label="Start page">
 			{#each PAGES as p (p)}<label class="toggle"><input type="radio" class="vh" name="startpage" checked={views.startPage === p} onchange={() => view('startpage', { startPage: p }, { startPage: views.startPage as Page }, `The app opens on ${PAGE_LABEL[p]}.`)} /><span data-reserve={PAGE_LABEL[p]}>{PAGE_LABEL[p]}</span></label>{/each}

@@ -81,7 +81,7 @@ export const taskForm = z.object({
 export type MetricForm = TaskForm['metrics'][number];
 /** Notes and journal options a new Metric starts with: one line, no prompts, no numbers. */
 /** What a new Task's words are. */
-export const rowWords = () => ({ rowOne: 'set', rowMany: 'sets', betweenName: 'Rest' });
+export const rowWords = () => ({ rowOne: 'entry', rowMany: 'entries', betweenName: 'Pause' });
 /** What a new field has besides its name, type and unit. */
 export const noteDefaults = (): Pick<MetricForm, 'long' | 'starter' | 'prompts' | 'promptOrder' | 'scores' | 'times' | 'better'> => ({
 	times: false,

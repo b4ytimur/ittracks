@@ -376,7 +376,7 @@ export function prepare(ds: Dataset): Prepared {
 
 // ---------- units ----------
 // The table is the account's (src/lib/units.ts).
-const unitsOf = (P: Prepared): UnitTable => P.ds.units ?? STARTER;
+export const unitsOf = (P: Prepared): UnitTable => P.ds.units ?? STARTER;
 /** The account's groupings; a dataset without them has the one there was before they were data. */
 export const groupsOf = (P: Prepared, ctx?: Pick<Ctx, 'settings'>): GroupTable => P.ds.groups ?? groupTable(readGroupings(null, ctx?.settings.muscle));
 

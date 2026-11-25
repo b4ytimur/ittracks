@@ -1,6 +1,7 @@
 // History policies against a real (in-memory) database: what an edit of a Task or a habit may do
 // to data already logged. Units convert or keep their numbers, removed fields and sub-tasks with
 // logs are archived, locked fields stay put, and build or break is fixed once something is logged.
+import { takePack } from './packs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -25,6 +26,7 @@ let today: string;
 beforeAll(async () => {
 	migrate(db, { migrationsFolder: './drizzle' });
 	me = await createAccount('history', 'correct horse battery');
+	takePack(me, 'gym'); // kg and lb convert
 	saveSettings(me, { timeZone: 'UTC', dayStart: '00:00' });
 	today = userToday(me);
 });

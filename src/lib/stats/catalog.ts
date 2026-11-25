@@ -7,7 +7,7 @@ import { formulaProblem } from './formula';
 export interface Catalog {
 	habits: { id: string; name: string; direction: 'build' | 'break'; archived: boolean; areaId: string | null; hasCost: boolean; logged: number }[];
 	tasks: { id: string; name: string; areaId: string | null; tags: string[]; /** The measures it has the fields for, by id. */ measures: string[]; targets: boolean; logged: number }[];
-	metrics: { id: string; taskId: string; name: string; type: string; unit: string | null; repeats: boolean; targets: boolean; scored?: boolean }[];
+	metrics: { id: string; taskId: string; name: string; type: string; unit: string | null; repeats: boolean; targets: boolean; scored?: boolean; /** The kind its unit is in, or the unit itself. */ dim?: string }[];
 	tags: string[];
 	groupings: { id: string; name: string; one: string }[];
 	areas: { id: string; name: string; icon: string; color: string }[];
@@ -55,14 +55,6 @@ export const emptyCtx = (): StatCtx => ({
 	measureProblem: null
 });
 
-const unitDim = (u: string | null) => {
-	const k = (u ?? '').trim().toLowerCase();
-	if (['s', 'sec', 'secs', 'seconds', 'min', 'mins', 'minute', 'minutes', 'h', 'hr', 'hrs', 'hour', 'hours'].includes(k)) return 't';
-	if (['g', 'kg', 'lb', 'lbs'].includes(k)) return 'w';
-	if (['m', 'km', 'mi', 'mile', 'miles'].includes(k)) return 'd';
-	return `u:${k}`;
-};
-
 /** The fields a field card reads, from the catalog. */
 export function cardFields(card: StatCard, c: Catalog) {
 	if (card.what.metrics.length) return c.metrics.filter((m) => card.what.metrics.includes(m.id));
@@ -86,7 +78,7 @@ export function statCtx(card: StatCard, c: Catalog, opts: { hidden?: string[]; m
 		: card.what.source === 'field'
 			? c.tasks.filter((t) => fields.some((m) => m.taskId === t.id))
 			: c.tasks;
-	const dims = new Set(fields.map((m) => unitDim(m.unit)));
+	const dims = new Set(fields.map((m) => m.dim ?? m.unit ?? ''));
 	const types = [...new Set(fields.map((m) => m.type))];
 	const m = measureOf(card.perLog, opts.measures ?? []);
 	const named = [...card.filter.habits.map((id) => c.habits.find((h) => h.id === id)), card.what.taskId ? c.tasks.find((t) => t.id === card.what.taskId) : undefined];

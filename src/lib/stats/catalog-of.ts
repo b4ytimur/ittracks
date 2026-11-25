@@ -1,7 +1,8 @@
 // The catalog of an account, from its logs. Apart from catalog.ts, so a page that only shows the
 // builder doesn't carry the engine.
 import type { Catalog } from './catalog';
-import { fits, groupsOf, type Prepared } from './engine';
+import { unitWord } from '../units';
+import { fits, groupsOf, unitOfMetric, unitsOf, type Prepared } from './engine';
 import type { CustomMeasure } from './model';
 import { seedMeasures } from './seed';
 
@@ -42,6 +43,7 @@ export function catalogOf(P: Prepared, extra: { areas: Catalog['areas']; identit
 			unit: m.unit,
 			repeats: m.repeats,
 			targets: targeted.has(m.id),
+			dim: unitsOf(P).kindOf(unitOfMetric(m))?.id ?? `u:${unitWord(m.unit)}`,
 			scored: m.type === 'choice' && !!m.scores && Object.keys(m.scores).length > 0
 		})),
 		tags: [...new Set(P.ds.tasks.flatMap((t) => t.tags.map((x) => x.name)))].sort((a, b) => a.localeCompare(b)),

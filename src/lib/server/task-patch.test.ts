@@ -1,4 +1,5 @@
 // One line of a Task at a time, and taking back what touched logged values.
+import { takePack } from './packs';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { eq } from 'drizzle-orm';
@@ -25,6 +26,7 @@ const weights = () => db.select().from(entry).where(eq(entry.taskId, id)).all().
 beforeAll(async () => {
 	migrate(db, { migrationsFolder: './drizzle' });
 	me = await createAccount('tpatch', 'correct horse battery');
+	takePack(me, 'gym'); // kg and lb convert
 	other = await createAccount('tpatch-other', 'correct horse battery');
 });
 beforeEach(() => {

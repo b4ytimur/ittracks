@@ -3,9 +3,10 @@ import { db } from './db';
 import { settings, tag } from './db/schema';
 import type { DayRange } from '$lib/engine/day';
 import type { PastDays } from '$lib/engine/backfill';
-import type { TaskType } from '$lib/task-types';
-import { DEFAULT_WEIGHTS, groupTable, readGroupings, type Grouping, type GroupTable, type Weights } from '$lib/groupings';
-import { readKinds, unitTable, type UnitKind, type UnitTable } from '$lib/units';
+import { PACKS, PACKS_BEFORE } from '$lib/packs';
+import { PLAIN_TASK_TYPES, type TaskType } from '$lib/task-types';
+import { DEFAULT_WEIGHTS, groupTable, readGroupings, starterGroupings, type Grouping, type GroupTable, type Weights } from '$lib/groupings';
+import { readKinds, STARTER_KINDS, TIME, unitTable, type UnitKind, type UnitTable } from '$lib/units';
 import { readViews, type ViewSettings } from '$lib/views';
 
 export interface Settings {
@@ -31,8 +32,10 @@ export interface Settings {
 	views?: ViewSettings;
 	/** Habits offered as home screen shortcuts, in order. */
 	pinned: string[];
-	/** Task types the user saved, offered next to the built-in ones. */
+	/** Task types: the ones the packs brought and the ones you saved. */
 	taskTypes: TaskType[];
+	/** Starter packs copied in. Unset on an account from before there were packs: it has what used to be built in. */
+	packs?: string[];
 	/** The starting Areas were created once; deleting them all doesn't bring them back. */
 	areasSeeded?: boolean;
 	/** Stats boards, cards and custom measures (src/lib/stats/model.ts). Unset until Stats is first opened. */
@@ -58,6 +61,9 @@ const defaults: Settings = {
 	dayNote: false
 };
 
+/** What an account starts with: nothing that belongs to one kind of tracking. */
+export const newAccountSettings = () => ({ packs: [], units: STARTER_KINDS.filter((k) => k.id === TIME), groupings: starterGroupings(), stats: { seeded: true } });
+
 export function getSettings(accountId: string): Settings {
 	const row = db.select().from(settings).where(eq(settings.accountId, accountId)).get();
 	return { ...defaults, ...((row?.data as Partial<Settings>) ?? {}) };
@@ -77,6 +83,17 @@ export function getKinds(accountId: string): UnitKind[] {
 	return readKinds(s.units, s.weightUnit);
 }
 export const getUnits = (accountId: string): UnitTable => unitTable(getKinds(accountId));
+
+/** The packs an account has. */
+export const getPacks = (accountId: string): string[] => getSettings(accountId).packs ?? PACKS_BEFORE;
+
+/** What a new Task can start from: your types, then the plain ones. */
+export function getTaskTypes(accountId: string): TaskType[] {
+	const s = getSettings(accountId);
+	const before = s.packs ? [] : PACKS.filter((p) => PACKS_BEFORE.includes(p.id)).flatMap((p) => p.types).filter((t) => !s.taskTypes.some((x) => x.key === t.key));
+	const own = [...before, ...s.taskTypes];
+	return [...own, ...PLAIN_TASK_TYPES.filter((t) => !own.some((x) => x.key === t.key))];
+}
 
 /** The account's groupings; before it changes them, its tags with the weights it had set in Stats. */
 export function getGroupings(accountId: string): Grouping[] {

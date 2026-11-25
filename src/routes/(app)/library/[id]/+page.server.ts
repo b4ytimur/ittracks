@@ -22,8 +22,8 @@ import { emit } from '$lib/server/core/events';
 import type { UnitChoice } from '$lib/units';
 import { listAreas } from '$lib/server/repo/areas';
 import { listCollections } from '$lib/server/repo/collections';
-import { getSettings, saveSettings } from '$lib/server/settings';
-import { BUILTIN_TASK_TYPES } from '$lib/task-types';
+import { getPacks, getTaskTypes, saveSettings } from '$lib/server/settings';
+import { ownTypes } from '$lib/server/settings-patch';
 import { metricTypes } from '$lib/metric-types';
 import { db } from '$lib/server/db';
 import { task } from '$lib/server/db/schema';
@@ -67,7 +67,6 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		const c = url.searchParams.get('collection');
 		if (c) form.collectionIds = [c];
 	}
-	const settings = getSettings(accountId);
 	const archived = isNew
 		? false
 		: !!db.select({ a: task.archived }).from(task).where(and(eq(task.id, params.id), eq(task.accountId, accountId))).get()?.a;
@@ -79,7 +78,7 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		allTags: listTagNames(accountId),
 		areas: listAreas(accountId),
 		collections: listCollections(accountId).filter((c) => !c.filter),
-		types: [...BUILTIN_TASK_TYPES, ...settings.taskTypes],
+		types: getTaskTypes(accountId),
 		usage: isNew ? null : (taskUsage(accountId).get(params.id) ?? { habits: [], inside: [], lastLogged: null, timesLogged: 0 }),
 		/** Fields with logged values, parts with logs under them and options picked: the history policies guard their edits. */
 		logged: isNew ? { metrics: [] as string[], parts: [] as string[], options: [] as string[] } : taskLoggedLists(params.id),
@@ -179,7 +178,6 @@ export const actions: Actions = {
 		const parsed = savedType.safeParse(json);
 		if (!parsed.success) return fail(400, { error: 'Give the type a name and at least one valid field.' });
 		const accountId = locals.account!.id;
-		const s = getSettings(accountId);
 		const t = parsed.data;
 		const key = `user-${t.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 		const type = {
@@ -190,7 +188,7 @@ export const actions: Actions = {
 			...(t.words ? { words: t.words } : {}),
 			metrics: t.metrics.map((m) => ({ ...m, unit: m.unit }))
 		};
-		saveSettings(accountId, { taskTypes: [...s.taskTypes.filter((x) => x.key !== key), type].slice(-20) });
+		saveSettings(accountId, { taskTypes: [...ownTypes(accountId).filter((x) => x.key !== key), type].slice(-60), packs: getPacks(accountId) });
 		return { typeSaved: t.name };
 	},
 	delete: ({ locals, params, cookies }) => {

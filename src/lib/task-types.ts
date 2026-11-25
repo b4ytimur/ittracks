@@ -1,90 +1,40 @@
 // Starting points for a new Task: which Metrics it logs and whether it rests between sets.
-import type { MetricType } from './metric-types';
+import { z } from 'zod';
+import { metricTypes } from './metric-types';
 import { noteDefaults } from './forms';
 import { effectiveUnit, withShownUnits, type UnitTable } from './units';
 
-export interface TaskTypeMetric {
-	name: string;
-	type: MetricType;
-	unit: string;
-	repeats: boolean;
-	step: number | null;
-	/** In a row it is written after a ×. */
-	times?: boolean;
-	/** Less is better. */
-	better?: 'less';
-}
+export const taskTypeSchema = z.object({
+	key: z.string().min(1).max(60),
+	name: z.string().trim().min(1, 'Give it a name').max(40),
+	description: z.string().max(200),
+	restTimerEnabled: z.boolean(),
+	/** Its own words; "entry", "entries" and "Pause" when left out. */
+	words: z.object({ rowOne: z.string().trim().min(1).max(20), rowMany: z.string().trim().min(1).max(20), betweenName: z.string().trim().min(1).max(20) }).optional(),
+	metrics: z
+		.array(
+			z.object({
+				name: z.string().trim().min(1).max(120),
+				type: z.enum(metricTypes),
+				unit: z.string().max(20),
+				repeats: z.boolean(),
+				step: z.number().positive().nullable(),
+				/** In a row it is written after a ×. */
+				times: z.boolean().optional(),
+				/** Less is better. */
+				better: z.literal('less').optional()
+			})
+		)
+		.max(20)
+});
+export type TaskType = z.infer<typeof taskTypeSchema>;
+export type TaskTypeMetric = TaskType['metrics'][number];
 
-export interface TaskType {
-	key: string;
-	name: string;
-	description: string;
-	metrics: TaskTypeMetric[];
-	restTimerEnabled: boolean;
-	/** Its own words, when "set" and "Rest" aren't them. */
-	words?: { rowOne: string; rowMany: string; betweenName: string };
-}
-
-/** Built-in types. `{weight}` in a unit becomes the unit that kind is shown in. */
-export const BUILTIN_TASK_TYPES: TaskType[] = [
-	{
-		key: 'strength',
-		name: 'Strength',
-		description: 'Weight and reps for each set, with a rest timer',
-		restTimerEnabled: true,
-		metrics: [
-			{ name: 'Weight', type: 'number', unit: '{weight}', repeats: true, step: null },
-			{ name: 'Reps', type: 'count', unit: '', repeats: true, step: 1, times: true }
-		]
-	},
-	{
-		key: 'bodyweight',
-		name: 'Bodyweight',
-		description: 'Reps for each set',
-		restTimerEnabled: true,
-		metrics: [{ name: 'Reps', type: 'count', unit: '', repeats: true, step: 1 }]
-	},
-	{
-		key: 'cardio',
-		name: 'Cardio',
-		description: 'Time and distance',
-		restTimerEnabled: false,
-		metrics: [
-			{ name: 'Time', type: 'duration', unit: 'min', repeats: false, step: 5 },
-			{ name: 'Distance', type: 'number', unit: 'km', repeats: false, step: 0.5 }
-		]
-	},
-	{
-		key: 'study',
-		name: 'Study',
-		description: 'Minutes and how many items',
-		restTimerEnabled: false,
-		metrics: [
-			{ name: 'Minutes', type: 'duration', unit: 'min', repeats: false, step: 5 },
-			{ name: 'Items', type: 'count', unit: '', repeats: false, step: 1 }
-		]
-	},
-	{
-		key: 'timed',
-		name: 'Timed',
-		description: 'Just minutes, with the built-in timer',
-		restTimerEnabled: false,
-		metrics: [{ name: 'Minutes', type: 'duration', unit: 'min', repeats: false, step: 5 }]
-	},
-	{
-		key: 'count',
-		name: 'Count',
-		description: 'One number, like glasses of water or pages',
-		restTimerEnabled: false,
-		metrics: [{ name: 'Count', type: 'count', unit: '', repeats: false, step: 1 }]
-	},
-	{
-		key: 'check',
-		name: 'Yes or no',
-		description: 'Nothing to fill in, just done',
-		restTimerEnabled: false,
-		metrics: []
-	}
+/** The starting points that belong to no one kind of tracking. The rest come in packs (packs.ts). */
+export const PLAIN_TASK_TYPES: TaskType[] = [
+	{ key: 'count', name: 'Count', description: 'One number, like glasses of water or pages', restTimerEnabled: false, metrics: [{ name: 'Count', type: 'count', unit: '', repeats: false, step: 1 }] },
+	{ key: 'timed', name: 'Timed', description: 'Just minutes, with the built-in timer', restTimerEnabled: false, metrics: [{ name: 'Minutes', type: 'duration', unit: 'min', repeats: false, step: 5 }] },
+	{ key: 'check', name: 'Yes or no', description: 'Nothing to fill in, just done', restTimerEnabled: false, metrics: [] }
 ];
 
 /** Default plus and minus step for a Metric with no step of its own: its unit's. */

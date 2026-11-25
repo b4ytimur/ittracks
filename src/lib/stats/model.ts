@@ -8,7 +8,7 @@ import { z } from 'zod';
 export const SOURCES = {
 	outcomes: 'Habit outcomes (done, missed, target met)',
 	field: 'A field you log',
-	task: 'A Task (sets, volume, e1RM, your own measures)',
+	task: 'A Task (its sets, and your measures)',
 	slips: 'Slips',
 	cravings: 'Cravings resisted',
 	money: 'Money saved'
@@ -245,6 +245,10 @@ export const customMeasure = z.object({
 	over: z.enum(keysOf(OVER_TIME)).optional(),
 	/** Its line among a Task's records. `[Reps]` is that field in the set. */
 	record: str(240).optional(),
+	/** The card a Task with its fields gets by itself: each log, each week, or one for all of a habit's Tasks by grouping. */
+	auto: z.enum(['session', 'week', 'split']).optional(),
+	/** The range worth aiming for, on the card it gets by itself. */
+	aim: z.tuple([z.number(), z.number()]).optional(),
 	/** Off your list, kept for the cards that count by it. */
 	off: z.boolean().optional()
 });

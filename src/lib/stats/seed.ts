@@ -77,10 +77,10 @@ export function seedMeasures(metrics: SeedField[], legacy: Legacy = { e1rm: E1RM
 	const f = found(metrics);
 	const [w, r, d, t] = [anyOf(f.weight), anyOf(f.reps), anyOf(f.distance), anyOf(f.time)];
 	return [
-		{ id: 'volume', name: 'Volume', formula: `${w} * ${r}`, per: 'set', combine: 'sum', unit: '{weight}', read: 'shown', sets: true, weigh: true, record: 'Most volume in a session' },
-		{ id: 'e1rm', name: 'Estimated 1RM', formula: oneRep(legacy.e1rm, w, r, legacy.e1rmMaxReps), per: 'set', combine: 'max', unit: '{weight}', read: 'shown', sets: true, over: 'max', record: 'Best estimated 1RM' },
-		{ id: 'hardSets', name: 'Hard sets', formula: 'sets()', per: 'log', combine: 'sum', unit: 'sets', kind: 'count', weigh: true },
-		{ id: 'pace', name: 'Pace', formula: `minutes(${t}) / ${d}`, per: 'log', combine: 'sum', unit: `min/[${within(f.distance, 200).join('|')}]`, better: 'less', over: 'avg' },
+		{ id: 'volume', name: 'Volume', formula: `${w} * ${r}`, per: 'set', combine: 'sum', unit: '{weight}', read: 'shown', sets: true, weigh: true, record: 'Most volume in a session', auto: 'week' },
+		{ id: 'e1rm', name: 'Estimated 1RM', formula: oneRep(legacy.e1rm, w, r, legacy.e1rmMaxReps), per: 'set', combine: 'max', unit: '{weight}', read: 'shown', sets: true, over: 'max', record: 'Best estimated 1RM', auto: 'session' },
+		{ id: 'hardSets', name: 'Hard sets', formula: 'sets()', per: 'log', combine: 'sum', unit: 'sets', kind: 'count', weigh: true, auto: 'split', aim: [10, 20] },
+		{ id: 'pace', name: 'Pace', formula: `minutes(${t}) / ${d}`, per: 'log', combine: 'sum', unit: `min/[${within(f.distance, 200).join('|')}]`, better: 'less', over: 'avg', auto: 'session' },
 		{ id: 'heaviest', name: 'Heaviest set', formula: w, per: 'set', combine: 'max', unit: '{weight}', read: 'shown', sets: true, over: 'max', record: `Heaviest set (× [${within(f.reps, 200).join('|')}])` }
 	];
 }

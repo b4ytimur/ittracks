@@ -4,6 +4,7 @@ import { PAST_DAYS_CHOICES } from '$lib/engine/backfill';
 import type { DayRange } from '$lib/engine/day';
 import type { PastDays } from '$lib/engine/backfill';
 import type { Grouping } from '$lib/groupings';
+import { PACKS } from '$lib/packs';
 import { TIME, type UnitKind } from '$lib/units';
 import { FEATURES, type FeatureKey } from '$lib/views';
 
@@ -21,6 +22,8 @@ export interface Now {
 	showAllSections: boolean;
 	units: UnitKind[];
 	measures: { name: string; off?: boolean }[];
+	taskTypes: { name: string }[];
+	packs: string[];
 	groupings: Grouping[];
 	startPage: string;
 	template: string;
@@ -96,7 +99,9 @@ export function settingGroups(s: Now): Group[] {
 				{ id: 'newhabits', label: 'New habits', words: `${s.guidedSetup ? 'Ask how to start.' : 'Open the full page.'}${s.showAllSections ? ' Every section is shown.' : ''}`, says: 'What + Habit opens, and what a habit’s page shows before you add to it.', also: 'guided setup editor sections gallery' },
 				{ id: 'units', label: 'Units', words: `${names(s.units.filter((k) => !k.off).map((k) => (k.id === TIME ? k.name : `${k.name} in ${k.shown}`)), 6)}.`, says: 'Every number you log can have a unit, and it can be any word. Units of one kind convert into each other; a word that is in no kind never does.', also: `kinds convert step ${s.units.flatMap((k) => k.units.flatMap((x) => [x.name, ...x.also])).join(' ')}` },
 				{ id: 'measures', label: 'Measures', words: s.measures.some((m) => !m.off) ? `${names(s.measures.filter((m) => !m.off).map((m) => m.name))}.` : 'None yet.', says: 'A measure is a formula over the fields you log, such as [Weight] * [Reps] or [Distance] / [Time] * 60. Stats cards count logs by them, and a Task’s records list the ones you want.', also: `formula stats records ${s.measures.map((m) => m.name).join(' ')} epley brzycki lombardi` },
-				{ id: 'groupings', label: 'Groupings', words: `${names(s.groupings.map((g) => g.name))}.`, says: 'A grouping has members, the tags a Task carries, and levels that say how much. Splitting a Stats card by one counts a log toward each of its Task’s members by the level’s weight: 1 in full, 0.5 half, 0 not at all. Auto-filled slots compare levels by their order.', also: `tags levels stats muscle groups ${s.groupings.flatMap((g) => [g.one, ...g.levels.map((l) => l.name)]).join(' ')}` }
+				{ id: 'groupings', label: 'Groupings', words: `${names(s.groupings.map((g) => g.name))}.`, says: 'A grouping has members, the tags a Task carries, and levels that say how much. Splitting a Stats card by one counts a log toward each of its Task’s members by the level’s weight: 1 in full, 0.5 half, 0 not at all. Auto-filled slots compare levels by their order.', also: `tags levels stats muscle groups ${s.groupings.flatMap((g) => [g.one, ...g.levels.map((l) => l.name)]).join(' ')}` },
+				{ id: 'types', label: 'Task types', words: s.taskTypes.length ? `${names(s.taskTypes.map((t) => t.name))}, and the plain ones.` : 'Only the plain ones.', says: 'What a new Task can start from: its fields, whether a clock runs between rows, and what a row is called.', also: `strength cardio fields ${s.taskTypes.map((t) => t.name).join(' ')}` },
+				{ id: 'packs', label: 'Starter packs', words: s.packs.length ? `${names(PACKS.filter((p) => s.packs.includes(p.id)).map((p) => p.name))}.` : 'None.', says: 'A pack copies units, groupings, measures and Task types in. They are yours from then on. Taking a pack out removes only what nothing uses.', also: PACKS.map((p) => `${p.name} ${p.brings}`).join(' ') }
 			]
 		},
 		{

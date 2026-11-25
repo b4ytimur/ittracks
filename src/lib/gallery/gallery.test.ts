@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { listGallery } from '.';
+import { listGallery, PACK_OF } from '.';
+import { packById } from '$lib/packs';
 import { STARTER_KINDS, unitTable } from '$lib/units';
 import { applyAnswers, fromTemplate } from '$lib/template';
 import { habitForm, taskForm } from '$lib/forms';
@@ -25,6 +26,13 @@ describe('gallery', () => {
 		for (const q of item.template.questions)
 			if (q.kind === 'number')
 				for (const m of q.metrics) expect(item.template.tasks.some((t) => t.metrics.some((x) => x.key === m))).toBe(true);
+	});
+
+	it('every pack a template brings is there, and so is the template', () => {
+		for (const [slug, id] of Object.entries(PACK_OF)) {
+			expect(items.some((i) => i.slug === slug)).toBe(true);
+			expect(packById(id)).toBeDefined();
+		}
 	});
 
 	it('uses the weight unit of the person', () => {

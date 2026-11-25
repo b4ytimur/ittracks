@@ -6,11 +6,12 @@ import { z } from 'zod';
 import { checkSettings, cleanSettings } from '$lib/rules/settings';
 import { firstError } from '$lib/forms';
 import { groupingList, groupingsProblem } from '$lib/groupings';
+import { PLAIN_TASK_TYPES, taskTypeSchema } from '$lib/task-types';
 import { kindsProblem, unitKinds, unitTable, unitWord } from '$lib/units';
 import { db } from './db';
 import { metric, task } from './db/schema';
 import { renameRanges } from './repo/ranges';
-import { getGroupings, getKinds, getSettings, saveSettings, type Settings } from './settings';
+import { getGroupings, getKinds, getPacks, getSettings, getTaskTypes, saveSettings, type Settings } from './settings';
 
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Pick a time like 04:00');
 
@@ -25,7 +26,8 @@ const fields = z
 		guidedSetup: z.boolean(),
 		showAllSections: z.boolean(),
 		units: unitKinds,
-		groupings: groupingList
+		groupings: groupingList,
+		taskTypes: z.array(taskTypeSchema).max(60)
 	})
 	.partial()
 	.strict();
@@ -54,12 +56,15 @@ function renameUnits(accountId: string, renames: [string, string][]) {
 const ordered = (v: unknown): string =>
 	JSON.stringify(v ?? null, (_, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : 1))) : x));
 
+/** Task types without the plain ones, which are always there. */
+export const ownTypes = (accountId: string) => getTaskTypes(accountId).filter((t) => !PLAIN_TASK_TYPES.some((p) => p.key === t.key));
+
 export function patchSettings(accountId: string, body: unknown): SettingsResult {
 	const parsed = settingsPatch.safeParse(body);
 	if (!parsed.success) return { error: firstError(parsed.error) };
 	const p = parsed.data;
 	// Units and groupings are read as the account has them, also before any were stored.
-	const cur: Settings = { ...getSettings(accountId), units: getKinds(accountId), groupings: getGroupings(accountId) };
+	const cur: Settings = { ...getSettings(accountId), units: getKinds(accountId), groupings: getGroupings(accountId), taskTypes: ownTypes(accountId) };
 	const keys = Object.keys(p.set) as (keyof SettingsSet)[];
 	if (!keys.length) return { error: 'Nothing to change' };
 	const moved = keys.filter((k) => ordered(cur[k]) !== ordered(p.was[k]) && ordered(cur[k]) !== ordered(p.set[k]));
@@ -82,7 +87,8 @@ export function patchSettings(accountId: string, body: unknown): SettingsResult 
 	// What it clears with it belongs to this change too.
 	const changed = (Object.keys(fields.shape) as (keyof SettingsSet)[]).filter((k) => ordered(cur[k]) !== ordered(clean[k]));
 	const pick = (s: Settings) => Object.fromEntries(changed.map((k) => [k, s[k] ?? null])) as SettingsSet;
-	if (changed.length) saveSettings(accountId, Object.fromEntries(changed.map((k) => [k, clean[k]])) as Partial<Settings>);
+	// Types of an account from before there were packs are stored with the packs they came from.
+	if (changed.length) saveSettings(accountId, { ...Object.fromEntries(changed.map((k) => [k, clean[k]])), ...(changed.includes('taskTypes') ? { packs: getPacks(accountId) } : {}) } as Partial<Settings>);
 	// A rename counts when the old name is gone and the new one is there.
 	const has = (n: string) => clean.ranges.some((r) => r.name === n);
 	const renames = new Map(Object.entries(p.renames).filter(([from, to]) => from !== to && has(to) && !has(from)));

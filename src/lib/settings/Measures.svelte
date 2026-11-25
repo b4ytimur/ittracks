@@ -128,6 +128,10 @@
 							<label class="label" for="mo-{m.id}">On a new card</label>
 							<select id="mo-{m.id}" value={m.over ?? 'sum'} onchange={(e) => change(m, { over: e.currentTarget.value as OverTime })}>{#each Object.entries(OVER_TIME) as [k, l] (k)}<option value={k}>{l}</option>{/each}</select>
 						</div>
+						<div class="field">
+							<label class="label" for="ma-{m.id}">A card by itself</label>
+							<select id="ma-{m.id}" value={m.auto ?? ''} onchange={(e) => change(m, { auto: (e.currentTarget.value || undefined) as CustomMeasure['auto'] })}><option value="">None</option><option value="session">For each log</option><option value="week">Per week</option><option value="split">By grouping, for all of a habit's Tasks</option></select>
+						</div>
 						<div class="field"><label class="label" for="mx-{m.id}">Among a Task's records as</label><input id="mx-{m.id}" value={m.record ?? ''} maxlength="240" placeholder="Not listed" onchange={(e) => change(m, { record: e.currentTarget.value.trim() || undefined })} /></div>
 					</div>
 				</div>

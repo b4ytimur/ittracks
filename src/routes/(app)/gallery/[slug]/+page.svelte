@@ -16,6 +16,7 @@
 
 <form method="POST" action="?/add" class="stack">
 	<TemplatePreview tpl={data.template} today={data.today} libraryNames={data.libraryNames} habitNames={data.habitNames} areaNames={data.areaNames} />
+	{#if data.pack}<p class="muted small-text">It brings the {data.pack} pack: {data.brings} You can change or take out any of it in Settings.</p>{/if}
 	{#if form?.error}<p class="error">{form.error}</p>{/if}
 	<button class="primary">{inside ? `Add these ${inside + 1} habits` : 'Add this habit'}</button>
 	<p class="muted small-text">You can change the schedule, Tasks and targets afterwards in the habit editor.</p>

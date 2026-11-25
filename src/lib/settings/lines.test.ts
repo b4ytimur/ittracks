@@ -18,6 +18,8 @@ const now: Now = {
 	showAllSections: false,
 	units: STARTER_KINDS,
 	measures: [],
+	taskTypes: [],
+	packs: [],
 	groupings: starterGroupings(),
 	startPage: 'Today',
 	template: 'Standard',

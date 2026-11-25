@@ -22,12 +22,12 @@ import { feelingsUsed, habitLogged, PastEditError } from '$lib/server/history';
 import { identityFor, listIdentities } from '$lib/server/repo/identities';
 import { listTagNames, listTasks, saveTask } from '$lib/server/repo/tasks';
 import { listAreas } from '$lib/server/repo/areas';
-import { getViews, getSettings, getUnits, saveSettings } from '$lib/server/settings';
+import { getViews, getSettings, getTaskTypes, getUnits, saveSettings } from '$lib/server/settings';
 import { repaused, userToday } from '$lib/server/today';
 import { ownedHabit } from '$lib/server/owned';
 import { trash } from '$lib/server/trash';
 import { archiveHabit, unarchiveHabit } from '$lib/server/habit-actions';
-import { BUILTIN_TASK_TYPES, defaultStep, metricsFromType } from '$lib/task-types';
+import { defaultStep, metricsFromType, PLAIN_TASK_TYPES } from '$lib/task-types';
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
@@ -197,7 +197,7 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 				.from(occurrence)
 				.where(and(eq(occurrence.habitId, params.id), inArray(occurrence.status, ['done', 'skipped'])))
 				.get(),
-		types: [...BUILTIN_TASK_TYPES, ...settings.taskTypes].map(({ key, name, description }) => ({ key, name, description }))
+		types: getTaskTypes(accountId).map(({ key, name, description }) => ({ key, name, description }))
 	};
 };
 
@@ -248,7 +248,7 @@ export const actions: Actions = {
 		const accountId = locals.account!.id;
 		const settings = getSettings(accountId);
 		const type =
-			[...BUILTIN_TASK_TYPES, ...settings.taskTypes].find((t) => t.key === String(f.get('type'))) ?? BUILTIN_TASK_TYPES.at(-1)!;
+			getTaskTypes(accountId).find((t) => t.key === String(f.get('type'))) ?? PLAIN_TASK_TYPES.at(-1)!;
 		const areaId = String(f.get('areaId') ?? '');
 		const units = getUnits(accountId);
 		const metrics = metricsFromType(type, units, randomUUID);

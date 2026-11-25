@@ -1,7 +1,7 @@
 // Cards nobody has to build (A1) and whole boards in one tap (A2).
 // Auto cards come from the type of each field a habit or Task logs; board templates pick
 // the habits and Tasks that fit them from what the account already has.
-import { makeCard, MAX_CARDS, newId, type Board, type StatCard, type StatCardInput } from './model';
+import { makeCard, MAX_CARDS, newId, perLogOf, type Board, type CustomMeasure, type StatCard, type StatCardInput } from './model';
 import { measuresOf } from './catalog-of';
 import { compile, fieldsOf, FormulaError } from './formula';
 import { fits, groupsOf, type DsHabit, type DsMetric, type DsTask, type Prepared } from './engine';
@@ -58,20 +58,47 @@ const hasTargets = (P: Prepared, habitId: string) =>
 			)
 		);
 
-/** Does a Task have what these measures read? */
-const has = (P: Prepared, t: DsTask, ...ids: string[]) =>
-	ids.every((id) => {
-		const m = measuresOf(P).find((x) => x.id === id && !x.off);
-		return !!m && fits(m, P.metricsByTask.get(t.id) ?? []);
+const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+/** The measures that get a card by themselves on a Task with their fields: per log first, then per week. */
+const autoOf = (P: Prepared, t: DsTask): CustomMeasure[] => {
+	const own = measuresOf(P).filter((m) => !m.off && (m.auto === 'session' || m.auto === 'week') && fits(m, P.metricsByTask.get(t.id) ?? []));
+	return [...own.filter((m) => m.auto === 'session'), ...own.filter((m) => m.auto === 'week')];
+};
+/** It is logged in rows its measures say all about, so its fields need no cards of their own. */
+const inRows = (P: Prepared, t: DsTask) => autoOf(P, t).some((m) => m.sets);
+/** The plain numbers these measures read on a Task. */
+function readBy(P: Prepared, t: DsTask, ms: CustomMeasure[]): DsMetric[] {
+	const names = ms.flatMap((m) => {
+		const f = compile(m.formula);
+		return f instanceof FormulaError ? [] : fieldsOf(f).map((x) => x.trim().toLowerCase());
 	});
-const isStrength = (P: Prepared, t: DsTask) => has(P, t, 'volume', 'e1rm');
-const isCardio = (P: Prepared, t: DsTask) => has(P, t, 'pace');
-/** The number a pace is over. */
-function paceField(P: Prepared, t: DsTask): DsMetric | undefined {
-	const f = compile(measuresOf(P).find((x) => x.id === 'pace')?.formula ?? '');
-	const names = f instanceof FormulaError ? [] : fieldsOf(f).map((x) => x.toLowerCase());
-	return (P.metricsByTask.get(t.id) ?? []).find((m) => m.type === 'number' && names.includes(m.name.trim().toLowerCase()));
+	return (P.metricsByTask.get(t.id) ?? []).filter((m) => m.type === 'number' && names.includes(m.name.trim().toLowerCase()));
 }
+const measureCard = (m: CustomMeasure, t: DsTask, filter: In['filter']) =>
+	m.auto === 'week'
+		? card({ title: `${t.name}: ${lower(m.name)} per week`, what: { source: 'task', taskId: t.id }, perLog: perLogOf(m), overTime: m.over ?? 'sum', bucket: 'week', range: '90d', filter, look: { chart: 'bars', size: 'wide' } })
+		: card({ title: `${t.name}: ${lower(m.name)}`, what: { source: 'task', taskId: t.id }, perLog: perLogOf(m), overTime: m.over ?? 'sum', bucket: 'session', range: '90d', filter, look: { chart: 'line', size: 'wide' } });
+/** One card for all the Tasks of a habit: a measure by the members of the first grouping. */
+function splitCards(P: Prepared, tasks: DsTask[], filter?: In['filter']): StatCard[] {
+	if (!tasks.some((t) => t.tags.length)) return [];
+	return measuresOf(P)
+		.filter((m) => m.auto === 'split' && !m.off)
+		.map((m) =>
+			card({
+				title: `${m.name} per ${groupsOf(P).groupings[0].one} this week`,
+				what: { source: 'task' },
+				perLog: perLogOf(m),
+				overTime: 'sum',
+				bucket: 'all',
+				split: 'tag',
+				range: 'week',
+				...(filter ? { filter } : {}),
+				...(m.aim ? { compare: { goal: m.aim[0], goalMax: m.aim[1] } } : {}),
+				look: { chart: 'bars', size: 'wide', top: 12 }
+			})
+		);
+}
+const isPace = (P: Prepared, t: DsTask) => autoOf(P, t).some((m) => !m.sets);
 
 /** Cards for one Task's fields, scoped by `filter`. */
 export function taskCards(P: Prepared, t: DsTask, opts: { habitId?: string } = {}): StatCard[] {
@@ -82,27 +109,23 @@ function taskCardsOf(P: Prepared, t: DsTask, opts: { habitId?: string }): StatCa
 	const filter = opts.habitId ? { habits: [opts.habitId] } : {};
 	const ms = P.metricsByTask.get(t.id) ?? [];
 	const out: StatCard[] = [];
-	if (isStrength(P, t)) {
-		out.push(
-			card({ title: `${t.name}: estimated 1RM`, what: { source: 'task', taskId: t.id }, perLog: 'e1rm', overTime: 'max', bucket: 'session', range: '90d', filter, look: { chart: 'line', size: 'wide' } }),
-			card({ title: `${t.name}: volume per week`, what: { source: 'task', taskId: t.id }, perLog: 'volume', overTime: 'sum', bucket: 'week', range: '90d', filter, look: { chart: 'bars', size: 'wide' } }),
-			card({ title: `${t.name}: records`, what: { source: 'task', taskId: t.id }, perLog: 'e1rm', overTime: 'max', range: 'all', filter, look: { chart: 'records', size: 'small' } }),
-			card({ title: `${t.name}: recent sessions`, what: { source: 'task', taskId: t.id }, perLog: 'sets', overTime: 'sum', range: 'all', filter, look: { chart: 'sessions', size: 'wide', top: 5 } })
-		);
+	const auto = autoOf(P, t);
+	if (inRows(P, t)) {
+		out.push(...auto.map((m) => measureCard(m, t, filter)));
+		const best = auto[0];
+		if (auto.some((m) => m.record)) out.push(card({ title: `${t.name}: records`, what: { source: 'task', taskId: t.id }, perLog: perLogOf(best), overTime: best.over ?? 'sum', range: 'all', filter, look: { chart: 'records', size: 'small' } }));
+		out.push(card({ title: `${t.name}: recent sessions`, what: { source: 'task', taskId: t.id }, perLog: 'sets', overTime: 'sum', range: 'all', filter, look: { chart: 'sessions', size: 'wide', top: 5 } }));
 		return out;
 	}
-	if (isCardio(P, t)) {
-		const over = paceField(P, t);
-		if (over) out.push(card({ title: `${t.name}: ${over.name.toLowerCase()} per week`, what: { source: 'field', metrics: [over.id] }, perLog: 'value', overTime: 'sum', bucket: 'week', range: '90d', filter, look: { chart: 'bars', size: 'wide' } }));
-		out.push(
-			card({ title: `${t.name}: pace`, what: { source: 'task', taskId: t.id }, perLog: 'pace', overTime: 'avg', bucket: 'session', range: '90d', filter, look: { chart: 'line', size: 'wide' } })
-		);
-	}
+	for (const over of readBy(P, t, auto))
+		out.push(card({ title: `${t.name}: ${over.name.toLowerCase()} per week`, what: { source: 'field', metrics: [over.id] }, perLog: 'value', overTime: 'sum', bucket: 'week', range: '90d', filter, look: { chart: 'bars', size: 'wide' } }));
+	out.push(...auto.map((m) => measureCard(m, t, filter)));
 	for (const m of ms) {
-		if (isCardio(P, t) && (m.type === 'duration' || m.type === 'number')) continue;
+		// What its measures are made of needs no card of its own.
+		if (auto.length && (m.type === 'duration' || m.type === 'number')) continue;
 		out.push(...fieldCards(t, m, filter));
 	}
-	if (ms.some((m) => m.repeats) && !isStrength(P, t))
+	if (ms.some((m) => m.repeats))
 		out.push(card({ title: `${t.name}: recent sessions`, what: { source: 'task', taskId: t.id }, perLog: 'sets', range: 'all', filter, look: { chart: 'sessions', size: 'wide', top: 5 } }));
 	return out;
 }
@@ -174,20 +197,17 @@ function habitCardsOf(P: Prepared, h: DsHabit): StatCard[] {
 		out.push(card({ title: 'Target met', what: { source: 'outcomes' }, perLog: 'targetMet', overTime: 'avg', range: '30d', filter, look: { chart: 'tile' } }));
 	out.push(card({ title: 'Calendar', what: { source: 'outcomes' }, perLog: 'done', overTime: 'sum', range: '90d', filter, look: { chart: 'calendar', size: 'full' } }));
 	const tasks = habitTasks(P, h.id);
-	const lifts = tasks.filter((t) => isStrength(P, t));
-	if (lifts.length > 2) {
-		// A full workout: a few cards for the whole session instead of four per exercise.
-		if (lifts.some((t) => t.tags.length))
-			out.push(card({ title: `Hard sets per ${groupsOf(P).groupings[0].one} this week`, what: { source: 'task' }, perLog: 'hardSets', overTime: 'sum', bucket: 'all', split: 'tag', range: 'week', filter, compare: { goal: 10, goalMax: 20 }, look: { chart: 'bars', size: 'wide', top: 12 } }));
-		out.push(
-			card({ title: 'Volume per week', what: { source: 'task' }, perLog: 'volume', overTime: 'sum', bucket: 'week', range: '90d', filter, look: { chart: 'bars', size: 'wide' } }),
-			card({ title: 'Best estimated 1RM per exercise', what: { source: 'task' }, perLog: 'e1rm', overTime: 'max', split: 'task', range: '90d', filter, look: { chart: 'table', size: 'full', top: 20 } })
-		);
-		const ranked = [...lifts].sort((a, b) => (P.logsByTask.get(b.id)?.length ?? 0) - (P.logsByTask.get(a.id)?.length ?? 0));
-		for (const t of ranked.slice(0, 3))
-			out.push(card({ title: `${t.name}: estimated 1RM`, what: { source: 'task', taskId: t.id }, perLog: 'e1rm', overTime: 'max', bucket: 'session', range: '90d', filter, look: { chart: 'line', size: 'wide' } }));
-	} else for (const t of lifts) out.push(...taskCardsOf(P, t, { habitId: h.id }));
-	for (const t of tasks.filter((x) => !isStrength(P, x))) out.push(...taskCardsOf(P, t, { habitId: h.id }));
+	const rows = tasks.filter((t) => inRows(P, t));
+	if (rows.length > 2) {
+		// Several of them: a few cards for the whole session instead of four per Task.
+		out.push(...splitCards(P, rows, filter));
+		const shared = autoOf(P, rows[0]).filter((m) => rows.every((t) => autoOf(P, t).includes(m)));
+		for (const m of shared.filter((x) => x.auto === 'week')) out.push(card({ title: `${m.name} per week`, what: { source: 'task' }, perLog: perLogOf(m), overTime: m.over ?? 'sum', bucket: 'week', range: '90d', filter, look: { chart: 'bars', size: 'wide' } }));
+		for (const m of shared.filter((x) => x.auto === 'session')) out.push(card({ title: `Best ${lower(m.name)} per Task`, what: { source: 'task' }, perLog: perLogOf(m), overTime: m.over ?? 'max', split: 'task', range: '90d', filter, look: { chart: 'table', size: 'full', top: 20 } }));
+		const ranked = [...rows].sort((a, b) => (P.logsByTask.get(b.id)?.length ?? 0) - (P.logsByTask.get(a.id)?.length ?? 0));
+		for (const t of ranked.slice(0, 3)) out.push(...autoOf(P, t).filter((m) => m.auto === 'session').map((m) => measureCard(m, t, filter)));
+	} else for (const t of rows) out.push(...taskCardsOf(P, t, { habitId: h.id }));
+	for (const t of tasks.filter((x) => !inRows(P, x))) out.push(...taskCardsOf(P, t, { habitId: h.id }));
 	return out;
 }
 
@@ -214,9 +234,13 @@ export function headlineOptions(P: Prepared, h: DsHabit): HeadlineOption[] {
 	const out: HeadlineOption[] = [];
 	if (hasTargets(P, h.id)) out.push(opt('target:30d', 'Target met, last 30 days', { what: { source: 'outcomes' }, perLog: 'targetMet', overTime: 'avg', range: '30d' }));
 	for (const t of habitTasks(P, h.id)) {
-		if (isStrength(P, t)) {
-			out.push(opt(`e1rm:${t.id}`, `Best e1RM, ${t.name}`, { what: { source: 'task', taskId: t.id }, perLog: 'e1rm', overTime: 'max', range: '90d' }));
-			out.push(opt(`volume:${t.id}`, `Volume this week, ${t.name}`, { what: { source: 'task', taskId: t.id }, perLog: 'volume', overTime: 'sum', range: 'week' }));
+		if (inRows(P, t)) {
+			for (const m of autoOf(P, t))
+				out.push(
+					m.auto === 'session'
+						? opt(`${m.id}:${t.id}`, `Best ${lower(m.name)}, ${t.name}`, { what: { source: 'task', taskId: t.id }, perLog: perLogOf(m), overTime: m.over ?? 'max', range: '90d' })
+						: opt(`${m.id}:${t.id}`, `${m.name} this week, ${t.name}`, { what: { source: 'task', taskId: t.id }, perLog: perLogOf(m), overTime: m.over ?? 'sum', range: 'week' })
+				);
 			continue;
 		}
 		for (const m of P.metricsByTask.get(t.id) ?? []) {
@@ -272,16 +296,19 @@ export function boardTemplate(id: BoardTemplateId, P: Prepared): Board {
 		return b(cards);
 	}
 	if (id === 'gym') {
-		const lifts = logsPerTask(P).filter((x) => isStrength(P, x.t));
-		const gymHabits = build.filter((h) => habitTasks(P, h.id).some((t) => isStrength(P, t))).map((h) => h.id);
+		const rows = logsPerTask(P).filter((x) => inRows(P, x.t));
+		const own = build.filter((h) => habitTasks(P, h.id).some((t) => inRows(P, t))).map((h) => h.id);
 		const cards = [
-			card({ title: 'Sessions per week', what: { source: 'outcomes' }, perLog: 'done', overTime: 'sum', bucket: 'week', range: '90d', filter: { habits: gymHabits }, look: { chart: 'bars', size: 'wide' } }),
-			card({ title: `Hard sets per ${groupsOf(P).groupings[0].one} this week`, what: { source: 'task' }, perLog: 'hardSets', overTime: 'sum', bucket: 'all', split: 'tag', range: 'week', compare: { goal: 10, goalMax: 20 }, look: { chart: 'bars', size: 'wide', top: 12 } }),
-			card({ title: 'Volume per week', what: { source: 'task' }, perLog: 'volume', overTime: 'sum', bucket: 'week', range: '90d', look: { chart: 'bars', size: 'wide' } })
+			card({ title: 'Sessions per week', what: { source: 'outcomes' }, perLog: 'done', overTime: 'sum', bucket: 'week', range: '90d', filter: { habits: own }, look: { chart: 'bars', size: 'wide' } }),
+			...splitCards(P, rows.map((x) => x.t)),
+			...measuresOf(P)
+				.filter((m) => m.auto === 'week' && m.sets && !m.off)
+				.map((m) => card({ title: `${m.name} per week`, what: { source: 'task' }, perLog: perLogOf(m), overTime: m.over ?? 'sum', bucket: 'week', range: '90d', look: { chart: 'bars', size: 'wide' } }))
 		];
-		for (const x of lifts.slice(0, 3))
-			cards.push(card({ title: `${x.t.name}: estimated 1RM`, what: { source: 'task', taskId: x.t.id }, perLog: 'e1rm', overTime: 'max', bucket: 'session', range: '90d', look: { chart: 'line', size: 'wide' } }));
-		if (lifts[0]) cards.push(card({ title: `${lifts[0].t.name}: records`, what: { source: 'task', taskId: lifts[0].t.id }, perLog: 'e1rm', overTime: 'max', range: 'all', look: { chart: 'records' } }));
+		const best = (t: DsTask) => autoOf(P, t).filter((m) => m.auto === 'session');
+		for (const x of rows.slice(0, 3)) cards.push(...best(x.t).map((m) => measureCard(m, x.t, undefined)));
+		const top = rows[0] && best(rows[0].t)[0];
+		if (top) cards.push(card({ title: `${rows[0].t.name}: records`, what: { source: 'task', taskId: rows[0].t.id }, perLog: perLogOf(top), overTime: top.over ?? 'sum', range: 'all', look: { chart: 'records' } }));
 		return b(cards);
 	}
 	if (id === 'learner') {
@@ -319,7 +346,7 @@ export function boardTemplate(id: BoardTemplateId, P: Prepared): Board {
 	}
 	// health
 	const vitals = P.ds.metrics
-		.filter((m) => m.type === 'number' && !m.repeats && !(P.tasks.get(m.taskId) && isCardio(P, P.tasks.get(m.taskId)!)))
+		.filter((m) => m.type === 'number' && !m.repeats && !(P.tasks.get(m.taskId) && isPace(P, P.tasks.get(m.taskId)!)))
 		.map((m) => ({ m, n: (P.logsByTask.get(m.taskId) ?? []).length }))
 		.sort((a, c) => c.n - a.n)
 		.slice(0, 6);
@@ -350,6 +377,22 @@ export function suggestedCards(P: Prepared): { group: string; habitId: string; c
 	return out;
 }
 
+/** Cards of your own measures. */
+function measureGroup(P: Prepared): { group: string; cards: StatCard[] }[] {
+	const ms = measuresOf(P).filter((m) => !m.off && m.auto);
+	const cards = ms.flatMap((m) =>
+		m.auto === 'split'
+			? [card({ title: `${m.name} per ${groupsOf(P).groupings[0].one}`, what: { source: 'task' }, perLog: perLogOf(m), overTime: 'sum', bucket: 'all', split: 'tag', range: 'week', ...(m.aim ? { compare: { goal: m.aim[0], goalMax: m.aim[1] } } : {}), look: { chart: 'bars', size: 'wide', top: 12 } })]
+			: m.auto === 'week'
+				? [
+						card({ title: `Weekly ${lower(m.name)}`, what: { source: 'task' }, perLog: perLogOf(m), overTime: m.over ?? 'sum', bucket: 'week', range: '90d', look: { chart: 'bars', size: 'wide' } }),
+						card({ title: `${m.name} per Task`, what: { source: 'task' }, perLog: perLogOf(m), overTime: m.over ?? 'sum', split: 'task', look: { chart: 'table', size: 'wide' } })
+					]
+				: []
+	);
+	return cards.length ? [{ group: 'Your measures', cards }] : [];
+}
+
 /** Named presets for the card gallery: common questions that need no setup. */
 export function galleryCards(P: Prepared): { group: string; cards: StatCard[] }[] {
 	return [
@@ -367,14 +410,7 @@ export function galleryCards(P: Prepared): { group: string; cards: StatCard[] }[
 				card({ title: 'When habits get done', what: { source: 'outcomes' }, perLog: 'done', overTime: 'sum', range: '90d', look: { chart: 'pattern', size: 'wide' } })
 			]
 		},
-		{
-			group: 'Gym',
-			cards: [
-				card({ title: `Hard sets per ${groupsOf(P).groupings[0].one}`, what: { source: 'task' }, perLog: 'hardSets', overTime: 'sum', bucket: 'all', split: 'tag', range: 'week', compare: { goal: 10, goalMax: 20 }, look: { chart: 'bars', size: 'wide', top: 12 } }),
-				card({ title: 'Weekly volume', what: { source: 'task' }, perLog: 'volume', overTime: 'sum', bucket: 'week', range: '90d', look: { chart: 'bars', size: 'wide' } }),
-				card({ title: 'Volume per exercise', what: { source: 'task' }, perLog: 'volume', overTime: 'sum', split: 'task', look: { chart: 'table', size: 'wide' } })
-			]
-		},
+		...measureGroup(P),
 		{
 			group: 'Breaking habits',
 			cards: [
