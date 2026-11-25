@@ -466,7 +466,7 @@
 </EditChrome>
 
 {#if data.askDay}
-	<form method="POST" action="?/day" class="card stack ask" use:enhance>
+	<form method="POST" action="?/day" class="card stack day-ask" use:enhance>
 		<strong>When does your day start?</strong>
 		<p class="muted small-text" style="margin: 0.25rem 0 0">
 			Anything you log before this time counts for the day before, so a late night doesn't break a streak.
@@ -1108,7 +1108,7 @@
 		color: var(--muted);
 		text-decoration: line-through;
 	}
-	.ask {
+	.day-ask {
 		margin-bottom: 1rem;
 		border-color: var(--accent);
 	}
