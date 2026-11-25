@@ -14,6 +14,7 @@
 @import './styles/tab.css';
 @import './styles/echo-shelf.css';
 @import './styles/ask.css';
+@import './styles/selection-bar.css';
 
 /* The names from before the design system's tokens. Screens move off them one by one. */
 :root {
@@ -61,7 +62,8 @@ button, a.button {
 button.primary, a.button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 button.danger { color: var(--danger); }
 button.link { border: none; background: none; color: var(--accent); padding: 0; min-height: 0; }
-button.small { padding: 0.25rem 0.6rem; font-size: 0.85rem; }
+button.primary[aria-disabled='true'] { background: none; color: var(--ink-muted); border-color: var(--line-control); cursor: not-allowed; }
+button.small, a.button.small { padding: 0.25rem 0.6rem; font-size: 0.85rem; }
 
 .num { font-variant-numeric: tabular-nums; }
 /* Room for the widest label (bold), so a change of weight or words never resizes the box. */
@@ -110,11 +112,13 @@ button.small { padding: 0.25rem 0.6rem; font-size: 0.85rem; }
 .section-title { font-size: var(--font-size-section-title); line-height: 1.5rem; font-weight: 700; }
 .card-title { font-size: var(--font-size-card-title); line-height: 1.25rem; font-weight: 600; }
 .figure { font-size: var(--font-size-figure); line-height: 2rem; font-weight: 600; }
+.content > .name { font-weight: 600; }
+.meta-line { font-size: var(--font-size-label); line-height: 1.25rem; }
 .meta { font-size: var(--font-size-meta); line-height: 1.25rem; }
 .small-text { font-size: var(--font-size-meta); }
 .muted { color: var(--muted); }
 .error { color: var(--danger); }
-.chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.4rem; }
+.chips { margin-top: 0.4rem; }
 .chip { font-size: 0.8rem; padding: 0.1rem 0.5rem; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); }
 .chip.on { border-color: var(--accent); color: var(--accent); }
 .auth { max-width: 360px; margin: 15vh auto 0; padding: 1rem; }

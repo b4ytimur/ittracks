@@ -4,7 +4,11 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import ViewBar from '$lib/ViewBar.svelte';
 	import EditableList from '$lib/ui/EditableList.svelte';
-	import EditButton from '$lib/ui/EditButton.svelte';
+	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import EmptyState from '$lib/ui/EmptyState.svelte';
+	import StatusTag from '$lib/ui/StatusTag.svelte';
+	import type { Mode } from '$lib/ui/list';
+	import GroupHeading from '$lib/ui/GroupHeading.svelte';
 	import InlineText from '$lib/ui/InlineText.svelte';
 	import { invalidateAll } from '$app/navigation';
 	import { runAction, showToast } from '$lib/toast.svelte';
@@ -17,8 +21,10 @@
 	type Task = (typeof data.tasks)[number];
 	/** The list as shown, changed at once by edits here and refreshed from the server after. */
 	let tasks = $derived(data.tasks);
-	/** Edit mode is a flag on this same list: rename in place and archive. The Library has no order of its own to drag. */
-	let editing = $state(false);
+	/** One of three on this same list. Editing renames in place and archives; the Library has no order of its own to drag. */
+	let mode = $state<Mode>('use');
+	/** Archived while editing: they stay in the list, struck, until editing ends. */
+	const struck = new SvelteSet<string>();
 
 	// Search, filters and sort are a view: remembered between visits and savable by name.
 	let views = $state(untrack(() => data.views));
@@ -41,7 +47,7 @@
 		const q = view.query.trim().toLowerCase();
 		const list = tasks.filter(
 			(t) =>
-				(data.showArchived || !t.archived) &&
+				(data.showArchived || !t.archived || struck.has(t.id)) &&
 				(!q || t.name.toLowerCase().includes(q) || t.tags.some((g) => g.name.toLowerCase().includes(q))) &&
 				view.tags.every((g) => t.tags.some((x) => x.name === g)) &&
 				(!areaId || t.areaId === areaId) &&
@@ -65,8 +71,8 @@
 	const filtering = $derived(!!(view.query || view.tags.length || areaId || view.collection));
 	const clear = () => (view = { ...view, query: '', tags: [], areas: [], collection: null });
 
-	/** Selecting is a flag on the same list: tick Tasks, then change them together from the bulk bar. */
-	let selecting = $state(false);
+	/** Select mode: tick Tasks, then change them together from the band. */
+	let outcome = $state(new Map<string, { tag?: string; reason?: string }>());
 	const selected = new SvelteSet<string>();
 	/** The ticked Tasks and the Library Tasks inside them, at any depth. */
 	function withInside(ids: string[]) {
@@ -114,49 +120,70 @@
 			patch(t.id, { archived: !to });
 			return showToast(r.error ?? "Couldn't change it. Are you online?");
 		}
-		showToast(to ? `Archived ${t.name}. Its logs are kept.` : `${t.name} is back.`, async () => {
-			await runAction(to ? '?/unarchive' : '?/archive', { id: t.id });
-			await invalidateAll();
+		// The row shows its own way back until editing ends.
+		if (to) struck.add(t.id);
+		else if (!struck.delete(t.id)) showToast(`${t.name} is back.`, async () => void (await runAction('?/archive', { id: t.id })));
+	}
+	/** Editing ended: the struck rows go, and the band can bring them back. */
+	function leave() {
+		const gone = tasks.filter((t) => struck.has(t.id));
+		struck.clear();
+		if (!gone.length) return;
+		invalidateAll();
+		showToast(`Archived ${gone.length === 1 ? gone[0].name : `${gone.length} Tasks`}. ${gone.length === 1 ? 'Its' : 'Their'} logs are kept.`, async () => {
+			for (const t of gone) await runAction('?/unarchive', { id: t.id });
 		});
 	}
+	const setMode = (m: Mode) => {
+		if (mode === 'edit' && m !== 'edit') leave();
+		mode = m;
+	};
+	const metaOf = (t: Task) =>
+		[view.group === 'area' || areaId ? '' : area(t.areaId)?.name, t.usedIn.length ? `In ${t.usedIn.join(', ')}` : ''].filter(Boolean).join(' · ');
 </script>
 
 <svelte:head><title>Library · ittracks</title></svelte:head>
 
-<header class="bar">
-	<h1>Library</h1>
-	<a class="button primary" href="/library/new{areaId ? `?area=${areaId}` : view.collection ? `?collection=${view.collection}` : ''}">New task</a>
-</header>
-
-<ViewBar page="library" bind:views bind:current={view}>
-	{#snippet end()}
-		<EditButton bind:editing look="chip" onchange={(on) => on && (selecting = false)} />
-		<EditButton bind:editing={selecting} label="Select" look="chip" onchange={(on) => on && (editing = false)} />
+<EditChrome
+	title="Library"
+	{mode}
+	modes={['use', 'edit', 'select']}
+	onmode={setMode}
+	hints={{
+		use: `${shown.length} ${shown.length === 1 ? 'Task' : 'Tasks'}`,
+		edit: 'Tap a name to rename it. Archived Tasks keep their logs.',
+		select: 'Tick Tasks to change them together.'
+	}}
+>
+	{#snippet actions()}
+		<a class="button primary" href="/library/new{areaId ? `?area=${areaId}` : view.collection ? `?collection=${view.collection}` : ''}">New task</a>
 	{/snippet}
-</ViewBar>
+</EditChrome>
+
+<ViewBar page="library" bind:views bind:current={view} />
 
 <input type="search" bind:value={view.query} placeholder="Search Tasks and tags" aria-label="Search" />
 
 <div class="chips" role="group" aria-label="Area">
-	<button class="chip small" class:on={!areaId} onclick={() => setArea(null)}>All areas</button>
+	<button type="button" class="toggle" aria-pressed={!areaId} onclick={() => setArea(null)}>All areas</button>
 	{#each data.areas as a (a.id)}
-		<button class="chip small" class:on={areaId === a.id} style="--c: {a.color}" onclick={() => setArea(areaId === a.id ? null : a.id)}>{a.icon} {a.name}</button>
+		<button type="button" class="toggle" aria-pressed={areaId === a.id} onclick={() => setArea(areaId === a.id ? null : a.id)}>{a.name}</button>
 	{/each}
 </div>
 
 <div class="chips" role="group" aria-label="Collections">
 	{#each topCollections as c (c.id)}
-		<button class="chip small" class:on={view.collection === c.id} onclick={() => (view.collection = view.collection === c.id ? null : c.id)}
-			>{c.smart ? '⚡ ' : ''}{c.name} · {c.taskIds.length}</button
+		<button type="button" class="toggle" aria-pressed={view.collection === c.id} onclick={() => (view.collection = view.collection === c.id ? null : c.id)}
+			>{c.name} · {c.taskIds.length}</button
 		>
 		{#each childrenOf(c.id) as k (k.id)}
-			<button class="chip small sub" class:on={view.collection === k.id} onclick={() => (view.collection = view.collection === k.id ? null : k.id)}
-				>{c.name} › {k.smart ? '⚡ ' : ''}{k.name} · {k.taskIds.length}</button
+			<button type="button" class="toggle" aria-pressed={view.collection === k.id} onclick={() => (view.collection = view.collection === k.id ? null : k.id)}
+				>{c.name} › {k.name} · {k.taskIds.length}</button
 			>
 		{/each}
 	{/each}
-	{#if view.collection}<a class="chip small" href="/library/collections/{view.collection}">Edit collection</a>{/if}
-	<a class="chip small" href="/library/collections/new">+ Collection</a>
+	{#if view.collection}<a class="button small" href="/library/collections/{view.collection}">Edit collection</a>{/if}
+	<a class="button small" href="/library/collections/new">+ Collection</a>
 </div>
 
 <div class="row tools">
@@ -169,85 +196,56 @@
 {#if showTags}
 	<div class="chips" role="group" aria-label="Filter by tags (all must match)">
 		{#each data.tags as t (t)}
-			<button class="chip small" class:on={view.tags.includes(t)} onclick={() => toggleTag(t)}>{t}</button>
+			<button type="button" class="toggle" aria-pressed={view.tags.includes(t)} onclick={() => toggleTag(t)}>{t}</button>
 		{/each}
 	</div>
 {/if}
 
 {#if data.tasks.length === 0}
-	<p class="muted">
-		Your Library holds the Tasks you build habits from, like "Bench press" or "Learn new words".
-		Add your first one, or <a href="/gallery">add a ready-made habit</a> and its Tasks come with it.
-	</p>
+	<EmptyState text={'Your Library holds the Tasks you build habits from, like “Bench press” or “Learn new words”. Add your first one, or add a ready-made habit and its Tasks come with it.'} />
+	<a href="/gallery">Browse ready-made habits</a>
 {:else if shown.length === 0}
-	<p class="muted">Nothing matches. {#if filtering}<button class="link" onclick={clear}>Clear filters</button>{/if}</p>
+	<EmptyState kind="filtered" text="Nothing matches." onclear={filtering ? clear : undefined} />
 {/if}
 
-{#if editing}
-	<p class="muted small-text">Tap a name to rename it. Archived Tasks keep their logs and leave the pickers.</p>
-{/if}
-{#if selecting}
-	<BulkBar kind="task" {selected} visible={shown.map((t) => t.id)} today={data.today} {sources} />
+{#if mode === 'select'}
+	<BulkBar kind="task" {selected} bind:outcome visible={shown.map((t) => t.id)} today={data.today} {sources} />
 {/if}
 
 {#each groups as g (g.key)}
 	{#if g.label}
-		<h2 class="area" style="--c: {g.color ?? 'var(--border)'}">{g.label}</h2>
+		<GroupHeading title={area(g.key)?.name ?? g.label} color={g.color} {mode} count={String(g.items.length)} />
 	{/if}
 	<EditableList
 		items={g.items}
 		key={(t) => t.id}
 		label={(t) => t.name}
-		{editing}
-		{selecting}
+		{mode}
 		{selected}
+		rowCard
+		href={(t) => `/library/${t.id}`}
+		itemClass={(t) => (struck.has(t.id) ? 'struck' : '')}
 		onremove={archive}
 		removeLabel={(t) => (t.archived ? 'Unarchive' : 'Archive')}
 		ariaLabel={g.label || 'Tasks'}
-		class="tasks"
 	>
 		{#snippet row(t)}
-			{@const a = area(t.areaId)}
-			<svelte:element this={editing ? 'div' : 'a'} class="card task" href={editing ? undefined : `/library/${t.id}`} style="--c: {a?.color ?? 'transparent'}">
-				<div class="row" style="align-items: center">
-					<strong class="grow"><InlineText value={t.name} {editing} label="Name of {t.name}" maxlength={120} onsave={(v) => rename(t, v)} /></strong>
-					{#if t.archived}<span class="chip">Archived</span>{:else if !t.usedIn.length && !t.timesLogged}<span class="chip">Unused</span>{/if}
-				</div>
-				{#if t.usedIn.length}<div class="muted small-text">In {t.usedIn.join(', ')}</div>{/if}
-				{#if t.tags.length}
-					<div class="chips">
-						{#each t.tags as tg (tg.name)}<span class="chip">{tg.name}: {levelWord[tg.level]}</span>{/each}
-					</div>
-				{/if}
-			</svelte:element>
+			{@const o = outcome.get(t.id)}
+			{#if mode === 'use'}<a class="name" href="/library/{t.id}">{t.name}</a>
+			{:else}<span class="name"><InlineText value={t.name} editing={mode === 'edit' && !struck.has(t.id)} label="Name of {t.name}" maxlength={120} onsave={(v) => rename(t, v)} /></span>{/if}
+			{#if o?.tag}<span class="tags"><span class="tag pending"><span aria-hidden="true">→</span> {o.tag}</span></span>
+			{:else if t.archived}<span class="tags"><StatusTag status="archived" /></span>
+			{:else if !t.usedIn.length && !t.timesLogged}<span class="tags"><StatusTag status="unused" /></span>{/if}
+			{#if o?.reason || metaOf(t)}<p class="meta-line label">{o?.reason ?? metaOf(t)}</p>{/if}
+			{#if t.tags.length}
+				<span class="row-line tags">{#each t.tags as tg (tg.name)}<span class="tag">{tg.name}: {levelWord[tg.level]}</span>{/each}</span>
+			{/if}
 		{/snippet}
 	</EditableList>
 {/each}
 
 <style>
-	.small-text {
-		font-size: 0.85rem;
-	}
 	.tools {
-		margin-top: 0.6rem;
-		align-items: end;
-	}
-	.chip.small {
-		background: none;
-		cursor: pointer;
-		text-decoration: none;
-	}
-	.chip.sub {
-		font-style: italic;
-	}
-	.task {
-		border-left: 4px solid var(--c);
-	}
-	:global(ul.tasks) {
-		margin-top: 0.75rem;
-	}
-	h2.area {
-		border-left: 4px solid var(--c);
-		padding-left: 0.5rem;
+		margin-block: 0.6rem;
 	}
 </style>
