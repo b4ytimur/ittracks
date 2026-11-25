@@ -31,7 +31,7 @@ A habit's page is one page of lines. Each line says what it means ("Weekly on Mo
 
 ## What you do: Variants, Slots and targets
 
-A build habit holds one or more **Variants**. Most habits have one. Add more with **Add another Variant (for A/B plans)** when you alternate plans, like Push day A and Pull day B. Each Variant can be renamed, moved, duplicated or removed.
+A build habit holds one or more **Variants**. Most habits have one. Add more with **Add another Variant (for A/B plans)** when you alternate plans, like Push day A and Pull day B. Each Variant can be renamed, moved, duplicated or removed. One you logged something on is archived instead: past days keep it, and **Bring back** stands under the list.
 
 Each Variant holds **Slots**, one per thing you log:
 
