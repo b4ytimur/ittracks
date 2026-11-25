@@ -3,6 +3,7 @@
 import { PAST_DAYS_CHOICES } from '$lib/engine/backfill';
 import type { DayRange } from '$lib/engine/day';
 import type { PastDays } from '$lib/engine/backfill';
+import { TIME, type UnitKind } from '$lib/units';
 import { FEATURES, type FeatureKey } from '$lib/views';
 
 export interface Now {
@@ -17,7 +18,7 @@ export interface Now {
 	journalOff: boolean;
 	guidedSetup: boolean;
 	showAllSections: boolean;
-	weightUnit: string;
+	units: UnitKind[];
 	measures: { name: string }[];
 	e1rm: { name: string; maxReps: number };
 	muscle: { high: number; medium: number; low: number };
@@ -93,7 +94,7 @@ export function settingGroups(s: Now): Group[] {
 			title: 'What you track',
 			lines: [
 				{ id: 'newhabits', label: 'New habits', words: `${s.guidedSetup ? 'Ask how to start.' : 'Open the full page.'}${s.showAllSections ? ' Every section is shown.' : ''}`, says: 'What + Habit opens, and what a habit’s page shows before you add to it.', also: 'guided setup editor sections gallery' },
-				{ id: 'units', label: 'Units', words: `Weights in ${s.weightUnit}.`, says: 'The unit a new Task starts with. Each field keeps its own, changed on its Task.', also: 'kg lb weight default' },
+				{ id: 'units', label: 'Units', words: `${names(s.units.filter((k) => !k.off).map((k) => (k.id === TIME ? k.name : `${k.name} in ${k.shown}`)), 6)}.`, says: 'Every number you log can have a unit, and it can be any word. Units of one kind convert into each other; a word that is in no kind never does.', also: `kinds convert step ${s.units.flatMap((k) => k.units.flatMap((x) => [x.name, ...x.also])).join(' ')}` },
 				{ id: 'measures', label: 'Your measures', words: s.measures.length ? `${names(s.measures.map((m) => m.name))}.` : 'None of your own yet.', says: 'A measure is a formula over the fields you log, such as [Weight] * [Reps] or [Distance] / [Time] * 60. A Stats card can count logs by it.', also: 'formula stats tonnage pace volume' },
 				{ id: 'e1rm', label: 'Estimated 1RM', words: `${s.e1rm.name}, for sets of ${count(s.e1rm.maxReps, 'rep')} or fewer.`, says: 'How the best single lift is worked out from a set’s weight and reps.', also: 'formula stats max epley brzycki' },
 				{ id: 'muscle', label: 'Muscle groups', words: `High ${s.muscle.high}, medium ${s.muscle.medium}, low ${s.muscle.low}.`, says: 'When hard sets or volume are split by tag, a set counts toward each of its Task’s tags by the tag’s level. 1 is a full set, 0.5 half, 0 not at all.', also: 'tags levels stats sets weight' }

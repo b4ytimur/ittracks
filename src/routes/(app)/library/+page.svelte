@@ -14,6 +14,7 @@
 	import { runAction, showToast, undoWith } from '$lib/toast.svelte';
 	import BulkBar from '$lib/bulk/BulkBar.svelte';
 	import { unitOptions } from '$lib/bulk/catalog';
+	import { units } from '$lib/units-here';
 	import { groupBy } from '$lib/views';
 
 	let { data } = $props();
@@ -96,7 +97,7 @@
 			.sort((a, b) => Number(a.units.has('no unit')) - Number(b.units.has('no unit')) || b.tasks.size - a.tasks.size || a.name.localeCompare(b.name))
 			.map((g) => ({ value: g.name, label: `${g.name} · ${g.tasks.size} ${g.tasks.size === 1 ? 'Task' : 'Tasks'} · ${[...g.units].join(', ')}` }));
 	}
-	const sources = (ids: string[]) => ({ fields: fieldsIn(ids), units: unitOptions() });
+	const sources = (ids: string[]) => ({ fields: fieldsIn(ids), units: unitOptions(units().names()) });
 
 	const patch = (id: string, change: Partial<Task>) => (tasks = tasks.map((x) => (x.id === id ? { ...x, ...change } : x)));
 	async function rename(t: Task, name: string) {

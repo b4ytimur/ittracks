@@ -1,7 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import { and, eq, isNull } from 'drizzle-orm';
 import { galleryItem } from '$lib/gallery';
-import { getSettings } from '$lib/server/settings';
+import { getUnits } from '$lib/server/settings';
 import { userToday } from '$lib/server/today';
 import { addTemplate, addedPath, readAddForm } from '$lib/server/repo/templates';
 import { deleteSavedTemplate, getSavedTemplate } from '$lib/server/repo/saved-templates';
@@ -14,7 +14,7 @@ import type { Actions, PageServerLoad } from './$types';
 
 /** A ready-made template, or one you saved (by its id): `mine` says which. */
 function find(accountId: string, slug: string): { template: TemplateFile; mine: boolean } | null {
-	const builtIn = galleryItem(slug, getSettings(accountId).weightUnit);
+	const builtIn = galleryItem(slug, getUnits(accountId));
 	if (builtIn) return { template: builtIn.template, mine: false };
 	const saved = getSavedTemplate(accountId, slug);
 	return saved ? { template: saved.template, mine: true } : null;

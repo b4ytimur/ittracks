@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { listGallery } from '.';
+import { STARTER_KINDS, unitTable } from '$lib/units';
 import { applyAnswers, fromTemplate } from '$lib/template';
 import { habitForm, taskForm } from '$lib/forms';
 import { checkHabit } from '$lib/rules/habit';
 import { checkTask } from '$lib/rules/task';
 
 describe('gallery', () => {
-	const items = listGallery('lb');
+	const items = listGallery(unitTable(STARTER_KINDS.map((k) => (k.id === 'weight' ? { ...k, shown: 'lb' } : k))));
 
 	it('ships 20 valid templates', () => {
 		expect(items).toHaveLength(20);

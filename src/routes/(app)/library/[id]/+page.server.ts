@@ -76,7 +76,6 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		task: form,
 		archived,
 		allTags: listTagNames(accountId),
-		weightUnit: settings.weightUnit,
 		areas: listAreas(accountId),
 		collections: listCollections(accountId).filter((c) => !c.filter),
 		types: [...BUILTIN_TASK_TYPES, ...settings.taskTypes],

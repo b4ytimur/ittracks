@@ -4,7 +4,9 @@ import { invalidateAll } from '$app/navigation';
 import { showToast } from '$lib/toast.svelte';
 import type { SettingsSet } from '$lib/server/settings-patch';
 
-type Answer = { was: SettingsSet; now: SettingsSet; renames: Record<string, string>; error?: string };
+type Renames = Record<string, string>;
+type Answer = { was: SettingsSet; now: SettingsSet; renames: Renames; unitRenames: Renames; error?: string };
+const back = (r: Renames = {}) => Object.fromEntries(Object.entries(r).map(([x, y]) => [y, x]));
 
 async function send(body: object): Promise<{ status: number; r: Partial<Answer> } | null> {
 	const res = await fetch('/api/settings', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), keepalive: true }).catch(() => null);
@@ -20,20 +22,20 @@ let queue: Promise<unknown> = Promise.resolve();
  * Save it, and say so. Returns why it wasn't, or ''. One at a time: `was` is read when its turn
  * comes, so two quick changes don't look like two devices.
  */
-export function saveSetting(set: SettingsSet, was: () => SettingsSet, said: string, renames: Record<string, string> = {}): Promise<string> {
+export function saveSetting(set: SettingsSet, was: () => SettingsSet, said: string, renames: Renames = {}, unitRenames: Renames = {}): Promise<string> {
 	const run = async () => {
-		const a = await send({ set, was: was(), renames });
+		const a = await send({ set, was: was(), renames, unitRenames });
 		if (!a) return NO_ANSWER;
 		if (a.status !== 200) {
 			if (a.status === 409) await invalidateAll();
 			return a.r.error ?? 'Not saved.';
 		}
-		const { was: before, now, renames: moved = {} } = a.r as Answer;
+		const { was: before, now, renames: moved, unitRenames: units } = a.r as Answer;
 		if (Object.keys(now).length)
 			showToast(said, async () => {
-				const back = await send({ set: before, was: now, renames: Object.fromEntries(Object.entries(moved).map(([x, y]) => [y, x])) });
-				if (back) await invalidateAll();
-				return back?.status === 200 ? undefined : (back?.r.error ?? false);
+				const r = await send({ set: before, was: now, renames: back(moved), unitRenames: back(units) });
+				if (r) await invalidateAll();
+				return r?.status === 200 ? undefined : (r?.r.error ?? false);
 			});
 		await invalidateAll();
 		return '';

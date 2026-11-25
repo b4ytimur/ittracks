@@ -4,10 +4,14 @@ import { settings } from './db/schema';
 import type { DayRange } from '$lib/engine/day';
 import type { PastDays } from '$lib/engine/backfill';
 import type { TaskType } from '$lib/task-types';
+import { readKinds, unitTable, type UnitKind, type UnitTable } from '$lib/units';
 import { readViews, type ViewSettings } from '$lib/views';
 
 export interface Settings {
+	/** Before units were stored: the weight unit. Now only says what Weight is shown in until they are. */
 	weightUnit: string;
+	/** Kinds of units and the units in them. Unset reads as the starting ones (src/lib/units.ts). */
+	units?: UnitKind[];
 	/** IANA zone from the browser, e.g. Europe/Berlin; used for reminders. */
 	timeZone?: string;
 	/** HH:MM when a new day begins. Unset until the user has been asked. */
@@ -63,6 +67,13 @@ export function saveSettings(accountId: string, next: Partial<Settings>) {
 		.onConflictDoUpdate({ target: settings.accountId, set: { data: data as unknown as Record<string, unknown> } })
 		.run();
 }
+
+/** The account's units, with the starting ones until it changes them. */
+export function getKinds(accountId: string): UnitKind[] {
+	const s = getSettings(accountId);
+	return readKinds(s.units, s.weightUnit);
+}
+export const getUnits = (accountId: string): UnitTable => unitTable(getKinds(accountId));
 
 /** The user's views, with defaults filled in. */
 export function getViews(accountId: string): ViewSettings {

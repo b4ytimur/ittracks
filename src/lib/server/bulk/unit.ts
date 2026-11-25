@@ -12,7 +12,8 @@ import { emit } from '../core/events';
 import { blocked } from '$lib/rules/core';
 import { checkTaskPast, metricRules } from '$lib/rules/task';
 import { MAX_DEPTH } from '$lib/engine/parts';
-import { effectiveUnit, findUnit, unitChange } from '$lib/units';
+import { effectiveUnit } from '$lib/units';
+import { getUnits } from '../settings';
 import { plural } from './report';
 import type { TaskRow } from './select';
 import type { Run } from './types';
@@ -66,8 +67,9 @@ function reaches(id: string, ids: Set<string>, kids: Map<string, string[]>, seen
 }
 
 export const convertUnit: Run<'convert_unit'> = ({ actor, undo, report }, tasks, { field, to, values, inside }) => {
-	// "lbs" is saved as the registry's "lb"; a unit it doesn't know is kept as written.
-	const unit = findUnit(to)?.key ?? to.trim();
+	// "lbs" is saved as the table's "lb"; a unit it doesn't know is kept as written.
+	const table = getUnits(actor.accountId);
+	const unit = table.find(to)?.name ?? to.trim();
 	const shown = (u: string) => u || 'no unit';
 	let converted = 0;
 	const found = new Set<string>();
@@ -90,7 +92,7 @@ export const convertUnit: Run<'convert_unit'> = ({ actor, undo, report }, tasks,
 				continue;
 			}
 			const from = effectiveUnit(m);
-			const change = unitChange(from, unit);
+			const change = table.change(from, unit);
 			if (change.kind === 'same') {
 				report.skip(`Already in ${shown(unit)}`, line);
 				continue;
@@ -100,7 +102,7 @@ export const convertUnit: Run<'convert_unit'> = ({ actor, undo, report }, tasks,
 				continue;
 			}
 			// History policy for a unit: once logged, past values follow the choice made.
-			const past = checkTaskPast(form, nextForm, logged, { [m.id]: values });
+			const past = checkTaskPast(form, nextForm, logged, table, { [m.id]: values });
 			if (past.errors[0]) {
 				report.skip(past.errors[0].reason, line);
 				continue;

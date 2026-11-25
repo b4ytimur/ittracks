@@ -1,7 +1,7 @@
 // The Journal is History with notes only. This address keeps working for bookmarks, and its
 // actions for the day note (also sent by the offline outbox) and the journal's setup.
 import { error, fail, redirect } from '@sveltejs/kit';
-import { getSettings, getViews, saveSettings } from '$lib/server/settings';
+import { getSettings, getUnits, getViews, saveSettings } from '$lib/server/settings';
 import { userToday } from '$lib/server/today';
 import { saveDayNote } from '$lib/server/journal';
 import { addTemplate } from '$lib/server/repo/templates';
@@ -40,7 +40,7 @@ export const actions: Actions = {
 		const wantNote = f.get('dayNote') === 'on';
 		if (!wantHabit && !wantNote) return fail(400, { error: 'Pick at least one, or skip this.' });
 		if (wantHabit) {
-			const item = galleryItem('journaling', getSettings(accountId).weightUnit);
+			const item = galleryItem('journaling', getUnits(accountId));
 			if (!item) return fail(500, { error: 'The Journaling template is missing.' });
 			const r = addTemplate(accountId, item.template, { today: userToday(accountId, cookies.get('tz')), reuse: true });
 			if ('error' in r) return fail(400, { error: r.error });

@@ -20,6 +20,7 @@
 	import Restore from '$lib/settings/Restore.svelte';
 	import { NO_ANSWER, saveSetting } from '$lib/settings/save';
 	import Template from '$lib/settings/Template.svelte';
+	import Units from '$lib/settings/Units.svelte';
 	import Vacations from '$lib/settings/Vacations.svelte';
 	import { statsOp } from '$lib/stats/client';
 	import { formulaProblem } from '$lib/stats/formula';
@@ -114,11 +115,11 @@
 		await tick();
 		controls()[at]?.focus();
 	}
-	async function save(line: string, set: SettingsSet, said: string, renames?: Record<string, string>) {
-		const why = await saveSetting(set, () => Object.fromEntries(Object.keys(set).map((k) => [k, data.settings[k as keyof typeof data.settings]])) as SettingsSet, said, renames);
-		if (why === NO_ANSWER) showError(why, () => save(line, set, said, renames));
-		// The parts keep what is being typed.
-		if (why && line !== 'parts') return void failed(line, why);
+	async function save(line: string, set: SettingsSet, said: string, renames?: Record<string, string>, unitRenames?: Record<string, string>) {
+		const why = await saveSetting(set, () => Object.fromEntries(Object.keys(set).map((k) => [k, data.settings[k as keyof typeof data.settings]])) as SettingsSet, said, renames, unitRenames);
+		if (why === NO_ANSWER) showError(why, () => save(line, set, said, renames, unitRenames));
+		// These keep what is being typed.
+		if (why && line !== 'parts' && line !== 'units') return void failed(line, why);
 		problem[line] = why;
 	}
 	async function view(line: string, body: Record<string, unknown>, back: Record<string, unknown>, said: string) {
@@ -260,8 +261,7 @@
 			<p class="field-hint meta" id="all-h">Otherwise a habit's page shows what it uses, and + Add brings the rest.</p>
 		</div>
 	{:else if id === 'units'}
-		<div class="field"><label class="label" for="unit-w">Weights</label><input id="unit-w" class="short" list="weight-units" maxlength="20" value={s.weightUnit} onchange={(e) => save('units', { weightUnit: e.currentTarget.value.trim() }, `New Tasks start in ${e.currentTarget.value.trim()}.`)} /></div>
-		<datalist id="weight-units"><option value="kg"></option><option value="lb"></option></datalist>
+		<Units kinds={s.units} used={data.usedUnits} bind:problem={() => problem.units ?? '', (v) => (problem.units = v)} onsave={(units, said, renames) => save('units', { units }, said, {}, renames)} />
 	{:else if id === 'measures'}
 		<Measures measures={data.stats.measures} fields={data.stats.fields} />
 	{:else if id === 'e1rm'}

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { STARTER_KINDS } from '$lib/units';
 import { FEATURES } from '$lib/views';
 import { FEATURE_HIDES, matches, settingGroups, type Now } from './lines';
 
@@ -14,7 +15,7 @@ const now: Now = {
 	journalOff: false,
 	guidedSetup: true,
 	showAllSections: false,
-	weightUnit: 'kg',
+	units: STARTER_KINDS,
 	measures: [],
 	e1rm: { name: 'Epley', maxReps: 12 },
 	muscle: { high: 1, medium: 0.5, low: 0 },
@@ -38,6 +39,7 @@ describe('the words of a setting', () => {
 		expect(words('past', { pastDays: 5, nudgeYesterday: false })).toBe('Up to 5 days back.');
 		expect(words('past', { pastDays: 0, nudgeYesterday: false })).toBe('Off. Only today can be logged.');
 		expect(words('daynote', { dayNote: true, journalOff: true })).toBe('On, and hidden while the Journal is off.');
+		expect(words('units')).toBe('Time, Weight in kg, Distance in km.');
 		expect(words('features', { hidden: ['levels', 'journal'] })).toBe('7 in use. Off: Levels, Journal.');
 		expect(words('template', { own: 1, toCheck: 2 })).toBe('Standard, with 1 change of your own. 2 things to check.');
 		expect(words('logout', { waiting: 1 })).toBe('1 change on this device is not saved yet.');

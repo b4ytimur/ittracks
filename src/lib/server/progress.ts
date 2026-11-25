@@ -3,10 +3,12 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray, isNull, lt } from 'drizzle-orm';
 import { db } from './db';
-import { entry, habit, metric, occurrence, slot, type SlotGoals } from './db/schema';
+import { entry, habit, metric, occurrence, slot, task, type SlotGoals } from './db/schema';
+import { getUnits } from './settings';
 import { positionsFor } from './positions';
 import { amountTarget, loggedValue, progressOf, verdict, type Progress, type ProgressMetric, type ProgressSlot, type Verdict } from '$lib/engine/progress';
 import { defaultStep } from '$lib/task-types';
+import { STARTER, type UnitTable } from '$lib/units';
 import type { Level } from '$lib/engine/streak';
 
 interface OccRow {
@@ -191,20 +193,21 @@ export function rejudge(habitId: string, before: string) {
 }
 
 /** How much one tap of +1 adds: the Metric's own step, else a sensible one for its type. */
-export const plusStep = (m: { type: string; unit: string | null; step: number | null }) =>
-	m.step ?? defaultStep(m.type, m.unit);
+export const plusStep = (m: { type: string; unit: string | null; step: number | null }, units: UnitTable) =>
+	m.step ?? defaultStep(m.type, m.unit, units);
 
 /** Each Metric's step by id, for a raise by steps (engine/progression.ts). */
 export function stepsOf(metricIds: string[], q: Pick<typeof db, 'select'> = db): Record<string, number> {
 	if (!metricIds.length) return {};
-	return Object.fromEntries(
-		q
-			.select({ id: metric.id, type: metric.type, unit: metric.unit, step: metric.step })
-			.from(metric)
-			.where(inArray(metric.id, [...new Set(metricIds)]))
-			.all()
-			.map((m) => [m.id, plusStep(m)])
-	);
+	const rows = q
+		.select({ id: metric.id, type: metric.type, unit: metric.unit, step: metric.step, accountId: task.accountId })
+		.from(metric)
+		.innerJoin(task, eq(metric.taskId, task.id))
+		.where(inArray(metric.id, [...new Set(metricIds)]))
+		.all();
+	// Fields of one habit: one account.
+	const units = rows.length ? getUnits(rows[0].accountId) : STARTER;
+	return Object.fromEntries(rows.map((m) => [m.id, plusStep(m, units)]));
 }
 
 /**
@@ -228,7 +231,7 @@ export function plusOne(occurrenceId: string, by: 1 | -1 = 1): { value: number; 
 		.orderBy(asc(entry.sortOrder))
 		.all();
 	const before = loggedValue(mine, taskId, m.id);
-	const step = plusStep(m);
+	const step = plusStep(m, getUnits(db.select({ a: habit.accountId }).from(habit).where(eq(habit.id, o.habitId)).get()!.a));
 	const value = Math.max(0, Math.round((before + by * step) * 1000) / 1000);
 	const done = value >= amount.target;
 	db.transaction((tx) => {

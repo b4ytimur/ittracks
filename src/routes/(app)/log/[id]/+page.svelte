@@ -11,6 +11,7 @@
 	import NumberField from '$lib/ui/NumberField.svelte';
 	import { endRest, startRest } from '$lib/rest.svelte';
 	import { defaultStep } from '$lib/task-types';
+	import { units } from '$lib/units-here';
 	import { enqueue, isOffline, save } from '$lib/outbox.svelte';
 	import { postAction, showToast, undoWith } from '$lib/toast.svelte';
 	import { differs, revOf, type LogContent } from '$lib/logrev';
@@ -685,7 +686,7 @@
 
 	const prevSummary = (i: number) => data.items[i].previous.find(isSummary) ?? {};
 	const num = (v: unknown) => (v === null || v === undefined || v === '' ? '' : String(v));
-	const stepOf = (m: Metric) => m.step ?? defaultStep(m.type, m.unit);
+	const stepOf = (m: Metric) => m.step ?? defaultStep(m.type, m.unit, units());
 	const isNumeric = (m: Metric) => m.type === 'number' || m.type === 'count' || m.type === 'duration';
 	/** Required fields always show, so a quick log can always be finished. */
 	const shownMetrics = (ms: Metric[]) => (quickMode ? ms.filter((m) => m.quick || m.required) : ms);

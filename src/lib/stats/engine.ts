@@ -7,7 +7,7 @@ import { chainCells } from '../engine/chain';
 import { withinOn, withinStreak, usedIn, limitOn, type Limit } from '../engine/limit';
 import { compile, evaluate, FormulaError } from './formula';
 import { excerpt } from '../markdown';
-import { convert, convertible, effectiveUnit, findUnit } from '../units';
+import { effectiveUnit, STARTER, TIME_BASE, type UnitTable } from '../units';
 import { parentPath, parsePath, withoutRounds } from '../engine/parts';
 import { optionName, scoresOn, type ChoiceOption, type EarlierScores, type Scores } from '../options';
 import {
@@ -130,7 +130,10 @@ export interface DsCraving {
 }
 export interface Dataset {
 	today: ISODate;
+	/** The unit Weight is shown in. */
 	weightUnit: string;
+	/** The account's units; the starting ones when left out. */
+	units?: UnitTable;
 	ranges: { name: string; start: string; end: string }[];
 	areas: { id: string; name: string }[];
 	habits: DsHabit[];
@@ -384,15 +387,14 @@ export function prepare(ds: Dataset): Prepared {
 }
 
 // ---------- units ----------
-// The table itself is the app's unit registry (src/lib/units.ts).
+// The table is the account's (src/lib/units.ts).
+const unitsOf = (P: Prepared): UnitTable => P.ds.units ?? STARTER;
 
 /** A field's unit: what it names, or minutes for a duration that names none (as the log screen shows it). */
 export const unitOfMetric = (m: Pick<DsMetric, 'unit' | 'type'>): string | null => effectiveUnit(m) || null;
 
 /** Is this a unit of time (s, min, h…)? Times add up in minutes and show as hours and minutes. */
-const isTimeUnit = (u: string | null) => findUnit(u)?.dimension === 'time';
-
-export { convertible, convert };
+const isTimeUnit = (u: string | null, P: Prepared) => unitsOf(P).isTime(u);
 
 // ---------- ranges and buckets ----------
 
@@ -596,10 +598,10 @@ export function fieldsFor(card: StatCard, P: Prepared, ctx: Ctx): { metrics: DsM
 	const type = ms[0].type;
 	const first = unitOfMetric(ms[0]);
 	// Times are added up in minutes whatever unit they were logged in, and shown as hours and minutes.
-	const unit = isTimeUnit(first) ? 'min' : first;
+	const unit = isTimeUnit(first, P) ? TIME_BASE : first;
 	const left: string[] = [];
 	const keep = ms.filter((m) => {
-		const ok = m.type === type && convertible(unitOfMetric(m), unit);
+		const ok = m.type === type && unitsOf(P).convertible(unitOfMetric(m), unit);
 		if (!ok) left.push(`${m.name} in ${P.tasks.get(m.taskId)?.name ?? 'a Task'} (${m.unit || m.type}) can't be added to ${unit || type} and was left out`);
 		return ok;
 	});
@@ -777,7 +779,7 @@ function e1rmOf(set: Values, l: Log, P: Prepared, ctx: Ctx): number | null {
 		if (n === 'reps') return reps;
 		return fieldLookup(l, P, set, 'set')(name);
 	});
-	return v === null ? null : convert(v, r.weight.unit, P.ds.weightUnit);
+	return v === null ? null : unitsOf(P).convert(v, r.weight.unit, P.ds.weightUnit);
 }
 
 /** The number one log gives for a Task measure. */
@@ -794,7 +796,7 @@ export function taskValue(perLog: string, l: Log, P: Prepared, ctx: Ctx): number
 				const w = num(s[r.weight.id]);
 				const n = num(s[r.reps.id]);
 				if (w !== null && n !== null) {
-					v += convert(w, r.weight.unit, P.ds.weightUnit) * n;
+					v += unitsOf(P).convert(w, r.weight.unit, P.ds.weightUnit) * n;
 					any = true;
 				}
 			}
@@ -811,7 +813,7 @@ export function taskValue(perLog: string, l: Log, P: Prepared, ctx: Ctx): number
 			if (!r.time || !r.distance) return null;
 			const t = fieldLookup(l, P, null, 'log')(r.time.name);
 			const d = fieldLookup(l, P, null, 'log')(r.distance.name);
-			return t !== null && d ? convert(t, r.time.unit || 'min', 'min') / d : null;
+			return t !== null && d ? unitsOf(P).convert(t, r.time.unit || TIME_BASE, TIME_BASE) / d : null;
 		}
 		case 'pctTarget': {
 			const t = targetsFor(l, P);
@@ -898,7 +900,7 @@ export function pointsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range): 
 				const base = { habit: l.habit, task: l.task, occ: l.occ, date: l.occ.date, time: l.occ.time };
 				const push = (value: number, series = tagsFor(base)) =>
 					out.push({ date: l.occ.date, value, series, occId: l.occ.id, habitId: l.habit.id, taskId: l.task.id, time: l.occ.time });
-				const conv = (v: number) => convert(v, unitOfMetric(m), unit);
+				const conv = (v: number) => unitsOf(P).convert(v, unitOfMetric(m), unit);
 				const fieldSeries = (): SeriesTag[] => [{ key: `f:${m.name.toLowerCase()}`, label: m.name, w: 1, order: card.what.metrics.indexOf(m.id) }];
 				const series = card.split === 'field' ? fieldSeries() : undefined;
 				if (m.repeats) {
@@ -1102,7 +1104,7 @@ export function unitOf(card: StatCard, P: Prepared, ctx: Ctx): { unit: string; k
 			return { unit: card.perLog === 'sets' ? 'sets' : card.perLog === 'ticked' ? 'ticked' : 'times', kind: 'count', share: false };
 		const f = fieldsFor(card, P, ctx);
 		const m = f.metrics[0];
-		const isTime = m?.type === 'duration' || isTimeUnit(f.unit);
+		const isTime = m?.type === 'duration' || isTimeUnit(f.unit, P);
 		return { unit: isTime ? 'min' : (f.unit ?? ''), kind: isTime ? 'duration' : m?.type === 'count' ? 'count' : 'number', share: false };
 	}
 	// task
@@ -1471,7 +1473,7 @@ function recordsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range, points:
 				const w = num(s[roles.weight.id]);
 				const r = num(s[roles.reps.id]);
 				if (w === null || !r) continue;
-				const wv = convert(w, roles.weight.unit, P.ds.weightUnit);
+				const wv = unitsOf(P).convert(w, roles.weight.unit, P.ds.weightUnit);
 				if (!heavy || wv > heavy.v || (wv === heavy.v && r > heavy.reps)) heavy = { v: wv, reps: r, date: l.occ.date, occId: l.occ.id };
 			}
 		if (heavy) out.push({ label: `Heaviest set (× ${heavy.reps})`, value: round(heavy.v)!, unit: P.ds.weightUnit, kind: 'number', date: heavy.date, occId: heavy.occId });
