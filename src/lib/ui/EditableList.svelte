@@ -418,10 +418,6 @@
 		font-size: 1.15rem;
 		line-height: 1;
 	}
-	.handle:focus-visible {
-		outline: 2px solid var(--accent);
-		outline-offset: 1px;
-	}
 	.dragging {
 		z-index: 2;
 	}
