@@ -29,6 +29,10 @@ export const TODAY_STATUSES = { all: 'Any status', due: 'Still due', done: 'Done
 
 const str = (n = 200) => z.string().max(n);
 
+/** How Today is laid out. */
+export const LAYOUTS = { outline: 'Outline', focus: 'Up next first', blocks: 'Area blocks', flat: 'One list' } as const;
+export type LayoutKey = keyof typeof LAYOUTS;
+
 /** One page's filter, sort and grouping. Fields a page doesn't use are ignored there. */
 export const viewState = z.object({
 	areas: z.array(str(64)).max(50).default([]),
@@ -41,7 +45,9 @@ export const viewState = z.object({
 	collection: str(64).nullable().default(null),
 	archived: z.boolean().default(false),
 	sort: str(32).default(''),
-	group: str(32).default('none')
+	group: str(32).default('none'),
+	/** Today only. Kept with the view, so each saved view has its own. */
+	layout: z.enum(Object.keys(LAYOUTS) as [LayoutKey, ...LayoutKey[]]).default('outline')
 });
 export type ViewState = z.infer<typeof viewState>;
 export const emptyState = (): ViewState => viewState.parse({});
@@ -324,7 +330,8 @@ const DEFAULT_FIELD_LABEL: Record<keyof ViewState, string> = {
 	collection: 'filter',
 	archived: 'filter',
 	sort: 'sort',
-	group: 'grouping'
+	group: 'grouping',
+	layout: 'layout'
 };
 const stateKeys = Object.keys(DEFAULT_FIELD_LABEL) as (keyof ViewState)[];
 

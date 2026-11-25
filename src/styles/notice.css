@@ -1,0 +1,57 @@
+/* Notice: one inline box for a fact the app tells you (a nudge, a suggestion, why a screen is read-only, a risk,
+   something that couldn't be worked out), and the status disc, the drawn "!" every error line starts with.
+   Owns .notice (tones notice, warn, error: data-tone), .notice-text, .notice-acts, .status-disc, and the notice's
+   place as a row line (.content > .notice) and on a shelf.
+   Markup: <div class="notice" [data-tone="warn|error"] [data-mode="edit|select"] [role="alert": an error a submit returned, only]>
+             <div class="notice-text"> <p class="label">[<span class="status-disc" aria-hidden="true">!</span>]Words…</p> [p.label …] </div>
+             [<div class="notice-acts"> <button class="quiet hit">Verb</button> … </div>]
+           </div>
+   Pitch: 1 + 7 + 20 per line + 7 + 1 = 36 with one line. Verbs beside the words add nothing (their 24px boxes
+   overhang the 20px line by 2px each way); under the words, as they always are in a row (D3.24), they add 4 + 20: 60. */
+
+.notice {
+	display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-tight) var(--space-inline); /* 4px row gap: a verb's focus ring clears the words above */
+	padding: calc(var(--space-inline) - 1px) calc(var(--space-inline) + var(--space-tight)); /* the 1px edge comes out of the 8px */
+	border: 1px solid var(--line); border-radius: var(--radius-inset);
+	background: none; color: var(--ink); overflow-wrap: anywhere; /* no fill: a notice takes the surface it sits on (S.1, D3.12) */
+}
+.notice-text { flex: 1 1 14rem; min-width: 0; } /* on the page and in a card the words keep 14rem before the verbs wrap under them */
+.notice-acts {
+	flex: none; display: flex; flex-wrap: wrap; column-gap: var(--space-inline);
+	margin-block: calc((1.25rem - var(--target-min)) / 2); /* 24px verbs on a 20px line */
+	margin-inline: calc(-1 * var(--space-tight)); /* verb text on the words' edge when wrapped, and on the padding edge */
+}
+
+/* ---------- Tones: the edge only; the words stay ink in every tone (warn text is 4.21:1, danger 4.05:1 on light sunken) ---------- */
+.shelf .notice { border-color: var(--line-inset); } /* line vanishes on sunken (1.05:1 light) */
+.notice[data-tone='warn'] { border-color: var(--warn); }
+.notice[data-tone='error'] { border-color: var(--danger); }
+
+/* ---------- The status disc: "!" in a 16px danger disc, drawn and aria-hidden; "!" means something failed or can't be worked out (D3.11) ---------- */
+/* Inside the text at its start: 2 + 16 + 2 fills a 20px line exactly however the text wraps; wrapped lines run under it.
+   No on-danger token: the "!" is surface-raised (4.83:1 light, 6.32:1 dark). */
+.status-disc {
+	flex: none; display: inline-grid; place-items: center; width: var(--glyph-md); height: var(--glyph-md);
+	border-radius: 50%; background: var(--danger); color: var(--surface-raised);
+	font-size: var(--font-size-note); line-height: var(--glyph-md); font-weight: 700;
+	vertical-align: top; margin-block: calc(var(--pitch) / 2); margin-inline-end: var(--space-inline);
+}
+
+/* ---------- Where it sits ---------- */
+/* In a row: a row line under the meta line, 8px below it, full width. Positioned above a stretched name link
+   (ListRow's .card.link), as the verb is, so its verbs stay reachable. On the page and in a block card it adds no
+   margin: the page's stack spaces it, and a card's head keeps its own 8px. */
+.content > .notice { flex-basis: 100%; margin-top: var(--space-inline); position: relative; z-index: 1; }
+/* In a row the verbs always sit under the words: Edit empties the verb slot, so the content widens, and verbs that
+   moved up beside the words there would make the row shorter than in use (D3.24, F.6). */
+.content > .notice > .notice-acts { flex-basis: 100%; }
+
+/* ---------- Edit and Select: the words stay, the verbs hide in place, so nothing moves (F.6, S.11) ---------- */
+/* data-mode on the notice itself (D4.13), in a row, a card or a page alike; never read from an ancestor, so a form's notice
+   keeps its verbs inside a grid in Edit. */
+.notice:is([data-mode='edit'], [data-mode='select']) > .notice-acts { visibility: hidden; }
+
+/* ---------- Forced colours: every edge turns CanvasText, so the tones meet and their words carry them ---------- */
+@media (forced-colors: active) {
+	.status-disc { border: 1px solid CanvasText; } /* the disc's fill goes; the ring keeps the mark */
+}

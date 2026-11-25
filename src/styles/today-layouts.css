@@ -1,0 +1,84 @@
+/* TodayLayouts: Today's four compositions (views.today.layout: outline, focus, blocks, flat), built from GroupHeading,
+   ListRow, NestedRow, LogControl and EmptyState. This fragment draws only what none of them covers:
+     .area-block       Area blocks: the NestedRow holder that is one block; its top row is the block's heading
+     .later-line       One list: the quiet lines after the list (Prepare for tomorrow, Paused, Not today; R2.7)
+     .layout-chooser   Edit mode on Today: the Layout menu, last in EditChrome's .hint-tools
+   The swatch, the › fold and the menu box are other components' bare looks (Disclosure's .fold, .chev; Swatch's .swatch;
+   Menu's .menu); this fragment only places them.
+   Markup:
+     <li class="row holder area-block">                                        Area blocks, one per Area, then Limits, Not today
+       <div class="card"><span class="slot"></span><div class="content">
+         <h2 class="name" aria-labelledby="bt-fit bn-fit"><span class="icon" aria-hidden="true">💪</span><span id="bt-fit">Fitness</span><span class="swatch" style="--c: var(--area-1)"></span></h2>
+         <span class="tags"><span class="tag count" aria-hidden="true">0/2<span class="vh" id="bn-fit">0 of 2 done</span></span></span>
+       </div></div>
+       <div class="shelf"><ul class="elist" data-mode="use" aria-labelledby="bt-fit" style="--depth:1">…</ul></div>
+     </li>
+     <li class="row holder area-block">                                        Not today: Disclosure's › fold leads the card
+       <div class="card"><button class="fold" aria-expanded="false" aria-labelledby="bt-later bn-later"><span class="chev" aria-hidden="true">›</span></button>
+         <span class="slot"></span><div class="content"><h2 class="name" …><span id="bt-later">Not today</span></h2>
+         <span class="tags">…2…</span><p class="meta-line label">Long run, Call family</p></div></div>   names line only while folded
+     </li>                                                                     open: the shelf follows, as above
+     <p class="later-line meta">Not today: Long run, Call family</p>        One list, after its ul.elist; one per section
+     <span class="layout-chooser">                                             inside .hint-tools (EditChrome), after Reset layout
+       <button class="quiet layout-pick" aria-haspopup="menu" aria-expanded="true" aria-controls="lm">Layout: <b data-reserve="Up next first">Outline</b></button>
+       <span class="menu layout-menu" role="menu" id="lm" aria-label="Today layout">   Menu's .menu; a span, the hint line is a p
+         <button role="menuitemradio" aria-checked="true" tabindex="-1" aria-labelledby="ln-focus" aria-describedby="ld-focus">
+           <span class="menu-check" aria-hidden="true">✓</span><span class="menu-label" id="ln-focus">Up next first</span>
+           <span class="menu-note note" id="ld-focus">The one thing to do now, then what's left</span></button> …
+       </span></span> */
+
+/* ---------- Area blocks: the top row is the heading ---------- */
+/* The Area's stored icon leads the name, as on GroupHeading; the swatch (Swatch's look) follows it, inline, so a long
+   name wraps and the swatch follows its last word. */
+.area-block > .card .icon { margin-inline-end: var(--space-tight); }
+.area-block > .card .swatch { margin-inline-start: var(--space-inline); }
+/* Folded (Not today): NestedRow's rule for a holder without a shelf drops the seam and gives the padding back. */
+/* Lifted (a block carried by its top row's grip, edit): in dark, surface-lifted is surface-tint, so the count steps
+   down to sunken, as on GroupHeading's lifted heading. The swatch ring's ink-muted step is Swatch's (.dragging). */
+.elist > .area-block.dragging > .card .tag { background: var(--surface-sunken); }
+
+/* The › fold (R2.8): Disclosure's look, placed in the card's leading padding with no width of its own, so the
+   title stays on the rows' name column. Glyph at 5–13, 4 before the title at 17 (33 in edit, after the grip).
+   Its hit area is the whole top row (a stretched pseudo-element, like a .link card); the grip and the edit verb sit
+   above it (a local z 1, as ListRow's .link card verb). Its focus ring is Disclosure's, round the chevron (D3.25), in
+   the 14px the card's padding has: 1px clear of the card's edge and of the title. A hidden section has nothing to
+   unfold, so its fold goes (and leaves the tab order). */
+.area-block > .card { position: relative; }
+.area-block > .card > .fold {
+	--fold-ring: calc(var(--space-inline) + var(--focus-width));
+	flex: none; align-self: flex-start; width: var(--space-inline);
+	margin-inline: calc(-1 * (var(--space-inline) + var(--space-tight))) var(--space-tight);
+}
+.area-block > .card > .fold::after { content: ''; position: absolute; inset: 0; }
+.area-block > .card > .fold ~ .slot, .area-block > .card > .fold ~ .verb { position: relative; z-index: 1; }
+.area-block.hidden-item > .card > .fold { visibility: hidden; }
+
+/* ---------- One list: the quiet lines ---------- */
+/* Text on the rows' name column (the cards' 1px edge + 16px padding), space-group under the last row, like EmptyState's
+   slot; each further line 4 under the one before. ink-muted on the page: 4.59 / 7.83. */
+.later-line {
+	margin-block-start: var(--space-group); padding-inline: calc(var(--space-group) + 1px);
+	color: var(--ink-muted); overflow-wrap: anywhere;
+}
+.later-line + .later-line { margin-block-start: var(--space-tight); }
+
+/* ---------- The layout chooser ---------- */
+/* Button's quiet verb (accent-ink, meta size, 24px) whose value is a fact, so ink 600. The menu is Menu's .menu
+   (trailing edge, 4px below, z-popover, flips up by data-side, items, the ✓ column, hover, focus, forced colours). */
+.layout-chooser { position: relative; display: inline-flex; }
+/* As wide as its longest line, up to the box's cap (20rem, never past the screen): an absolute box would otherwise
+   shrink to the chooser's width and wrap every description. */
+.layout-menu { inline-size: max-content; }
+/* The value reserves the longest of the four names (base's [data-reserve], R2.22), as the mode switch reserves its
+   bold labels, so choosing never changes the chooser's width or rewraps the hint line. A grid, so the hidden copy
+   takes a 0px row under the value and sets its width. */
+.layout-pick > b { display: grid; justify-items: start; color: var(--ink); font-weight: 600; }
+.layout-pick[aria-expanded='true'] { text-decoration: underline; text-underline-offset: 3px; } /* open: the hover look, held */
+
+/* ---------- Forced colours ---------- */
+/* The chooser's LinkText and underline are Button's (every quiet button); its value takes them too. */
+@media (forced-colors: active) {
+	.layout-pick > b { color: inherit; }
+}
+/* Motion: nothing here moves. The chevron turns on Disclosure's clock; a layout change is one FLIP pass over the rows
+   (EditableList's clock), and reduced motion swaps the layouts in one duration-quick cross-fade; both are the page's script. */

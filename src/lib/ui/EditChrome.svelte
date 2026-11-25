@@ -61,14 +61,13 @@
 	{#if actions}<div class="title-actions" inert={mode !== 'use'}>{@render actions()}</div>{/if}
 	{#if modes.length > 1}<Segmented label="Mode" options={modes.map((m) => ({ value: m, label: words[m] }))} value={mode} onchange={set} />{/if}
 </header>
-{#if Object.keys(hints).length || onreset || tools}
+{#if Object.keys(hints).length || onreset}
 	<p class="hint-line meta" data-mode={mode}>
 		{#each modes as m (m)}
 			<span data-hint={m} inert={mode !== m}>
-				{#if m === 'edit' && (onreset || tools)}
+				{#if m === 'edit' && onreset}
 					<span class="hint-tools">
-						{@render tools?.()}
-						{#if onreset}<button type="button" class="quiet reset" data-at-default={atDefault ? '' : null} onclick={onreset}>{resetLabel}</button>{/if}
+						<button type="button" class="quiet reset" data-at-default={atDefault ? '' : null} onclick={onreset}>{resetLabel}</button>
 					</span>
 				{/if}
 				{hints[m] ?? ''}
@@ -76,3 +75,4 @@
 		{/each}
 	</p>
 {/if}
+{#if tools && mode === 'edit'}<div class="tools">{@render tools()}</div>{/if}

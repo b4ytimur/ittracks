@@ -1,0 +1,35 @@
+/* ProgressBar: a share of a whole, drawn by the native <progress> (D4.1). Owns the bar both native elements share (Meter
+   draws an amount on it) and .parts, the cuts that make a small whole countable.
+   Markup:
+     <progress class="parts" style="--parts: 3" max="3" value="2" aria-label="Morning routine: 2 of 3 habits">2 of 3 habits</progress>
+     <progress max="42" value="17" aria-label="Couch to 5K: 17 of 42 runs">17 of 42 runs</progress>      more than ten: no cuts
+   --parts is the same number as max. The words between the tags are for a browser that can't draw it. Never without value
+   (D3.16: work of unknown length says so in words). */
+
+/* ---------- The bar: what counts is 8px thick, what is left is a 2px line ---------- */
+/* Two thicknesses, so the share reads without its colour (1.4.1) and the end of the whole is always drawn. The line is
+   line-control: 3.54 / 4.12 on the page, 3.69 / 3.65 on raised, 3.10 / 3.90 on sunken. Both are pitches, so they grow
+   with the text. */
+:is(progress, meter) {
+	appearance: none; display: block; inline-size: 100%; min-inline-size: 0; block-size: calc(2 * var(--pitch)); border: 0;
+	background: linear-gradient(var(--line-control) 0 0) center / 100% calc(var(--pitch) / 2) no-repeat;
+}
+progress { --bar-fill: var(--good); } /* a part that is done, as a done day (DayTile): data, never accent (P.13) */
+progress::-webkit-progress-inner-element, progress::-webkit-progress-bar { background: none; }
+/* The two engines' fills can't share a rule: a selector one of them doesn't know drops it for both. */
+progress::-webkit-progress-value { background: var(--bar-fill); border-radius: var(--radius-indicator); box-shadow: inset 0 0 0 1px var(--bar-edge, var(--bar-fill)); }
+progress::-moz-progress-bar { background: var(--bar-fill); border-radius: var(--radius-indicator); box-shadow: inset 0 0 0 1px var(--bar-edge, var(--bar-fill)); }
+/* On a sunken surface good is 2.82:1 in light, so the fill takes a 3:1 edge there, as DayTile's marks do. */
+.shelf :is(progress, meter) { --bar-edge: var(--line-control); }
+
+/* ---------- Parts: up to ten, a 4px gap between two, so "2 of 3" can be counted ---------- */
+/* One mask over line and fill. The same cuts from either end, so RTL needs nothing. The ink is only the mask's alpha. */
+progress.parts {
+	--part: calc((100% - (var(--parts) - 1) * var(--pitch)) / var(--parts));
+	mask: repeating-linear-gradient(to right, var(--ink) 0 var(--part), transparent 0 calc(var(--part) + var(--pitch)));
+}
+
+/* ---------- Forced colours: fills and gradients would be dropped, so the bar keeps its drawing in CanvasText ---------- */
+@media (forced-colors: active) {
+	:is(progress, meter) { forced-color-adjust: none; --bar-fill: CanvasText; --bar-edge: CanvasText; --line-control: CanvasText; }
+}
