@@ -4,7 +4,7 @@
 	// will do (and what it leaves as it is, and why), then applies it in one go with Undo.
 	// It talks to the same `bulk` action as the API and the MCP server.
 	import { invalidateAll } from '$app/navigation';
-	import { showToast } from '$lib/toast.svelte';
+	import { band, showToast } from '$lib/toast.svelte';
 	import { buttonsFor, TARGETS, type BulkButton, type TargetKind } from './catalog';
 	import { initialValues, type FieldSources } from './fields';
 	import BulkForm from './BulkForm.svelte';
@@ -30,6 +30,7 @@
 		visible,
 		today,
 		sources = {},
+		outcome = $bindable(new Map()),
 		onchanged = () => invalidateAll()
 	}: {
 		kind: TargetKind;
@@ -40,6 +41,8 @@
 		today: string;
 		/** Option lists the action forms read (areas, fields, units). */
 		sources?: FieldSources | ((ids: string[]) => FieldSources);
+		/** What the open action will do to each row, for the page to show on it. */
+		outcome?: Map<string, { tag?: string; reason?: string }>;
 		/** After a change or its Undo. */
 		onchanged?: () => unknown;
 	} = $props();
@@ -90,11 +93,15 @@
 		return { action: { name: open!.action, ...action }, ids, apply };
 	};
 
+	let asked = 0;
 	async function run(apply: boolean) {
 		if (!open || !ids.length) return;
-		busy = true;
+		const mine = ++asked;
+		busy = apply;
 		error = '';
 		const r = await call('bulk', input(apply));
+		// The selection or the input changed while it was away.
+		if (mine !== asked) return;
 		busy = false;
 		if (!r.ok) {
 			error = r.error;
@@ -117,108 +124,96 @@
 		});
 	}
 
-	// A new selection or input makes an old preview wrong.
+	// A new selection or input makes an old preview wrong: ask again, a moment after the last change.
+	let form = $state<HTMLFormElement>();
 	$effect(() => {
 		void ids.length;
 		void JSON.stringify(values);
+		const on = open && ids.length;
 		preview = null;
+		asked++;
+		busy = false;
+		const t = setTimeout(() => on && (!form || form.checkValidity()) && run(false), 300);
+		return () => clearTimeout(t);
+	});
+	$effect(() => {
+		outcome = new Map<string, { tag?: string; reason?: string }>([
+			...(preview?.skipped ?? []).flatMap((s) => s.items.map((i) => [i.id, { reason: s.reason }] as const)),
+			...(preview?.changes ?? []).map((c) => [c.id, { tag: c.detail || 'Changes' }] as const)
+		]);
+	});
+	const left = $derived((preview?.skipped ?? []).reduce((n, s) => n + s.items.length, 0));
+	const say = $derived(
+		error ||
+			(!preview
+				? form && !form.checkValidity()
+					? 'Fill in what it needs to see what changes.'
+					: 'Checking…'
+				: preview.count
+					? `${preview.count} ${preview.count === 1 ? 'changes' : 'change'}${left ? `, ${left} ${left === 1 ? 'stays' : 'stay'}` : ''}. ${preview.notes.join(' ')}`.trim()
+					: 'Nothing would change.')
+	);
+	const ready = $derived(!!preview?.count && !busy);
+	/** Bring the next row that changes into view. */
+	let at = -1;
+	function jump() {
+		const els = (preview?.changes ?? []).map((c) => document.querySelector<HTMLElement>(`li[data-key="${CSS.escape(c.id)}"]`)).filter((x) => x !== null);
+		if (!els.length) return;
+		at = (at + 1) % els.length;
+		els[at].scrollIntoView({ block: 'center' });
+	}
+	$effect(() => {
+		band.select = bar;
+		return () => {
+			band.select = null;
+		};
 	});
 </script>
 
-<section class="card bulk" aria-label="Change the selected {t.many}">
-	<div class="row top">
-		<strong class="grow" aria-live="polite">{ids.length ? `${ids.length} selected` : `Tick ${t.many} to change them together`}</strong>
-		{#if visible.length}<button type="button" class="small" onclick={selectAll}>{allShown ? 'Clear shown' : `Select all ${visible.length} shown`}</button>{/if}
-		{#if ids.length && !allShown}<button type="button" class="small" onclick={() => selected.clear()}>Clear</button>{/if}
-	</div>
-	<div class="row actions" role="toolbar" aria-label="Bulk actions">
-		{#each buttons as b (b.id)}
-			<button type="button" class="small" class:primary={open?.id === b.id} aria-expanded={open?.id === b.id} disabled={!ids.length} onclick={() => pick(b)}>{b.label}</button>
-		{/each}
-	</div>
-
-	{#if open && ids.length}
-		<form
-			class="stack panel"
-			onsubmit={(e) => {
-				e.preventDefault();
-				run(false);
-			}}
-		>
-			<BulkForm fields={open.fields} bind:values sources={lists} />
-			{#if error}<p class="error" role="alert">{error}</p>{/if}
-			{#if !preview}
-				<div class="row">
-					<button type="submit" class="primary" disabled={busy}>{busy ? 'Checking…' : `Preview for ${ids.length} ${ids.length === 1 ? t.one : t.many}`}</button>
-					<button type="button" onclick={close}>Cancel</button>
-				</div>
-			{/if}
-		</form>
-	{/if}
-
-	{#if open && preview}
-		<div class="stack panel preview" aria-live="polite">
-			{#if preview.count}
-				<strong>{preview.count} {preview.count === 1 ? 'change' : 'changes'}</strong>
-				<ul class="lines">
-					{#each preview.changes as c (c.id)}<li><span>{c.label}</span>{#if c.detail}<span class="muted"> · {c.detail}</span>{/if}</li>{/each}
-				</ul>
-			{:else}
-				<strong>Nothing would change.</strong>
-			{/if}
-			{#each preview.skipped as s (s.reason)}
-				<div>
-					<span class="muted">Left as {s.items.length === 1 ? 'it is' : 'they are'}: {s.reason}</span>
-					<ul class="lines muted">
-						{#each s.items as i (i.id + (i.detail ?? ''))}<li>{i.label}{#if i.detail}<span> · {i.detail}</span>{/if}</li>{/each}
-					</ul>
-				</div>
-			{/each}
-			{#each preview.notes as n (n)}<p class="muted note">{n}</p>{/each}
-			<div class="row">
-				{#if preview.count}
-					<button type="button" class="primary" disabled={busy} onclick={() => run(true)}>{busy ? 'Working…' : `Apply ${preview.count} ${preview.count === 1 ? 'change' : 'changes'}`}</button>
-				{/if}
-				<button type="button" onclick={close}>Cancel</button>
+{#snippet bar()}
+	<section class="selbar" aria-label="Change the selected {t.many}">
+		<p class="selbar-head">
+			<span class="selbar-count num" aria-live="polite">{ids.length ? `${ids.length} selected` : 'None selected'}</span>
+			{#if visible.length && !allShown}<button class="link meta" type="button" onclick={selectAll}>Select all {visible.length}</button>{/if}
+			{#if ids.length}<button class="link meta" type="button" onclick={() => selected.clear()}>Clear</button>{/if}
+		</p>
+		{#if ids.length}
+			<div class="chips selbar-acts" role="group" aria-label="Change" inert={busy}>
+				{#each buttons as b (b.id)}
+					<button type="button" class="toggle" aria-pressed={open?.id === b.id} onclick={() => pick(b)}>{b.label}</button>
+				{/each}
 			</div>
-		</div>
-	{/if}
-</section>
+		{/if}
+		{#if open && ids.length}
+			<form
+				bind:this={form}
+				class="stack panel"
+				inert={busy}
+				onsubmit={(e) => {
+					e.preventDefault();
+					if (ready) run(true);
+				}}
+			>
+				<BulkForm fields={open.fields} bind:values sources={lists} />
+				<div class="selbar-commit">
+					<p class="selbar-say" role="status">{say}</p>
+					{#if (preview?.count ?? 0) > 1}<button class="link meta" type="button" onclick={jump}>Jump to next</button>{/if}
+					<span class="selbar-go">
+						<button class="small primary" aria-disabled={!ready}>{busy ? 'Applying…' : preview?.count ? `Apply ${preview.count} ${preview.count === 1 ? 'change' : 'changes'}` : 'Apply'}</button>
+						<button class="small" type="button" onclick={close}>Cancel</button>
+					</span>
+				</div>
+			</form>
+		{/if}
+	</section>
+{/snippet}
 
 <style>
-	.bulk {
-		margin: 0.75rem 0;
-		border-color: var(--accent);
-		position: sticky;
-		top: 0.5rem;
-		z-index: var(--z-sticky);
-		max-height: 80vh;
-		overflow: auto;
-	}
-	.top,
-	.actions {
-		align-items: center;
-		flex-wrap: wrap;
-	}
-	.actions {
-		margin-top: 0.5rem;
+	.selbar-head,
+	.selbar-say {
+		margin: 0;
 	}
 	.panel {
-		margin-top: 0.75rem;
-		padding-top: 0.75rem;
-		border-top: 1px solid var(--border);
-	}
-	.lines {
-		margin: 0.25rem 0 0;
-		padding-left: 1.1rem;
-		font-size: 0.9rem;
-	}
-	.note {
-		margin: 0;
-		font-size: 0.85rem;
-	}
-	.error {
-		color: var(--danger);
-		margin: 0;
+		margin-top: var(--space-inline);
 	}
 </style>

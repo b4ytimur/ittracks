@@ -90,11 +90,11 @@
 
 <div class="viewbar">
 	<div class="chips" role="group" aria-label="Views">
-		<button class="chip small" class:on={sameState(current, def)} onclick={() => apply(def)}>Default</button>
+		<button type="button" class="toggle" aria-pressed={sameState(current, def)} onclick={() => apply(def)}>Default</button>
 		{#each saved as s (s.id)}
-			<button class="chip small" class:on={sameState(current, s.state)} onclick={() => apply(s.state)}>{s.name}</button>
+			<button type="button" class="toggle" aria-pressed={sameState(current, s.state)} onclick={() => apply(s.state)}>{s.name}</button>
 		{/each}
-		<button class="chip small" aria-expanded={open} onclick={() => (open = !open)}>
+		<button type="button" class="small" aria-expanded={open} onclick={() => (open = !open)}>
 			Customize{filters ? ` · ${filters} filter${filters === 1 ? '' : 's'}` : ''}
 		</button>
 		{@render end?.()}
@@ -107,9 +107,9 @@
 					<span class="muted small-text">Areas</span>
 					<div class="chips" role="group" aria-label="Filter by Area">
 						{#each areas as a (a.id)}
-							<button class="chip small" class:on={current.areas.includes(a.id)} onclick={() => toggleArea(a.id)}>{a.icon} {a.name}</button>
+							<button type="button" class="toggle" aria-pressed={current.areas.includes(a.id)} onclick={() => toggleArea(a.id)}>{a.icon} {a.name}</button>
 						{/each}
-						<button class="chip small" class:on={current.areas.includes('')} onclick={() => toggleArea('')}>No area</button>
+						<button type="button" class="toggle" aria-pressed={current.areas.includes('')} onclick={() => toggleArea('')}>No area</button>
 					</div>
 				</div>
 			{/if}
@@ -181,7 +181,7 @@
 			{#if saved.length}
 				<div class="chips" role="group" aria-label="Delete saved views">
 					{#each saved as s (s.id)}
-						<button class="chip small" onclick={() => remove(s.id, s.name)} aria-label="Delete view {s.name}">{s.name} ×</button>
+						<button type="button" class="small" onclick={() => remove(s.id, s.name)} aria-label="Delete view {s.name}">{s.name} ×</button>
 					{/each}
 				</div>
 			{/if}
@@ -210,6 +210,7 @@
 
 <style>
 	.viewbar {
+		display: block;
 		margin-bottom: 0.75rem;
 	}
 	.sheet {
@@ -217,9 +218,6 @@
 	}
 	.wrap {
 		flex-wrap: wrap;
-	}
-	.small-text {
-		font-size: 0.85rem;
 	}
 	summary {
 		cursor: pointer;
