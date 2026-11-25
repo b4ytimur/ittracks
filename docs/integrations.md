@@ -30,7 +30,7 @@ Every change, from the app or a key, also goes into an append-only event log tha
 
 A link that logs as soon as it is opened: from a Shortcut, Siri, an NFC tag, a QR code or a home screen bookmark. The **Quick-log links** section builds one for you.
 
-- `/q/<habit id>` opens the habit's quick log. Signed in, it works without a key.
+- `/q/<habit id>` opens the habit's quick log. Signed in, it works without a key, and what it did is said on Today, with Undo. When the habit isn't due, Today offers **Log it anyway**. A link opened with a key alone answers with one sentence.
 - `?go=1` logs "same as last time" at once.
 - `?value=250` adds 250 to the habit's number, and marks the habit done once the target is reached. Add `&field=Minutes` when the habit has several numbers.
 - Without a value, the link marks the habit done (copying your last log when it has Tasks).

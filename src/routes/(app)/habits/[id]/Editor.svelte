@@ -1173,7 +1173,7 @@
 {/snippet}
 
 {#snippet identityPart()}
-	<p class="muted">Who does this habit make you? Each time you do it is a vote for that identity.</p>
+	<p class="muted">Who does this habit make you? Identities shows what stands for each.</p>
 	{#if identities.length}
 		<div class="chips">
 			{#each identities as i (i.id)}
@@ -1468,7 +1468,7 @@
 			><input type="checkbox" bind:checked={h.reward.celebrate} /> Celebrate when I finish</label
 		>
 		{#if h.reward.celebrate}
-			<label>Message <input bind:value={h.reward.message} placeholder="Another vote for the runner you are" /></label>
+			<label>Message <input bind:value={h.reward.message} placeholder="What you want to hear when it is done" /></label>
 		{/if}
 		<label style="color: var(--text)"
 			><input

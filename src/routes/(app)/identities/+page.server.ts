@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { userToday } from '$lib/server/today';
 import {
 	identityFor,
+	listIdentities,
+	orderIdentities,
 	deleteIdentity,
 	identityVotes,
 	renameIdentity,
@@ -20,7 +22,13 @@ export const actions: Actions = {
 	add: async ({ request, locals }) => {
 		const statement = statementOf(await request.formData());
 		if (!statement) return fail(400, { error: 'Write the identity as a sentence, like "I am a runner".' });
-		identityFor(locals.account!.id, statement);
+		const before = new Set(listIdentities(locals.account!.id).map((i) => i.id));
+		const id = identityFor(locals.account!.id, statement);
+		// One that was there already is not new, so its Undo would delete it.
+		return { added: before.has(id) ? null : id };
+	},
+	order: async ({ request, locals }) => {
+		orderIdentities(locals.account!.id, String((await request.formData()).get('ids') ?? '').split(',').slice(0, 500));
 	},
 	rename: async ({ request, locals }) => {
 		const f = await request.formData();

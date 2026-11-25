@@ -65,7 +65,7 @@
 		const jar = item?.reward?.jar;
 		const words = item?.reward?.celebrate
 			? [
-					item.reward.message || (item.identities.length ? 'Another vote for who you want to be.' : 'Nice work.'),
+					item.reward.message || 'Nice work.',
 					jar ? `${fmt(jar.total)} ${jar.unit}${jar.goal ? ` toward ${jar.goal}` : ''}` : ''
 				]
 					.filter(Boolean)
@@ -114,7 +114,19 @@
 	const statusOf = (o: { id: string; status: string }): string =>
 		pending[o.id] ?? (queuedDone.has(o.id) && o.status === 'due' ? 'done' : o.status);
 
-	// Back from a log or a quick-log link: say what was logged and offer Undo.
+	// A quick-log link answers here: in the band, or as a notice when it could not.
+	let notDue = $state<{ text: string; habit?: string } | null>(null);
+	$effect(() => {
+		const f = data.flash;
+		if (!f) return;
+		untrack(() => {
+			if (f.kind === 'notDue') notDue = f;
+			else if (f.kind === 'error') showError(f.text);
+			else showToast(f.text, f.kind === 'did' && f.occurrence ? undoWith('/?/undo', { occurrence: f.occurrence, clear: f.clear ? '1' : '' }) : undefined);
+		});
+	});
+
+	// Back from a log: say what was logged and offer Undo.
 	onMount(() => {
 		const id = page.url.searchParams.get('did');
 		if (!id) return;
@@ -174,14 +186,13 @@
 				showToast(`${name}: ${n(p.value)} of ${n(p.target)}${p.unit ? ` ${p.unit}` : ''}${p.done ? '. Done!' : '.'}`, undoWith('/?/plus', { occurrence: occurrenceId, by: '-1' }));
 			}
 		});
-	const resisted =
-		(vote: boolean): SubmitFunction =>
+	const resisted: SubmitFunction =
 		() =>
 		async ({ result, update }) => {
 			await update();
 			if (result.type === 'success' && result.data?.cravingId) {
 				const id = String(result.data.cravingId);
-				showToast(vote ? `Resisted. That's a vote for who you want to be.` : `Craving resisted. Nice.`, undoWith('/?/uncraving', { id }));
+				showToast('Craving resisted. Nice.', undoWith('/?/uncraving', { id }));
 			}
 		};
 	const stepLabel = (p: { type: string; unit: string; step: number | null }) => {
@@ -500,6 +511,13 @@
 	</div>
 {/if}
 
+{#if notDue}
+	<div class="notice" role="status">
+		<span class="notice-text">{notDue.text}</span>
+		<span class="notice-acts">{#if notDue.habit}<a class="button hit" href="/q/{notDue.habit}?go=1&extra=1" data-sveltekit-preload-data="off" onclick={() => (notDue = null)}>Log it anyway</a>{/if}<button type="button" class="quiet hit" onclick={() => (notDue = null)}>Close</button></span>
+	</div>
+{/if}
+
 {#if data.unlogged.length && nudgeHiddenFor !== yesterday}
 	<div class="card nudge row" role="status">
 		<span class="grow small-text"
@@ -797,7 +815,7 @@
 	{#if item.reward?.jar && line('reward')}
 		<p class="row-line meta">Jar: {fmt(item.reward.jar.total)} {item.reward.jar.unit}{item.reward.jar.goal ? ` toward ${item.reward.jar.goal}` : ''}</p>
 	{/if}
-	{#if item.identities.length && line('identities')}<p class="row-line meta">Vote for: {item.identities.join(' · ')}</p>{/if}
+	{#if item.identities.length && line('identities')}<p class="row-line meta">{item.identities.join(' · ')}</p>{/if}
 	{#if item.progression && line('progression')}
 		{@const p = item.progression}
 		<div class="notice" data-mode={mode}>
@@ -905,7 +923,7 @@
 			{/if}
 			{#if form?.habit === b.habitId && form?.error}<p class="row-line error meta">{form.error}</p>{/if}
 			{#if b.top.length}<p class="row-line meta">Most slips: {b.top.slice(0, 2).map(triggerLine).join(' · ')}</p>{/if}
-			{#if b.identities.length && !hidden('identities')}<p class="row-line meta">Vote for: {b.identities.join(' · ')}</p>{/if}
+			{#if b.identities.length && line('identities')}<p class="row-line meta">{b.identities.join(' · ')}</p>{/if}
 			{#if slipOpen === b.habitId}
 				<div class="row-line">
 						<form
@@ -955,7 +973,7 @@
 			{#if !editing}
 				<LogControl
 					name={b.name}
-					act={{ label: 'Resisted', action: '?/craving', fields: { habit: b.habitId }, submit: resisted(b.identities.length > 0) }}
+					act={{ label: 'Resisted', action: '?/craving', fields: { habit: b.habitId }, submit: resisted }}
 					ways={[{ label: b.limit ? 'Log one…' : 'Log a slip…', onselect: () => ((slipOpen = slipOpen === b.habitId ? null : b.habitId), (feeling = '')) }]}
 				/>
 			{/if}

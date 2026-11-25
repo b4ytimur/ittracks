@@ -1,127 +1,76 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
+	// A routine's day: the habits inside it that are due, in order, each with its own log. Done and
+	// Skip say what they did in the band, with Undo.
+	import { invalidateAll } from '$app/navigation';
+	import { runAction, showError, showToast, undoWith } from '$lib/toast.svelte';
+	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import LogControl, { type Way } from '$lib/ui/LogControl.svelte';
+	import MenuButton from '$lib/ui/MenuButton.svelte';
 
-	let { data, form } = $props();
-	const shortDate = (d: string) =>
-		new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+	let { data } = $props();
 	const r = $derived(data.routine);
-	/** The first habit still open: what to do next. */
-	const next = $derived(data.kids.find((k) => k.status === 'due' || k.status === 'missed') ?? null);
+	const day = $derived(r.date === data.today ? 'Today' : new Date(r.date + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }));
 	const open = (s: string) => s === 'due' || s === 'missed';
-	const statusText = (s: string, level: string | null) =>
-		s === 'done' ? (level === 'minimum' ? 'Done at Minimum' : level === 'stretch' ? 'Done at Stretch' : 'Done') : s === 'skipped' ? 'Skipped' : s === 'missed' ? 'Missed' : 'Due';
+	const said = (s: string, level: string | null) => (s === 'done' ? `✓ Done${level === 'minimum' ? ' at Minimum' : level === 'stretch' ? ' at Stretch' : ''}` : s === 'skipped' ? 'Skipped' : s === 'missed' ? 'Missed' : 'Due');
+	/** What to do next: the first still open. */
+	const next = $derived(data.kids.find((k) => open(k.status)) ?? null);
+	let need = $state('');
+
+	const url = $derived(`/routine/${r.occurrenceId}` as const);
+	async function act(action: 'done' | 'skip' | 'undo', occurrence: string, text: string) {
+		const x = await runAction<{ needsInput?: boolean }>(`${url}?/${action}`, { occurrence });
+		if (!x.ok) return void showError(x.error ?? 'Not saved. Are you online?');
+		need = x.data?.needsInput ? 'Some of them need values filled in before they count. Open those to finish.' : '';
+		showToast(text, action === 'undo' ? undefined : undoWith(`${url}?/undo`, { occurrence }));
+		await invalidateAll();
+	}
+	const waysOf = (k: (typeof data.kids)[number]): { act: Way; ways: (Way | '-')[] } => {
+		if (!open(k.status)) return { act: { label: 'Undo', onselect: () => act('undo', k.occurrenceId, `${k.name} is open again.`) }, ways: k.hasTasks ? [{ label: 'Open its log', href: k.log }] : [] };
+		const skip: Way = { label: 'Skip', onselect: () => act('skip', k.occurrenceId, `Skipped ${k.name}.`) };
+		return k.hasTasks
+			? { act: { label: 'Log', href: k.log }, ways: [{ label: 'Mark it done', onselect: () => act('done', k.occurrenceId, `Logged ${k.name}.`) }, skip] }
+			: { act: { label: 'Done', onselect: () => act('done', k.occurrenceId, `Logged ${k.name}.`) }, ways: [skip, { label: 'Open its log', href: k.log }] };
+	};
+	const all = $derived<(Way | '-')[]>(
+		open(r.status)
+			? [
+					{ label: 'Mark the rest done', onselect: () => act('done', r.occurrenceId, `Marked the rest of ${r.name} done.`) },
+					{ label: 'Skip the rest', onselect: () => act('skip', r.occurrenceId, `Skipped the rest of ${r.name}.`) }
+				]
+			: [{ label: `Open ${r.name} again`, onselect: () => act('undo', r.occurrenceId, `${r.name} is open again.`) }]
+	);
 </script>
 
-<svelte:head><title>{r.name}</title></svelte:head>
+<svelte:head><title>{r.name} · ittracks</title></svelte:head>
 
-<div class="row head">
-	<div class="grow">
-		<h1>{r.name}</h1>
-		<p class="muted small-text">
-			{r.date === data.today ? 'Today' : shortDate(r.date)} · {statusText(r.status, r.level)}{#if r.count}&nbsp;· {r.count}{/if}
-		</p>
-	</div>
-	<a href={r.date === data.today ? '/' : `/day/${r.date}`}>Back</a>
-</div>
+<EditChrome title={r.name} modes={['use']} back={{ href: r.date === data.today ? '/' : `/day/${r.date}`, label: r.date === data.today ? 'Today' : 'The day' }} hints={{ use: [day, said(r.status, r.level), r.count].filter(Boolean).join(' · ') }}>
+	{#snippet actions()}<span class="more"><MenuButton class="hit" label="More for {r.name}" items={all} /></span>{/snippet}
+</EditChrome>
 
-{#if next}
-	<div class="card next">
-		<span class="muted small-text">Next</span>
-		<div class="row">
-			<strong class="grow">{next.name}</strong>
-			{#if next.hasTasks}
-				<a class="button primary" href={next.log}>Log {next.name}</a>
-			{:else}
-				<form method="POST" action="?/done" use:enhance>
-					<input type="hidden" name="occurrence" value={next.occurrenceId} />
-					<button class="primary">Done</button>
-				</form>
-			{/if}
-		</div>
-	</div>
-{/if}
-
-<ol class="list">
+<ol class="elist" style="--gap: var(--space-inline)">
 	{#each data.kids as k (k.occurrenceId)}
-		<li class="card" class:finished={!open(k.status)}>
-			<div class="row">
-				<div class="grow">
-					<a class="name" href={k.log}><strong>{k.name}</strong></a>
-					<div class="muted small-text">
-						{statusText(k.status, k.level)}{#if k.progress && k.status !== 'skipped'}&nbsp;· {k.progress}{/if}
-					</div>
+		{@const w = waysOf(k)}
+		<li class="row">
+			<div class="card" class:done={k.status === 'done'}>
+				<div class="content">
+					<span class="name">{k.name}{#if k === next}&nbsp;<span class="tag strong">Next</span>{/if}</span>
+					<p class="meta-line meta">{[said(k.status, k.level), k.status !== 'skipped' ? k.progress : null].filter(Boolean).join(' · ')}</p>
 				</div>
-				{#if open(k.status)}
-					{#if k.hasTasks}
-						<a class="button" href={k.log} aria-label="Log {k.name}">Log</a>
-					{:else}
-						<form method="POST" action="?/done" use:enhance>
-							<input type="hidden" name="occurrence" value={k.occurrenceId} />
-							<button aria-label="Done: {k.name}">Done</button>
-						</form>
-					{/if}
-					<form method="POST" action="?/skip" use:enhance>
-						<input type="hidden" name="occurrence" value={k.occurrenceId} />
-						<button aria-label="Skip {k.name}">Skip</button>
-					</form>
-				{:else}
-					{#if k.hasTasks}<a class="button" href={k.log}>View</a>{/if}
-					<form method="POST" action="?/undo" use:enhance>
-						<input type="hidden" name="occurrence" value={k.occurrenceId} />
-						<button class="link" aria-label="Undo {k.name}">Undo</button>
-					</form>
-				{/if}
+				<span class="verb"><LogControl name={k.name} act={w.act} ways={w.ways} primary={k === next} /></span>
 			</div>
 		</li>
 	{/each}
 </ol>
-
-{#if form?.needsInput}
-	<p class="warn small-text">Some habits need values filled in before they count. Open them to finish.</p>
-{/if}
-
-<div class="row actions">
-	{#if open(r.status)}
-		<form method="POST" action="?/done" use:enhance>
-			<input type="hidden" name="occurrence" value={r.occurrenceId} />
-			<button title="Every habit still open gets its one tap: its last log, or its targets">Mark the rest done</button>
-		</form>
-		<form method="POST" action="?/skip" use:enhance>
-			<input type="hidden" name="occurrence" value={r.occurrenceId} />
-			<button>Skip the rest</button>
-		</form>
-	{:else}
-		<form method="POST" action="?/undo" use:enhance>
-			<input type="hidden" name="occurrence" value={r.occurrenceId} />
-			<button>Open {r.name} again</button>
-		</form>
-	{/if}
-</div>
-<p class="muted small-text">Each habit keeps its own log and streak. {r.name}'s day counts them.</p>
+{#if need}<p class="notice" data-tone="warn" role="status"><span class="notice-text">{need}</span></p>{/if}
+<p class="meta muted">Each habit keeps its own log and streak. {r.name}'s day counts them.</p>
 
 <style>
-	.head {
-		align-items: flex-start;
-	}
-	h1 {
-		margin-bottom: 0.15rem;
-	}
-	.next {
-		margin-bottom: 1rem;
-		border-color: var(--accent);
-	}
-	ol.list {
-		padding: 0;
+	ol {
 		list-style: none;
+		margin: var(--space-group) 0;
+		padding: 0;
 	}
-	.finished {
-		opacity: 0.6;
-	}
-	.actions {
-		margin: 1rem 0 0.5rem;
-		flex-wrap: wrap;
-	}
-	.warn {
-		color: var(--warn, #b45309);
+	.more {
+		position: relative;
 	}
 </style>

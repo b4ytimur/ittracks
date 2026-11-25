@@ -8,6 +8,7 @@ import { raise } from '$lib/engine/progression';
 import { addDays } from '$lib/engine/dates';
 import { getPacks, getSettings, getViews, saveSettings } from '$lib/server/settings';
 import { startHabit, unstart } from '$lib/server/start';
+import { takeFlash } from '$lib/server/flash';
 import { listHabits } from '$lib/server/repo/habits';
 import { PAGE_PATH, isHidden } from '$lib/views';
 import { getDayNote } from '$lib/server/journal';
@@ -65,6 +66,8 @@ export const load: PageServerLoad = ({ locals, cookies, url, request }) => {
 		packs: getPacks(accountId),
 		habitCount: listHabits(accountId).length,
 		hints: settings.hints ?? [],
+		/** What a quick link just did. */
+		flash: takeFlash(cookies),
 		views,
 		ranges: settings.ranges,
 		areas: listAreas(accountId),

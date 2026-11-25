@@ -94,7 +94,7 @@ export const LINES = {
 	bundle: 'Paired reward',
 	reward: 'Reward jar',
 	progression: 'Raise targets suggestion',
-	identities: 'Identity votes'
+	identities: 'Identities'
 } as const;
 export type LineKey = keyof typeof LINES;
 
