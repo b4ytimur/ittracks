@@ -15,7 +15,7 @@ import { scheduleStartBy } from '$lib/engine/unlogged';
 import { pauseOn } from '$lib/engine/pause';
 import { limitOn, planOn, usedIn } from '$lib/engine/limit';
 import type { Level } from '$lib/engine/streak';
-import { DEFAULT_TRIGGERS, type ScheduleForm } from '$lib/forms';
+import { DEFAULT_TRIGGERS, NOTE_MAX, type ScheduleForm } from '$lib/forms';
 import { optionName } from '$lib/options';
 import { createOccurrence, history, pausesOf, pickForVariant, recount, reopen, scheduleAt, settle } from './today';
 import { getSettings } from './settings';
@@ -281,7 +281,7 @@ const daySchema = z.object({
 			variantId: z.string().uuid().nullable(),
 			status: z.enum(['due', 'done', 'skipped', 'missed']),
 			level: z.enum(['minimum', 'target', 'stretch']).nullable(),
-			notes: z.string().max(5000).nullable(),
+			notes: z.string().max(NOTE_MAX).nullable(),
 			picks: z.record(z.string(), z.string()).nullable(),
 			finishedAt: z.number().nullable(),
 			extra: z.boolean().default(false),
@@ -349,6 +349,25 @@ export function restore(accountId: string, raw: unknown): boolean {
 	// The habits inside a routine first, then the routine, which is judged from them.
 	for (const kid of parsed.data.below ?? []) restoreDay(accountId, kid);
 	return restoreDay(accountId, parsed.data);
+}
+
+/**
+ * Put back the days a routine's Done or Skip changed: only those still as it left them, so what was
+ * logged since stays.
+ */
+export function restoreUnchanged(accountId: string, rawBefore: unknown, rawAfter: unknown): boolean {
+	const before = snapshotSchema.safeParse(rawBefore);
+	const after = snapshotSchema.safeParse(rawAfter);
+	if (!before.success || !after.success) return false;
+	const { below: was = [], ...own } = before.data;
+	const { below: left = [], ...ownLeft } = after.data;
+	const same = (a: DaySnapshot, b: DaySnapshot) => JSON.stringify(a) === JSON.stringify(b);
+	for (const b of was) {
+		const a = left.find((x) => x.habitId === b.habitId && x.date === b.date);
+		if (a && !same(a, b) && same(a, daySnapshot(b.habitId, b.date))) restoreDay(accountId, b);
+	}
+	if (same(ownLeft, daySnapshot(own.habitId, own.date))) restoreDay(accountId, own);
+	return true;
 }
 
 function restoreDay(accountId: string, snap: DaySnapshot): boolean {

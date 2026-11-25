@@ -146,13 +146,13 @@
 		replaceState(u, {});
 	});
 
-	type Did = { occurrence: string; habit: string; clear: boolean; skipped?: boolean; short?: 'minimum' | 'target' };
+	type Did = { occurrence: string; habit: string; clear: boolean; undo?: string; skipped?: boolean; short?: 'minimum' | 'target' };
 	/** After a quick action: say what happened and offer Undo. */
 	function afterDid(result: ActionResult) {
 		if (result.type !== 'success') return;
 		const did = result.data?.did as Did | undefined;
 		if (!did) return;
-		const undo = undoWith('/?/undo', { occurrence: did.occurrence, clear: did.clear ? '1' : '' });
+		const undo = undoWith('/?/undo', { occurrence: did.occurrence, clear: did.clear ? '1' : '', undo: did.undo ?? '' });
 		// Short of what counts for this habit: it stays open, and says why.
 		if (did.short)
 			showToast(
@@ -476,7 +476,7 @@
 		const fields = { occurrence: o.id };
 		const log = quick(o.id, item.name);
 		const skip: Way = { label: 'Skip today', action: '?/skip', fields, submit: quick(o.id, item.name, 'skipped') };
-		if (item.group) return { act: { label: 'Start', href: `/routine/${o.id}` }, ways: [{ label: 'Mark all done', action: '?/done', fields, submit: log }, '-', skip] };
+		if (item.group) return { act: { label: 'Start', href: `/log/${o.id}` }, ways: [{ label: 'Mark all done', action: '?/done', fields, submit: log }, '-', skip] };
 		const details: Way[] = o.slotCount ? [{ label: 'Log details…', href: `/log/${o.id}` }] : [];
 		const post = o.slotCount ? '?/quick' : '?/done';
 		const levels: Way[] =
@@ -861,7 +861,7 @@
 		{@const w = waysOf(item)}
 		<LogControl name={item.name} act={w.act} ways={w.ways} primary={item.habitId === upNext} />
 	{:else if !pending[o.id]}
-		{#if item.group || o.slotCount > 0}<a class="quiet hit" href={item.group ? `/routine/${o.id}` : `/log/${o.id}`} aria-label="View {item.name}">View</a>{/if}
+		{#if item.group || o.slotCount > 0}<a class="quiet hit" href="/log/{o.id}" aria-label="View {item.name}">View</a>{/if}
 		{@const undo = just.get(item.habitId)?.undo}
 		{#if undo}
 			<button type="button" class="quiet hit" aria-label="Undo {item.name}" onclick={undo}>Undo</button>

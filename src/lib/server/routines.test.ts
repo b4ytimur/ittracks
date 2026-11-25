@@ -11,6 +11,7 @@ import { createAccount } from './auth';
 import { saveSettings } from './settings';
 import { loadToday, recount, repaused, settleAll, userToday } from './today';
 import { restore, snapshot } from './backfill';
+import { undoRoutine, withRoutineUndo } from './routine-day';
 import { checkHabitEdit, checkLinks, deleteHabit, getHabitForm, saveHabit } from './repo/habits';
 import { habitForm, type HabitForm, type ScheduleForm } from '$lib/forms';
 import { addDays, weekday } from '$lib/engine/dates';
@@ -187,6 +188,28 @@ describe('Done, Skip and Undo on a routine', () => {
 		// Done stays done; the rest is skipped, so the day counts the one that was done.
 		expect([occOf(a).status, occOf(b).status]).toEqual(['done', 'skipped']);
 		expect(occOf(r.id)).toMatchObject({ status: 'done', rollup: { done: 1, total: 1 } });
+	});
+
+	it('taken back puts back exactly what it marked, and nothing that was done before or changed since', () => {
+		const r = routine('Night', 0);
+		const [a, b, c] = ['Teeth', 'Read', 'Plan'].map((n) => follower(n, r.id, 0));
+		loadToday(me, today);
+		run('log_done', { habit: a });
+		const { undo } = withRoutineUndo(occOf(r.id), () => doneOcc(app, occOf(r.id), 'mark', null));
+		expect([a, b, c].map((x) => occOf(x).status)).toEqual(['done', 'done', 'done']);
+		// One of them changes before the Undo: it stays as it is now.
+		db.update(occurrence).set({ notes: 'kept' }).where(eq(occurrence.id, occOf(c).id)).run();
+		expect(undoRoutine(app, occOf(r.id), undo!)).toBe(true);
+		expect([a, b, c].map((x) => occOf(x).status)).toEqual(['done', 'due', 'done']);
+		expect(occOf(r.id).status).toBe('due');
+		const skip = withRoutineUndo(occOf(r.id), () => skipOcc(app, occOf(r.id)));
+		expect(occOf(b).status).toBe('skipped');
+		expect(undoRoutine(app, occOf(r.id), skip.undo!)).toBe(true);
+		expect([a, b, c].map((x) => occOf(x).status)).toEqual(['done', 'due', 'done']);
+		// Another routine's, or nonsense: nothing.
+		expect(undoRoutine(app, occOf(a), undo!)).toBe(false);
+		expect(undoRoutine(app, occOf(r.id), 'x')).toBe(false);
+		expect(withRoutineUndo(occOf(a), () => 1)).toEqual({ result: 1 });
 	});
 
 	it('through the API too', () => {

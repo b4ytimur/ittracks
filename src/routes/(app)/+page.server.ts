@@ -19,6 +19,7 @@ import { headlineTexts } from '$lib/server/stats';
 import { unloggedOn } from '$lib/server/backfill';
 import { logWindow } from '$lib/engine/backfill';
 import { ActionError, appActor } from '$lib/server/core/actor';
+import { undoRoutine, withRoutineUndo } from '$lib/server/routine-day';
 import { addSlip, doneOcc, plusOcc, removeCraving, removeSlip, reopenOcc, resistCraving, skipOcc } from '$lib/server/core/log';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -90,10 +91,10 @@ const clip = (v: string, n = 120) => v.trim().slice(0, n) || null;
  * What a Done from Today ended as. A log that falls short of the habit's rule stays open, and
  * the toast says why instead of celebrating.
  */
-function ended(o: { occ: { id: string }; habit: { id: string; name: string; minimumCounts: boolean } }, clear: boolean) {
+function ended(o: { occ: { id: string }; habit: { id: string; name: string; minimumCounts: boolean } }, clear: boolean, undo?: string) {
 	const status = db.select({ status: occurrence.status }).from(occurrence).where(eq(occurrence.id, o.occ.id)).get()?.status;
 	const short = status === 'due' ? (o.habit.minimumCounts ? 'minimum' : 'target') : undefined;
-	return { finished: status === 'done' ? o.habit.id : null, did: { occurrence: o.occ.id, habit: o.habit.name, clear, short } };
+	return { finished: status === 'done' ? o.habit.id : null, did: { occurrence: o.occ.id, habit: o.habit.name, clear, short, undo } };
 }
 
 export const actions: Actions = {
@@ -102,8 +103,8 @@ export const actions: Actions = {
 		const f = await request.formData();
 		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
 		if (!o) error(404);
-		doneOcc(actorOf(locals, cookies), o.occ, 'mark', levelOf(f));
-		return ended(o, false);
+		const { undo } = withRoutineUndo(o.occ, () => doneOcc(actorOf(locals, cookies), o.occ, 'mark', levelOf(f)));
+		return ended(o, false, undo);
 	},
 	/** One tap: done at a level, logging that level's Slot targets. */
 	quick: async ({ request, locals, cookies }) => {
@@ -185,14 +186,16 @@ export const actions: Actions = {
 		const f = await request.formData();
 		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
 		if (!o) error(404);
-		skipOcc(actorOf(locals, cookies), o.occ);
-		return { did: { occurrence: o.occ.id, habit: o.habit.name, clear: false, skipped: true } };
+		const { undo } = withRoutineUndo(o.occ, () => skipOcc(actorOf(locals, cookies), o.occ));
+		return { did: { occurrence: o.occ.id, habit: o.habit.name, clear: false, skipped: true, undo } };
 	},
 	/** Back to due. `clear` also removes what a one-tap log wrote. */
 	undo: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
 		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
 		if (!o) error(404);
+		const undo = field(f, 'undo');
+		if (undo) return undoRoutine(actorOf(locals, cookies), o.occ, undo) ? undefined : fail(400, { error: 'Could not undo.' });
 		reopenOcc(actorOf(locals, cookies), o.occ, field(f, 'clear') === '1');
 	},
 	/** A habit from the sentence it was said in. */
