@@ -67,8 +67,8 @@
 	{#each refused as q (q.id)}
 		<div class="offline refused" role="alert">
 			Not saved: {q.label}. {q.refused}
-			<button class="small" onclick={() => tryAgain(q.id)}>Try again</button>
-			<button class="small" onclick={() => showToast(`Discarded a change to ${q.label}.`, discard(q.id))}>Discard</button>
+			<button class="small" onclick={() => tryAgain(q.id)}>{q.stale ? 'Keep mine' : 'Try again'}</button>
+			<button class="small" onclick={() => showToast(`Discarded a change to ${q.label}.`, discard(q.id))}>{q.stale ? 'Use the other one' : 'Discard'}</button>
 		</div>
 	{/each}
 	<main class="content">

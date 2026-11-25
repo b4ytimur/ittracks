@@ -8,6 +8,7 @@
 	import { defaultStep } from '$lib/task-types';
 	import { enqueue, isOffline, save } from '$lib/outbox.svelte';
 	import { postAction, showToast } from '$lib/toast.svelte';
+	import { differs, revOf, type LogContent } from '$lib/logrev';
 	import NoteBox from '$lib/NoteBox.svelte';
 	import Markdown from '$lib/Markdown.svelte';
 	import { starterFor, untouched } from '$lib/journal';
@@ -117,6 +118,8 @@
 		notes: string;
 		level: 'minimum' | 'target' | 'stretch';
 		synced: boolean;
+		/** The versions it grew from (see `bases`); drafts from before this have none. */
+		bases?: string[];
 	}
 	const readDraft = (): Draft | null => {
 		try {
@@ -153,6 +156,13 @@
 	let saveTimer: ReturnType<typeof setTimeout> | undefined;
 	let saveState = $state<'idle' | 'saving' | 'saved' | 'local' | 'refused'>('idle');
 	let refusedWhy = $state('');
+	/**
+	 * The versions of this log that this one grew from: what the server had when it was loaded, and
+	 * what was sent since and not answered yet. The server refuses a save made from any other.
+	 */
+	let bases = $state.raw<string[]>(untrack(() => [data.rev]));
+	/** The log as another device left it, and what was being saved when that came out. */
+	let theirs = $state.raw<(LogContent & { rev: string; from: 'autosave' | 'finish' }) | null>(null);
 	const snapshot = $derived(JSON.stringify({ log, notes, level }));
 	let primed = false;
 
@@ -163,7 +173,10 @@
 			log = d.log;
 			notes = d.notes;
 			level = d.level;
+			// Not what is on the server now: if that changed since, the save says so.
+			if (d.bases?.length) bases = d.bases;
 		}
+		restoreOffer();
 		return () => clearTimeout(saveTimer);
 	});
 
@@ -185,7 +198,7 @@
 
 	function writeDraft(synced: boolean) {
 		try {
-			localStorage.setItem(DRAFT, JSON.stringify({ log: $state.snapshot(log), notes, level, synced }));
+			localStorage.setItem(DRAFT, JSON.stringify({ log: $state.snapshot(log), notes, level, synced, bases }));
 		} catch {
 			/* storage blocked */
 		}
@@ -203,12 +216,74 @@
 		saveTimer = undefined;
 		const sent = snapshot;
 		saveState = 'saving';
-		const a = await save(saveUrl(), [['payload', payload(false, true)]], data.habitName);
+		const body = payload(false, true);
+		const mine = sending(body);
+		const a = await save(saveUrl(), [['payload', body]], data.habitName);
+		// The server holds exactly this now; what was sent after it may be there next.
+		if (a.kind === 'saved') bases = bases.slice(bases.indexOf(mine));
+		if (a.kind === 'refused' && a.stale) changedElsewhere(a.stale, 'autosave');
 		// Changed while it was being sent: the next save, already on its way, says how that went.
 		if (snapshot !== sent) return;
 		if (a.kind === 'saved') writeDraft(true);
 		refusedWhy = a.kind === 'refused' ? a.why : '';
 		saveState = a.kind === 'later' ? 'local' : a.kind;
+	}
+
+	/** What is being sent may be on the server before its answer is here: later saves may grow from it. */
+	function sending(body: string): string {
+		const rev = revOf(JSON.parse(body) as LogContent);
+		bases = [...bases.filter((b) => b !== rev), rev].slice(-20);
+		writeDraft(false);
+		return rev;
+	}
+
+	function changedElsewhere(now: unknown, from: 'autosave' | 'finish') {
+		clearTimeout(saveTimer);
+		saveTimer = undefined;
+		theirs = { ...(now as LogContent & { rev: string }), from };
+	}
+	const taskName = (id: string) => data.items.find((it) => it.task?.id === id)?.task?.name ?? 'another Task';
+	const changed = $derived(theirs ? differs(JSON.parse(payload(false, true)) as LogContent, theirs, taskName) : []);
+
+	/** Save this one over what the other device left. */
+	async function keepMine() {
+		if (!theirs) return;
+		const { rev, from } = theirs;
+		bases = [rev];
+		theirs = null;
+		if (from === 'finish') {
+			untickedAnswered = true;
+			await tick(); // the form holds the payload
+			finishForm?.requestSubmit();
+		} else await autosave();
+	}
+	/** Show what the other device left. This one is kept aside, so it can be had back. */
+	const ASIDE = untrack(() => `log-aside:${data.occurrence.id}`);
+	function useTheirs() {
+		try {
+			localStorage.setItem(ASIDE, JSON.stringify({ log: $state.snapshot(log), notes, level }));
+		} catch {
+			/* storage blocked: there is nothing to have back */
+		}
+		clearDraft();
+		theirs = null;
+		location.reload();
+	}
+	function restoreOffer() {
+		let d: Pick<Draft, 'log' | 'notes' | 'level'> | null = null;
+		try {
+			d = JSON.parse(localStorage.getItem(ASIDE) ?? 'null');
+			localStorage.removeItem(ASIDE);
+		} catch {
+			/* storage blocked */
+		}
+		if (!d || d.log.length !== log.length) return;
+		const mine = d;
+		showToast('Showing what the other device saved.', () => {
+			log = mine.log;
+			notes = mine.notes;
+			level = mine.level;
+		});
 	}
 
 	// Leaving before the autosave ran (Back right after a tick): save first, then go, so the
@@ -221,7 +296,9 @@
 		if (nav.willUnload || !nav.to) {
 			saveTimer = undefined;
 			const body = new FormData();
-			body.set('payload', payload(false, true));
+			const sent = payload(false, true);
+			sending(sent);
+			body.set('payload', sent);
 			void fetch(saveUrl(), { method: 'POST', body, keepalive: true, headers: { 'x-sveltekit-action': 'true' } }).catch(() => {});
 			return;
 		}
@@ -284,7 +361,7 @@
 		});
 		// Values for places this log no longer shows go back as they were.
 		entries.push(...data.orphans.map((e) => ({ taskId: e.taskId, path: e.path ?? null, values: e.values })));
-		return JSON.stringify({ finish, stay, notes, entries, level, back: data.back });
+		return JSON.stringify({ finish, stay, notes, entries, level, back: data.back, bases });
 	}
 
 	const empty = (v: unknown) => v === undefined || v === null || v === '' || v === false;
@@ -681,6 +758,17 @@
 		</div>
 	</div>
 {/if}
+{#if theirs}
+	<section class="card elsewhere" role="alert">
+		<p>
+			This log changed on another device{changed.length ? `: ${changed.join(', ')} ${changed.length === 1 ? 'is' : 'are'} different there` : ''}. Nothing here is saved over it yet.
+		</p>
+		<div class="row">
+			<button type="button" class="primary" onclick={keepMine}>Keep mine</button>
+			<button type="button" onclick={useTheirs}>Use the other one</button>
+		</div>
+	</section>
+{/if}
 {#if form?.error}<p class="error">{form.error}</p>{/if}
 {#if form?.saved}<p class="muted">Saved.</p>{/if}
 
@@ -727,6 +815,7 @@
 					goto(data.back);
 					return;
 				}
+				if (result.type === 'failure' && result.data?.stale) return changedElsewhere(result.data.stale, 'finish');
 				if (result.type === 'redirect' || result.type === 'success') clearDraft();
 				await update({ reset: false });
 			};
@@ -751,6 +840,17 @@
 {/if}
 
 <style>
+	.elsewhere {
+		/* In view wherever you type, without moving what you type in. */
+		position: sticky;
+		bottom: calc(4.2rem + env(safe-area-inset-bottom));
+		z-index: 4;
+		margin-top: 0.75rem;
+		border-color: var(--danger);
+	}
+	.elsewhere p {
+		margin: 0 0 0.6rem;
+	}
 	.past {
 		margin: -0.5rem 0 0.75rem;
 	}

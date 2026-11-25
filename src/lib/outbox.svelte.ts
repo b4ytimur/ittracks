@@ -3,7 +3,7 @@
 // entries, a status), so sending one twice does no harm. What an answer means is in queue.ts.
 import { untrack } from 'svelte';
 import { browser } from '$app/environment';
-import { keyOf, readAnswer, sendAll, type Answer, type Queued } from './queue';
+import { keyOf, overriding, readAnswer, sendAll, type Answer, type Queued } from './queue';
 
 export type { Queued } from './queue';
 
@@ -83,9 +83,16 @@ export async function flush(): Promise<number> {
 	}
 }
 
-/** Send a refused action again, for instance after changing what it was refused for. */
+/**
+ * Send a refused action again, for instance after changing what it was refused for. One refused
+ * because it changed elsewhere is kept over that: asking again would be refused again.
+ */
 export function retry(id: string) {
-	write(read().map(({ refused, ...q }) => (q.id === id || !refused ? q : { ...q, refused })));
+	write(read().map((x) => {
+		if (x.id !== id) return x;
+		const { refused: _, stale, ...q } = x;
+		return stale ? { ...q, fields: overriding(q.fields) } : q;
+	}));
 	return flush();
 }
 

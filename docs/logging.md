@@ -38,7 +38,7 @@ A day logged short of its target reads like "Done · 5 of 6 glasses" or "Missed 
 - **Finish** saves the log. Fields marked **Required before Finish** must be filled. If some sets aren't ticked, it asks whether to tick them all or save only the ticked ones.
 - Values that start from last time or the target are suggestions until you finish: saving as you go leaves them out. If you finish with some places still showing only those values while you logged others (rounds you stopped before), it asks whether you did them: **No, save only what I logged** or **Yes, keep them and finish**. Finishing without touching anything saves the whole log as planned.
 
-The log saves as you go. It also works offline: changes wait on the device and sync when the connection is back. They wait just the same when the server has a problem or you were signed out, and go once it answers. If the server refuses a change, a line at the top says why, with **Try again** and **Discard**; nothing is dropped by itself.
+The log saves as you go. It also works offline: changes wait on the device and sync when the connection is back. They wait just the same when the server has a problem or you were signed out, and go once it answers. If the server refuses a change, a line at the top says why, with **Try again** and **Discard**; nothing is dropped by itself. If the same log was changed on another device in the meantime, nothing is saved over it: the log says what differs and you choose **Keep mine** or **Use the other one**. Choosing the other one leaves an **Undo** that brings yours back.
 
 ### Timers
 
