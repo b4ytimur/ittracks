@@ -60,11 +60,11 @@
 	}
 	td.s1 { background: var(--seq-1); }
 	td.s2 { background: var(--seq-2); }
-	td.s3 { background: var(--seq-3); color: #fff; }
-	td.s4 { background: var(--seq-4); color: #fff; }
-	td.s5 { background: var(--seq-5); color: #fff; }
+	td.s3 { background: var(--seq-3); color: var(--ink-inverse); }
+	td.s4 { background: var(--seq-4); color: var(--ink-inverse); }
+	td.s5 { background: var(--seq-5); color: var(--ink-inverse); }
 	@media (prefers-color-scheme: dark) {
-		td.s1, td.s2, td.s3 { color: #fff; }
-		td.s4, td.s5 { color: #0b0b0b; }
+		td.s1, td.s2, td.s3 { color: var(--ink); }
+		td.s4, td.s5 { color: var(--ink-inverse); }
 	}
 </style>

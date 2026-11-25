@@ -113,7 +113,7 @@
 		list-style: none;
 		cursor: pointer;
 		padding: 0 0.4rem;
-		border-radius: 6px;
+		border-radius: var(--radius-inset);
 		color: var(--muted);
 		font-size: 1.1rem;
 		line-height: 1.2;
@@ -128,12 +128,12 @@
 		position: absolute;
 		right: 0;
 		top: 1.8rem;
-		z-index: 5;
+		z-index: var(--z-popover);
 		min-width: 11rem;
 		background: var(--surface);
 		border: 1px solid var(--border);
-		border-radius: 8px;
-		box-shadow: 0 4px 16px rgb(0 0 0 / 0.14);
+		border-radius: var(--radius-control);
+		box-shadow: var(--shadow-popover);
 		padding: 0.25rem;
 		display: flex;
 		flex-direction: column;
@@ -144,7 +144,7 @@
 		background: none;
 		text-align: left;
 		padding: 0.45rem 0.6rem;
-		border-radius: 6px;
+		border-radius: var(--radius-inset);
 		font-size: 0.88rem;
 		color: var(--text);
 		text-decoration: none;

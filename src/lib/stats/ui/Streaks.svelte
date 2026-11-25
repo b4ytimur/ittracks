@@ -87,7 +87,7 @@
 	}
 	.strip i.forgiven {
 		background: transparent;
-		box-shadow: inset 0 0 0 1.5px var(--danger);
+		box-shadow: inset 0 0 0 var(--chosen-width) var(--danger);
 	}
 	.strip i.skipped {
 		background: var(--muted);

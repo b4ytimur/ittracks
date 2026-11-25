@@ -55,7 +55,7 @@
 		padding: 1rem;
 	}
 	dialog::backdrop {
-		background: rgb(0 0 0 / 0.35);
+		background: var(--scrim);
 	}
 	h2 {
 		margin: 0;

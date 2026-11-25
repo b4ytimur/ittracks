@@ -127,11 +127,11 @@
 		pointer-events: none;
 		background: var(--surface);
 		border: 1px solid var(--border);
-		border-radius: 8px;
+		border-radius: var(--radius-control);
 		padding: 0.35rem 0.5rem;
 		font-size: 0.8rem;
-		box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
-		z-index: 2;
+		box-shadow: var(--shadow-tooltip);
+		z-index: var(--z-raised);
 		white-space: nowrap;
 	}
 </style>

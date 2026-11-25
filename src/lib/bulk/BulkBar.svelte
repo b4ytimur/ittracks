@@ -191,7 +191,7 @@
 		border-color: var(--accent);
 		position: sticky;
 		top: 0.5rem;
-		z-index: 5;
+		z-index: var(--z-sticky);
 		max-height: 80vh;
 		overflow: auto;
 	}

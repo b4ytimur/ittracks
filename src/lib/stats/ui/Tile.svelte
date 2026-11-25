@@ -54,7 +54,7 @@
 		font-size: 0.8rem;
 	}
 	.delta {
-		color: var(--muted);
+		color: var(--ink);
 		margin-top: 0.15rem;
 	}
 	.delta span {
