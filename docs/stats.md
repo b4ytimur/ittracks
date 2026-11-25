@@ -25,7 +25,7 @@ Press **+ Card** to add one:
 
 ### All settings
 
-What a sentence can't say (goals, rolling averages, splits, filters) is in **⋯ → All settings…**:
+What a sentence can't say (goals, rolling averages, splits, filters) is in **⋯ → All settings…**. Each change there saves itself; the band keeps one Undo for the whole visit:
 
 | Setting | Choices |
 | --- | --- |

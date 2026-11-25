@@ -3,7 +3,7 @@
 	// the logs behind any number. Used by Stats boards and by each habit's Stats tab. The grid is
 	// the shared EditableList laid out as a grid, so moving cards works as everywhere else.
 	import { invalidateAll } from '$app/navigation';
-	import { showToast } from '$lib/toast.svelte';
+	import { dismiss, showError, showToast } from '$lib/toast.svelte';
 	import type { CardResult, DrillRow, ValueKind } from '../engine';
 	import type { Catalog } from '../catalog';
 	import type { BoardFilter, Chart, CustomMeasure, Size, StatCard } from '../model';
@@ -90,6 +90,34 @@
 			if (r.warnings?.length) showToast(r.warnings[0]);
 		}
 	}
+	/** The card whose settings are open, as it was when they opened, with its one entry in the band. */
+	let settings = $state.raw<{ card: StatCard; was: StatCard; entry: number | null } | null>(null);
+	let problem = $state('');
+	function openSettings(item: Item) {
+		const was = $state.snapshot(item.card) as StatCard;
+		problem = '';
+		// A title it was given by itself goes with what it says.
+		settings = { was, entry: null, card: { ...structuredClone(was), title: was.title === autoTitle(was, catalog, measures) ? '' : was.title } };
+	}
+	async function saveSettings(s: NonNullable<typeof settings>, card: StatCard) {
+		const at = where; // The band outlives this board, so its Undo keeps where it was.
+		try {
+			await statsOp({ op: 'card.save', where: at, card });
+		} catch (e) {
+			problem = (e as Error).message;
+			// Closed by now: said where it can be seen.
+			if (settings !== s) showError(problem, () => void saveSettings(s, card));
+			return false;
+		}
+		problem = '';
+		if (s.entry !== null) dismiss(s.entry);
+		s.entry = showToast(`Changed “${titleOf(card)}”.`, async () => {
+			settings = null;
+			return !!(await op({ op: 'card.save', where: at, card: s.was }));
+		});
+		await invalidateAll();
+		return true;
+	}
 	async function addNow(card: StatCard) {
 		const r = await op({ op: 'card.save', where, card }, `Added “${card.title}”`);
 		if (r) adding = false;
@@ -172,7 +200,7 @@
 				onpick={readonly ? undefined : (k, v) => pickWord(item, k, v)}
 				onchart={readonly ? undefined : (c) => setChart(item, c)}
 				onsize={readonly ? undefined : (x) => resize(item, x)}
-				onedit={readonly ? undefined : () => (building = structuredClone($state.snapshot(item.card)) as StatCard)}
+				onedit={readonly ? undefined : () => openSettings(item)}
 				onremove={readonly ? undefined : () => remove(item, title)}
 				ondrill={item.result ? (from, to, series) => openDrill(item, from, to, series) : undefined}
 				onclose={() => (drill = null)}
@@ -184,11 +212,30 @@
 	</EditableList>
 {/if}
 
+{#if settings}
+	{@const s = settings}
+	<dialog class="card-settings" aria-label="All settings of {titleOf(s.was)}" onclose={() => (settings = null)} {@attach (d) => (d as HTMLDialogElement).showModal()}>
+		<CardBuilder live initial={s.card} {catalog} {measures} {hidden} {board} {problem} onsave={(card) => saveSettings(s, card)} oncancel={() => (settings = null)} />
+	</dialog>
+{/if}
+
 {#if drill?.all}
 	<Drill title={drill.title} rows={drill.rows} loading={false} unit={drill.unit} kind={drill.kind} onclose={() => drill && (drill = { ...drill, all: false })} />
 {/if}
 
 <style>
+	.card-settings {
+		inline-size: min(60rem, calc(100vw - 2rem));
+		max-block-size: 90dvh;
+		border: 1px solid var(--line);
+		border-radius: var(--radius-card);
+		background: var(--surface-page);
+		color: var(--ink);
+		padding: var(--space-group);
+	}
+	.card-settings::backdrop {
+		background: var(--scrim);
+	}
 	/* The grid: six columns, each card spanning by its size. */
 	:global(ul.cards) {
 		display: grid;

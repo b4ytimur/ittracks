@@ -2,7 +2,7 @@
 	// Build your own card: pick what it reads, how each log becomes a number, how numbers
 	// combine, and how it is drawn, with a live preview. Choices the stats rules would block
 	// are greyed out with the reason, so a card can't be saved in a state that lies.
-	import { untrack } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { blocked, set } from '$lib/rules/core';
 	import { cardRules, checkCard } from '$lib/rules/stats';
 	import type { CardResult } from '../engine';
@@ -31,6 +31,8 @@
 		hidden,
 		board,
 		saving = false,
+		live = false,
+		problem = '',
 		onsave,
 		oncancel
 	}: {
@@ -40,7 +42,11 @@
 		hidden: string[];
 		board: { range: string; filter: BoardFilter };
 		saving?: boolean;
-		onsave: (card: StatCard) => void;
+		/** The settings of a card that is there: each change saves itself. */
+		live?: boolean;
+		/** Why the last one wasn't saved. */
+		problem?: string;
+		onsave: (card: StatCard) => unknown;
 		oncancel: () => void;
 	} = $props();
 
@@ -180,8 +186,23 @@
 	function save() {
 		const out = snap();
 		out.title = out.title.trim() || title;
-		onsave(out);
+		return onsave(out);
 	}
+	let saved = untrack(() => JSON.stringify(snap()));
+	/** Saves what changed, unless the rules block it. One that failed is sent again with the next change, or on the way out. */
+	async function flush() {
+		const now = JSON.stringify(snap());
+		if (!live || now === saved || blocks.length) return;
+		const was = saved;
+		saved = now;
+		if ((await save()) === false && saved === now) saved = was;
+	}
+	$effect(() => {
+		void JSON.stringify(snap());
+		const t = setTimeout(flush, 800);
+		return () => clearTimeout(t);
+	});
+	onDestroy(() => void flush());
 	const usesBucket = $derived(['bars', 'line', 'tile', 'goal'].includes(c.look.chart));
 	const habits = $derived(catalog.habits.filter((h) => !h.archived || c.filter.habits.includes(h.id)));
 </script>
@@ -462,10 +483,15 @@
 			</ul>
 		{/if}
 
-		<div class="actions">
-			<button type="button" onclick={oncancel}>Cancel</button>
-			<button type="button" class="primary" disabled={!!blocks.length || saving} onclick={save}>{saving ? 'Saving…' : 'Save card'}</button>
-		</div>
+		{#if live}
+			<p class="meta" role="status">{blocks.length ? 'This isn’t saved until it is put right.' : problem ? `Not saved. ${problem}` : ''}</p>
+			<div class="actions"><button type="button" onclick={oncancel}>Close</button></div>
+		{:else}
+			<div class="actions">
+				<button type="button" onclick={oncancel}>Cancel</button>
+				<button type="button" class="primary" disabled={!!blocks.length || saving} onclick={save}>{saving ? 'Saving…' : 'Save card'}</button>
+			</div>
+		{/if}
 	</div>
 </div>
 
