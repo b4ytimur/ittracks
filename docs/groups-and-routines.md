@@ -57,8 +57,9 @@ When the routine's days change (a schedule change to past days too, a past log t
 
 On Today, a routine shows the habits inside it.
 
-- **Start** opens the routine's log: the habits inside that are due, in order. One is open, the rest are a line each. **Done** marks the open one and goes to the next; a habit with Tasks says **Open its log**, and Finish there comes back here. **Skip** is in its ⋯. The ⋯ at the top has **Mark the rest done** (every open habit gets its one tap; one that needs values stays open) and **Skip the rest**. The band's Undo puts back exactly what that marked. Leave and come back: the first one still to do is open.
+- **Start** opens the routine's log: the habits inside that are due, in order. One is open, the rest are a line each. **Done** marks the open one and goes to the next; a habit with Tasks says **Open its log**, and Finish there comes back here. **Skip** is in its ⋯. The ⋯ at the top has **Mark the rest done** (every open habit gets its one tap; one that needs values, or whose time today is still ahead, stays open) and **Skip the rest**. The band's Undo puts back exactly what that marked. Leave and come back: the first one still to do is open.
 - **Done** on the routine marks every habit inside that is due done. **Skip** skips them. This works on [past days](logging.md#log-a-past-day) too.
+- A habit inside whose time today is still ahead stays due: its cue time, or the start of its part of the day. At 5 AM, **Done** on Evening medicines leaves Evening Lisinopril (20:00) open and says "Evening Lisinopril waits for 20:00." The routine stays open until it is done. On a past day every time has come, so Done marks them all.
 - **Undo** on the routine opens again only the habits its own Done or Skip marked, and takes away what that one tap filled in. A habit you logged on its own stays as it is. A routine that is done only because every habit inside it was logged on its own has no Undo: undo those habits instead.
 - **Clear** on a past routine day takes the logs of the habits inside it away too, so the day counts as missed again. Its Undo brings them all back.
 

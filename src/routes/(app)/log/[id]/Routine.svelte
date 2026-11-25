@@ -8,6 +8,7 @@
 	import EditChrome from '$lib/ui/EditChrome.svelte';
 	import MenuButton, { type Way } from '$lib/ui/MenuButton.svelte';
 	import type { RoutineDay } from '$lib/server/routine-day';
+	import { leftText, type LeftOpen } from '$lib/engine/rollup';
 
 	let { routine: r, today, back, canLog }: { routine: RoutineDay; today: string; back: string; /** False for a day further back than Settings allow. */ canLog: boolean } = $props();
 	type Step = RoutineDay['steps'][number];
@@ -29,13 +30,15 @@
 	const url = $derived(`/log/${r.occurrenceId}` as const);
 	async function act(action: 'stepDone' | 'stepSkip' | 'stepUndo', occurrence: string, text: string, keyboard = false) {
 		const at = url;
-		const x = await runAction<{ needsInput?: boolean; undo?: string }>(`${at}?/${action}`, { occurrence });
+		const x = await runAction<{ needsInput?: boolean; undo?: string; left?: LeftOpen[] }>(`${at}?/${action}`, { occurrence });
 		if (!x.ok) {
 			just = '';
 			return void showError(x.error ?? 'Not saved. Are you online?');
 		}
-		need = x.data?.needsInput ? 'Some of them need values filled in before they count. Open those to finish.' : '';
-		showToast(text, action === 'stepUndo' ? undefined : undoWith(`${at}?/stepUndo`, { occurrence, undo: x.data?.undo ?? '' }));
+		// What the routine's Done left open: one waiting for its time today needs nothing more from you now.
+		const left = x.data?.left ?? [];
+		need = x.data?.needsInput && (!left.length || left.some((l) => !l.at)) ? 'Some of them need values filled in before they count. Open those to finish.' : '';
+		showToast(left.length ? `${text} ${leftText(left)}` : text, action === 'stepUndo' ? undefined : undoWith(`${at}?/stepUndo`, { occurrence, undo: x.data?.undo ?? '' }));
 		chosen = null;
 		await invalidateAll();
 		if (keyboard) tick().then(() => document.querySelector<HTMLElement>('.lg-act, .lg-finish')?.focus());

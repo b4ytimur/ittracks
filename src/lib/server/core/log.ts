@@ -16,6 +16,8 @@ import { place } from '$lib/engine/parts';
 import { isTick } from '$lib/engine/groups';
 import { parentOn } from '$lib/engine/tree';
 import { progressText } from '$lib/engine/progress';
+import { cueClock, stillAhead } from '$lib/engine/day';
+import type { LeftOpen } from '$lib/engine/rollup';
 import { NOTE_MAX, type ScheduleForm } from '$lib/forms';
 import { activeOptions, findOption, optionName } from '$lib/options';
 import type { Level } from '$lib/engine/streak';
@@ -41,6 +43,8 @@ export interface LogResult {
 	missing?: string[];
 	/** Nothing changed: it already was in that state. */
 	already?: boolean;
+	/** A routine's habits still open after its Done: one waits for its time today, or needs values first. */
+	left?: LeftOpen[];
 }
 
 /** Where an Occurrence stands now, as actions report it. */
@@ -78,9 +82,11 @@ const hasSlots = (occ: Pick<OccRow, 'variantId'>) =>
 export function doneOcc(actor: Actor, occ: OccRow, how: DoneHow, level: Level | null): 'done' | 'needsInput' | 'gone' {
 	const kids = routineKids(occ, actor);
 	if (kids) {
-		// A routine is done through the habits inside it: each one still open gets its one tap.
+		// A routine is done through the habits inside it: each one still open gets its one tap,
+		// except one whose time today is still ahead (an evening pill at 5 AM): it stays due.
+		const later = timesAhead(actor, occ.date, kids.map((k) => k.habit.id));
 		inside(occ.id, () => {
-			for (const k of kids) if (k.occ.status !== 'done' && k.occ.status !== 'skipped') doneOcc(actor, k.occ, oneTap(k.occ), level);
+			for (const k of kids) if (k.occ.status !== 'done' && k.occ.status !== 'skipped' && !later.has(k.habit.id)) doneOcc(actor, k.occ, oneTap(k.occ), level);
 		});
 		const now = recountRoutine(actor, occ);
 		if (now?.status !== 'done') return 'needsInput';
@@ -166,6 +172,30 @@ function routineKids(occ: OccRow, actor?: Actor) {
 	if (actor && occ.date < userToday(actor.accountId, actor.tz)) kidsDueOn(actor.accountId, occ.habitId, occ.date);
 	const kids = kidsOn(occ.habitId, occ.date).filter((k) => !k.occ.extra);
 	return kids.length ? kids : null;
+}
+
+/**
+ * The habits whose time is still ahead today, each with that time: a cue time, or the start of
+ * its part of the day. Empty for any other day, since a past day's times have all come.
+ */
+export function timesAhead(actor: Actor, date: string, habitIds: string[]): Map<string, string> {
+	const out = new Map<string, string>();
+	if (!habitIds.length || date !== userToday(actor.accountId, actor.tz)) return out;
+	const s = getSettings(actor.accountId);
+	const now = timeIn(actor.tz || s.timeZone);
+	for (const h of db.select({ id: habit.id, cue: habit.cue }).from(habit).where(inArray(habit.id, habitIds)).all()) {
+		const at = cueClock(h.cue, s.ranges);
+		if (at && stillAhead(at, now, s.dayStart ?? '00:00')) out.set(h.id, at);
+	}
+	return out;
+}
+
+/** What a routine's day still has open: each habit inside, with its time when that is still ahead today. Empty for any other habit. */
+export function leftOpen(actor: Actor, occ: Pick<OccRow, 'habitId' | 'date'>): LeftOpen[] {
+	if (!isRoutine(occ.habitId, occ.date)) return [];
+	const open = kidsOn(occ.habitId, occ.date).filter((k) => !k.occ.extra && (k.occ.status === 'due' || k.occ.status === 'missed'));
+	const later = timesAhead(actor, occ.date, open.map((k) => k.habit.id));
+	return open.map((k) => ({ habit: k.habit.name, at: later.get(k.habit.id) ?? null }));
 }
 
 /** A habit inside a routine done with the routine: its last log copied when it has one, else its targets. */
@@ -256,7 +286,9 @@ export function logDone(
 		if (occ.status === 'done') return resultOf(occ.id, { already: true });
 		const r = doneOcc(actor, occ, input.how ?? 'auto', input.level ?? null);
 		if (r === 'gone') throw new ActionError('not_found', `${day.habit.name} has nothing to log.`);
-		return resultOf(occ.id, r === 'needsInput' ? { missing: missingRequired(occ.id) } : {});
+		if (r !== 'needsInput') return resultOf(occ.id);
+		const left = leftOpen(actor, occ);
+		return resultOf(occ.id, left.length ? { left } : { missing: missingRequired(occ.id) });
 	});
 }
 

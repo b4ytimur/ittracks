@@ -38,7 +38,7 @@ import { DEFAULT_TRIGGERS, type ScheduleForm } from '$lib/forms';
 import { activeOptions, optionName } from '$lib/options';
 import { identitiesByHabit } from './repo/identities';
 import { getGroups, getSettings } from './settings';
-import { dayOrder, logicalDate } from '$lib/engine/day';
+import { cueClock, dayOrder, logicalDate } from '$lib/engine/day';
 import { pauseOn, type Pause } from '$lib/engine/pause';
 import { carriesOver, lastTimeFor } from '$lib/engine/backfill';
 import { missedDaysOver, recountFrom, scheduleOn, type EarlierSchedule, type Unlogged } from '$lib/engine/unlogged';
@@ -862,7 +862,6 @@ export function loadToday(accountId: string, today: string) {
 	const idents = identitiesByHabit(accountId);
 	const settings = getSettings(accountId);
 	const dayStart = settings.dayStart ?? '00:00';
-	const rangeStart = new Map(settings.ranges.map((r) => [r.name, r.start]));
 	const allPauses = pausesOf(accountId);
 	// Habits first, then the groups they sit in: a group's day is counted from theirs.
 	const groupIds = new Set(habits.filter((h) => h.direction === 'build' && isGroup(h.schedule as Schedule | null)).map((h) => h.id));
@@ -1069,7 +1068,7 @@ export function loadToday(accountId: string, today: string) {
 	// Cue times first, in the order the day is lived, each stacked habit right after its anchor.
 	// A cue that names only a part of the day sorts at that part's start.
 	const sortKey = (b: TodayItem) => {
-		const t = b.cue.time ?? (b.cue.range ? rangeStart.get(b.cue.range) : null);
+		const t = cueClock(b.cue, settings.ranges);
 		return t ? String(dayOrder(t, dayStart)).padStart(4, '0') : null;
 	};
 	const progress = progressFor(todayRows);

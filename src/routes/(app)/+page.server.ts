@@ -16,10 +16,10 @@ import { ownedHabit, ownedOccurrence } from '$lib/server/owned';
 import { headlineTexts } from '$lib/server/stats';
 import { unloggedOn } from '$lib/server/backfill';
 import { logWindow } from '$lib/engine/backfill';
-import { ActionError, appActor } from '$lib/server/core/actor';
+import { ActionError, appActor, type Actor } from '$lib/server/core/actor';
 import { undoRoutine, withRoutineUndo } from '$lib/server/routine-day';
 import { notYet, raiseTargets, startEarly, tickPrep } from '$lib/server/day-plan';
-import { addSlip, doneOcc, plusOcc, removeCraving, removeSlip, reopenOcc, resistCraving, skipOcc, undoClears } from '$lib/server/core/log';
+import { addSlip, doneOcc, leftOpen, plusOcc, removeCraving, removeSlip, reopenOcc, resistCraving, skipOcc, undoClears } from '$lib/server/core/log';
 import type { Actions, PageServerLoad } from './$types';
 
 /** The signed-in person, as the core's actions and the event log see them. */
@@ -88,12 +88,14 @@ const clip = (v: string, n = 120) => v.trim().slice(0, n) || null;
 
 /**
  * What a Done from Today ended as. A log that falls short of the habit's rule stays open, and
- * the toast says why instead of celebrating.
+ * the toast says why instead of celebrating. A routine left open says which habits inside it
+ * are still to do, and why (`left`).
  */
-function ended(o: { occ: { id: string }; habit: { id: string; name: string; minimumCounts: boolean } }, clear: boolean, undo?: string) {
+function ended(actor: Actor, o: { occ: { id: string; habitId: string; date: string }; habit: { id: string; name: string; minimumCounts: boolean } }, clear: boolean, undo?: string) {
 	const status = db.select({ status: occurrence.status }).from(occurrence).where(eq(occurrence.id, o.occ.id)).get()?.status;
-	const short = status === 'due' ? (o.habit.minimumCounts ? 'minimum' : 'target') : undefined;
-	return { finished: status === 'done' ? o.habit.id : null, did: { occurrence: o.occ.id, habit: o.habit.name, clear, short, undo } };
+	const left = status === 'due' ? leftOpen(actor, o.occ) : [];
+	const short = status === 'due' && !left.length ? (o.habit.minimumCounts ? 'minimum' : 'target') : undefined;
+	return { finished: status === 'done' ? o.habit.id : null, did: { occurrence: o.occ.id, habit: o.habit.name, clear, short, undo, left } };
 }
 
 export const actions: Actions = {
@@ -102,16 +104,18 @@ export const actions: Actions = {
 		const f = await request.formData();
 		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
 		if (!o) error(404);
-		const { undo } = withRoutineUndo(o.occ, () => doneOcc(actorOf(locals, cookies), o.occ, 'mark', levelOf(f)));
-		return ended(o, false, undo);
+		const actor = actorOf(locals, cookies);
+		const { undo } = withRoutineUndo(o.occ, () => doneOcc(actor, o.occ, 'mark', levelOf(f)));
+		return ended(actor, o, false, undo);
 	},
 	/** One tap: done at a level, logging that level's Slot targets. */
 	quick: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
 		const o = ownedOccurrence(locals.account!.id, field(f, 'occurrence'));
 		if (!o) error(404);
-		if (doneOcc(actorOf(locals, cookies), o.occ, 'targets', levelOf(f)) === 'needsInput') redirect(303, `/log/${o.occ.id}?quick`);
-		return ended(o, true);
+		const actor = actorOf(locals, cookies);
+		if (doneOcc(actor, o.occ, 'targets', levelOf(f)) === 'needsInput') redirect(303, `/log/${o.occ.id}?quick`);
+		return ended(actor, o, true);
 	},
 	/** +1 toward a habit's one target ("3 of 6 glasses"), or by=-1 to take a tap back. Reaching the target finishes it. */
 	plus: async ({ request, locals, cookies }) => {
@@ -156,8 +160,9 @@ export const actions: Actions = {
 		if (!o) error(404);
 		// Same as last keeps what was already logged, so Undo must not clear it.
 		const started = !!db.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, o.occ.id)).get();
-		if (o.occ.status === 'due' && doneOcc(actorOf(locals, cookies), o.occ, 'same', null) === 'needsInput') redirect(303, `/log/${o.occ.id}?quick`);
-		return ended(o, !started);
+		const actor = actorOf(locals, cookies);
+		if (o.occ.status === 'due' && doneOcc(actor, o.occ, 'same', null) === 'needsInput') redirect(303, `/log/${o.occ.id}?quick`);
+		return ended(actor, o, !started);
 	},
 	skip: async ({ request, locals, cookies }) => {
 		const f = await request.formData();

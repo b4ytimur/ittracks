@@ -12,7 +12,7 @@
 	import { saveLayout, saveView, viewOp } from '$lib/viewclient';
 	import { headlineText } from '$lib/engine/stats';
 	import { isPartial, progressText } from '$lib/engine/progress';
-	import { rollupDay, rollupText } from '$lib/engine/rollup';
+	import { leftText, rollupDay, rollupText, type LeftOpen } from '$lib/engine/rollup';
 	import { invalidateAll } from '$app/navigation';
 	import { addDays } from '$lib/engine/dates';
 	import DayNote from '$lib/DayNote.svelte';
@@ -150,7 +150,7 @@
 		replaceState(u, {});
 	});
 
-	type Did = { occurrence: string; habit: string; clear: boolean; undo?: string; skipped?: boolean; short?: 'minimum' | 'target' };
+	type Did = { occurrence: string; habit: string; clear: boolean; undo?: string; skipped?: boolean; short?: 'minimum' | 'target'; left?: LeftOpen[] };
 	/** A row's name: it stays put while the row's controls change, so focus waits there. */
 	const nameOf = (habitId: string) => `${rowOf(habitId)} a.name`;
 	/** After a quick action: say what happened and offer Undo. */
@@ -159,8 +159,10 @@
 		const did = result.data?.did as Did | undefined;
 		if (!did) return;
 		const undo = undoWith('/?/undo', { occurrence: did.occurrence, clear: did.clear ? '1' : '', undo: did.undo ?? '' });
+		// A routine with habits still to do inside it: say which, and why (one waits for its time).
+		if (did.left?.length) showToast(`Logged ${did.habit}. ${leftText(did.left)}`, undo);
 		// Short of what counts for this habit: it stays open, and says why.
-		if (did.short)
+		else if (did.short)
 			showToast(
 				`Logged ${did.habit}. It counts once it reaches ${did.short === 'target' ? 'the full target' : 'the Minimum'}, and stays open until the day ends.`,
 				undo

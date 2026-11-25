@@ -50,3 +50,19 @@ export function rollupDay(children: ChildDay[], rule: RollupRule, opts: { past: 
 
 /** "2 of 3 habits". */
 export const rollupText = (r: { done: number; total: number }) => `${r.done} of ${r.total} habit${r.total === 1 ? '' : 's'}`;
+
+/** A habit a routine's Done left open: `at` is its time still ahead today, null when it needs values first. */
+export interface LeftOpen {
+	habit: string;
+	at: string | null;
+}
+
+const names = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+
+/** "Evening Lisinopril waits for 20:00. Blood pressure needs values filled in before it counts." */
+export function leftText(left: LeftOpen[]): string {
+	const waiting = left.filter((l) => l.at).map((l) => `${l.habit} waits for ${l.at}.`);
+	const need = left.filter((l) => !l.at).map((l) => l.habit);
+	if (need.length) waiting.push(`${names(need)} ${need.length > 1 ? 'need' : 'needs'} values filled in before ${need.length > 1 ? 'they count' : 'it counts'}.`);
+	return waiting.join(' ');
+}

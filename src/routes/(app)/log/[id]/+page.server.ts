@@ -17,7 +17,7 @@ import { NOTE_MAX, type ScheduleForm } from '$lib/forms';
 import { ActionError, appActor } from '$lib/server/core/actor';
 import { rerollSlot, swapSlot } from '$lib/server/day-plan';
 import { emit } from '$lib/server/core/events';
-import { doneOcc, reopenOcc, skipOcc, undoClears } from '$lib/server/core/log';
+import { doneOcc, leftOpen, reopenOcc, skipOcc, undoClears } from '$lib/server/core/log';
 import { routineDay, routineSteps, undoRoutine, withRoutineUndo } from '$lib/server/routine-day';
 import { contentOf, staleSave } from '$lib/server/stale';
 import { revOf } from '$lib/logrev';
@@ -277,7 +277,8 @@ export const actions: Actions = {
 	stepDone: async (event) => {
 		const { occ, actor } = step(event, await event.request.formData());
 		const { result, undo } = withRoutineUndo(occ, () => doneOcc(actor, occ, 'mark', null));
-		return { needsInput: result === 'needsInput', undo };
+		// The routine's habits still open: one waits for its time today, or needs values first.
+		return { needsInput: result === 'needsInput', undo, left: result === 'needsInput' ? leftOpen(actor, occ) : [] };
 	},
 	stepSkip: async (event) => {
 		const { occ, actor } = step(event, await event.request.formData());

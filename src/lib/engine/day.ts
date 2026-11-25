@@ -41,6 +41,15 @@ export function dayOrder(clock: string, dayStart = '00:00'): number {
 	return (minutesOf(clock) - minutesOf(dayStart) + 1440) % 1440;
 }
 
+/** When a cue puts a habit in the day: its clock time, else the start of its part of the day, else null. */
+export function cueClock(cue: { time?: string | null; range?: string | null } | null | undefined, ranges: DayRange[]): string | null {
+	if (cue?.time) return cue.time;
+	return (cue?.range && ranges.find((r) => r.name === cue.range)?.start) || null;
+}
+
+/** A clock time still to come today, `now` being the time now and the day starting at `dayStart`. */
+export const stillAhead = (clock: string, now: string, dayStart = '00:00') => dayOrder(clock, dayStart) > dayOrder(now, dayStart);
+
 /** Suggested ranges, offered during setup. */
 export const DEFAULT_RANGES: DayRange[] = [
 	{ name: 'Morning', start: '05:00', end: '11:00' },
