@@ -435,6 +435,8 @@ export const occurrence = sqliteTable('occurrence', {
 	 * always judged against what it aimed for. Null: the Slots' targets now still apply.
 	 */
 	goals: text('goals', { mode: 'json' }).$type<Record<string, SlotGoals>>(),
+	/** Slots taken out of the plan while this log, still open, had values in them: it keeps them. */
+	kept: text('kept', { mode: 'json' }).$type<Record<string, SlotGoals>>(),
 	/** A group's day: how many habits inside it were done, of how many that counted. */
 	rollup: text('rollup', { mode: 'json' }).$type<{ done: number; total: number }>()
 });

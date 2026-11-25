@@ -1,0 +1,1 @@
+ALTER TABLE `occurrence` ADD `kept` text;

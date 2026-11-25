@@ -25,7 +25,10 @@
 		onorder,
 		onname,
 		onnumber,
-		onrows
+		onrows,
+		onremove,
+		onadd,
+		library
 	}: {
 		places: EditPlace[];
 		/** The Task whose rows show first. */
@@ -34,6 +37,10 @@
 		onname: (p: EditPlace, name: string) => void;
 		onnumber: (p: EditPlace, id: string, n: number) => void;
 		onrows: (key: string, rows: RowState[], moved: RowState) => void;
+		onremove: (p: EditPlace) => void;
+		onadd: (task: string) => void;
+		/** What can be added. */
+		library: { id: string; name: string }[];
 	} = $props();
 
 	let shown = $state<Record<string, boolean>>({});
@@ -54,7 +61,8 @@
 	holder={isOpen}
 	class="lg-page lg-places"
 	ariaLabel="What to log"
-	onmove={(m, order) => onorder(order, m.key)}
+	onmove={(m, order) => (onorder(order, m.key), true)}
+	onremove={(p) => onremove(p)}
 >
 	{#snippet row(p)}
 		<h2 class="name">{#if p.task}<InlineText editing value={p.name} label="Name of the Task" onsave={(v) => onname(p, v)} />{:else}{p.name}{/if}</h2>
@@ -86,7 +94,7 @@
 				mode="edit"
 				rowCard
 				ariaLabel="{cap(r.many)} of {r.name}"
-				onmove={(m, order) => onrows(r.key, order.map((k) => r.sets.find((s) => idOf(s) === k)!), r.sets.find((s) => idOf(s) === m.key)!)}
+				onmove={(m, order) => (onrows(r.key, order.map((k) => r.sets.find((s) => idOf(s) === k)!), r.sets.find((s) => idOf(s) === m.key)!), true)}
 			>
 				{#snippet row(s, ctx)}
 					<span class="num"><span class="vh">{cap(r.one)} </span>{ctx.index + 1}</span>
@@ -97,8 +105,25 @@
 		{/each}
 	{/snippet}
 </EditableList>
+<label class="add"
+	><span class="vh">Add a Task, from now on</span><select
+		value=""
+		onchange={(e) => {
+			const id = e.currentTarget.value;
+			e.currentTarget.value = '';
+			if (id) onadd(id);
+		}}
+	>
+		<option value="">+ Task…</option>
+		{#each library as l (l.id)}<option value={l.id}>{l.name}</option>{/each}
+	</select></label
+>
 
 <style>
+	.add > select {
+		width: auto;
+		max-inline-size: 100%;
+	}
 	p,
 	h2 {
 		margin: 0;

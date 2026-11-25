@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inOrder, numberIn, toCount, withSlot, type Plan } from './plan';
+import { inOrder, numberIn, toCount, withoutSlot, withSlot, withTask, type Plan } from './plan';
 
 const slot = (id: string) => ({ id, taskId: null, fillRule: null, sets: 3, targets: {}, minTargets: {}, stretchTargets: {} });
 const plan: Plan = [
@@ -17,6 +17,11 @@ describe('editing the plan on a log', () => {
 	});
 	it('changes one Slot', () => {
 		expect(withSlot(plan, '2', { sets: 5 })[0].slots.map((s) => s.sets)).toEqual([3, 5, 3]);
+	});
+	it('adds a Task to one Variant and takes one out', () => {
+		expect(ids(withTask(plan, 'b', '9', 't'))).toBe('123 49');
+		expect(withTask(plan, 'b', '9', 't')[1].slots[1]).toMatchObject({ taskId: 't', sets: null });
+		expect(ids(withoutSlot(plan, '2'))).toBe('13 4');
 	});
 	it('reads a number out of what was typed', () => {
 		expect([numberIn('4 sets'), numberIn('62,5 kg'), numberIn('8'), numberIn('some')]).toEqual([4, 62.5, 8, null]);

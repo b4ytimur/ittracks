@@ -6,7 +6,7 @@
 	import Timer from './Timer.svelte';
 	import Place from '$lib/log/Place.svelte';
 	import EditPlaces, { type EditPlace } from '$lib/log/EditPlaces.svelte';
-	import { inOrder, slotIn, toCount, withSlot, type Plan } from '$lib/log/plan';
+	import { inOrder, slotIn, toCount, withoutSlot, withSlot, withTask, type Plan } from '$lib/log/plan';
 	import { circuitsOf, roundWords, type Circuit } from '$lib/log/circuit';
 	import { cap, cursor, follow, rowsText, rowText, valueText, type Cursor, type Field, type RowState } from '$lib/log/run';
 	import EditChrome from '$lib/ui/EditChrome.svelte';
@@ -740,7 +740,7 @@
 	// ----- Edit: names, order and the plan's numbers, from now on; a row's place, for this log -----
 
 	let mode = $state<Mode>('use');
-	const canEdit = $derived(stage === 'run' && !data.past && !quickMode && !!data.plan && data.items.length > 0);
+	const canEdit = $derived(stage === 'run' && !data.past && !quickMode && !!data.plan);
 	const editing = $derived(canEdit && mode === 'edit');
 	const editPlaces = $derived.by((): EditPlace[] => {
 		const out: (EditPlace & { at: number[] })[] = [];
@@ -761,6 +761,8 @@
 			// A Task swapped in for this log has no targets of its own in the plan.
 			if (s && t && s.taskId === t.id)
 				for (const m of t.metrics.filter((x) => isNumeric(x) && s.targets[x.id] !== undefined)) g.numbers.push({ id: m.id, label: m.name, text: `${s.targets[m.id]} ${m.unit || m.name.toLowerCase()}` });
+			// The clock between rows is the Task's, everywhere.
+			if (t && (inRows(it) || it.kids)) g.numbers.push({ id: 'pause', label: t.betweenName, text: t.restTimerEnabled ? `${t.betweenName.toLowerCase()} ${t.restTimerSeconds} s` : `no ${t.betweenName.toLowerCase()}` });
 			// The rounds of a circuit keep their order.
 			if (g.at.length === 1 || !g.at.some((i) => data.items[i].roundHead || data.items[i].path.includes('#')))
 				for (const i of g.at) {
@@ -806,6 +808,14 @@
 		const it = data.items[i];
 		const key = placeKey(it);
 		const s = slotIn(data.plan!, p.id)!;
+		if (id === 'pause') {
+			const t = it.task!;
+			const was = { restTimerEnabled: t.restTimerEnabled, restTimerSeconds: t.restTimerSeconds };
+			const seconds = Math.min(3600, Math.round(n));
+			const set = seconds ? { restTimerEnabled: true, restTimerSeconds: seconds } : { restTimerEnabled: false, restTimerSeconds: t.restTimerSeconds };
+			if (JSON.stringify(set) === JSON.stringify(was)) return;
+			return void edit(`/api/tasks/${t.id}`, set, was, seconds ? `${t.betweenName} after ${t.rowMany} of ${p.name} is ${seconds} s now, everywhere.` : `No ${t.betweenName.toLowerCase()} after ${t.rowMany} of ${p.name} any more.`);
+		}
 		if (!id) {
 			const count = Math.max(1, Math.round(n));
 			const rows = [...(places[key]?.sets ?? [])];
@@ -827,6 +837,24 @@
 			for (const x of places[key].sets) if (!x.done && !x.own?.includes(id) && x.values[id] === from) x.values[id] = to;
 			if (!m.repeats && places[key].summary[id] === from) places[key].summary[id] = to;
 		});
+	}
+	/** Out of the plan, from now on. A log that has values in it keeps it. */
+	function editRemove(p: EditPlace) {
+		if (!slotIn(data.plan!, p.id)) return void showToast(`${p.name} is not in the plan any more. This log keeps it.`);
+		const here = data.items.some((it, i) => it.slotId === p.id && hasLog(log[i], starts[i]));
+		// What is ticked here is saved first, so the log keeps its place.
+		const gone = async () => {
+			if (saveTimer !== undefined) {
+				dropAutosave();
+				if ((await autosave()).kind !== 'saved') return void showError('Not saved. Are you online?');
+			}
+			await editPlan(withoutSlot(data.plan!, p.id), `Took ${p.name} out of ${data.habitName}, from now on.${here ? ' This log keeps it.' : ''}`);
+		};
+		void gone();
+	}
+	function editAdd(task: string) {
+		const name = data.library.find((l) => l.id === task)?.name;
+		void editPlan(withTask(data.plan!, data.variantId!, crypto.randomUUID(), task), `Added ${name} to ${data.habitName}, from now on.`);
 	}
 	function editRows(key: string, rows: RowState[], moved: RowState) {
 		const before = [...places[key].sets];
@@ -884,7 +912,7 @@
 <svelte:head><title>{data.habitName} · ittracks</title></svelte:head>
 <svelte:window onkeydown={(e) => e.key === 'Enter' && (e.ctrlKey || e.metaKey) && stage === 'run' && finishForm?.requestSubmit()} />
 
-<EditChrome title={quickMode ? `Quick log: ${data.habitName}` : data.habitName} back={{ href: data.back, label: 'Back' }} bind:mode modes={canEdit ? ['use', 'edit'] : ['use']} hints={{ use: hint, edit: 'Drag ⠿ to move. Names and numbers change the plan, from now on.' }} />
+<EditChrome title={quickMode ? `Quick log: ${data.habitName}` : data.habitName} back={{ href: data.back, label: 'Back' }} bind:mode modes={canEdit ? ['use', 'edit'] : ['use']} hints={{ use: hint, edit: 'Drag ⠿ to move. What you change, add or remove here is the plan, from now on.' }} />
 {#if saveState === 'refused' && !theirs}<p class="error" role="alert">Not saved: {refusedWhy}</p>{/if}
 <p class="vh" role="status">{said}</p>
 
@@ -1022,7 +1050,7 @@
 {/snippet}
 
 {#if editing}
-	<EditPlaces places={editPlaces} open={data.items.find((it) => placeKey(it) === row?.key)?.slotId ?? null} onorder={editOrder} onname={editName} onnumber={editNumber} onrows={editRows} />
+	<EditPlaces places={editPlaces} open={data.items.find((it) => placeKey(it) === row?.key)?.slotId ?? null} onorder={editOrder} onname={editName} onnumber={editNumber} onrows={editRows} onremove={editRemove} onadd={editAdd} library={data.library.filter((l) => !l.archived)} />
 {:else}
 <ul class="elist lg-page lg-places" data-mode="use" aria-label="What to log">
 	{#each data.items as it, i (placeKey(it))}

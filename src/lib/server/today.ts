@@ -740,6 +740,7 @@ export function createOccurrence(
 		level: null,
 		extra,
 		goals: null,
+		kept: null,
 		rollup: null
 	};
 	db.insert(occurrence).values(row).run();

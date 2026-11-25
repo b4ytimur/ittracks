@@ -8,6 +8,7 @@ import { entry, habit, occurrence, task } from './db/schema';
 import { createAccount } from './auth';
 import { saveHabit, variantForms } from './repo/habits';
 import { occurrenceOn } from './backfill';
+import { positionsOf } from './positions';
 import { saveTask } from './repo/tasks';
 import { currentForm, habitPatch, patchHabit } from './habit-patch';
 import { restoreSnapshot, withSnapshot } from './snapshot';
@@ -94,6 +95,33 @@ describe('Variants', () => {
 		patch({ variants: [three[0], ...variantForms(id, true)] }, { variants: form().variants });
 		expect(form().variants.map((x) => [x.name, x.slots.length])).toEqual([['Main', 0], ['B', 1]]);
 		expect(variantForms(id, true)).toEqual([]);
+	});
+
+	it('a Slot taken out stays in an open log that has values in it, and only there', () => {
+		const [t1, t2] = [library(me), library(me)];
+		const [s1, s2] = [slotOf(t1), slotOf(t2)];
+		const full = [{ ...form().variants[0], slots: [s1, s2] }];
+		patch({ variants: full }, { variants: form().variants });
+		const today_ = days().at(-1)!;
+		db.update(occurrence).set({ status: 'due', variantId: v, goals: null }).where(eq(occurrence.id, today_.id)).run();
+		db.insert(entry).values({ id: crypto.randomUUID(), occurrenceId: today_.id, taskId: t1, path: s1.id, values: { done: true }, sortOrder: 0 }).run();
+		const places = (id: string) => positionsOf(db.select().from(occurrence).where(eq(occurrence.id, id)).get()!).map((p) => p.path);
+		const one = [{ ...full[0], slots: [s2] }];
+		patch({ variants: one }, { variants: form().variants });
+		expect(form().variants[0].slots.map((x) => x.id)).toEqual([s2.id]);
+		expect(places(today_.id)).toEqual([s1.id, s2.id]);
+		const other = days().find((o) => o.id !== today_.id && o.variantId === v && !o.goals)!;
+		if (other) expect(places(other.id)).toEqual([s2.id]);
+		// Put back in the plan: once. Out again with the log finished: still there.
+		patch({ variants: full }, { variants: form().variants });
+		expect(places(today_.id)).toEqual([s1.id, s2.id]);
+		patch({ variants: one }, { variants: form().variants });
+		db.update(occurrence).set({ status: 'done' }).where(eq(occurrence.id, today_.id)).run();
+		patch({ variants: [{ ...one[0], slots: [] }] }, { variants: form().variants });
+		expect(places(today_.id)).toEqual([s1.id, s2.id]);
+		// Nothing was logged there: it just goes.
+		expect(db.select().from(occurrence).where(eq(occurrence.habitId, id)).all().filter((o) => o.kept)).toHaveLength(1);
+		db.delete(entry).run();
 	});
 
 	it("are never another habit's, and their Tasks are this account's", () => {

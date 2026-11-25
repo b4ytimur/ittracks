@@ -215,6 +215,7 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		back,
 		levels: o.habit.levels?.enabled ? o.habit.levels : null,
 		variantName: v?.name ?? null,
+		variantId: v?.id ?? null,
 		/** The plan this log follows, to change where it stands: an open log of today only. */
 		plan: !past && o.occ.status === 'due' && v && !v.archived ? (currentForm(accountId, o.habit.id)?.variants ?? null) : null,
 		items,
@@ -228,9 +229,9 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 			o.occ.date
 		),
 		library: db
-			.select({ id: task.id, name: task.name })
+			.select({ id: task.id, name: task.name, archived: task.archived })
 			.from(task)
-			.where(and(eq(task.accountId, accountId), isNull(task.parentTaskId)))
+			.where(and(eq(task.accountId, accountId), isNull(task.parentTaskId), isNull(task.deleteAfter)))
 			.orderBy(asc(task.name))
 			.all()
 	};
