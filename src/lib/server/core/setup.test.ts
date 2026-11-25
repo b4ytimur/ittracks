@@ -213,9 +213,43 @@ describe('setup', () => {
 		run('setup_undo', { undo: a.undo });
 	});
 
+	it('saves a view by names, shows the views before and after, and undoes it', () => {
+		const p = setup([{ op: 'view', change: { op: 'save', page: 'today', name: 'Gym days', state: { habit: 'Running', sort: 'cue', group: 'part' } } }]);
+		expect(p.summary).toEqual(['Add the view “Gym days” to Today']);
+		const views = (x: unknown) => (x as { views: { pages: { today: { on: string; views: { name: string; state: Record<string, unknown> }[] } } } }).views.pages.today;
+		expect(views(p.before).views.map((v) => v.name)).toEqual(['Default']);
+		const made = views(p.after).views.find((v) => v.name === 'Gym days')!;
+		expect(made.state).toEqual({ habit: habitNamed('Running')!.id, sort: 'cue', group: 'part' });
+		expect(views(p.after).on).toBe('Gym days');
+		const a = setup([{ op: 'view', change: { op: 'save', page: 'today', name: 'Gym days', state: { habit: 'Running', sort: 'cue', group: 'part' } } }], { apply: true });
+		const r = run('setup_read', { ref: 'views' }) as unknown as { views: unknown; options: { sorts: { today: Record<string, string> } } };
+		expect(views(r).on).toBe('Gym days');
+		expect(Object.keys(r.options.sorts.today)).toContain('cue');
+		// A view by its name, then the layout.
+		const b = setup(
+			[
+				{ op: 'view', change: { op: 'select', page: 'today', view: 'default' } },
+				{ op: 'view', change: { op: 'patch', today: { timeAware: true } } }
+			],
+			{ apply: true }
+		);
+		expect(b.summary).toEqual(['Put Today on the view “Default”', 'Change the layout: today']);
+		run('setup_undo', { undo: b.undo });
+		expect(views(run('setup_read', { ref: 'views' })).on).toBe('Gym days');
+		run('setup_undo', { undo: a.undo });
+		expect(views(run('setup_read', { ref: 'views' })).views.map((v) => v.name)).toEqual(['Default']);
+	});
+
 	it('needs edit access and a key that sees every habit', () => {
 		const reader: Actor = { ...app, scopes: new Set(['read']) };
 		fails(() => runAction(reader, 'setup', { changes: [{ op: 'archive', habit: 'Running' }] }), 'forbidden', /edit/);
+		// Notes stay out of what a key without notes access reads, and an edit keeps them.
+		const noNotes: Actor = { ...app, scopes: new Set(['read', 'edit']) };
+		setup([{ op: 'edit_habit', habit: 'Running', set: { notes: 'Private: knee hurts' } }], { apply: true });
+		const read = runAction(noNotes, 'setup_read', { ref: 'habit:Running' }) as { form: Record<string, unknown> };
+		expect(read.form).not.toHaveProperty('notes');
+		runAction(noNotes, 'setup', { changes: [{ op: 'edit_habit', habit: 'Running', set: read.form }], apply: true });
+		expect(getHabitForm(me, habitNamed('Running')!.id)!.notes).toBe('Private: knee hurts');
 		const limited: Actor = { ...app, habitIds: new Set([habitNamed('Running')!.id]) };
 		fails(() => runAction(limited, 'setup', { changes: [{ op: 'archive', habit: 'Running' }] }), 'forbidden', /every habit/);
 	});
@@ -224,7 +258,7 @@ describe('setup', () => {
 		const c = catalog(app);
 		const setupTools = c.actions.filter((a) => a.name.startsWith('setup'));
 		expect(setupTools.map((a) => a.name).sort()).toEqual(['setup', 'setup_guide', 'setup_read', 'setup_undo']);
-		expect(JSON.stringify(setupTools).length).toBeLessThan(12_000);
+		expect(JSON.stringify(setupTools).length).toBeLessThan(8_000);
 		const guide = run('setup_guide', { topic: 'habit' }) as unknown as { schema: { properties: Record<string, unknown> } };
 		expect(Object.keys(guide.schema.properties)).toContain('variants');
 	});

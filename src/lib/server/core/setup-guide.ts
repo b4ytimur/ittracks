@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { habitForm, taskForm } from '$lib/forms';
 import { templateFile } from '$lib/template';
 import { metricTypes } from '$lib/metric-types';
+import { viewChange } from '../views';
 
 const schema = (s: z.ZodTypeAny) => {
 	const { $schema: _s, ...rest } = z.toJSONSchema(s, { io: 'input', unrepresentable: 'any' }) as Record<string, unknown>;
@@ -25,7 +26,8 @@ const OVERVIEW = {
 		Routine: 'A build habit with its own schedule and no Tasks of its own, with habits inside it that follow it (schedule kind follow). Done on it marks the habits inside.',
 		Program: 'A habit with a phases schedule (a 4-week ramp-up, then maintain), often with habits inside. It travels as a template.',
 		Template: 'A portable JSON file of one habit, the habits inside it and the Tasks they use, with local keys instead of ids. The Gallery has ready-made ones; any habit can be kept as one (save_template).',
-		Area: 'A life area a habit or Task belongs to (Health, Learning). Named; a new name is added.'
+		Area: 'A life area a habit or Task belongs to (Health, Learning). Named; a new name is added.',
+		View: 'What a page (Today, Habits, Library, History) shows and in what order: a filter, sort and grouping, saved under a name. Each page is on one view; Default is a view too. The layout (Today sections, lines on a card, widgets) and hidden features apply app-wide.'
 	},
 	workflow: [
 		'1. Learn what exists: describe (habits, Tasks, fields), and the stats tools when advice should rest on the user\'s own data.',
@@ -35,16 +37,18 @@ const OVERVIEW = {
 		'5. Only when the user says yes: call setup again with the same changes, apply: true and the check. Then say what changed; setup_undo with the undo id takes it all back for a day.'
 	],
 	changes: {
-		add_template: 'Best for anything new with new Tasks, several Variants, habits inside, or phases: a template file (topic "template"), or from: a ready-made template with answers.',
-		add_habit: 'A new habit using Tasks already in the Library (named), or none (a plain yes/no habit). Topic "habit".',
-		edit_habit: 'Replace some fields of a habit: setup_read habit:<name> first, then set only what changes.',
-		add_task: 'A new Library Task. Topic "task".',
-		edit_task: 'Replace some fields of a Task (fields, parts, tags, rest timer, words).',
-		archive: 'Archive a habit or Task (logs stay), or bring it back with archived: false.',
-		save_template: 'Keep a habit (with the habits inside it and its Tasks) in My templates in the Gallery.'
+		add_template: '{ template } or { from: "<slug or id>", answers: { "<question key>": value } }, plus reuse (default true: a Task named like one in the Library uses that one) and remind. Best for anything new with new Tasks, several Variants, habits inside, or phases. Topic "template".',
+		add_habit: '{ habit }: a new habit using Tasks already in the Library (by name), or none (a plain yes/no habit). Topic "habit".',
+		edit_habit: '{ habit: "<id or name>", set: { only the fields that change }, scheduleApplies: "today" (default: past days keep their plan) or "past" }. Read the form with setup_read first.',
+		add_task: '{ task }: a new Library Task. Topic "task".',
+		edit_task: '{ task: "<id or name>", set, units: { "<field>": "convert" or "relabel" } }. units only when the preview says a field with values changes unit.',
+		archive: '{ habit or task, archived: false to bring it back }. Archiving keeps every log.',
+		save_template: '{ habit, name?, description? }: keep it, with the habits inside it and its Tasks, in My templates in the Gallery.',
+		view: '{ change: one view change }: a saved view (filter, sort, grouping, Today layout) on Today, Habits, Library or History, which view a page is on or opens with, the Today and Habits layout, hidden features, the start page, or a view template. Topic "views"; setup_read ref "views" shows them and every option.',
+		key: 'add_habit, add_task and add_template take key: your own name for what they make, so a later change in the same request can use it (a Slot\'s taskId, a parentId).'
 	},
 	refs: 'In add_habit, edit_habit, add_task and edit_task, ids can be written as short keys ("A", "push") for new things, and Tasks, fields, habits, Areas and Variants can be named instead of using ids. A key on one change (key: "press") lets a later change in the same request use what it made. Everything in one request applies together or not at all.',
-	topics: { habit: 'The habit form', task: 'The Task form', schedule: 'Every schedule kind with examples', template: 'The template file', examples: 'Worked requests for common goals' }
+	topics: { habit: 'The habit form', task: 'The Task form', schedule: 'Every schedule kind with examples', template: 'The template file', views: 'View changes', examples: 'Worked requests for common goals' }
 };
 
 const SCHEDULES = {
@@ -174,6 +178,11 @@ const TOPICS = {
 	template: () => ({
 		about: 'A template file. Keys (task, metric and Variant keys) are local to the file. format, version and name may be left out. Slots point at the file\'s tasks by key; targets are keyed by the Task\'s metric keys. children are habits inside the habit, each with a key and a parent key (null: inside the file\'s habit). questions are asked when it is added (answers on add_template).',
 		schema: schema(templateFile)
+	}),
+	views: () => ({
+		about: 'One view change per setup change ({ op: "view", change }). save makes a named view on a page (state: filter, sort, group, and layout for Today; fields left out are blank) and puts the page on it; update changes a view (by name or id; "default" is the page default); select puts a page on a view; delete removes one; open sets what a page opens with ("last", "default" or a view); patch changes the layout (today, habits, history, hidden features, startPage), only the keys sent; template switches the view template (keep: true keeps your own changes). Areas, a habit and an identity in state may be named. setup_read ref "views" lists the views now and every allowed sort, group and layout value.',
+		example: { op: 'view', change: { op: 'save', page: 'today', name: 'Gym days', state: { areas: ['Fitness'], sort: 'cue', group: 'part' } } },
+		schema: schema(viewChange)
 	}),
 	examples: () => ({ examples: EXAMPLES })
 };

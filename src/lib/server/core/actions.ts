@@ -412,7 +412,7 @@ export const ACTIONS: ActionDef[] = [
 		scope: 'read',
 		title: 'How to set things up',
 		description:
-			'Read before setting something up. overview (default): the words (habit, Variant, Slot, Task, field, part, schedule, routine, program, template), how to propose before changing anything, and the changes setup takes. habit, task, template: the exact shape with its JSON Schema. schedule: every schedule kind with an example. examples: worked requests (language, gym A/B, quitting, a routine, editing).',
+			'Read before setting something up. overview (default): the words (habit, Variant, Slot, Task, field, part, schedule, routine, program, template), how to propose before changing anything, and the changes setup takes. habit, task, template: the exact shape with its JSON Schema. schedule: every schedule kind with an example. views: view changes. examples: worked requests (language, gym A/B, quitting, a routine, editing).',
 		input: z.object({ topic: z.enum(GUIDE_TOPICS).optional() }),
 		run: (_a, i) => setupGuide(i.topic)
 	}),
@@ -423,7 +423,7 @@ export const ACTIONS: ActionDef[] = [
 		scope: 'read',
 		title: 'Read something to change',
 		description:
-			'What setup changes, in the shape it takes: habit:<id or name> (its form, with names for the ids in it; as "template" gives it as a template file to copy), task:<id or name> (its form), templates (the ready-made and saved templates, with their questions), template:<slug or id> (one of them).',
+			'What setup changes, in the shape it takes: habit:<id or name> (its form, with names for the ids in it; as "template" gives it as a template file to copy), task:<id or name> (its form), templates (the ready-made and saved templates, with their questions), template:<slug or id> (one of them), views (the views and layout, with every option).',
 		input: z.object({ ref: z.string().trim().min(3).max(240), as: z.enum(['form', 'template']).optional() }),
 		run: (a, i) => readSetup(a, i)
 	}),
@@ -432,9 +432,9 @@ export const ACTIONS: ActionDef[] = [
 		version: 1,
 		kind: 'write',
 		scope: 'edit',
-		title: 'Create or change habits, Tasks and templates',
+		title: 'Create or change habits, Tasks, templates and views',
 		description:
-			'Propose, then apply. changes is a list run in order: add_template (a template file, or from a ready-made one with answers: anything new with its own Tasks, Variants, schedule, habits inside, phases), add_habit, edit_habit (set: only the fields that change), add_task, edit_task, archive, save_template. Without apply nothing is saved: it returns a preview (summary, warnings, each touched habit and Task before and after) and a check. Show the user the preview and only after they agree call again with the same changes, apply: true and the check; it applies all or nothing and returns an undo id. Names and short keys work wherever the forms want ids. Read setup_guide first.',
+			'Propose, then apply. changes is a list run in order: add_template (a template file, or from a ready-made one with answers: anything new with its own Tasks, Variants, schedule, habits inside, phases), add_habit, edit_habit (set: only the fields that change), add_task, edit_task, archive, save_template, view (saved views and layout). Without apply nothing is saved: it returns a preview (summary, warnings, each touched habit and Task before and after) and a check. Show the user the preview and only after they agree call again with the same changes, apply: true and the check; it applies all or nothing and returns an undo id. Names and short keys work wherever the forms want ids. Read setup_guide first.',
 		input: setupInput,
 		run: (a, i) => runSetup(a, i)
 	}),

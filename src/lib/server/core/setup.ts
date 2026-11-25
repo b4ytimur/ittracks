@@ -12,110 +12,67 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../db';
 import { habit, metric, slot, task, taskPart, undoSnapshot, variant } from '../db/schema';
-import { habitForm, taskForm, firstError, type HabitForm, type TaskForm } from '$lib/forms';
+import { defaultLevels, defaultTriggers, emptyCue, habitForm, type HabitForm, type TaskForm } from '$lib/forms';
 import { DEFAULT_STREAK_RULE } from '$lib/engine/streak';
 import { isPhases, tidyPhases } from '$lib/engine/schedule';
-import { defaultLevels, defaultTriggers, emptyCue } from '$lib/forms';
 import { applyAnswers, fromTemplate, mapSchedule, templateFile, TEMPLATE_FORMAT, TEMPLATE_VERSION, type TemplateFile } from '$lib/template';
-import { checkTask } from '$lib/rules/task';
 import { galleryItem, listGallery, PACK_OF } from '$lib/gallery';
 import { packById } from '$lib/packs';
-import { checkHabitEdit, checkHabitForm, checkLinks, getHabitForm, listHabits, saveHabit, type ScheduleApplies } from '../repo/habits';
-import { checkTaskEdit, checkTaskLinks, getTaskForm, saveTask } from '../repo/tasks';
+import { getHabitForm, listHabits, type ScheduleApplies } from '../repo/habits';
+import { getTaskForm, setTaskArchived } from '../repo/tasks';
 import { addTemplate, unadd } from '../repo/templates';
 import { getSavedTemplate, listSavedTemplates, saveTemplate, deleteSavedTemplate } from '../repo/saved-templates';
 import { areaFor, listAreas } from '../repo/areas';
 import { identityFor, listIdentities } from '../repo/identities';
 import { archiveHabit, unarchiveHabit } from '../habit-actions';
-import { setTaskArchived } from '../repo/tasks';
 import { shareFile } from '../share';
-import { PastEditError } from '../history';
 import { restoreSnapshot, withSnapshot } from '../snapshot';
 import { restoreTaskSnapshot, withTaskSnapshot } from '../task-snapshot';
 import { takePack, undoPack, unitsWith, type PackUndo } from '../packs';
-import { getPacks, getUnits } from '../settings';
+import { getPacks, getUnits, getViews } from '../settings';
+import { changeViews } from '../views';
+import { DEFAULT_VIEW, emptyState, FEATURES, GROUPS, HABIT_LINES, LAYOUTS, LINES, PAGE_LABEL, PAGES, SECTIONS, SORTS, STATS, TEMPLATES, WIDGETS, DONE_MODES, type ViewSettings } from '$lib/views';
 import { trash } from '../trash';
 import { userToday } from '../today';
 import { ActionError, requireScope, type Actor } from './actor';
 import { findHabit } from './day';
 import { describe } from './read';
 import { emit } from './events';
+import { saveHabitChecked, saveTaskChecked, type Refused, type Saved } from './save';
 
 // ---------- input ----------
 
 const ref = z.string().trim().min(1).max(200);
 const fields = z.record(z.string(), z.unknown());
-const key = z
-	.string()
-	.trim()
-	.min(1)
-	.max(64)
-	.optional()
-	.describe('Your own name for what this change makes, so a later change in the same request can point at it (a Slot\'s taskId, a parentId).');
+/** Your own name for what a change makes, so a later change in the same request can point at it. */
+const key = z.string().trim().min(1).max(64).optional();
+const set = fields.describe('Only the fields that change, in the shape setup_read shows. A list is replaced whole.');
 
+// The shapes inside (habit, task, template, set) are in setup_guide, so the tool stays short.
 export const setupChange = z.discriminatedUnion('op', [
-	z.object({
-		op: z.literal('add_habit'),
-		key,
-		habit: fields.describe('A habit in the editor\'s shape (setup_guide topic "habit"). Fields left out take the editor\'s defaults. Ids can be your own short keys; Tasks, Areas and habits can be named.')
-	}),
-	z.object({
-		op: z.literal('edit_habit'),
-		habit: ref.describe('Habit id or name.'),
-		set: fields.describe('The fields to replace, in the shape setup_read shows; fields left out stay as they are. A list (variants, triggers) is replaced whole.'),
-		scheduleApplies: z.enum(['today', 'past']).optional().describe('A schedule change applies from today on (default: past days keep their plan), or to past days too.')
-	}),
-	z.object({
-		op: z.literal('add_task'),
-		key,
-		task: fields.describe('A Library Task (setup_guide topic "task"): name, fields (metrics), and optionally parts, tags, area.')
-	}),
-	z.object({
-		op: z.literal('edit_task'),
-		task: ref.describe('Task id or name.'),
-		set: fields.describe('The fields to replace, in the shape setup_read shows; fields left out stay as they are.'),
-		units: z
-			.record(z.string(), z.enum(['convert', 'relabel']))
-			.optional()
-			.describe('For a unit change on a field that already has values, by field id or name: convert the old values, or keep their numbers (relabel). The preview says when it is needed.')
-	}),
+	z.object({ op: z.literal('add_habit'), key, habit: fields }),
+	z.object({ op: z.literal('edit_habit'), habit: ref, set, scheduleApplies: z.enum(['today', 'past']).optional() }),
+	z.object({ op: z.literal('add_task'), key, task: fields }),
+	z.object({ op: z.literal('edit_task'), task: ref, set, units: z.record(z.string(), z.enum(['convert', 'relabel'])).optional() }),
 	z.object({
 		op: z.literal('add_template'),
 		key,
-		template: fields
-			.optional()
-			.describe('A template file (setup_guide topic "template"): one habit with its own new Tasks, Variants, schedule and the habits inside it. format and version may be left out.'),
-		from: z.string().trim().max(200).optional().describe('Instead of template: a ready-made template\'s slug or a saved template\'s id (setup_read ref "templates").'),
-		answers: z
-			.record(z.string(), z.union([z.number(), z.string().max(20), z.array(z.number().int().min(0).max(6)).max(7)]))
-			.optional()
-			.describe('Answers to the template\'s questions, by question key.'),
-		reuse: z.boolean().optional().describe('Use Library Tasks with the same name instead of making copies. Default true.'),
-		remind: z.boolean().optional().describe('Turn on the reminder the template suggests.')
+		template: fields.optional(),
+		from: z.string().trim().max(200).optional().describe('Or a template slug or id.'),
+		answers: z.record(z.string(), z.union([z.number(), z.string().max(20), z.array(z.number().int().min(0).max(6)).max(7)])).optional(),
+		reuse: z.boolean().optional(),
+		remind: z.boolean().optional()
 	}),
-	z.object({
-		op: z.literal('archive'),
-		habit: ref.optional().describe('Habit id or name.'),
-		task: ref.optional().describe('Or a Task id or name.'),
-		archived: z.boolean().optional().describe('false brings it back. Default true. Archiving keeps every log.')
-	}),
-	z.object({
-		op: z.literal('save_template'),
-		habit: ref.describe('The habit to keep as a template in My templates (Gallery), with the habits inside it and its Tasks.'),
-		name: z.string().trim().min(1).max(120).optional(),
-		description: z.string().max(2000).optional()
-	})
+	z.object({ op: z.literal('archive'), habit: ref.optional(), task: ref.optional(), archived: z.boolean().optional() }),
+	z.object({ op: z.literal('save_template'), habit: ref, name: z.string().trim().min(1).max(120).optional(), description: z.string().max(2000).optional() }),
+	z.object({ op: z.literal('view'), change: fields })
 ]);
 export type SetupChange = z.infer<typeof setupChange>;
 
 export const setupInput = z.object({
 	changes: z.array(setupChange).min(1).max(25),
-	apply: z.boolean().optional().describe('Leave out to preview. true makes the changes, all or nothing.'),
-	check: z
-		.string()
-		.max(80)
-		.optional()
-		.describe('With apply: the check the preview returned. If anything it shows changed since, nothing is applied and you are asked to preview again.')
+	apply: z.boolean().optional().describe('Leave out to preview.'),
+	check: z.string().max(80).optional().describe('With apply: the preview\'s check.')
 });
 export type SetupInput = z.infer<typeof setupInput>;
 
@@ -154,7 +111,7 @@ class Keys {
 /** One setup request: what it made so far (by key), what it touched, and how to undo it. */
 class Run {
 	readonly made = { habits: new Map<string, string>(), tasks: new Map<string, string>() };
-	readonly touched = { habits: new Set<string>(), tasks: new Set<string>() };
+	readonly touched = { habits: new Set<string>(), tasks: new Set<string>(), views: false };
 	readonly undo: UndoStep[] = [];
 	constructor(
 		readonly actor: Actor,
@@ -480,62 +437,22 @@ function zodError(what: string, e: z.ZodError): ActionError {
 
 // ---------- saving, with the editors' checks ----------
 
-/** The habit editor's Save, as a function: parse, conflict rules, links, history policies, save. */
-function saveHabitChecked(run: Run, id: string | null, raw: Obj, applies: ScheduleApplies): { id: string; warnings: string[] } {
-	const parsed = habitForm.safeParse(raw);
-	if (!parsed.success) throw zodError(`Habit “${raw.name ?? ''}”`, parsed.error);
-	const checked = checkHabitForm(parsed.data);
-	if (checked.errors[0]) throw invalid(`Habit “${parsed.data.name}”: ${checked.errors[0].reason}.`);
-	const links = checkLinks(run.accountId, id, parsed.data);
-	if (links) throw invalid(`Habit “${parsed.data.name}”: ${links}.`);
-	const refused = id ? checkHabitEdit(run.accountId, id, parsed.data) : null;
-	if (refused) throw invalid(`Habit “${parsed.data.name}”: ${refused}.`);
-	let saved: string | null;
-	try {
-		saved = saveHabit(run.accountId, id, parsed.data, run.today, { scheduleApplies: applies });
-	} catch (e) {
-		if (e instanceof PastEditError) throw invalid(`Habit “${parsed.data.name}”: ${e.message}.`);
-		throw e;
-	}
-	if (!saved) throw new ActionError('not_found', 'No such habit.');
-	return { id: saved, warnings: checked.warnings.map((w) => w.reason) };
+/** The editor's Save (core/save.ts), with a refusal as an error that names what was refused. */
+function saved(what: string, raw: Obj, r: Saved | Refused): Saved {
+	if ('id' in r) return r;
+	if (r.notFound) throw new ActionError('not_found', `No such ${what.toLowerCase()}.`);
+	if (r.zod) throw zodError(`${what} “${raw.name ?? ''}”`, r.zod);
+	throw invalid(`${what} “${raw.name ?? ''}”: ${r.error}.`);
 }
-
-/** The Task editor's Save, as a function. */
-function saveTaskChecked(run: Run, id: string | null, raw: Obj, units: Record<string, 'convert' | 'relabel'> = {}): { id: string; warnings: string[] } {
-	const parsed = taskForm.safeParse(raw);
-	if (!parsed.success) throw zodError(`Task “${raw.name ?? ''}”`, parsed.error);
-	const checked = checkTask(parsed.data);
-	if (checked.errors[0]) throw invalid(`Task “${parsed.data.name}”: ${checked.errors[0].reason}.`);
-	const f: TaskForm = checked.form;
-	const links = checkTaskLinks(run.accountId, id, f);
-	if (links) throw invalid(`Task “${f.name}”: ${links}.`);
+const saveHabitForm = (run: Run, id: string | null, raw: Obj, applies: ScheduleApplies) => saved('Habit', raw, saveHabitChecked(run.accountId, id, raw, run.today, applies));
+function saveTaskForm(run: Run, id: string | null, raw: Obj, units: Record<string, 'convert' | 'relabel'> = {}) {
 	// Unit choices by field id or name.
-	const choices = Object.fromEntries(Object.entries(units).map(([k, v]) => [f.metrics.find((m) => m.id === k || low(m.name) === low(k))?.id ?? k, v]));
-	const past = id ? checkTaskEdit(run.accountId, id, f, choices) : null;
-	if (past?.errors[0]) throw invalid(`Task “${f.name}”: ${past.errors[0].reason}. ${past.units.some((u) => !u.choice) ? 'Pass units: {"<field>": "convert" | "relabel"} on edit_task.' : ''}`.trim());
-	let saved: string | null;
-	try {
-		saved = saveTask(run.accountId, id, f, undefined, { units: choices });
-	} catch (e) {
-		if (e instanceof PastEditError) throw invalid(`Task “${f.name}”: ${e.message}.`);
-		throw e;
-	}
-	if (!saved) throw new ActionError('not_found', 'No such Task.');
-	for (const u of past?.units ?? [])
-		emit(run.actor, 'metric.unit_changed', {
-			data: { taskId: saved, metricId: u.metricId, from: u.from, to: u.to, converted: u.choice === 'convert', factor: u.choice === 'convert' && u.change.kind === 'convertible' ? u.change.factor : 1 }
-		});
-	const warnings = checked.warnings.map((w) => w.reason);
-	const name = (mid: string) => (getTaskForm(run.accountId, saved)?.metrics.find((m) => m.id === mid)?.name ?? '');
-	if (past) {
-		const was = (mid: string) => ownName(id!, mid) ?? name(mid);
-		for (const m of past.removed.metrics.archive) warnings.push(`Field “${was(m)}” is taken off; it has logged values, so it is archived and they stay.`);
-		for (const m of past.removed.metrics.drop) warnings.push(`Field “${was(m)}” is removed (nothing was logged in it).`);
-	}
-	return { id: saved, warnings };
+	const metrics = (Array.isArray(raw.metrics) ? raw.metrics : []) as { id: string; name: string }[];
+	const choices = Object.fromEntries(Object.entries(units).map(([k, v]) => [metrics.find((m) => m.id === k || low(m.name) === low(k))?.id ?? k, v]));
+	const r = saveTaskChecked(run.actor, id, raw, choices);
+	if ('error' in r && /^Choose what happens/.test(r.error)) r.error += '. Pass units: {"<field>": "convert" or "relabel"} on edit_task';
+	return saved('Task', raw, r);
 }
-const ownName = (taskId: string, metricId: string) => db.select({ name: metric.name }).from(metric).where(and(eq(metric.id, metricId), eq(metric.taskId, taskId))).get()?.name ?? null;
 
 // ---------- the changes ----------
 
@@ -577,7 +494,8 @@ type UndoStep =
 	| { k: 'added'; made: { habits: string[]; tasks: string[] } }
 	| { k: 'archive'; t: 'habit' | 'task'; id: string; archived: boolean }
 	| { k: 'pack'; undo: PackUndo }
-	| { k: 'saved'; id: string };
+	| { k: 'saved'; id: string }
+	| { k: 'views'; before: ViewSettings; after: ViewSettings };
 
 export interface ChangeResult {
 	op: SetupChange['op'];
@@ -609,14 +527,60 @@ function templateFrom(run: Run, from: string): { tpl: TemplateFile; pack?: strin
 	throw new ActionError('not_found', `No template “${from}”. setup_read with ref "templates" lists them.`);
 }
 
+/** A view change with names where it wants ids: views by name, Areas and habits by name. */
+function resolveView(run: Run, raw: Obj): Obj {
+	const c: Obj = { ...raw };
+	const v = getViews(run.accountId);
+	const viewId = (r: unknown, page?: unknown) => {
+		const s = String(r ?? '');
+		if (s === DEFAULT_VIEW || s === 'last') return s;
+		const mine = v.saved.filter((x) => !page || x.page === page);
+		return mine.find((x) => x.id === s)?.id ?? mine.find((x) => low(x.name) === low(s))?.id ?? s;
+	};
+	if (typeof c.view === 'string') c.view = viewId(c.view, c.page);
+	if (c.op === 'delete' && typeof c.id === 'string') c.id = viewId(c.id);
+	if (c.op === 'open' && typeof c.value === 'string') c.value = viewId(c.value, c.page);
+	if (isObj(c.state)) {
+		const st: Obj = { ...emptyState(), ...c.state };
+		const areas = listAreas(run.accountId);
+		if (Array.isArray(st.areas)) st.areas = st.areas.map((a) => areas.find((x) => x.id === a || low(x.name) === low(a))?.id ?? a);
+		if (typeof st.habit === 'string' && st.habit) st.habit = run.habit(st.habit);
+		if (typeof st.identity === 'string' && st.identity) st.identity = listIdentities(run.accountId).find((i) => i.id === st.identity || low(i.statement) === low(st.identity))?.id ?? st.identity;
+		c.state = st;
+	}
+	return c;
+}
+
+const viewName = (v: ViewSettings, id: string | undefined) => (!id || id === DEFAULT_VIEW ? 'Default' : (v.saved.find((x) => x.id === id)?.name ?? id));
+
 const OPS: { [K in SetupChange['op']]: Op<K> } = {
+	view: (run, c) => {
+		const before = getViews(run.accountId);
+		const change = resolveView(run, c.change);
+		const r = changeViews(run.accountId, change);
+		run.touched.views = true;
+		if (JSON.stringify(before) !== JSON.stringify(r.views)) run.undo.push({ k: 'views', before, after: r.views });
+		const page = typeof change.page === 'string' && change.page in PAGE_LABEL ? PAGE_LABEL[change.page as keyof typeof PAGE_LABEL] : '';
+		const summary: Record<string, () => string> = {
+			save: () => `Add the view “${change.name}” to ${page}`,
+			update: () => `Change the view “${viewName(before, (change.view as string) ?? before.active[change.page as string])}” on ${page}`,
+			select: () => `Put ${page} on the view “${viewName(before, change.view as string)}”`,
+			delete: () => `Delete the view “${viewName(before, change.id as string)}”`,
+			open: () => `${page} opens with ${change.value === 'last' ? 'the view it was on last' : `the view “${viewName(before, change.value as string)}”`}`,
+			patch: () => `Change the layout: ${Object.keys(change).filter((k) => k !== 'op').join(', ')}`,
+			template: () => `Switch to the view template “${TEMPLATES.find((t) => t.id === change.id)?.name ?? change.id}”`,
+			restore: () => 'Put the views back as they were'
+		};
+		return { op: c.op, summary: summary[String(change.op)]?.() ?? 'Change the views', warnings: r.warnings };
+	},
+
 	add_habit: (run, c) => {
 		const start = blankHabit(run.today);
 		const raw = { ...start, ...c.habit } as Obj;
 		// A build habit with nothing said about Variants gets one, named after it.
 		if (raw.direction !== 'break' && (!Array.isArray(raw.variants) || !raw.variants.length) && !(isObj(raw.schedule) && raw.schedule.kind === 'group'))
 			raw.variants = [{ id: 'main', name: String(raw.name ?? 'Main'), slots: [] }];
-		const { id, warnings } = saveHabitChecked(run, null, resolveHabit(run, raw, null), 'today');
+		const { id, warnings } = saveHabitForm(run, null, resolveHabit(run, raw, null), 'today');
 		if (c.key) run.made.habits.set(c.key, id);
 		run.touched.habits.add(id);
 		run.undo.push({ k: 'added', made: { habits: [id], tasks: [] } });
@@ -627,7 +591,7 @@ const OPS: { [K in SetupChange['op']]: Op<K> } = {
 		const before = getHabitForm(run.accountId, id);
 		if (!before) throw new ActionError('not_found', `No habit “${c.habit}”.`);
 		const raw = resolveHabit(run, { ...before, ...c.set }, id);
-		const { result, undo } = withSnapshot(run.accountId, id, () => saveHabitChecked(run, id, raw, c.scheduleApplies ?? 'today'));
+		const { result, undo } = withSnapshot(run.accountId, id, () => saveHabitForm(run, id, raw, c.scheduleApplies ?? 'today'));
 		run.undo.push({ k: 'habit', snapshot: undo });
 		run.touched.habits.add(id);
 		const changed = changedFields(before, getHabitForm(run.accountId, id));
@@ -641,7 +605,7 @@ const OPS: { [K in SetupChange['op']]: Op<K> } = {
 	},
 	add_task: (run, c) => {
 		const raw = { ...blankTask(), ...c.task } as Obj;
-		const { id, warnings } = saveTaskChecked(run, null, resolveTask(run, raw, null));
+		const { id, warnings } = saveTaskForm(run, null, resolveTask(run, raw, null));
 		if (c.key) run.made.tasks.set(c.key, id);
 		run.touched.tasks.add(id);
 		run.undo.push({ k: 'added', made: { habits: [], tasks: [id] } });
@@ -652,7 +616,7 @@ const OPS: { [K in SetupChange['op']]: Op<K> } = {
 		const before = getTaskForm(run.accountId, id);
 		if (!before) throw new ActionError('not_found', `No Task “${c.task}”.`);
 		const raw = resolveTask(run, { ...before, ...c.set }, id);
-		const { result, undo } = withTaskSnapshot(run.accountId, id, () => saveTaskChecked(run, id, raw, c.units));
+		const { result, undo } = withTaskSnapshot(run.accountId, id, () => saveTaskForm(run, id, raw, c.units));
 		run.undo.push({ k: 'task', snapshot: undo });
 		run.touched.tasks.add(id);
 		const changed = changedFields(before, getTaskForm(run.accountId, id));
@@ -749,10 +713,59 @@ function dryRun<T>(fn: () => T): T {
 }
 
 type Described = ReturnType<typeof describe>;
-/** The touched habits and Tasks as describe shows them (without the running totals). */
-function slice(d: Described, touched: Run['touched']) {
+
+/** What describe leaves out of a habit but a person checks before saying yes: only what is set. */
+function settingsOf(accountId: string, id: string, notes = false) {
+	const f = getHabitForm(accountId, id);
+	if (!f) return {};
+	const habitName = (x: string | null) => (x ? (db.select({ name: habit.name }).from(habit).where(eq(habit.id, x)).get()?.name ?? null) : null);
+	const cue = [f.cue.time, f.cue.range, f.cue.place && `at ${f.cue.place}`, (habitName(f.cue.afterHabitId) ?? f.cue.afterText) && `after ${habitName(f.cue.afterHabitId) ?? f.cue.afterText}`].filter(Boolean).join(' · ');
+	const identities = listIdentities(accountId).filter((i) => f.identityIds.includes(i.id)).map((i) => i.statement);
+	return Object.fromEntries(
+		Object.entries({
+			cue: cue || null,
+			levels: f.levels.enabled ? { minimum: f.levels.minimum, target: f.levels.target, stretch: f.levels.stretch } : null,
+			reminder: f.remind ? (f.reminder?.time ?? 'on') : null,
+			quickDone: f.quickDone || null,
+			unlogged: f.unlogged === 'ignore' ? 'ignored (not counted as missed)' : null,
+			identities: identities.length ? identities : null,
+			ifThen: f.direction === 'break' && (f.ifThen.when || f.ifThen.then) ? `When ${f.ifThen.when}, then ${f.ifThen.then || habitName(f.ifThen.habitId)}` : null,
+			limit: f.limit,
+			cost: f.cost,
+			progression: f.progression,
+			prep: f.prep.length ? f.prep : null,
+			notes: notes && f.notes ? `${f.notes.slice(0, 200)}${f.notes.length > 200 ? '…' : ''}` : null
+		}).filter(([, v]) => v !== null && v !== undefined)
+	);
+}
+
+/** The views as a person reads them: each page's views (only what differs from a blank view) and the layout. */
+export function viewsOf(v: ViewSettings) {
+	const blank = emptyState() as Record<string, unknown>;
+	const set = (st: Record<string, unknown>) => Object.fromEntries(Object.entries(st).filter(([k, x]) => JSON.stringify(x) !== JSON.stringify(blank[k])));
 	return {
-		habits: d.habits.filter((h) => touched.habits.has(h.id)).map(({ totals: _t, ...h }) => (void _t, h)),
+		template: v.template,
+		startPage: v.startPage,
+		pages: Object.fromEntries(
+			PAGES.map((p) => [
+				p,
+				{
+					on: viewName(v, v.active[p] ?? DEFAULT_VIEW),
+					views: [{ name: 'Default', id: DEFAULT_VIEW, state: set((v.defaults[p] ?? {}) as Record<string, unknown>) }, ...v.saved.filter((x) => x.page === p).map((x) => ({ name: x.name, id: x.id, state: set(x.state) }))]
+				}
+			])
+		),
+		today: { ...v.today, order: `${v.today.order.length} habits in My order` },
+		habits: v.habits,
+		history: v.history,
+		hidden: v.hidden
+	};
+}
+
+/** The touched habits and Tasks as describe shows them (without the running totals), with their settings. */
+function slice(d: Described, touched: Run['touched'], actor: Actor) {
+	return {
+		habits: d.habits.filter((h) => touched.habits.has(h.id)).map(({ totals: _t, ...h }) => (void _t, { ...h, settings: settingsOf(actor.accountId, h.id, actor.scopes.has('notes')) })),
 		tasks: d.tasks.filter((t) => touched.tasks.has(t.id))
 	};
 }
@@ -770,7 +783,10 @@ export function runSetup(actor: Actor, input: SetupInput) {
 	const today = userToday(actor.accountId, actor.tz);
 	const exec = () => {
 		const start = describe(actor);
+		const viewsBefore = getViews(actor.accountId);
 		const run = new Run(actor, today);
+		/** As things are before: read now, cut to what the changes touch once they are known. */
+		const settingsBefore = new Map(listHabits(actor.accountId, { archived: true }).map((h) => [h.id, settingsOf(actor.accountId, h.id, actor.scopes.has('notes'))]));
 		const changes: ChangeResult[] = [];
 		input.changes.forEach((c, i) => {
 			try {
@@ -780,8 +796,13 @@ export function runSetup(actor: Actor, input: SetupInput) {
 				throw e;
 			}
 		});
-		const before = slice(start, run.touched);
-		return { run, changes, before, after: slice(describe(actor), run.touched), check: checkOf(actor.accountId, input.changes, before) };
+		const before = {
+			habits: start.habits.filter((h) => run.touched.habits.has(h.id)).map(({ totals: _t, ...h }) => (void _t, { ...h, settings: settingsBefore.get(h.id) ?? {} })),
+			tasks: start.tasks.filter((t) => run.touched.tasks.has(t.id)),
+			...(run.touched.views ? { views: viewsOf(viewsBefore) } : {})
+		};
+		const after = { ...slice(describe(actor), run.touched, actor), ...(run.touched.views ? { views: viewsOf(getViews(actor.accountId)) } : {}) };
+		return { run, changes, before, after, check: checkOf(actor.accountId, input.changes, before) };
 	};
 
 	if (!input.apply) {
@@ -856,6 +877,10 @@ export function undoSetup(actor: Actor, id: string) {
 				case 'saved':
 					deleteSavedTemplate(actor.accountId, u.id);
 					break;
+				case 'views':
+					if (JSON.stringify(getViews(actor.accountId)) === JSON.stringify(u.after)) changeViews(actor.accountId, { op: 'restore', views: u.before });
+					else kept.push('the views changed again since, so they stay as they are now');
+					break;
 			}
 		}
 		db.update(undoSnapshot).set({ data: { ...b, undone: true } }).where(eq(undoSnapshot.id, id)).run();
@@ -884,12 +909,31 @@ function namesFor(accountId: string, taskIds: string[]) {
  */
 export function readSetup(actor: Actor, input: { ref: string; as?: 'form' | 'template' }) {
 	requireScope(actor, 'read');
-	const m = input.ref.trim().match(/^(habit|task|template|templates)(?::(.*))?$/i);
-	if (!m) throw invalid('ref is habit:<id or name>, task:<id or name>, template:<slug or id>, or templates.');
+	const m = input.ref.trim().match(/^(habit|task|template|templates|views)(?::(.*))?$/i);
+	if (!m) throw invalid('ref is habit:<id or name>, task:<id or name>, template:<slug or id>, templates, or views.');
 	const kind = m[1].toLowerCase();
 	const what = (m[2] ?? '').trim();
 	const accountId = actor.accountId;
 	switch (kind) {
+		case 'views':
+			return {
+				views: viewsOf(getViews(accountId)),
+				options: {
+					pages: PAGES,
+					sorts: SORTS,
+					groups: GROUPS,
+					todayLayouts: LAYOUTS,
+					todaySections: SECTIONS,
+					todayDone: DONE_MODES,
+					todayWidgets: WIDGETS,
+					todayLines: LINES,
+					todayHeadline: STATS,
+					habitsLines: HABIT_LINES,
+					features: FEATURES,
+					templates: TEMPLATES.map((t) => ({ id: t.id, name: t.name, blurb: t.blurb }))
+				},
+				next: 'Change them with setup (op view, change: one view change; setup_guide topic "views").'
+			};
 		case 'templates':
 			return {
 				builtIn: listGallery(getUnits(accountId)).map((g) => ({
@@ -913,11 +957,14 @@ export function readSetup(actor: Actor, input: { ref: string; as?: 'form' | 'tem
 			if (!what) throw invalid('Name the habit: habit:<id or name>.');
 			const id = findHabit(actor, what).id;
 			if (input.as === 'template') {
-				const file = shareFile(accountId, id);
+				const file = shareFile(accountId, id, { noHowTo: !actor.scopes.has('notes') });
 				if (!file) throw new ActionError('not_found', 'No such habit.');
 				return { ref: `habit:${id}`, template: file, next: 'Change it and pass it to add_template to make a new habit like this one.' };
 			}
-			const form = getHabitForm(accountId, id)!;
+			const full = getHabitForm(accountId, id)!;
+			// A habit's note is private like the journal: only for a key with notes access (an edit keeps it).
+			const { notes: _n, ...rest } = full;
+			const form = actor.scopes.has('notes') ? full : (void _n, rest as HabitForm);
 			const taskIds = [...new Set(form.variants.flatMap((v) => v.slots.map((s) => s.taskId)).filter((x): x is string => !!x))];
 			const all = listHabits(accountId, { archived: true });
 			return {
@@ -937,7 +984,9 @@ export function readSetup(actor: Actor, input: { ref: string; as?: 'form' | 'tem
 			if (!what) throw invalid('Name the Task: task:<id or name>.');
 			const run = new Run(actor, userToday(accountId, actor.tz));
 			const id = run.task(what);
-			const form = getTaskForm(accountId, id)!;
+			const full = getTaskForm(accountId, id)!;
+			const { notes: _n, ...rest } = full;
+			const form = actor.scopes.has('notes') ? full : (void _n, rest as TaskForm);
 			const inside = form.parts.flatMap((p) => (p.kind === 'task' ? [p.taskId] : []));
 			return {
 				ref: `task:${id}`,

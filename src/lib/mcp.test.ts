@@ -136,7 +136,7 @@ describe('ittracks MCP server', () => {
 			expect(unknown.result.isError).toBe(true);
 
 			const prompts = await mcp.ask({ jsonrpc: '2.0', id: 8, method: 'prompts/list' });
-			expect(prompts.result.prompts.map((p: { name: string }) => p.name)).toEqual(['weekly_review', 'find_patterns']);
+			expect(prompts.result.prompts.map((p: { name: string }) => p.name)).toEqual(['start_habit', 'weekly_review', 'find_patterns']);
 			const prompt = await mcp.ask({ jsonrpc: '2.0', id: 9, method: 'prompts/get', params: { name: 'weekly_review', arguments: { days: '14' } } });
 			expect(prompt.result.messages[0].content.text).toContain('last 14 days');
 

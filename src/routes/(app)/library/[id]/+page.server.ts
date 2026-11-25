@@ -2,23 +2,17 @@ import { userToday } from '$lib/server/today';
 import { trash } from '$lib/server/trash';
 import { error, fail, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
-import { firstError, rowWords, taskForm, type TaskForm } from '$lib/forms';
-import { checkTask } from '$lib/rules/task';
+import { rowWords, type TaskForm } from '$lib/forms';
 import {
-	checkTaskEdit,
-	checkTaskLinks,
 	libraryForParts,
 	duplicateTask,
 	getTaskForm,
 	listTagNames,
-	PastEditError,
-	saveTask,
 	setTaskArchived,
 	taskUsage
 } from '$lib/server/repo/tasks';
 import { taskLoggedLists } from '$lib/server/history';
 import { appActor } from '$lib/server/core/actor';
-import { emit } from '$lib/server/core/events';
 import type { UnitChoice } from '$lib/units';
 import { listAreas } from '$lib/server/repo/areas';
 import { listCollections } from '$lib/server/repo/collections';
@@ -31,6 +25,7 @@ import { and, eq } from 'drizzle-orm';
 import { catalogFor, getStats, itemsFor, statsContext } from '$lib/server/stats';
 import { getViews } from '$lib/server/settings';
 import { taskCards } from '$lib/stats/auto';
+import { saveTaskChecked } from '$lib/server/core/save';
 import type { Actions, PageServerLoad } from './$types';
 
 const blank = (): TaskForm => ({
@@ -121,35 +116,12 @@ export const actions: Actions = {
 		} catch {
 			return fail(400, { error: 'Could not read the form.' });
 		}
-		const parsed = taskForm.safeParse(json);
-		if (!parsed.success) return fail(400, { error: firstError(parsed.error) });
-		const checked = checkTask(parsed.data);
-		if (checked.errors[0]) return fail(400, { error: checked.errors[0].reason });
-		parsed.data = checked.form;
 		const accountId = locals.account!.id;
-		if (parsed.data.areaId && !listAreas(accountId).some((a) => a.id === parsed.data.areaId)) parsed.data.areaId = null;
 		const editing = params.id === 'new' ? null : params.id;
-		const links = checkTaskLinks(accountId, editing, parsed.data);
-		if (links) return fail(400, { error: links });
-		// History policies: edits that would change what is already logged are refused or ask first.
-		const past = editing ? checkTaskEdit(accountId, editing, parsed.data, unitChoices) : null;
-		if (editing && !past) error(404, 'Task not found');
-		if (past?.errors[0]) return fail(400, { error: past.errors[0].reason });
-		let id: string | null;
-		try {
-			id = saveTask(accountId, editing, parsed.data, undefined, { units: unitChoices });
-		} catch (e) {
-			if (e instanceof PastEditError) return fail(400, { error: e.message });
-			throw e;
-		}
-		if (!id) error(404, 'Task not found');
-		// The event log says when past values were converted or relabeled, so readers of older
-		// value events know which unit they were in.
-		const actor = appActor(accountId, cookies.get('tz'));
-		for (const u of past?.units ?? [])
-			emit(actor, 'metric.unit_changed', {
-				data: { taskId: id, metricId: u.metricId, from: u.from, to: u.to, converted: u.choice === 'convert', factor: u.choice === 'convert' && u.change.kind === 'convertible' ? u.change.factor : 1 }
-			});
+		// The checks, the save and the unit-change events are shared with setup (src/lib/server/core/save.ts).
+		const r = saveTaskChecked(appActor(accountId, cookies.get('tz')), editing, json, unitChoices);
+		if ('notFound' in r) error(404, 'Task not found');
+		if ('error' in r) return fail(400, { error: r.error });
 		const back = url.searchParams.get('back');
 		redirect(303, back && back.startsWith('/') && !back.startsWith('//') ? back : '/library');
 	},
