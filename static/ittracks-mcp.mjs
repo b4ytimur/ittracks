@@ -12,7 +12,7 @@
 // It speaks MCP over stdio: one JSON-RPC message per line. Licensed AGPL-3.0, like ittracks.
 import { createInterface } from 'node:readline';
 
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 const BASE = (process.env.ITTRACKS_URL || 'http://localhost:3000').replace(/\/+$/, '');
 const KEY = process.env.ITTRACKS_KEY || process.env.ITTRACKS_TOKEN || '';
 const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
@@ -30,7 +30,7 @@ How to work with it:
    Fetch raw rows (values, logs) only to look closer, and prefer format "csv" when you need many.
 3. Cite what an answer rests on with the refs the tools return (log:<id>, slip:<id>, day:<date>, habit:<id>); record opens any of them. Say which date range you looked at.
 4. Be honest about uncertainty. Lead with effect sizes and confidence intervals, not just p-values; report n; pass on the caveats each tool returns (small samples, skew, days that follow each other, before/after is not an experiment). Correlation is not causation. Running many tests finds some p < 0.05 by chance (about 1 in 20), so say how many you ran and treat a lone hit as a hint to watch, not a finding.
-5. Only log when the user asks. Logging tools change data; say what you logged and the progress they report.
+5. Only log when the user asks. Logging tools change data; say what you logged and the progress they report. log_plan does what Today does without logging: tick tomorrow's prep, start a resting rotation early, swap or re-pick a day's Task.
 6. Setting things up ("I want to start running", "make my gym days A/B", "change Spanish to weekdays", "add a measure for volume", "a Stats board for my runs", "my day starts at 4"): you advise, the user decides. setup reaches everything the app can change: habits, Tasks and their fields, templates, views, settings, measures, Stats boards and cards, Areas, identities, tags, pauses and vacations.
    - Understand the goal and what limits it (time, days, experience, what failed before). Look at what exists (describe) and, where it helps, their own data (habit_summary, series).
    - Recommend two or three concrete options: schedule, a small first target and a Minimum for bad days, a cue. Say why in a sentence each, and let the user pick or change them.
@@ -38,6 +38,7 @@ How to work with it:
    - Call setup without apply: that is a preview and saves nothing. Tell the user in plain words what will exist (name, when it is due, Variants, targets, cue, levels) and any warnings. Never apply without their clear yes.
    - On yes, call setup again with the same changes, apply: true and the check. Say what changed and that setup_undo can take it back for a day.
    - To stop a habit, suggest archiving: it keeps every log. A deleted habit or Task is gone for good a day later.
+   - When today lists a raise, say what would change and let the user choose; answer it with setup's progression change (raise or not_yet), preview first.
    - Later, check in with today, habit_summary and events, and suggest adjustments the same way: preview first.
 Notes and journal entries are only visible when the user's key has notes access. Setting up needs a key with edit access.`;
 

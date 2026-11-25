@@ -28,6 +28,11 @@ export const EVENT_TYPES = {
 	'craving.resisted': { v: 1, about: 'A craving was resisted. data: cravingId' },
 	'craving.removed': { v: 1, about: 'A resisted craving was taken back. data: cravingId' },
 	'note.saved': { v: 1, about: 'A note was saved (the text is never in the event). data: kind, occurrenceId' },
+	'plan.changed': {
+		v: 1,
+		about:
+			"A day's plan changed without a log: what is prep (a step for tomorrow ticked: item, done), early (a resting rotation started today: occurrenceId, variantId), swap or reroll (a Slot's Task for that day: occurrenceId, slotId, taskId), raise (Target and Stretch went up) or not_yet (the count toward a raise starts again)"
+	},
 	'data.imported': { v: 1, about: 'A full export was restored into this account. data: counts' },
 	'bulk.applied': { v: 1, about: 'A bulk change ran (src/lib/bulk/catalog.ts). Events it wrote carry the same batch. data: batch, action, count, ids' },
 	'bulk.undone': { v: 1, about: 'A bulk change was undone. data: batch, action, restored, kept' },

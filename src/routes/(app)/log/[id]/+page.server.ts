@@ -6,16 +6,16 @@ import { db } from '$lib/server/db';
 import { entry, metric, occurrence, slot, task, variant } from '$lib/server/db/schema';
 import { groupOfOccurrence, ownedOccurrence } from '$lib/server/owned';
 import { currentForm } from '$lib/server/habit-patch';
-import { candidates, ensurePicks, lastEntries, recount, userToday } from '$lib/server/today';
+import { ensurePicks, lastEntries, recount, userToday } from '$lib/server/today';
 import { finishAs } from '$lib/server/progress';
 import { PATH_RE, place, startsRound } from '$lib/engine/parts';
 import { partIdsIn, plannedSlots, positionsOf } from '$lib/server/positions';
-import { getGroups, getSettings, getUnits } from '$lib/server/settings';
+import { getSettings, getUnits } from '$lib/server/settings';
 import { recapFor } from '$lib/server/stats';
 import { planOfToday, replanToday, windowFor } from '$lib/server/backfill';
 import { NOTE_MAX, type ScheduleForm } from '$lib/forms';
-import { pickTask, type FillRule } from '$lib/engine/fill';
-import { appActor } from '$lib/server/core/actor';
+import { ActionError, appActor } from '$lib/server/core/actor';
+import { rerollSlot, swapSlot } from '$lib/server/day-plan';
 import { emit } from '$lib/server/core/events';
 import { doneOcc, reopenOcc, skipOcc, undoClears } from '$lib/server/core/log';
 import { routineDay, routineSteps, undoRoutine, withRoutineUndo } from '$lib/server/routine-day';
@@ -371,41 +371,29 @@ export const actions: Actions = {
 	},
 
 	/** Pick a different Task for an auto-filled Slot. */
-	reroll: async ({ request, locals, params }) => {
+	reroll: async ({ request, locals, params, cookies }) => {
 		const o = ownedOccurrence(locals.account!.id, params.id);
 		if (!o || !o.occ.variantId) error(404);
 		const slotId = String((await request.formData()).get('slot'));
-		const s = db.select().from(slot).where(and(eq(slot.id, slotId), eq(slot.variantId, o.occ.variantId))).get();
-		if (!s?.fillRule) error(404);
-		const picks = { ...(o.occ.picks ?? {}) };
-		// Exclude every Task already in this Occurrence, including the current pick.
-		const fixed = db
-			.select({ taskId: slot.taskId })
-			.from(slot)
-			.where(eq(slot.variantId, o.occ.variantId))
-			.all()
-			.map((x) => x.taskId)
-			.filter((x): x is string => !!x);
-		const used = new Set([...Object.values(picks), ...fixed]);
-		const next = pickTask(s.fillRule as FillRule, candidates(locals.account!.id), getGroups(locals.account!.id).rank, used);
-		if (!next) return fail(400, { error: 'No other Task matches this slot.' });
-		picks[s.id] = next;
-		db.update(occurrence).set({ picks }).where(eq(occurrence.id, o.occ.id)).run();
+		try {
+			rerollSlot(appActor(locals.account!.id, cookies.get('tz')), o.occ, slotId);
+		} catch (e) {
+			if (!(e instanceof ActionError)) throw e;
+			if (e.code === 'not_found') error(404);
+			return fail(400, { error: e.message });
+		}
 	},
 
 	/** Use a Task of your choice in a Slot, for this Occurrence only. */
-	swap: async ({ request, locals, params }) => {
+	swap: async ({ request, locals, params, cookies }) => {
 		const o = ownedOccurrence(locals.account!.id, params.id);
 		if (!o || !o.occ.variantId) error(404);
 		const f = await request.formData();
-		const slotId = String(f.get('slot'));
-		const taskId = String(f.get('task'));
-		const s = db.select().from(slot).where(and(eq(slot.id, slotId), eq(slot.variantId, o.occ.variantId))).get();
-		const t = db.select().from(task).where(and(eq(task.id, taskId), eq(task.accountId, locals.account!.id))).get();
-		if (!s || !t) error(404);
-		db.update(occurrence)
-			.set({ picks: { ...(o.occ.picks ?? {}), [s.id]: t.id } })
-			.where(eq(occurrence.id, o.occ.id))
-			.run();
+		try {
+			swapSlot(appActor(locals.account!.id, cookies.get('tz')), o.occ, String(f.get('slot')), String(f.get('task')));
+		} catch (e) {
+			if (e instanceof ActionError) error(404);
+			throw e;
+		}
 	}
 };

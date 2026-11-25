@@ -1,10 +1,8 @@
-import { keepGoals, stepsOf } from '$lib/server/progress';
 import { error, fail, redirect } from '@sveltejs/kit';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { entry, habit, occurrence, prepTick, slot, variant } from '$lib/server/db/schema';
-import { createOccurrence, loadPrep, loadToday, timeIn, userToday } from '$lib/server/today';
-import { raise } from '$lib/engine/progression';
+import { entry, occurrence } from '$lib/server/db/schema';
+import { loadPrep, loadToday, timeIn, userToday } from '$lib/server/today';
 import { addDays } from '$lib/engine/dates';
 import { getPacks, getSettings, getViews, saveSettings } from '$lib/server/settings';
 import { startHabit, unstart } from '$lib/server/start';
@@ -20,6 +18,7 @@ import { unloggedOn } from '$lib/server/backfill';
 import { logWindow } from '$lib/engine/backfill';
 import { ActionError, appActor } from '$lib/server/core/actor';
 import { undoRoutine, withRoutineUndo } from '$lib/server/routine-day';
+import { notYet, raiseTargets, startEarly, tickPrep } from '$lib/server/day-plan';
 import { addSlip, doneOcc, plusOcc, removeCraving, removeSlip, reopenOcc, resistCraving, skipOcc, undoClears } from '$lib/server/core/log';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -133,36 +132,14 @@ export const actions: Actions = {
 		const h = ownedHabit(locals.account!.id, field(f, 'habit'));
 		const item = field(f, 'item');
 		if (!h || !h.prep?.includes(item)) error(404);
-		const date = addDays(userToday(locals.account!.id, cookies.get('tz')), 1);
-		const where = and(eq(prepTick.habitId, h.id), eq(prepTick.date, date), eq(prepTick.item, item));
-		if (field(f, 'done') === 'true') db.insert(prepTick).values({ habitId: h.id, date, item }).onConflictDoNothing().run();
-		else db.delete(prepTick).where(where).run();
+		tickPrep(actorOf(locals, cookies), h, item, field(f, 'done') === 'true', userToday(locals.account!.id, cookies.get('tz')));
 	},
 	/** Accept a progression suggestion: raise Target and Stretch in every Slot. */
 	raise: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
 		const h = ownedHabit(locals.account!.id, field(f, 'habit'));
 		if (!h?.progression) error(404);
-		const p = h.progression;
-		const today = userToday(locals.account!.id, cookies.get('tz'));
-		db.transaction((tx) => {
-			const variants = tx.select({ id: variant.id }).from(variant).where(and(eq(variant.habitId, h.id), eq(variant.archived, false))).all();
-			// Logs before the raise keep the targets they aimed for.
-			keepGoals(tx, variants.map((v) => v.id));
-			for (const v of variants)
-				for (const s of tx.select().from(slot).where(eq(slot.variantId, v.id)).all()) {
-					// By steps, each target rises by its own field's step: 2.5 kg, 1 rep.
-					const steps = stepsOf([...Object.keys(s.targets ?? {}), ...Object.keys(s.stretchTargets ?? {})], tx);
-					tx.update(slot)
-						.set({
-							targets: s.targets ? raise(s.targets, p, steps) : s.targets,
-							stretchTargets: s.stretchTargets ? raise(s.stretchTargets, p, steps) : s.stretchTargets
-						})
-						.where(eq(slot.id, s.id))
-						.run();
-				}
-			tx.update(habit).set({ progressionFrom: today }).where(eq(habit.id, h.id)).run();
-		});
+		raiseTargets(actorOf(locals, cookies), h, userToday(locals.account!.id, cookies.get('tz')));
 		return { raised: h.id };
 	},
 	/** Not yet: start counting again from today. */
@@ -170,7 +147,7 @@ export const actions: Actions = {
 		const f = await request.formData();
 		const h = ownedHabit(locals.account!.id, field(f, 'habit'));
 		if (!h) error(404);
-		db.update(habit).set({ progressionFrom: userToday(locals.account!.id, cookies.get('tz')) }).where(eq(habit.id, h.id)).run();
+		notYet(actorOf(locals, cookies), h.id, userToday(locals.account!.id, cookies.get('tz')));
 	},
 	/** Same as last time: copy the last log and finish. */
 	same: async ({ request, locals, cookies }) => {
@@ -221,13 +198,13 @@ export const actions: Actions = {
 	early: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
 		const h = ownedHabit(locals.account!.id, field(f, 'habit'));
-		const v = db
-			.select()
-			.from(variant)
-			.where(and(eq(variant.id, field(f, 'variant')), eq(variant.habitId, h?.id ?? ''), eq(variant.archived, false)))
-			.get();
-		if (!h || !v) error(404);
-		createOccurrence(locals.account!.id, h.id, v.id, userToday(locals.account!.id, cookies.get('tz')));
+		if (!h) error(404);
+		try {
+			startEarly(actorOf(locals, cookies), h.id, field(f, 'variant'), userToday(locals.account!.id, cookies.get('tz')));
+		} catch (e) {
+			if (e instanceof ActionError) error(404);
+			throw e;
+		}
 	},
 	slip: async ({ request, locals, cookies }) => {
 		const f = await request.formData();

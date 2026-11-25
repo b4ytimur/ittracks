@@ -36,10 +36,10 @@ const fields = z.record(z.string(), z.unknown());
 const list = z.array(ref).max(200);
 const day = z.string().max(10);
 
-/** The changes, shapes in setup_guide (topic "account" and "stats"). */
 /** How long a deleted habit or Task can still be put back: "24 hours". */
 const keptFor = () => (TRASH_MS >= 3_600_000 ? `${Math.round(TRASH_MS / 3_600_000)} hours` : `${Math.round(TRASH_MS / 60_000)} minutes`);
 
+/** The changes, shapes in setup_guide (topic "account" and "stats"). */
 export const ACCOUNT_CHANGES = [
 	z.object({ op: z.literal('settings'), set: fields, renames: z.record(z.string(), z.string()).optional(), unitRenames: z.record(z.string(), z.string()).optional() }),
 	z.object({ op: z.literal('measure'), measure: ref.optional(), set: fields.optional(), delete: z.boolean().optional() }),

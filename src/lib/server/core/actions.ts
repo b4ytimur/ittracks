@@ -9,6 +9,7 @@
 import { z } from 'zod';
 import { ActionError, requireScope, type Actor, type Scope } from './actor';
 import { addSlip, logDone, logSkip, logTask, logUndo, logValue, removeSlip, resistCraving, writeDayNote, writeLogNote } from './log';
+import { logPlan } from './plan';
 import { describe, getRecord, habitSummary, listLogs, listValues, searchNotes, today } from './read';
 import { analysisOptions, correlation, series } from './analysis';
 import { statsCompare, statsDescribe, statsGroups, statsTrend } from './statistics';
@@ -105,7 +106,7 @@ export const ACTIONS: ActionDef[] = [
 		kind: 'read',
 		scope: 'read',
 		title: "Today's plan",
-		description: "Today's build habits with status (due, done, skipped) and progress, break habits with days since the last slip, and habits resting today.",
+		description: "Today's build habits with status (due, done, skipped) and progress, break habits with days since the last slip, habits resting today (startEarly: the Variant log_plan can start), tomorrow's prep lists, and raises Today suggests (setup's progression answers them).",
 		input: z.object({}),
 		run: (a) => today(a)
 	}),
@@ -336,6 +337,25 @@ export const ACTIONS: ActionDef[] = [
 		run: (a, i) => logUndo(a, i)
 	}),
 	def({
+		name: 'log_plan',
+		version: 1,
+		kind: 'write',
+		scope: 'log',
+		title: "Change a day's plan",
+		description:
+			'What Today and the log screen change without logging. prep: tick a step of tomorrow\'s prep list (item; done: false unticks). early: start a resting rotation\'s next Variant today (today lists it as startEarly). swap: use another Library Task in a slot for that day only (slot, task). reroll: pick another Task that fits a slot filled by a rule. slot: the Task in it now, or its number from 1.',
+		input: z.object({
+			habit: habitRef,
+			do: z.enum(['prep', 'early', 'swap', 'reroll']),
+			item: z.string().max(200).optional(),
+			done: z.boolean().optional(),
+			slot: z.string().max(200).optional(),
+			task: z.string().max(200).optional(),
+			date
+		}),
+		run: (a, i) => logPlan(a, i)
+	}),
+	def({
 		name: 'log_slip',
 		version: 1,
 		kind: 'write',
@@ -438,7 +458,7 @@ export const ACTIONS: ActionDef[] = [
 		scope: 'edit',
 		title: 'Set up anything the app can: habits, Tasks, templates, views, settings, measures, Stats',
 		description:
-			'Propose, then apply. changes is a list run in order: add_template (a template file, or from a ready-made one with answers: anything new with its own Tasks, Variants, schedule, habits inside, phases), add_habit, edit_habit (set: only the fields that change), add_task (type: start from a Task type), edit_task, archive, save_template, view (saved views and layout); and for the account: settings (day start, parts of the day, units, groupings, Task types…), measure (formulas like [Weight] * [Reps]), stats (boards, cards, the number on Today), area, identity, tag, pause (or a vacation), delete, pin, pack, collection, remove_template. Without apply nothing is saved: it returns a preview (summary, warnings, each touched habit and Task, and the parts of the account that change, before and after) and a check. Show the user the preview and only after they agree call again with the same changes, apply: true and the check; it applies all or nothing and returns an undo id. Names and short keys work wherever the forms want ids. Read setup_guide first.',
+			'Propose, then apply. changes is a list run in order: add_template (a template file, or from a ready-made one with answers: anything new with its own Tasks, Variants, schedule, habits inside, phases), add_habit, edit_habit (set: only the fields that change), progression (answer Today\'s raise: raise or not_yet), add_task (type: start from a Task type), edit_task, archive, save_template, view (saved views and layout); and for the account: settings (day start, parts of the day, units, groupings, Task types…), measure (formulas like [Weight] * [Reps]), stats (boards, cards, the number on Today), area, identity, tag, pause (or a vacation), delete, pin, pack, collection, remove_template. Without apply nothing is saved: it returns a preview (summary, warnings, each touched habit and Task, and the parts of the account that change, before and after) and a check. Show the user the preview and only after they agree call again with the same changes, apply: true and the check; it applies all or nothing and returns an undo id. Names and short keys work wherever the forms want ids. Read setup_guide first.',
 		input: setupInput,
 		run: (a, i) => runSetup(a, i)
 	}),

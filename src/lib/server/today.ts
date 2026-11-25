@@ -1145,8 +1145,21 @@ function progressionFor(
 	return hits >= p.after ? { hits, by: p.by, unit: p.unit, changes: previewRaise(p, variantIds) } : null;
 }
 
+/** The raise Today suggests for a habit now, or null. */
+export function raiseFor(h: { id: string; progression: Progression | null; progressionFrom: string | null }) {
+	if (!h.progression) return null;
+	const marks = db
+		.select({ date: occurrence.date, status: occurrence.status, level: occurrence.level })
+		.from(occurrence)
+		.where(eq(occurrence.habitId, h.id))
+		.orderBy(asc(occurrence.date))
+		.all();
+	const variants = db.select({ id: variant.id }).from(variant).where(and(eq(variant.habitId, h.id), eq(variant.archived, false))).all();
+	return progressionFor(h.progression, marks, h.progressionFrom, variants.map((v) => v.id));
+}
+
 /** What Raise would change, as "Bench press: Reps 8→9, Weight 80→84", one line per Task. */
-function previewRaise(p: Progression, variantIds: string[]): string[] {
+export function previewRaise(p: Progression, variantIds: string[]): string[] {
 	if (!variantIds.length) return [];
 	const slots = db
 		.select()

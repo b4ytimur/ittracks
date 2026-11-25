@@ -34,7 +34,8 @@ import { metricsFromType, PLAIN_TASK_TYPES } from '$lib/task-types';
 import { changeViews } from '../views';
 import { DEFAULT_VIEW, emptyState, FEATURES, GROUPS, HABIT_LINES, LAYOUTS, LINES, PAGE_LABEL, PAGES, SECTIONS, SORTS, STATS, TEMPLATES, WIDGETS, DONE_MODES, type ViewSettings } from '$lib/views';
 import { trash } from '../trash';
-import { userToday } from '../today';
+import { previewRaise, raiseFor, userToday } from '../today';
+import { notYet, raiseTargets } from '../day-plan';
 import { ActionError, requireScope, type Actor } from './actor';
 import { brief } from './brief';
 import { findHabit } from './day';
@@ -55,6 +56,7 @@ const set = fields.describe('Only the fields that change, in the shape setup_rea
 export const setupChange = z.discriminatedUnion('op', [
 	z.object({ op: z.literal('add_habit'), key, habit: fields }),
 	z.object({ op: z.literal('edit_habit'), habit: ref, set, scheduleApplies: z.enum(['today', 'past']).optional() }),
+	z.object({ op: z.literal('progression'), habit: ref, answer: z.enum(['raise', 'not_yet']).describe("Today's raise suggestion: raise the targets, or not yet.") }),
 	z.object({ op: z.literal('add_task'), key, task: fields }),
 	z.object({ op: z.literal('edit_task'), task: ref, set, units: z.record(z.string(), z.enum(['convert', 'relabel'])).optional() }),
 	z.object({
@@ -621,6 +623,27 @@ const OPS: { [K in SetupChange['op']]: Op<K> } = {
 			habitId: id,
 			changed,
 			warnings: result.warnings
+		};
+	},
+	progression: (run, c) => {
+		const id = run.habit(c.habit);
+		const h = db.select().from(habit).where(eq(habit.id, id)).get()!;
+		if (!h.progression) throw invalid(`“${h.name}” has no progression: set one with edit_habit (progression: { after, by, unit }).`);
+		const suggested = raiseFor(h);
+		const by = `${h.progression.by}${h.progression.unit === 'percent' ? '%' : h.progression.by === 1 ? ' step' : ' steps'}`;
+		const variants = db.select({ id: variant.id }).from(variant).where(and(eq(variant.habitId, id), eq(variant.archived, false))).all();
+		const lines = c.answer === 'raise' ? previewRaise(h.progression, variants.map((v) => v.id)) : [];
+		const { undo } = withSnapshot(run.accountId, id, () => (c.answer === 'raise' ? raiseTargets(run.actor, h, run.today) : notYet(run.actor, id, run.today)));
+		run.undo.push({ k: 'habit', snapshot: undo });
+		run.touched.habits.add(id);
+		return {
+			op: c.op,
+			summary:
+				c.answer === 'raise'
+					? `Raise the targets of “${h.name}” by ${by}${lines.length ? `: ${lines.join('; ')}` : ''}`
+					: `Keep the targets of “${h.name}”; the count toward the next raise starts again today`,
+			habitId: id,
+			warnings: suggested ? [] : [`Today doesn't suggest a raise for “${h.name}” yet: it waits for ${h.progression.after} logs at Target or better in a row.`]
 		};
 	},
 	add_task: (run, c) => {

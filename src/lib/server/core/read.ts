@@ -10,7 +10,8 @@ import { parsePath } from '$lib/engine/parts';
 import { getGroups, getSettings, getUnits } from '../settings';
 import { perLogOf } from '$lib/stats/model';
 import { getStats, loadDataset } from '../stats';
-import { ensureToday, settleAll, userToday } from '../today';
+import { ensureToday, loadPrep, nextEarly, pausesOf, raiseFor, settleAll, userToday } from '../today';
+import { pauseOn } from '$lib/engine/pause';
 import { prepare, describeLog, type Dataset, type Prepared } from '$lib/stats/engine';
 import { describeSchedule, groupRuleText } from '$lib/describe';
 import { progressText } from '$lib/engine/progress';
@@ -599,7 +600,27 @@ export function today(actor: Actor) {
 	const group = build.find((h) => isGroup(h.schedule as Schedule));
 	if (group) ensureToday(actor.accountId, group.id, group.schedule as ScheduleForm, date);
 	// ensureToday counts parents again for habits in a tree; a group alone does it for all.
-	return dayView(actor, date);
+	const view = dayView(actor, date);
+	const pauses = pausesOf(actor.accountId);
+	const variantName = (id: string) => db.select({ name: variant.name }).from(variant).where(eq(variant.id, id)).get()?.name;
+	const visible = new Set(build.map((h) => h.id));
+	return {
+		...view,
+		// As Today's Start early: a rotation resting today can start its next Variant (log_plan).
+		resting: view.resting.map((r) => {
+			const h = build.find((x) => x.id === r.habitId);
+			const next = h && !pauseOn(pauses, h.id, date) ? nextEarly(h.id, h.schedule as ScheduleForm, date) : null;
+			const name = next ? variantName(next) : undefined;
+			return name ? { ...r, startEarly: name } : r;
+		}),
+		prep: loadPrep(actor.accountId, date)
+			.filter((p) => visible.has(p.habitId))
+			.map((p) => ({ habitId: p.habitId, habit: p.name, date: p.date, steps: p.items })),
+		raise: build.flatMap((h) => {
+			const r = raiseFor(h);
+			return r ? [{ habitId: h.id, habit: h.name, hits: r.hits, changes: r.changes }] : [];
+		})
+	};
 }
 
 export function dayView(actor: Actor, date: string) {

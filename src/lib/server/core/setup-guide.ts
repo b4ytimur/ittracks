@@ -54,6 +54,7 @@ const OVERVIEW = {
 		edit_habit: '{ habit: "<id or name>", set: { only the fields that change }, scheduleApplies: "today" (default: past days keep their plan) or "past" }. Read the form with setup_read first.',
 		add_task: '{ task }: a new Library Task. Topic "task".',
 		edit_task: '{ task: "<id or name>", set, units: { "<field>": "convert" or "relabel" } }. units only when the preview says a field with values changes unit.',
+		progression: '{ habit, answer: "raise" or "not_yet" }: answers Today\'s raise suggestion (today lists them under raise). raise: Target and Stretch go up in every Slot by the habit\'s progression, logs before keep what they aimed for. not_yet: the targets stay and the count starts again today.',
 		archive: '{ habit or task, archived: false to bring it back }. Archiving keeps every log.',
 		save_template: '{ habit, name?, description? }: keep it, with the habits inside it and its Tasks, in My templates in the Gallery.',
 		view: '{ change: one view change }: a saved view (filter, sort, grouping, Today layout) on Today, Habits, Library or History, which view a page is on or opens with, the Today and Habits layout, hidden features, the start page, or a view template. Topic "views"; setup_read ref "views" shows them and every option.',
