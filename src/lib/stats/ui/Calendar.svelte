@@ -99,9 +99,11 @@
 		fill: transparent;
 		stroke: var(--chart-grid);
 	}
-	.c:hover {
-		stroke: var(--ink);
-		stroke-width: 1;
+	@media (hover: hover) {
+		.c:hover {
+			stroke: var(--ink);
+			stroke-width: 1;
+		}
 	}
 	.key {
 		display: flex;

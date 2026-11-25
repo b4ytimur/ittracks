@@ -168,51 +168,53 @@
 	}
 </script>
 
-{#if building}
-	<CardBuilder initial={building} {catalog} {measures} {hidden} {board} {saving} onsave={save} oncancel={() => (building = null)} />
-{:else}
-	{#if adding}
-		<AddCard {suggested} {gallery} onadd={addNow} onbuild={(c) => (building = c)} oncancel={() => (adding = false)} />
-	{/if}
+{#if adding}
+	<AddCard {suggested} {gallery} onadd={addNow} onbuild={(c) => (building = c)} oncancel={() => (adding = false)} />
+{/if}
 
-	<EditableList
-		class="cards"
-		axis="grid"
-		layout="bare"
-		items={shown}
-		key={(item) => item.card.id}
-		label={(item) => titleOf(item.card)}
-		itemClass={(item) => item.card.look.size}
-		mode={editing && !readonly ? 'edit' : 'use'}
-		ariaLabel="Cards"
-		onmove={(_, order, text) => (void reorder(order, text), true)}
-	>
-		{#snippet row(item, ctx)}
-			{@const title = titleOf(item.card)}
-			<StatCardView
-				card={item.card}
-				r={item.result}
-				{title}
-				rangeKey={item.rangeKey}
-				boardRange={board.range}
-				warnings={item.warnings}
-				offer={readonly ? undefined : offer}
-				csvHref={csv?.(item.card.id)}
-				grip={ctx.grip}
-				logs={drill?.card === item.card.id ? drill : null}
-				onpick={readonly ? undefined : (k, v) => pickWord(item, k, v)}
-				onchart={readonly ? undefined : (c) => setChart(item, c)}
-				onsize={readonly ? undefined : (x) => resize(item, x)}
-				onedit={readonly ? undefined : () => openSettings(item)}
-				onremove={readonly ? undefined : () => remove(item, title)}
-				ondrill={item.result ? (from, to, series) => openDrill(item, from, to, series) : undefined}
-				onclose={() => (drill = null)}
-				onall={() => drill && (drill = { ...drill, all: true })}
-				onheadline={onheadline && item.card.look.chart === 'tile' ? () => onheadline(item.card) : undefined}
-				headline={headlines.includes(item.card.id)}
-			/>
-		{/snippet}
-	</EditableList>
+<EditableList
+	class="cards"
+	axis="grid"
+	layout="bare"
+	items={shown}
+	key={(item) => item.card.id}
+	label={(item) => titleOf(item.card)}
+	itemClass={(item) => item.card.look.size}
+	mode={editing && !readonly ? 'edit' : 'use'}
+	ariaLabel="Cards"
+	onmove={(_, order, text) => (void reorder(order, text), true)}
+>
+	{#snippet row(item, ctx)}
+		{@const title = titleOf(item.card)}
+		<StatCardView
+			card={item.card}
+			r={item.result}
+			{title}
+			rangeKey={item.rangeKey}
+			boardRange={board.range}
+			warnings={item.warnings}
+			offer={readonly ? undefined : offer}
+			csvHref={csv?.(item.card.id)}
+			grip={ctx.grip}
+			logs={drill?.card === item.card.id ? drill : null}
+			onpick={readonly ? undefined : (k, v) => pickWord(item, k, v)}
+			onchart={readonly ? undefined : (c) => setChart(item, c)}
+			onsize={readonly ? undefined : (x) => resize(item, x)}
+			onedit={readonly ? undefined : () => openSettings(item)}
+			onremove={readonly ? undefined : () => remove(item, title)}
+			ondrill={item.result ? (from, to, series) => openDrill(item, from, to, series) : undefined}
+			onclose={() => (drill = null)}
+			onall={() => drill && (drill = { ...drill, all: true })}
+			onheadline={onheadline && item.card.look.chart === 'tile' ? () => onheadline(item.card) : undefined}
+			headline={headlines.includes(item.card.id)}
+		/>
+	{/snippet}
+</EditableList>
+
+{#if building}
+	<dialog class="card-settings" aria-label="A new card" onclose={() => (building = null)} {@attach (d) => (d as HTMLDialogElement).showModal()}>
+		<CardBuilder initial={building} {catalog} {measures} {hidden} {board} {saving} onsave={save} oncancel={() => (building = null)} />
+	</dialog>
 {/if}
 
 {#if settings}

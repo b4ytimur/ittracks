@@ -1088,8 +1088,10 @@
 		text-decoration: none;
 		border-radius: 6px;
 	}
-	.week a.day:hover {
-		background: var(--line);
+	@media (hover: hover) {
+		.week a.day:hover {
+			background: var(--line);
+		}
 	}
 	.nudge {
 		align-items: center;
