@@ -63,6 +63,7 @@ export function restoreSnapshot(accountId: string, id: string): boolean {
 	const row = db.select().from(undoSnapshot).where(and(eq(undoSnapshot.id, id), eq(undoSnapshot.accountId, accountId))).get();
 	if (!row) return false;
 	const { habitId, before, after } = row.data as Snapshot;
+	if (!habitId) return false;
 	const at = <R extends { id: string }>(rows: R[], k: string) => rows.find((r) => r.id === k);
 	const plain = (r: unknown) => JSON.parse(JSON.stringify(r));
 	// The plan has to be as the change left it: settling days since moves only `settledThrough`.

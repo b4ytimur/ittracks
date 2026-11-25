@@ -2,6 +2,9 @@
 
 A **Task** is a reusable thing you do: an exercise, "new words", "read", "meditate". Tasks live in your **Library** and are used by habits through [Slots](habits.md#what-you-do-variants-slots-and-targets). One Task can be used by many habits, and its history is shared.
 
+
+A Task's page is one page of lines, like a [habit's](habits.md#a-habits-page): each line says what it means, opens where it stands, and saves by itself with **Undo**. Only a change that touches what is logged waits for its own **Save**: a unit on a field with values (you choose whether they are converted or kept), or a field or step with logs taken away. Its Undo puts back exactly what it replaced, and leaves values you corrected since.
+
 ## Find Tasks
 
 The **Library** page lists your Tasks. Filter them with the search box (names and tags), an **Area**, a **Collection** or **Tags** (all picked tags must match). Sort and save filters like any page: see [Views](views-and-edit-mode.md#filters-and-saved-views).
@@ -48,7 +51,7 @@ Options per field:
 - **Required before Finish**.
 - **Show on quick logs**: the field appears on the short [quick log](integrations.md#quick-log-links). Required fields always show there.
 
-Use the arrows to reorder fields. **Use weight and reps per set** adds the Strength fields in one go.
+Drag ⠿ to reorder fields, or use the arrow keys on it.
 
 ### Changing fields that have logs
 
