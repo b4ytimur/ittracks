@@ -105,7 +105,7 @@ A Task can hold other things under **Inside this Task**, in order:
 
 Each Task inside can have its own **Sets** (or **Rounds**, when it has Tasks inside it) and **Minimum**, **Target** and **Stretch** per number field.
 
-When a Task with parts and no per-set fields is used in a habit, its **Rounds** repeat everything inside it. A circuit of three exercises with 3 rounds logs each exercise three times.
+When a Task with parts and no per-set fields is used in a habit, its **Rounds** repeat everything inside it. A circuit of three exercises with 3 rounds logs each exercise three times. In the log the rounds are its rows: the open one lists what is in it, each with its own tick, and **Done round 2** ticks what is left of it in one press. Press one to change its numbers; a number changed from last time goes on to the rounds still to do.
 
 Limits: nesting goes up to 4 levels deep, and a Task can't end up inside itself. Removing a step or Task that has logs archives it: its past logs keep their place.
 

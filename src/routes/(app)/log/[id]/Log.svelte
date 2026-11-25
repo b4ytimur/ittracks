@@ -7,7 +7,8 @@
 	import Place from '$lib/log/Place.svelte';
 	import EditPlaces, { type EditPlace } from '$lib/log/EditPlaces.svelte';
 	import { inOrder, slotIn, toCount, withSlot, type Plan } from '$lib/log/plan';
-	import { cap, cursor, follow, rowText, type Cursor, type Field, type RowState } from '$lib/log/run';
+	import { circuitsOf, roundWords, type Circuit } from '$lib/log/circuit';
+	import { cap, cursor, follow, rowsText, rowText, valueText, type Cursor, type Field, type RowState } from '$lib/log/run';
 	import EditChrome from '$lib/ui/EditChrome.svelte';
 	import type { Mode } from '$lib/ui/list';
 	import MenuButton, { type Way } from '$lib/ui/MenuButton.svelte';
@@ -22,7 +23,7 @@
 	import NoteBox from '$lib/NoteBox.svelte';
 	import Markdown from '$lib/Markdown.svelte';
 	import { starterFor, untouched } from '$lib/journal';
-	import { isSuggestion, keepsSuggestions, onlySuggested, type PlaceStart } from '$lib/prefill';
+	import { hasLog, isSuggestion, keepsSuggestions, onlySuggested, type PlaceStart } from '$lib/prefill';
 
 	import type { ActionData, PageData } from './$types';
 
@@ -35,6 +36,8 @@
 		summary: Values;
 		/** The tick of a Yes or no Task, or of a step (no fields and nothing inside). */
 		tick?: boolean;
+		/** A station of a round, answered by its tick: its values count, also those only suggested (or, false, none do). */
+		kept?: boolean;
 	}
 	type Item = (typeof data.items)[number];
 	type Metric = NonNullable<Item['task']>['metrics'][number];
@@ -384,8 +387,8 @@
 			}
 			// A long text field that still holds only its starter text counts as not written.
 			const longs = new Map(t.metrics.filter(isLong).map((m) => [m.id, m]));
-			const keep = (quickMode && finish) || keepsSuggestions(log, starts, i, { finish, confirmed: suggestionsConfirmed });
-			const filled = Object.entries(s.summary).filter(
+			const keep = stationIn.has(i) ? !!s.kept : (quickMode && finish) || keepsSuggestions(log, starts, i, { finish, confirmed: suggestionsConfirmed });
+			const filled = Object.entries(s.kept === false ? {} : s.summary).filter(
 				([k, v]) =>
 					v !== '' &&
 					v !== null &&
@@ -408,6 +411,8 @@
 		if (quickMode || !isOpen) return 0;
 		let n = 0;
 		data.items.forEach((it, i) => {
+			if (stationIn.has(i)) return;
+			if (circuits.has(i)) n += rowsAt(i).filter((x) => !x.done).length;
 			const ids = it.task?.metrics.filter((m) => m.repeats).map((m) => m.id) ?? [];
 			n += log[i]?.sets.filter((set) => !set.done && ids.some((id) => !empty(set.values[id]))).length ?? 0;
 		});
@@ -416,7 +421,7 @@
 	/** Places that still show only suggested values while others have a log (a session left half way), by name. */
 	function suggestedPlaces(): string[] {
 		if (quickMode || !isOpen) return [];
-		return onlySuggested(log, starts).map((i) => {
+		return onlySuggested(log, starts).filter((i) => !stationIn.has(i)).map((i) => {
 			const it = data.items[i];
 			const round = [...it.path.matchAll(/#(\d+)/g)].at(-1)?.[1];
 			return `${it.task?.name ?? 'Task'}${round ? ` (round ${round})` : ''}`;
@@ -430,7 +435,7 @@
 		const out: string[] = [];
 		data.items.forEach((it, i) => {
 			const t = it.task;
-			if (!t) return;
+			if (!t || (stationIn.has(i) && !answered(i))) return;
 			for (const m of t.metrics.filter((x) => x.required)) {
 				const bad = m.repeats
 					? log[i].sets.some((s) => (s.done || quickMode) && empty(s.values[m.id])) || !log[i].sets.length
@@ -455,16 +460,54 @@
 
 	const repeatingOf = (it: Item) => shownMetrics(it.task?.metrics.filter((m) => m.repeats) ?? []);
 	const inRows = (it: Item) => repeatingOf(it).length > 0;
-	const runPlaces = $derived(data.items.flatMap((it, i) => (inRows(it) ? [{ key: placeKey(it), sets: log[i].sets }] : [])));
+	/** Tasks whose parts repeat: one place each, with its rounds as rows and its parts as their stations. */
+	const circuits = $derived(quickMode ? new Map<number, Circuit>() : circuitsOf(data.items.map((it) => ({ path: it.path, kids: it.kids, inRows: inRows(it) }))));
+	const stationIn = $derived(new Set([...circuits.values()].flatMap((c) => c.rounds.flat())));
+	/** A station is done: its tick, its sets, or a value you gave or left as it was with its tick. */
+	function answered(j: number): boolean {
+		const s = log[j];
+		if (isYesNo(data.items[j])) return !!s.tick;
+		return inRows(data.items[j]) ? s.sets.length > 0 && s.sets.every((x) => x.done) : (s.kept ?? hasLog(s, starts[j]));
+	}
+	const isPlace = (i: number) => !stationIn.has(i) && (inRows(data.items[i]) || circuits.has(i));
+	const rowsAt = (i: number): RowState[] => circuits.get(i)?.rounds.map((r) => ({ done: r.every(answered), values: {} })) ?? log[i].sets;
+	const wordsAt = (i: number) => {
+		const t = data.items[i].task!;
+		return circuits.has(i) ? roundWords(t) : { one: t.rowOne, many: t.rowMany };
+	};
+	/** What a station holds, in words. */
+	const stationText = (j: number) =>
+		[rowsText(repeatingOf(data.items[j]) as Field[], log[j].sets), ...(data.items[j].task?.metrics ?? []).filter((m) => !m.repeats && !isLong(m)).map((m) => valueText(m as Field, log[j].summary[m.id]))].filter(Boolean).join(' · ');
+	function markStation(j: number, on: boolean) {
+		const s = places[placeKey(data.items[j])];
+		if (isYesNo(data.items[j])) s.tick = on;
+		for (const x of s.sets) x.done = on;
+		if (!inRows(data.items[j])) s.kept = on;
+	}
+	/** One press for a whole round. A number changed in it goes on to the rounds still to do. */
+	function markRound(c: Circuit, r: number, on: boolean) {
+		c.rounds[r].forEach((j, station) => {
+			// What a station was answered with already stays as it is.
+			if (on !== answered(j)) markStation(j, on);
+			if (!on) return;
+			const keys = c.rounds.map((x) => placeKey(data.items[x[station]]));
+			places[keys[r]].sets.forEach((_, k) => {
+				const rows = keys.map((key) => places[key].sets[k]);
+				const start = keys.map((key) => base[key]?.sets[k]);
+				if (rows.some((x) => !x) || start.some((x) => !x)) return;
+				follow(rows, start as RowState[], r, metricsOf(data.items[j])).forEach((x, n) => (places[keys[n]].sets[k] = x));
+			});
+		});
+	}
+	const runPlaces = $derived(data.items.flatMap((it, i) => (isPlace(i) ? [{ key: placeKey(it), sets: rowsAt(i), i }] : [])));
 	const row = $derived(stage === 'run' ? cursor(runPlaces, at, here) : at);
 	const setsLeft = $derived(runPlaces.some((p) => p.sets.some((x) => !x.done)));
 	const setsDone = $derived(runPlaces.reduce((n, p) => n + p.sets.filter((x) => x.done).length, 0));
 	const setsAll = $derived(runPlaces.reduce((n, p) => n + p.sets.length, 0));
 	/** The Tasks' own word for their rows, when they share one. */
 	const shared = (words: string[], or: string) => (new Set(words).size === 1 ? words[0] : or);
-	const rowTasks = $derived(data.items.flatMap((it) => (inRows(it) && it.task ? [it.task] : [])));
-	const oneWord = $derived(shared(rowTasks.map((t) => t.rowOne), 'row'));
-	const allWords = $derived(shared(rowTasks.map((t) => t.rowMany), 'rows'));
+	const oneWord = $derived(shared(runPlaces.map((p) => wordsAt(p.i).one), 'row'));
+	const allWords = $derived(shared(runPlaces.map((p) => wordsAt(p.i).many), 'rows'));
 
 	function show(key: string) {
 		tick().then(() => document.querySelector(`[data-place="${CSS.escape(key)}"] .lg-open`)?.scrollIntoView({ block: 'nearest' }));
@@ -476,8 +519,9 @@
 		if (set !== null) show(key);
 	}
 	function unfold(i: number) {
-		const left = log[i].sets.some((x) => !x.done) && stage === 'run';
-		openRow(i, left ? null : log[i].sets.length - 1);
+		const rows = rowsAt(i);
+		const left = rows.some((x) => !x.done) && stage === 'run';
+		openRow(i, left ? null : rows.length - 1);
 		show(placeKey(data.items[i]));
 	}
 	const metricsOf = (it: Item) => repeatingOf(it) as Field[];
@@ -485,8 +529,12 @@
 	function doneRow(i: number, set: number, keyboard: boolean) {
 		const it = data.items[i];
 		const key = placeKey(it);
-		log[i].sets[set].done = true;
-		places[key].sets = follow(log[i].sets, baseOf(i)?.sets ?? [], set, metricsOf(it));
+		const c = circuits.get(i);
+		if (c) markRound(c, set, true);
+		else {
+			log[i].sets[set].done = true;
+			places[key].sets = follow(log[i].sets, baseOf(i)?.sets ?? [], set, metricsOf(it));
+		}
 		logged = { key, set };
 		setTimeout(() => {
 			if (logged?.key === key && logged.set === set) logged = null;
@@ -496,11 +544,14 @@
 		const next = cursor(runPlaces, null, key);
 		// The last one stays open, so nothing that ends the log ever comes under the thumb.
 		if (!next) at = { key, set };
-		const to = next ? data.items.find((x) => placeKey(x) === next.key) : undefined;
-		const nextName = to ? `${next!.key === key ? '' : `${to.task?.name}, `}${to.task?.rowOne} ${next!.set + 1}` : '';
-		if (it.task?.restTimerEnabled && next && !data.past && stage === 'run') startRest(it.task.restTimerSeconds, `${to?.task?.rowOne} ${next.set + 1} of ${to?.task?.name}`, `/log/${data.occurrence.id}`, it.task.betweenName);
+		const toAt = next ? data.items.findIndex((x) => placeKey(x) === next.key) : -1;
+		const to = toAt < 0 ? undefined : data.items[toAt];
+		const toWord = to ? wordsAt(toAt).one : '';
+		const nextName = to ? `${next!.key === key ? '' : `${to.task?.name}, `}${toWord} ${next!.set + 1}` : '';
+		if (it.task?.restTimerEnabled && next && !data.past && stage === 'run') startRest(it.task.restTimerSeconds, `${toWord} ${next.set + 1} of ${to?.task?.name}`, `/log/${data.occurrence.id}`, it.task.betweenName);
 		else endRest();
-		said = `Logged ${it.task?.rowOne} ${set + 1}.${next ? ` Next: ${nextName}, ${rowText(metricsOf(to!), places[next.key].sets[next.set].values)}.` : ` All ${allWords} are done.`}`;
+		const nextText = !next ? '' : circuits.has(toAt) ? '' : `, ${rowText(metricsOf(to!), places[next.key].sets[next.set].values)}`;
+		said = `Logged ${wordsAt(i).one} ${set + 1}.${next ? ` Next: ${nextName}${nextText}.` : ` All ${allWords} are done.`}`;
 		if (next && next.key !== key) {
 			here = next.key;
 			show(next.key);
@@ -509,9 +560,11 @@
 	}
 	function tickRow(i: number, set: number, on: boolean) {
 		const key = placeKey(data.items[i]);
-		log[i].sets[set].done = on;
+		const c = circuits.get(i);
+		if (c) markRound(c, set, on);
+		else log[i].sets[set].done = on;
 		if (on) {
-			places[key].sets = follow(log[i].sets, baseOf(i)?.sets ?? [], set, metricsOf(data.items[i]));
+			if (!c) places[key].sets = follow(log[i].sets, baseOf(i)?.sets ?? [], set, metricsOf(data.items[i]));
 			const t = data.items[i].task;
 			if (t?.restTimerEnabled && stage === 'run' && !data.past) startRest(t.restTimerSeconds, t.name, `/log/${data.occurrence.id}`, t.betweenName);
 		} else {
@@ -519,7 +572,7 @@
 			here = key;
 			at = { key, set };
 		}
-		said = `${cap(data.items[i].task?.rowOne ?? 'row')} ${set + 1} ${on ? 'done' : 'not done'}.`;
+		said = `${cap(wordsAt(i).one)} ${set + 1} ${on ? 'done' : 'not done'}.`;
 	}
 	/** Changing a number never logs it. */
 	function setValue(i: number, set: number, id: string, v: unknown) {
@@ -529,6 +582,13 @@
 		// Stepping the row keeps it open, also once it is the only one left.
 		if (stage === 'run') at = { key: placeKey(data.items[i]), set };
 		if (x.done) places[placeKey(data.items[i])].sets = follow(log[i].sets, baseOf(i)?.sets ?? [], set, metricsOf(data.items[i]));
+	}
+	/** The stations whose fields are open. */
+	let stationOpen = $state<Record<string, boolean>>({});
+	function setStation(j: number, set: number, id: string, v: unknown) {
+		const x = places[placeKey(data.items[j])].sets[set];
+		x.values[id] = v;
+		if (!x.own?.includes(id)) x.own = [...(x.own ?? []), id];
 	}
 	function addSet(i: number) {
 		const last = log[i].sets.at(-1);
@@ -547,8 +607,9 @@
 	function tickAll() {
 		for (const [i, it] of data.items.entries()) {
 			const ids = it.task?.metrics.filter((m) => m.repeats).map((m) => m.id) ?? [];
-			for (const x of log[i].sets) if (ids.some((id) => !empty(x.values[id]))) x.done = true;
+			if (!stationIn.has(i)) for (const x of log[i].sets) if (ids.some((id) => !empty(x.values[id]))) x.done = true;
 		}
+		for (const c of circuits.values()) c.rounds.forEach((_, r) => markRound(c, r, true));
 		at = null;
 		endRest();
 	}
@@ -661,6 +722,8 @@
 	};
 	const headOf = (it: Item, i: number) => {
 		const t = it.task!;
+		const c = circuits.get(i);
+		if (c) return [`${c.rounds.length} ${wordsAt(i).many}`, ...new Set(c.rounds[0].map((j) => data.items[j].task?.name ?? ''))].filter(Boolean).join(' · ');
 		const n = log[i].sets.length;
 		const targets = repeatingOf(it).flatMap((m) => {
 			const v = targetAt(it, m.id);
@@ -671,7 +734,7 @@
 	};
 	const foldedAt = (i: number) => {
 		const it = data.items[i];
-		if (quickMode || layout === 'all' || !inRows(it)) return false;
+		if (quickMode || layout === 'all' || !isPlace(i)) return false;
 		return row ? row.key !== placeKey(it) : stage === 'correct' || runPlaces.length > 1;
 	};
 	// ----- Edit: names, order and the plan's numbers, from now on; a row's place, for this log -----
@@ -692,7 +755,8 @@
 			const t = it.task;
 			if (s && t && (inRows(it) || s.sets)) {
 				const n = inRows(it) ? log[g.at[0]].sets.length : s.sets!;
-				g.numbers.push({ id: '', label: cap(t.rowMany), text: `${n} ${n === 1 ? t.rowOne : t.rowMany}` });
+				const w = inRows(it) || !it.kids ? { one: t.rowOne, many: t.rowMany } : roundWords(t);
+				g.numbers.push({ id: '', label: cap(w.many), text: `${n} ${n === 1 ? w.one : w.many}` });
 			}
 			// A Task swapped in for this log has no targets of its own in the plan.
 			if (s && t && s.taskId === t.id)
@@ -745,7 +809,8 @@
 		if (!id) {
 			const count = Math.max(1, Math.round(n));
 			const rows = [...(places[key]?.sets ?? [])];
-			const word = count === 1 ? it.task!.rowOne : it.task!.rowMany;
+			const w = inRows(it) || !it.kids ? { one: it.task!.rowOne, many: it.task!.rowMany } : roundWords(it.task!);
+			const word = count === 1 ? w.one : w.many;
 			if (count === rows.length && count === s.sets) return;
 			return void editPlan(withSlot(data.plan!, p.id, { sets: count }), `Set ${p.name} to ${count} ${word} for ${data.habitName}, from now on.`, (back) => {
 				if (inRows(it)) places[key].sets = back ? (places[key].sets.length === count ? rows : places[key].sets) : toCount(places[key].sets, count);
@@ -811,7 +876,9 @@
 	const stepOf = (m: Metric) => m.step ?? defaultStep(m.type, m.unit, units());
 	const isNumeric = (m: Metric) => m.type === 'number' || m.type === 'count' || m.type === 'duration';
 	/** Required fields always show, so a quick log can always be finished. */
-	const shownMetrics = (ms: Metric[]) => (quickMode ? ms.filter((m) => m.quick || m.required) : ms);
+	function shownMetrics(ms: Metric[]) {
+		return quickMode ? ms.filter((m) => m.quick || m.required) : ms;
+	}
 </script>
 
 <svelte:head><title>{data.habitName} · ittracks</title></svelte:head>
@@ -897,6 +964,48 @@
 	{/each}
 {/snippet}
 
+{#snippet stations(c: Circuit, k: number, word: string)}
+	<ul class="elist lg-stations" data-mode="use" style="--gap: 0px; --depth: 1" aria-label="In {word} {k + 1}">
+		{#each c.rounds[k] as j (placeKey(data.items[j]))}
+			{@const x = data.items[j]}
+			{@const t = x.task}
+			{@const key = placeKey(x)}
+			{@const single = t?.metrics.filter((m) => !m.repeats) ?? []}
+			<li class="row lg-row" class:done={answered(j)}>
+				<div class="card link">
+					<span class="slot"></span>
+					<div class="content">
+						{#if isYesNo(x)}<label class="lg-tick-label" for="st-{key}">{t?.name}</label>
+						{:else}
+							<button type="button" class="lg-bare lg-press lg-station" aria-expanded={!!stationOpen[key]} onclick={() => (stationOpen[key] = !stationOpen[key])}
+								><span class="lg-press-text"><span class="lg-station-name">{t?.name}</span> <span class="label"><bdi dir="ltr">{stationText(j)}</bdi></span></span></button
+							>
+						{/if}
+					</div>
+					<div class="verb"><input id="st-{key}" type="checkbox" class="tick hit" disabled={stage === 'read'} checked={answered(j)} aria-label="{t?.name}, {word} {k + 1}, done" onchange={(e) => markStation(j, e.currentTarget.checked)} /></div>
+				</div>
+				{#if t && stationOpen[key]}
+					<div class="lg-station-fields">
+						{#each log[j].sets as row, n (n)}
+							<div class="lg-fields lg-regular">
+								{#each repeatingOf(x) as m (m.id)}
+									<div class="field">
+										{#if m.type === 'checkbox'}<label class="check"><input type="checkbox" class="tick" disabled={stage === 'read'} checked={!!row.values[m.id]} onchange={(e) => setStation(j, n, m.id, e.currentTarget.checked)} /> {m.name}</label>
+										{:else if m.type === 'choice'}<label class="label" for="st-{key}-{n}-{m.id}">{m.name}</label><select id="st-{key}-{n}-{m.id}" disabled={stage === 'read'} value={num(row.values[m.id])} onchange={(e) => setStation(j, n, m.id, e.currentTarget.value || null)}><option value=""></option>{#each m.choices ?? [] as o (o.id)}<option value={o.id}>{o.name}</option>{/each}</select>
+										{:else if isNumeric(m)}<span class="label">{m.name}{m.unit ? ` (${m.unit})` : ''}</span><NumberField value={row.values[m.id] as number | null} step={stepOf(m)} unit={m.unit ?? ''} label="{m.name} for {t.name}, {word} {k + 1}" disabled={stage === 'read'} onchange={(v) => setStation(j, n, m.id, v)} />
+										{:else}<label class="label" for="st-{key}-{n}-{m.id}">{m.name}</label><input id="st-{key}-{n}-{m.id}" disabled={stage === 'read'} value={num(row.values[m.id])} oninput={(e) => setStation(j, n, m.id, e.currentTarget.value)} />{/if}
+									</div>
+								{/each}
+							</div>
+						{/each}
+						{#if single.length}{@render onceFields(x, j, single)}{/if}
+					</div>
+				{/if}
+			</li>
+		{/each}
+	</ul>
+{/snippet}
+
 {#snippet extraOf(it: Item)}
 	{@const t = it.task}
 	{#if swapping === placeKey(it)}
@@ -920,6 +1029,7 @@
 		{@const t = it.task}
 		{@const key = placeKey(it)}
 		{@const single = t ? shownMetrics(t.metrics.filter((m) => !m.repeats)) : []}
+		{#if stationIn.has(i)}<!-- in its round -->{:else}
 		{#if it.roundHead && !quickMode}<li class="lg-heading"><h2 class="card-title">{it.roundHead}</h2></li>{/if}
 		{#if t && isYesNo(it)}
 			{#if !quickMode}
@@ -935,8 +1045,42 @@
 				</li>
 			{/if}
 		{:else if !t || !quickMode || shownMetrics(t.metrics).length}
-			<li class="holder lg-place" class:lg-folded={foldedAt(i)} class:lg-folds={foldedAt(i)} class:done={inRows(it) && log[i].sets.length > 0 && log[i].sets.every((x) => x.done)} data-place={key} style:margin-inline-start="calc({it.depth} * var(--space-indent))">
-				{#if t && inRows(it) && !quickMode}
+			<li class="holder lg-place" class:lg-folded={foldedAt(i)} class:lg-folds={foldedAt(i)} class:done={isPlace(i) && rowsAt(i).length > 0 && rowsAt(i).every((x) => x.done)} data-place={key} style:margin-inline-start="calc({it.depth} * var(--space-indent))">
+				{#if t && circuits.has(i)}
+					{@const c = circuits.get(i)!}
+					<Place
+						name={t.name}
+						words={wordsAt(i)}
+						fields={[]}
+						sets={rowsAt(i)}
+						base={[]}
+						previous={[]}
+						head={headOf(it, i)}
+						recap={stage === 'run' && !recapOf(t.id).startsWith('First') ? recapOf(t.id) : ''}
+						open={row?.key === key ? row.set : null}
+						folded={foldedAt(i)}
+						{stage}
+						toFinish={!setsLeft}
+						logged={logged?.key === key ? logged.set : null}
+						menu={menuOf(it)}
+						targetOf={() => undefined}
+						onopen={(k) => openRow(i, k)}
+						onunfold={() => unfold(i)}
+						ondone={(k, keyboard) => doneRow(i, k, keyboard)}
+						ontick={(k, on) => tickRow(i, k, on)}
+						onvalue={() => {}}
+						onadd={() => {}}
+						onremove={() => {}}
+						onfinish={goToFinish}
+						once={single.length ? onceHere : undefined}
+						extra={extraHere}
+						text={(k) => c.rounds[k].map(stationText).filter(Boolean).join(' · ')}
+						body={stationsHere}
+					/>
+					{#snippet onceHere()}{@render onceFields(it, i, single)}{/snippet}
+					{#snippet extraHere()}{@render extraOf(it)}{/snippet}
+					{#snippet stationsHere(k: number)}{@render stations(c, k, wordsAt(i).one)}{/snippet}
+				{:else if t && inRows(it) && !quickMode}
 					<Place
 						name={t.name}
 						words={{ one: t.rowOne, many: t.rowMany }}
@@ -1007,6 +1151,7 @@
 					{/if}
 				{/if}
 			</li>
+		{/if}
 		{/if}
 	{/each}
 </ul>

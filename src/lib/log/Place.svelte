@@ -35,7 +35,9 @@
 		onremove,
 		onfinish,
 		once,
-		extra
+		extra,
+		text,
+		body
 	}: {
 		name: string;
 		fields: LogField[];
@@ -71,7 +73,12 @@
 		/** Fields that are filled in once, not per row. */
 		once?: Snippet;
 		extra?: Snippet;
+		/** What a row says, when its values stand elsewhere (the stations of a round). */
+		text?: (row: number) => string;
+		/** What the open row holds in place of fields. Such rows are the plan's: none are added here. */
+		body?: Snippet<[number]>;
 	} = $props();
+	const textAt = (k: number) => (text ? text(k) : rowText(fields, sets[k].values));
 
 	const id = $props.id();
 	let ledger = $state(false);
@@ -90,16 +97,16 @@
 	const lastText = (k: number) => (previous[k] ? rowText(fields, previous[k]) : '');
 	const foldWords = $derived(
 		left < 0 && sets.length
-			? `✓ ${rowsText(fields, sets)}`
+			? `✓ ${text ? `${sets.length} ${words.many}` : rowsText(fields, sets)}`
 			: done.length
-				? `${done.length} of ${sets.length} done · next ${rowText(fields, sets[left].values)}`
+				? `${done.length} of ${sets.length} done${text ? '' : ` · next ${textAt(left)}`}`
 				: head || `${sets.length} ${words.many}`
 	);
 	const ledgerWords = $derived.by(() => {
 		const d = above.filter((s) => s.done);
 		if (!d.length) return above.length ? `${cap(words.one)} ${above.map((_, k) => k + 1).join(', ')} not done` : recap;
 		const k = above.findLastIndex((s) => s.done);
-		return [rowsName(above, words.one, words.many), rowsText(fields, d), d.length <= 2 ? deltas(k) : '', skippedName(sets, words.one)].filter(Boolean).join(' · ');
+		return [rowsName(above, words.one, words.many), text ? '' : rowsText(fields, d), d.length <= 2 ? deltas(k) : '', skippedName(sets, words.one)].filter(Boolean).join(' · ');
 	});
 	const newest = $derived(above.findLastIndex((s) => s.done));
 
@@ -119,7 +126,7 @@
 		if (open === null) return null;
 		const row = sets[open];
 		if (logged !== null) return { kind: 'busy' as const, label: `Logged ${words.one} ${logged + 1}`, detail: '', primary: false };
-		if (!row.done) return { kind: 'done' as const, label: `Done ${words.one} ${open + 1}`, detail: rowText(fields, row.values), primary: true };
+		if (!row.done) return { kind: 'done' as const, label: `Done ${words.one} ${open + 1}`, detail: textAt(open), primary: true };
 		if (stage === 'correct') return { kind: 'close' as const, label: 'Close', detail: '', primary: false };
 		if (toFinish) return { kind: 'finish' as const, label: 'Go to Finish', detail: '', primary: false };
 		return { kind: 'back' as const, label: left >= 0 ? `Back to ${words.one} ${left + 1}` : 'Go on', detail: '', primary: false };
@@ -143,7 +150,7 @@
 {#snippet rowWords(k: number)}
 	<span class="num"><span class="vh">{cap(words.one)} </span>{k + 1}</span>
 					<span class="lg-press-text">
-						<span class="lg-val"><bdi dir="ltr">{rowText(fields, sets[k].values) || '–'}</bdi></span>
+						<span class="lg-val"><bdi dir="ltr">{textAt(k) || '–'}</bdi></span>
 						{#if sets[k].done ? deltas(k) : lastText(k)}<span class="label lg-line"><bdi dir="ltr">{sets[k].done ? deltas(k) : `Last ${lastText(k)}`}</bdi></span>{/if}
 						{#if sets[k].done}<span class="vh">, done</span>{/if}
 					</span>
@@ -217,7 +224,9 @@
 						<span class="name">{cap(words.one)} {open + 1} of {sets.length}{sets[open].done ? ' · done' : ''}</span>
 						{#if lastText(open)}<span class="label"><bdi dir="ltr">Last {lastText(open)}</bdi></span>{/if}
 					</p>
-					{#if numbers.length || pills.length || others.length}
+					{#if body}
+						{@render body(open)}
+					{:else if numbers.length || pills.length || others.length}
 						<div class="lg-fields">
 							{#each numbers as f (f.id)}
 								<div class="field">
@@ -280,7 +289,7 @@
 				{/if}
 			{/if}
 		{/if}
-		{#if stage !== 'read'}
+		{#if stage !== 'read' && !body}
 			<div class="lg-foot">
 				<button type="button" class="quiet hit" onclick={onadd}>Add {words.one}</button>
 				{#if sets.length && !sets.at(-1)!.done}<button type="button" class="quiet hit" onclick={onremove}>Remove {words.one} {sets.length}</button>{/if}
