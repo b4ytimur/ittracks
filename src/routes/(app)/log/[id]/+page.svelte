@@ -7,7 +7,7 @@
 
 <!-- One log can lead to another (a routine's step, and back): each starts from its own. -->
 {#if data.routine}
-	{#key data.routine.occurrenceId}<Routine routine={data.routine} today={data.today} back={data.back} />{/key}
+	{#key data.routine.occurrenceId}<Routine routine={data.routine} today={data.today} back={data.back} canLog={data.canLog} />{/key}
 {:else}
 	{#key data.occurrence.id}<Log {data} {form} />{/key}
 {/if}

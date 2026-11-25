@@ -134,7 +134,7 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 	const back = safeBack(url.searchParams.get('back')) ?? (past ? `/day/${o.occ.date}` : '/');
 	// A routine's day: the habits inside it are its places.
 	const routine = routineSteps(accountId, params.id);
-	if (routine) return { routine, today, back };
+	if (routine) return { routine, today, back, canLog: !past || windowFor(accountId, o.occ.date, today) === 'ok' };
 	const win = windowFor(accountId, o.occ.date, today);
 	const v = o.occ.variantId
 		? db.select().from(variant).where(eq(variant.id, o.occ.variantId)).get()
@@ -265,6 +265,9 @@ function step(event: Parameters<Actions[string]>[0], f: FormData) {
 	const id = String(f.get('occurrence') ?? '');
 	const occ = id === day.o.occ.id ? day.o.occ : day.kids.find((k) => k.occ.id === id)?.occ;
 	if (!occ) error(404, 'Not found');
+	// A day further back than Settings allow can only be looked at.
+	const today = userToday(accountId, event.cookies.get('tz'));
+	if (occ.date < today && windowFor(accountId, occ.date, today) !== 'ok') error(400, 'This day is too far back to log.');
 	return { occ, actor: appActor(accountId, event.cookies.get('tz')) };
 }
 

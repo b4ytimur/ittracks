@@ -9,7 +9,7 @@
 	import MenuButton, { type Way } from '$lib/ui/MenuButton.svelte';
 	import type { RoutineDay } from '$lib/server/routine-day';
 
-	let { routine: r, today, back }: { routine: RoutineDay; today: string; back: string } = $props();
+	let { routine: r, today, back, canLog }: { routine: RoutineDay; today: string; back: string; /** False for a day further back than Settings allow. */ canLog: boolean } = $props();
 	type Step = RoutineDay['steps'][number];
 
 	const day = $derived(r.date === today ? 'Today' : new Date(r.date + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }));
@@ -80,8 +80,12 @@
 <svelte:head><title>{r.name} · ittracks</title></svelte:head>
 
 <EditChrome title={r.name} modes={['use']} back={{ href: back, label: 'Back' }} hints={{ use: [day, said(r.status, r.level), r.count].filter(Boolean).join(' · ') }}>
-	{#snippet actions()}<span class="menu-at"><MenuButton class="hit" label="More for {r.name}" items={all} /></span>{/snippet}
+	{#snippet actions()}{#if canLog}<span class="menu-at"><MenuButton class="hit" label="More for {r.name}" items={all} /></span>{/if}{/snippet}
 </EditChrome>
+
+{#if !canLog}
+	<div class="notice"><span class="notice-text">This day is further back than Settings allow logging, so it can only be looked at.</span><span class="notice-acts"><a class="quiet hit" href="/settings#past">Change it in Settings</a></span></div>
+{/if}
 
 <ul class="elist lg-page lg-places" data-mode="use" aria-label="Habits in {r.name}">
 	{#each r.steps as k (k.occurrenceId)}
@@ -90,12 +94,14 @@
 				<div class="card lg-head">
 					<span class="slot"></span>
 					<div class="content"><h2 class="name">{k.name}</h2><p class="meta-line">{words(k)}</p></div>
-					<div class="verb"><MenuButton class="lg-more hit" label="More for {k.name}" items={menuOf(k)} /></div>
+					{#if canLog}<div class="verb"><MenuButton class="lg-more hit" label="More for {k.name}" items={menuOf(k)} /></div>{/if}
 				</div>
 				<div class="shelf lg-shelf">
 					<div class="lg-slot">
 						<div class="lg-open" role="group" aria-label={k.name} aria-current="step">
-							{#if just}
+							{#if !canLog}
+								<a class="button lg-act" href={k.log}><span class="name">Open its log</span></a>
+							{:else if just}
 								<button type="button" class="lg-act" aria-busy="true" aria-disabled="true"><span class="name">Logged {just}</span></button>
 							{:else if !open(k.status)}
 								<button type="button" class="lg-act" onclick={() => act('stepUndo', k.occurrenceId, `${k.name} is open again.`)}><span class="name">Open it again</span></button>
