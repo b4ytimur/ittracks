@@ -15,6 +15,7 @@ import { keepEarlier, sameSchedule, scheduleStartBy, startMovedBack, type Earlie
 import { isFollow, isGroup, type Schedule } from '$lib/engine/schedule';
 import { fitFollow, standaloneSchedule } from '$lib/engine/follow';
 import { keepParent, makesCycle, type EarlierParent } from '$lib/engine/tree';
+import { keepValue, type EarlierArea } from '$lib/engine/dated';
 import { startFrom } from '../backfill';
 import { keepGoals, keepSlots, rejudge } from '../progress';
 import type { StreakRule } from '$lib/engine/streak';
@@ -322,6 +323,22 @@ function scheduleAfter(
 	return { earlierSchedules: keepEarlier(earliest(before.earlierSchedules), old, after.startDate, today) };
 }
 
+/**
+ * Its earlier Areas after a save: an Area change counts from today on, so Stats
+ * keep crediting its past days to the Area they had, like a move into a group. Past days too
+ * (also for a change made earlier today) puts every day in the Area it has now.
+ */
+export function areasAfter(
+	before: { areaId: string | null; earlierAreas: EarlierArea[] | null; startDate: string },
+	after: { areaId: string | null },
+	applies: ScheduleApplies,
+	today: string
+): EarlierArea[] | null {
+	if (applies === 'past') return null;
+	if (before.areaId === after.areaId) return before.earlierAreas;
+	return keepValue('areaId', before.earlierAreas, before.areaId, after.areaId, before.startDate, today);
+}
+
 /** The routine a habit starts to follow, turned to start where the habit is now: from today on, as any schedule edit. */
 function turnRoutine(tx: Tx, turn: RoutineTurn, today: string) {
 	const before = tx
@@ -395,7 +412,8 @@ export function saveHabit(
 	id: string | null,
 	f: HabitForm,
 	today: string = new Date().toISOString().slice(0, 10),
-	opts: { scheduleApplies?: ScheduleApplies } = {}
+	/** `areaApplies`: an Area change counts from today on (the default), or on past days too. */
+	opts: { scheduleApplies?: ScheduleApplies; areaApplies?: ScheduleApplies } = {}
 ): string | null {
 	// Values that can't apply (Levels on a break habit, a reminder with no time) are cleared.
 	f = checkHabitForm(f).form;
@@ -454,7 +472,9 @@ export function saveHabit(
 					levels: habit.levels,
 					triggers: habit.triggers,
 					parentId: habit.parentId,
-					earlierParents: habit.earlierParents
+					earlierParents: habit.earlierParents,
+					areaId: habit.areaId,
+					earlierAreas: habit.earlierAreas
 				})
 				.from(habit)
 				.where(and(eq(habit.id, id), eq(habit.accountId, accountId)))
@@ -480,7 +500,8 @@ export function saveHabit(
 			if (applies === 'past' && values.parentId && owned.parentId !== values.parentId) reachBack(accountId, values.parentId, values.startDate);
 			// A rotating habit that starts to follow a routine not yet begun starts it where the habit is now.
 			const turn = routineTurnFor(accountId, id, values, today, tx);
-			tx.update(habit).set({ ...values, ...sched, ...settled, earlierParents }).where(eq(habit.id, id)).run();
+			const earlierAreas = areasAfter(owned, values, opts.areaApplies ?? 'today', today);
+			tx.update(habit).set({ ...values, ...sched, ...settled, earlierParents, earlierAreas }).where(eq(habit.id, id)).run();
 			if (turn) turnRoutine(tx, turn, today);
 			// The rule for what counts changed: past logs are judged again by it.
 			judgeAgain = owned.minimumCounts !== values.minimumCounts || !!owned.levels?.enabled !== !!values.levels?.enabled;

@@ -8,6 +8,7 @@ import type { Reminder } from '../../reminder';
 import type { Progression } from '../../engine/progression';
 import type { EarlierSchedule } from '../../engine/unlogged';
 import type { EarlierParent } from '../../engine/tree';
+import type { EarlierArea } from '../../engine/dated';
 import type { ChoiceOption, EarlierScores, Scores } from '../../options';
 
 /** Temptation bundling: something you want, paired with the habit. */
@@ -329,7 +330,12 @@ export const habit = sqliteTable('habit', {
 	 * Where it sat before a move, oldest first: each entry still decides which group or routine
 	 * it counted in up to its `until` (see engine/tree.ts), as moves apply from that day on.
 	 */
-	earlierParents: text('earlier_parents', { mode: 'json' }).$type<EarlierParent[]>()
+	earlierParents: text('earlier_parents', { mode: 'json' }).$type<EarlierParent[]>(),
+	/**
+	 * Its Area before a change, oldest first: each entry still decides which Area its days counted
+	 * in up to its `until` (see engine/dated.ts), as an Area change applies from that day on.
+	 */
+	earlierAreas: text('earlier_areas', { mode: 'json' }).$type<EarlierArea[]>()
 });
 
 /** A pause for one Habit, or for all of them when habitId is null. Dates are inclusive. */

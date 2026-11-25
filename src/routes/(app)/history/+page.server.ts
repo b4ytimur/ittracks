@@ -4,6 +4,7 @@ import { entry, habit, metric, occurrence, slip, task, variant } from '$lib/serv
 import { optionName, type ChoiceOption } from '$lib/options';
 import { getSettings, getViews } from '$lib/server/settings';
 import { listAreas } from '$lib/server/repo/areas';
+import { areaOn } from '$lib/engine/dated';
 import { initialState } from '$lib/views';
 import { settleAll, userToday } from '$lib/server/today';
 import { addDays, daysBetween } from '$lib/engine/dates';
@@ -41,6 +42,7 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 			habitId: habit.id,
 			habit: habit.name,
 			areaId: habit.areaId,
+			earlierAreas: habit.earlierAreas,
 			variant: variant.name,
 			rollup: occurrence.rollup,
 			level: occurrence.level,
@@ -61,7 +63,7 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		.where(and(eq(habit.accountId, accountId), eq(occurrence.status, 'due'), eq(occurrence.date, today)))
 		.all();
 	const slips = db
-		.select({ date: slip.date, count: slip.count, habit: habit.name, habitId: habit.id, areaId: habit.areaId })
+		.select({ date: slip.date, count: slip.count, habit: habit.name, habitId: habit.id, areaId: habit.areaId, earlierAreas: habit.earlierAreas })
 		.from(slip)
 		.innerJoin(habit, eq(slip.habitId, habit.id))
 		.where(and(eq(habit.accountId, accountId), gte(slip.date, from)))
@@ -80,6 +82,8 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 			.filter((id, i, all) => all.indexOf(id) !== i)
 	);
 	for (const o of occ) if (!multi.has(o.habitId)) o.variant = null;
+	// A day is filed under the Area its habit had that day.
+	for (const x of [...occ, ...slips]) [x.areaId, x.earlierAreas] = [areaOn(x, x.date), null];
 
 	// What was written, by day: the journal is this list with notes only.
 	const settings = getSettings(accountId);

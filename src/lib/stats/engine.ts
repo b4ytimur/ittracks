@@ -2,6 +2,7 @@
 // numbers a chart draws. Pure functions only, so every number is testable and the same code
 // runs for the Stats page, a habit's Stats tab, a Task's history and Today's headline numbers.
 import { addDays, daysBetween, toDays, fromDays, weekStart, weekday, type ISODate } from '../engine/dates';
+import { areaOn, valuesEver, type EarlierArea } from '../engine/dated';
 import { daysSinceSlip, longestRun, streak, type Level, type Mark, type StreakRule } from '../engine/streak';
 import { chainCells } from '../engine/chain';
 import { withinOn, withinStreak, periodWithin, type Limit } from '../engine/limit';
@@ -34,6 +35,8 @@ export interface DsHabit {
 	name: string;
 	direction: 'build' | 'break';
 	areaId: string | null;
+	/** Its Areas before a change: a day counts in the Area it had then (engine/dated.ts). */
+	earlierAreas?: EarlierArea[] | null;
 	startDate: ISODate;
 	archived: boolean;
 	identities: string[];
@@ -555,8 +558,12 @@ export function scope(card: StatCard, P: Prepared, ctx: Ctx) {
 		(!cf.habits.length || cf.habits.includes(h.id)) &&
 		(!bf.identity || h.identities.includes(bf.identity)) &&
 		(bf.direction === 'all' || h.direction === bf.direction);
-	const areaOk = (h: DsHabit, t: DsTask | null) =>
-		areas.every((a) => a.includes(h.areaId ?? '') || (!!t && a.includes(t.areaId ?? '')));
+	// A habit counts in the Area it had on the day (`on`); 'ever' lets in one that had it on any day,
+	// for a loop that then checks each day; without a day, the Area it has now.
+	const areaOk = (h: DsHabit, t: DsTask | null, on?: ISODate | 'ever') => {
+		const mine = on === 'ever' ? valuesEver('areaId', h.areaId, h.earlierAreas) : [(on ? areaOn(h, on) : h.areaId) ?? ''];
+		return areas.every((a) => mine.some((x) => a.includes(x)) || (!!t && a.includes(t.areaId ?? '')));
+	};
 	const tagOk = (t: DsTask | null) => !tags.length || (!!t && t.tags.some((x) => tags.includes(x.name.toLowerCase())));
 	/** Tasks a habit's Variants use, for tag filters on habit outcomes. */
 	const habitTasks = (h: DsHabit) =>
@@ -565,8 +572,8 @@ export function scope(card: StatCard, P: Prepared, ctx: Ctx) {
 			.flatMap((v) => P.slotsByVariant.get(v.id) ?? [])
 			.map((s) => (s.taskId ? P.tasks.get(s.taskId) : undefined))
 			.filter((t): t is DsTask => !!t);
-	const logOk = (l: { habit: DsHabit; task: DsTask }) => habitOk(l.habit) && areaOk(l.habit, l.task) && tagOk(l.task);
-	const habitOnlyOk = (h: DsHabit) => habitOk(h) && areaOk(h, null) && (!tags.length || habitTasks(h).some(tagOk));
+	const logOk = (l: { habit: DsHabit; task: DsTask; occ?: { date: ISODate } | null }) => habitOk(l.habit) && areaOk(l.habit, l.task, l.occ?.date) && tagOk(l.task);
+	const habitOnlyOk = (h: DsHabit, on?: ISODate | 'ever') => habitOk(h) && areaOk(h, null, on) && (!tags.length || habitTasks(h).some(tagOk));
 	return { habitOk, areaOk, tagOk, logOk, habitOnlyOk };
 }
 
@@ -605,7 +612,8 @@ function splitTags(card: StatCard, P: Prepared, ctx: Ctx, l: { habit: DsHabit; t
 		case 'task':
 			return l.task ? one(l.task.id, l.task.name) : one('none', 'No Task', 1e9);
 		case 'area': {
-			const id = l.task?.areaId ?? l.habit.areaId;
+			// A habit's log counts in the Area it had that day; a Task's own Area wins.
+			const id = l.task?.areaId ?? areaOn(l.habit, l.date);
 			const a = id ? P.ds.areas.find((x) => x.id === id) : null;
 			return a ? one(a.id, a.name) : one('none', 'No area', 1e9);
 		}
@@ -825,9 +833,9 @@ export function pointsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range): 
 
 	if (src === 'outcomes') {
 		for (const h of P.ds.habits) {
-			if (h.direction !== 'build' || !sc.habitOnlyOk(h)) continue;
+			if (h.direction !== 'build' || !sc.habitOnlyOk(h, 'ever')) continue;
 			for (const o of P.occsByHabit.get(h.id) ?? []) {
-				if (!inRange(o.date) || o.status === 'due') continue;
+				if (!inRange(o.date) || o.status === 'due' || !sc.areaOk(h, null, o.date)) continue;
 				let v: number | null = null;
 				if (card.perLog === 'done') v = o.status === 'done' ? 1 : null;
 				else if (card.perLog === 'rate') v = o.status === 'done' ? 1 : o.status === 'missed' ? 0 : null;
@@ -850,7 +858,7 @@ export function pointsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range): 
 				for (const l of P.logsByTask.get(m.taskId) ?? []) logged.set(l.occ.id, (logged.get(l.occ.id) ?? 0) + 1);
 				for (const o of P.ds.occurrences) {
 					const habit = P.habits.get(o.habitId);
-					if (!task || !habit || o.status !== 'done' || !inRange(o.date) || !sc.logOk({ habit, task })) continue;
+					if (!task || !habit || o.status !== 'done' || !inRange(o.date) || !sc.logOk({ habit, task, occ: o })) continue;
 					const slots = P.slotsOf(o);
 					const left = slots.filter((x) => (o.picks?.[x.id] ?? x.taskId) === m.taskId).length - (logged.get(o.id) ?? 0);
 					const series =
@@ -948,7 +956,7 @@ export function pointsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range): 
 		const rows = src === 'slips' ? P.ds.slips : P.ds.cravings.map((c) => ({ ...c, count: 1 }));
 		for (const s of rows) {
 			const h = P.habits.get(s.habitId);
-			if (!h || !sc.habitOnlyOk(h) || !inRange(s.date)) continue;
+			if (!h || !inRange(s.date) || !sc.habitOnlyOk(h, s.date)) continue;
 			out.push({ date: s.date, value: s.count, series: tagsFor({ habit: h, task: null, occ: null, date: s.date, time: s.time }), occId: null, habitId: h.id, taskId: null, time: s.time });
 		}
 		return out;
@@ -957,11 +965,12 @@ export function pointsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range): 
 	if (src === 'money') {
 		const slipsBy = group(P.ds.slips, (s) => `${s.habitId}|${s.date}`);
 		for (const h of P.ds.habits) {
-			if (h.direction !== 'break' || !h.cost?.perDay || !sc.habitOnlyOk(h)) continue;
+			if (h.direction !== 'break' || !h.cost?.perDay || !sc.habitOnlyOk(h, 'ever')) continue;
 			// Only finished days count, so today doesn't count before it ends.
 			const from = h.startDate > range.from ? h.startDate : range.from;
 			const to = addDays(ctx.today, -1) < range.to ? addDays(ctx.today, -1) : range.to;
 			for (let d = from; d <= to; d = addDays(d, 1)) {
+				if (!sc.areaOk(h, null, d)) continue;
 				const n = (slipsBy.get(`${h.id}|${d}`) ?? []).reduce((a, s) => a + s.count, 0);
 				// The old daily rate less what was used that day, at what each one costs (as Today counts it).
 				out.push({ date: d, value: (h.cost.perDay - n) * h.cost.amount, series: tagsFor({ habit: h, task: null, occ: null, date: d, time: null }), occId: null, habitId: h.id, taskId: null, time: null });

@@ -60,6 +60,8 @@ Tap a Task's name to rename it, and **Archive** Tasks in place. Archived Tasks k
 
 Group Habits or the Library by Area, then choose **Edit**: drag an Area's heading to reorder, tap its name to rename it, press its dot for its colour and icon, **Delete** it (with Undo; nothing in it is deleted), or add one at the end.
 
+Changing a habit's Area counts from today on, like moving it into a group: Stats and History keep its past days in the Area they had, so moving a chore from one kid to another doesn't move the credit for what was done before. The band offers **Past days too** to put every day in the new Area, with an Undo. A bulk Area change also counts from today on.
+
 ### Stats
 
 Drag cards, and rename the board. What a card shows is changed in its own words, in Use too. See [Stats](stats.md).

@@ -1,0 +1,1 @@
+ALTER TABLE `habit` ADD `earlier_areas` text;

@@ -5,7 +5,8 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { habit } from '../db/schema';
-import { settledAfter } from '../repo/habits';
+import { areasAfter, settledAfter } from '../repo/habits';
+import { userToday } from '../today';
 import type { HabitBulkField } from '$lib/rules/habit';
 
 type Values = Partial<Record<HabitBulkField, unknown>>;
@@ -20,6 +21,13 @@ const COLUMN = { areaId: 'areaId', remind: 'remind', streakRule: 'streakRule', u
  * start on the next settle (repo/habits.ts settledAfter, as the editor's save).
  */
 const EFFECT: Partial<Record<HabitBulkField, (id: string, from: unknown, to: unknown) => Partial<typeof habit.$inferInsert>>> = {
+	// A new Area counts from today on, as the editor's Area line does: past days keep theirs in Stats.
+	areaId: (id, from, to) => {
+		const h = db.select({ accountId: habit.accountId, startDate: habit.startDate, earlierAreas: habit.earlierAreas }).from(habit).where(eq(habit.id, id)).get();
+		if (!h) return {};
+		const before = { areaId: (from as string | null) ?? null, earlierAreas: h.earlierAreas, startDate: h.startDate };
+		return { earlierAreas: areasAfter(before, { areaId: (to as string | null) ?? null }, 'today', userToday(h.accountId)) };
+	},
 	unlogged: (id, from, to) => {
 		const h = db.select({ startDate: habit.startDate }).from(habit).where(eq(habit.id, id)).get();
 		if (!h) return {};

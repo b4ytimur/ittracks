@@ -43,7 +43,10 @@ export function patchHabit(accountId: string, id: string, p: HabitPatch, today: 
 	if (!parsed.success) return { error: firstError(parsed.error), status: 400 };
 	const problem = checkHabitForm(parsed.data).errors[0]?.reason ?? checkLinks(accountId, id, parsed.data) ?? checkHabitEdit(accountId, id, parsed.data);
 	if (problem) return { error: problem, status: 400 };
-	const save = () => saveHabit(accountId, id, parsed.data, today, { scheduleApplies: p.applies as ScheduleApplies });
+	// The line's days: an Area line's say which days its Area counts on, any other line's which days its schedule does.
+	const area = keys.length === 1 && keys[0] === 'areaId';
+	const applies = p.applies as ScheduleApplies;
+	const save = () => saveHabit(accountId, id, parsed.data, today, area ? { areaApplies: applies } : { scheduleApplies: applies });
 	// Starting to follow a routine not yet begun turns it to start where this habit is now: said, and undone with it.
 	const turn = routineTurnFor(accountId, id, parsed.data, today);
 	try {

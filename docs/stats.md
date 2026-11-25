@@ -42,6 +42,8 @@ What a sentence can't say (goals, rolling averages, splits, filters) is in **⋯
 
 Choices that don't fit the rest of the card are greyed out, with the reason.
 
+A habit's logs count in the Area it had on their day, both when a card splits by Area and when it narrows to some Areas. See [Areas](views-and-edit-mode.md#areas). A Task's own Area comes first.
+
 ## A habit's Stats tab
 
 Each habit has a **Stats** tab (from its editor or chain) with cards made automatically from what it logs. They change like any card; **Back to the automatic cards** undoes your changes. **Last times** on a Task's page shows its charts.

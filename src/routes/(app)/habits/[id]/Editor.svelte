@@ -604,15 +604,30 @@
 		if (first) dismiss(first.entry);
 		const back = { ...was, ...(first?.was ?? {}) };
 		const now = pick(onServer, Object.keys(back) as Key[]);
-		const entry = showToast(id === 'name' ? `Renamed to ${name}.` : `Changed ${l.label.toLowerCase()} of ${name}.`, async () => {
+		// A new Area counts from today on, so Stats keep its past days where they were; asked here, past days too.
+		const areaMoved = id === 'area' && savedStart < data.today && back.areaId !== undefined && back.areaId !== onServer.areaId;
+		const text = id === 'name' ? `Renamed to ${name}.` : `Changed ${l.label.toLowerCase()} of ${name}${areaMoved ? ', from today on' : ''}.`;
+		const entry = showToast(text, async () => {
 			const a = await send(id, { set: back, was: now });
 			if (!a) return false;
 			if (!a.r.form) return a.status === 409 ? `${l.label} changed again since, so it is left as it is.` : false;
 			said.delete(id);
 			await onreset(Object.keys(opened).filter((k) => opened[k]));
 			return true;
-		});
+		}, undefined, areaMoved ? { label: 'Past days too', run: areaPastToo } : undefined);
 		said.set(id, { entry, was: back });
+	}
+	/** The new Area counts on the habit's past days too, with an Undo back to from today on. */
+	async function areaPastToo() {
+		const areaId = onServer.areaId;
+		const a = await send('area', { set: { areaId }, was: { areaId }, applies: 'past', keep: true });
+		if (!a?.r.form) return a?.r.error ?? false;
+		const where = data.areas.find((x) => x.id === areaId)?.name;
+		const undo = a.r.undo;
+		showToast(
+			`${full.name} counts ${where ? `in ${where}` : 'in no Area'} on its past days too.`,
+			undo ? async () => (await fetch('/api/undo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: undo }) }).catch(() => null))?.ok ?? false : undefined
+		);
 	}
 	function wait(id: string) {
 		clearTimeout(timers.get(id));

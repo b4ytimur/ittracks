@@ -77,6 +77,7 @@ export function loadDataset(accountId: string, tz?: string): Dataset {
 			name: h.name,
 			direction: h.direction,
 			areaId: h.areaId,
+			earlierAreas: h.earlierAreas ?? null,
 			startDate: h.startDate,
 			archived: h.archived,
 			identities: ids.filter((x) => x.habitId === h.id).map((x) => x.identityId),
