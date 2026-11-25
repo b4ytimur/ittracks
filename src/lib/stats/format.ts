@@ -93,7 +93,7 @@ export function niceTicks(min: number, max: number, count = 4): number[] {
 	return out;
 }
 
-export const seriesColor = (i: number, key: string) => (key === 'other' ? 'var(--muted)' : `var(--series-${(i % 8) + 1})`);
+export const seriesColor = (i: number, key: string) => (key === 'other' ? 'var(--ink-muted)' : `var(--series-${(i % 8) + 1})`);
 
 /** One of five steps of the amount ramp, 0 for nothing. */
 export function step(v: number | null, max: number): number {

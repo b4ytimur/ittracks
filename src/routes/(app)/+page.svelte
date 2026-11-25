@@ -243,10 +243,10 @@
 		line('headline') ? (data.headlines[item.habitId] ?? headlineText(views.today.headlineFor[item.habitId] ?? views.today.headline, item.stats, item.streak)) : '';
 
 	/** Change a Today layout setting here at once, and save it. */
-	function setToday(patch: Partial<typeof views.today>) {
+	function setToday(patch: Partial<typeof views.today>): Promise<unknown> {
 		const before = views.today;
 		views.today = { ...views.today, ...patch };
-		saveLayout({ op: 'patch', today: patch }, () => (views.today = before), () => setToday(patch));
+		return saveLayout({ op: 'patch', today: patch }, () => (views.today = before), () => void setToday(patch));
 	}
 	const sections = $derived(sectionOrder(views));
 	const toggleIn = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
@@ -267,7 +267,7 @@
 	function resetLayout() {
 		const { sections, done, widgets, lines, timeAware, headline } = views.today;
 		setToday({ sections: template.sections, done: template.done, widgets: template.widgets, lines: template.lines, timeAware: template.timeAware, headline: template.headline });
-		showToast('Layout reset.', () => setToday({ sections, done, widgets, lines, timeAware, headline }));
+		showToast('Layout reset.', async () => !!(await setToday({ sections, done, widgets, lines, timeAware, headline })));
 	}
 	const folded = (k: string) => views.today.folded.includes(foldKey(k));
 	// Stored keys are short and few; a long group name folds by its start.
@@ -275,18 +275,34 @@
 	const fold = (k: string) => setToday({ folded: toggleIn(views.today.folded, foldKey(k)).slice(-100) });
 	/** Every widget, the shown ones first in their order. */
 	const allWidgets = $derived([...views.today.widgets, ...(Object.keys(WIDGETS) as WidgetKey[]).filter((w) => !views.today.widgets.includes(w))]);
-	const reorderWidgets = (order: string[]) => setToday({ widgets: (order as WidgetKey[]).filter((w) => views.today.widgets.includes(w)) });
-	const reorderSections = (order: string[]) => setToday({ sections: order.map((k) => sections.find((s) => s.key === k)!) });
+	/** A move, said once it is saved. */
+	const moved = (patch: Partial<typeof views.today>, said: string, undo: () => Promise<boolean>) => void setToday(patch).then((ok) => ok && showToast(said, undo));
+	function reorderWidgets(order: string[], said: string) {
+		const { widgets } = views.today;
+		moved({ widgets: (order as WidgetKey[]).filter((w) => widgets.includes(w)) }, said, async () => !!(await setToday({ widgets })));
+		return true;
+	}
+	function reorderSections(order: string[], said: string) {
+		const was = sections;
+		moved({ sections: order.map((k) => sections.find((s) => s.key === k)!) }, said, async () => !!(await setToday({ sections: was })));
+		return true;
+	}
 	const toggleSection = (k: SectionKey) => setToday({ sections: sections.map((x) => (x.key === k ? { ...x, show: !x.show } : x)) });
 	/** A list of habits was reordered: it goes into the one habit order (My order), shared with the Habits page. */
-	function reorderHabits(part: string[]) {
+	function reorderHabits(part: string[], said: string) {
+		const was = { order: views.today.order, sort: view.sort };
 		const ids = [...data.build, ...data.resting].map((b) => b.habitId);
 		const all = [...views.today.order, ...ids.filter((id) => !views.today.order.includes(id))];
-		setToday({ order: reorderFrom(all, shownBuild.map((b) => b.habitId), part, view.sort === 'manual') });
+		const order = reorderFrom(all, shownBuild.map((b) => b.habitId), part, view.sort === 'manual');
 		if (view.sort !== 'manual') {
 			view.sort = 'manual';
-			showToast('Sorted by My order, shared with the Habits page.');
+			said += ' Sorted by My order, shared with the Habits page.';
 		}
+		moved({ order }, said, async () => {
+			view.sort = was.sort;
+			return !!(await setToday({ order: was.order }));
+		});
+		return true;
 	}
 	function setHeadline(habitId: string, v: string) {
 		const next = { ...views.today.headlineFor };
@@ -561,9 +577,9 @@
 			items={allWidgets}
 			key={(w) => w}
 			label={(w) => WIDGETS[w]}
-			editing
+			mode="edit"
 			ariaLabel="Widgets at the top"
-			onmove={(_, order) => reorderWidgets(order)}
+			onmove={(_, order, text) => reorderWidgets(order, text)}
 			onremove={(w) => setToday({ widgets: toggleIn(views.today.widgets, w) })}
 			removeLabel={(w) => (views.today.widgets.includes(w) ? 'Hide' : 'Show')}
 		>
@@ -588,7 +604,7 @@
 		label={(s) => SECTIONS[s.key]}
 		{mode}
 		ariaLabel="Sections of Today"
-		onmove={(_, order) => reorderSections(order)}
+		onmove={(_, order, text) => reorderSections(order, text)}
 	>
 		{#snippet row(sec, ctx)}
 			{@const k = `section:${sec.key}`}
@@ -789,7 +805,7 @@
 		holder={(b) => !!b.group && kidsOf(b.habitId).length > 0}
 		itemClass={(b) => [isDone(b) && statusOf(b.occurrence!) === 'skipped' ? 'skipped' : isDone(b) ? 'done' : '', just.has(b.habitId) ? 'just-done' : '', b.afterHabitId ? 'stacked' : ''].join(' ')}
 		ariaLabel={name}
-		onmove={(_, order) => reorderHabits(order)}
+		onmove={(_, order, text) => reorderHabits(order, text)}
 	>
 		{#snippet row(item)}{@render habitRow(item)}{/snippet}
 		{#snippet actions(item)}{@render verb(item)}{/snippet}

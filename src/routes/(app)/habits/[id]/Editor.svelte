@@ -1001,7 +1001,7 @@
 			items={phases}
 			key={(p) => p.key}
 			label={(p) => `Phase ${phases.indexOf(p) + 1}`}
-			editing
+			mode="edit"
 			layout="block"
 			ariaLabel="Phases"
 			onmove={(_, order) => (phases = order.map((k) => phases.find((p) => p.key === k)!))}

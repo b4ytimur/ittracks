@@ -39,10 +39,10 @@
 		const r = await run<{ deleted: object }>('delete', { id: i.id });
 		if (r?.deleted) showToast(`Deleted “${i.statement}”. Its habits stay.`, undoWith('/identities?/restore', { deleted: JSON.stringify(r.deleted) }));
 	}
-	async function move(ids: string[]) {
+	async function move(ids: string[], said: string) {
 		const was = list.map((i) => i.id);
 		order = ids;
-		if (await run('order', { ids: ids.join(',') })) showToast('Moved it.', undoWith('/identities?/order', { ids: was.join(',') }));
+		if (await run('order', { ids: ids.join(',') })) showToast(said, undoWith('/identities?/order', { ids: was.join(',') }));
 		order = null;
 	}
 </script>
@@ -59,7 +59,7 @@
 	{mode}
 	rowCard
 	ariaLabel="Identities"
-	onmove={(_, ids) => move(ids)}
+	onmove={(_, ids, text) => (void move(ids, text), true)}
 	onremove={remove}
 	removeLabel="Delete"
 	onadd={add}

@@ -1,11 +1,10 @@
 <script lang="ts" generics="T">
-	// The one list every editable list in the app is built from. `editing` and `selecting` are
-	// flags on the same list, so the list a page shows in use is the list it edits, and the two
-	// can't drift apart.
+	// The one list every editable list in the app is built from. Edit and select are modes of the
+	// same list, so the list a page shows in use is the list it edits, and the two can't drift apart.
 	//
-	// editing:   a handle on each row to drag (mouse, touch, pen), with the arrow keys on the
+	// edit:      a handle on each row to drag (mouse, touch, pen), with the arrow keys on the
 	//            handle as the keyboard way; a remove button on each row; an add button under it.
-	// selecting: a labelled checkbox on each row, and a tap anywhere on the row ticks it instead
+	// select:    a labelled checkbox on each row, and a tap anywhere on the row ticks it instead
 	//            of following its link. Shift-click ticks a range. Several lists on one page can
 	//            share one `selected` set (pass a SvelteSet); a list only adds and removes its own keys.
 	//
@@ -25,9 +24,7 @@
 		items,
 		key,
 		label,
-		mode: wanted,
-		editing: wantsEdit = false,
-		selecting: wantsSelect = false,
+		mode = 'use',
 		selected,
 		selectScope = 'item',
 		childKeys,
@@ -48,7 +45,7 @@
 		title,
 		children,
 		empty,
-		layout = 'row',
+		layout,
 		axis = 'y',
 		itemClass,
 		ariaLabel,
@@ -59,10 +56,8 @@
 		key: (item: T) => string;
 		/** The item's name for screen readers ("Move Gym", "Select Gym"). Defaults to the key. */
 		label?: (item: T) => string;
-		/** One of three, so edit and select are never both on. Without it, `editing` and `selecting` say which (select wins). */
+		/** One of three, so edit and select are never both on. */
 		mode?: Mode;
-		editing?: boolean;
-		selecting?: boolean;
 		/** Ticked keys, owned by the page. Pass a SvelteSet so rows update when it changes. */
 		selected?: Set<string>;
 		/** Ticking a row ticks what is inside it too ("unit"; needs `childKeys`), or the row alone ("item"). */
@@ -71,8 +66,11 @@
 		childKeys?: (key: string) => string[];
 		/** Whether a move is allowed. Without it, rows can go before and after each other, never inside. */
 		canDrop?: (move: Move) => boolean;
-		/** A row was moved. `order` is this list's keys afterwards (without the key, for a move inside a row). */
-		onmove?: (move: Move, order: string[]) => void;
+		/**
+		 * A row was moved. `order` is this list's keys afterwards (without the key, for a move inside a row),
+		 * `text` says it. A page that puts `text` in the band returns true: the band speaks it then, once.
+		 */
+		onmove?: (move: Move, order: string[], text: string) => unknown;
 		/** In a list nested inside a row: the row with this key moves out, to just after the row holding the list. */
 		onoutdent?: (key: string) => void;
 		/** Shows a remove button on each row while editing. */
@@ -97,12 +95,11 @@
 		/** With layout "block": the title in the bar above the row, beside the handle and remove button. */
 		title?: Snippet<[T, RowContext]>;
 		/**
-		 * "row" (the default): handle, row and remove button side by side, for rows of one line.
 		 * "block": a bar with the handle, title and remove button above the row at full width,
 		 * for big items such as a page section that holds a list of its own.
 		 * "bare": `row` draws all of it and puts the handle (`ctx.grip`) where it belongs.
 		 */
-		layout?: 'row' | 'block' | 'bare';
+		layout?: 'block' | 'bare';
 		/**
 		 * "y" (the default): one item under another. "grid": items flow in a grid the page lays out
 		 * with CSS on `class` (and `itemClass` for spans); drops go before or after the nearest cell,
@@ -122,7 +119,6 @@
 		class?: string;
 	} = $props();
 
-	const mode = $derived<Mode>(wanted ?? (wantsSelect ? 'select' : wantsEdit ? 'edit' : 'use'));
 	const editing = $derived(mode === 'edit');
 	const selecting = $derived(mode === 'select');
 	const scopeOf = (item: T) => (typeof selectScope === 'function' ? selectScope(item) : selectScope);
@@ -144,11 +140,8 @@
 		const order = applyMove(keys, m);
 		const item = items[keys.indexOf(m.key)];
 		const target = items[keys.indexOf(m.target)];
-		onmove?.(m, order);
-		announce =
-			m.position === 'inside'
-				? `${nameOf(item)} moved inside ${target ? nameOf(target) : 'the row'}.`
-				: `${nameOf(item)} moved to position ${order.indexOf(m.key) + 1} of ${order.length}.`;
+		const text = m.position === 'inside' ? `Moved ${nameOf(item)} into ${target ? nameOf(target) : 'the row'}.` : `Moved ${nameOf(item)} to ${order.indexOf(m.key) + 1} of ${order.length}.`;
+		if (onmove?.(m, order, text) !== true) announce = text;
 		if (refocus) await focusHandle(m.key);
 	}
 
@@ -235,7 +228,7 @@
 			// The first row whose bottom is below the pointer; past the last row means after it.
 			const r = others.find((x) => x.getBoundingClientRect().bottom > d.y) ?? others[others.length - 1];
 			// Where on the row is worked out on its own line, not on what sits under it.
-			const head = (layout !== 'row' ? r : (r.querySelector(':scope > .head, :scope > .card') ?? r)).getBoundingClientRect();
+			const head = (layout ? r : (r.querySelector(':scope > .card') ?? r)).getBoundingClientRect();
 			const target = r.dataset.key!;
 			const nest = allowed({ key: d.key, target, position: 'inside' });
 			pos = d.y < head.top ? 'before' : d.y > head.bottom ? 'after' : dropPosition(d.y, head, nest);
@@ -420,17 +413,11 @@
 					<div class="verb">{@render actions(item, ctx)}</div>
 				{/if}
 			</div>
-			{:else if layout !== 'block' || editing || selecting}
+			{:else if editing || selecting}
 			<div class="head">
 				{#if selecting && selected}{@render pick()}{/if}
 				{#if editing && onmove}{@render grip()}{/if}
-				{#if layout === 'block'}
-					<div class="title">{@render title?.(item, ctx)}</div>
-				{:else}
-					<div class="body">
-						{@render row(item, ctx)}
-					</div>
-				{/if}
+				<div class="title">{@render title?.(item, ctx)}</div>
 				{#if editing && onremove}
 					<button type="button" class="small remove" aria-label="{removeOf(item)} {nameOf(item)}" onclick={() => onremove(item)}>{removeOf(item)}</button>
 				{/if}
@@ -505,16 +492,11 @@
 	.head > .handle {
 		margin-inline-start: 0;
 	}
-	.dragging > .head > .body {
-		box-shadow: var(--shadow-lifted);
-		border-radius: var(--radius-card);
-	}
 	/* Block layout: a framed item with a title bar. */
 	.block.editing > li {
 		border: 1px dashed var(--line);
 		border-radius: var(--radius-card);
 		padding: 0.35rem 0.5rem 0.5rem;
-		background: var(--bg, transparent);
 	}
 	.block > li > .head {
 		min-height: 2rem;
@@ -537,9 +519,6 @@
 	}
 	.selecting > li {
 		cursor: pointer;
-	}
-	.picked > .head > .body > :global(.card) {
-		box-shadow: var(--chosen-shadow);
 	}
 	.remove {
 		flex: none;
