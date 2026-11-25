@@ -89,9 +89,7 @@
 		const item = data.build.find((b) => b.occurrence?.id === id);
 		if (item && short && item.occurrence?.status === 'due')
 			showToast(
-				`Saved ${item.name}${item.progress ? `: ${progressText(item.progress)}` : ''}. It counts once it reaches ${short === 'target' ? 'the full target' : 'the Minimum'}, and stays open until the day ends.`,
-				undefined,
-				7000
+				`Saved ${item.name}${item.progress ? `: ${progressText(item.progress)}` : ''}. It counts once it reaches ${short === 'target' ? 'the full target' : 'the Minimum'}, and stays open until the day ends.`
 			);
 		else if (item) showToast(`Logged ${item.name}.`, () => postAction('?/undo', { occurrence: id, clear: clear ? '1' : '' }).then(() => {}));
 		const u = new URL(page.url);
@@ -112,8 +110,7 @@
 		if (did.short)
 			showToast(
 				`Logged ${did.habit}. It counts once it reaches ${did.short === 'target' ? 'the full target' : 'the Minimum'}, and stays open until the day ends.`,
-				undo,
-				7000
+				undo
 			);
 		else showToast(`${did.skipped ? 'Skipped' : 'Logged'} ${did.habit}.`, undo);
 	}

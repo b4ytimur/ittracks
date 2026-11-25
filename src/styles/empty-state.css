@@ -1,0 +1,72 @@
+/* EmptyState: the sentence a list shows when it has no rows, and the ghost slot that ends a list.
+   Owns .ghost, .ghost-slot, .empty-first, .empty-filtered and .empty-range.
+   The li is ListRow's (.elist > li); on a shelf NestedRow places it (.shelf .ghost).
+   Dashes mean "type here or drop here", and the slot is both (R1.6). Its fill is the ground it stands on
+   (page, card, shelf), so it reads as a place for a row: never a raised card, never a hole. */
+
+/* ---------- The sentence ---------- */
+/* first: inside li.ghost, 8px over the slot like a heading over its rows. range: alone. filtered: ends with Clear filters,
+   a button.link.hit in the sentence, so Button underlines it (D3.29) and it wraps whole. */
+.empty-first, .empty-filtered, .empty-range { color: var(--ink-muted); overflow-wrap: anywhere; }
+.empty-first { margin-block-end: var(--space-inline); }
+
+/* ---------- The ghost slot: a dashed, row-shaped place at the end of a list ---------- */
+/* Rows to slot is space-group (the list's 8px gap + 8), so the last row's drop line has air (F.2). */
+.elist > .ghost:not(:first-child) { margin-block-start: var(--space-inline); }
+/* button.ghost-slot closed; div.ghost-slot open, holding InlineEditor's textarea. Same box, so opening moves nothing.
+   Edge + padding equal a row card's edge + padding (ListRow: 16 block, 17 inline), and the padding gives back what
+   a 2px lit edge takes. So in edit mode the + fills the grip column, the words and the typed name start on the name
+   column, and a one-line name sits 16px from the top: where the new row puts it. More lines grow down. */
+.ghost-slot {
+	--edge: 1px;
+	--words: var(--ink-muted);
+	display: flex; align-items: center; justify-content: flex-start; gap: 0;
+	width: 100%; min-height: calc(14 * var(--pitch)); /* a one-line regular row: 56px */
+	padding: calc(var(--space-group) - var(--edge)) calc(var(--space-group) + 1px - var(--edge));
+	border: var(--edge) dashed var(--line-control); border-radius: var(--radius-card);
+	background: var(--surface-page); color: var(--words); text-align: start;
+	overflow-wrap: anywhere; /* long words wrap inside the dashes (WCAG 1.4.10) */
+}
+/* The + is one name line tall and sits on the first line, so it stays there when a typed name wraps. */
+.ghost-slot > :first-child { flex: none; align-self: flex-start; width: var(--handle-slot); line-height: 1.5rem; text-align: center; }
+.ghost-slot > .name { flex: 1; min-width: 0; color: var(--ink); } /* the typed name is text, not a hint */
+.ghost-slot textarea::placeholder { color: var(--words); font-weight: 400; } /* the words stay visible in an empty open slot (CF.5); States sets opacity 1 */
+button.ghost-slot { cursor: text; }
+.ghost-slot.hover { border-color: var(--ink); color: var(--ink); } /* .hover: the previews' stand-in */
+@media (hover: hover) { .ghost-slot:hover { border-color: var(--ink); color: var(--ink); } } /* never a sticky look after a tap (States) */
+/* A drop into an empty list or shelf: the slot is the landing (DragHandle puts .drop-target on this li,
+   never on the holder), so the holder's outline stays as it is. */
+.ghost.drop-target > .ghost-slot { --edge: 2px; border-color: var(--accent); }
+/* Use mode: the + hangs in the leading padding, as the grip does, so the words sit on the use-mode name column.
+   The 16px between the dashes and the words holds an 8px glyph, so the column starts 2px in and is 14px wide:
+   about 5px of air to the dashes and a word space to the words (a full space-tight in glues it to them). */
+.elist[data-mode='use'] > .ghost > .ghost-slot { padding-inline-start: calc(var(--space-tight) / 2); }
+.elist[data-mode='use'] > .ghost > .ghost-slot > :first-child { width: calc(var(--handle-slot) - var(--space-tight) / 2); }
+
+/* ---------- Grounds and density ---------- */
+.card .ghost-slot { background: var(--surface-raised); } /* a list inside a card: Areas settings, the editors */
+/* On a shelf: the shelf's own fill (page fill is darker than the shelf in dark: a hole, F.1) and 44px, a plain row's
+   height. Words in ink: ink-muted on surface-sunken is 4.03:1 in light (S.2). The typed name is ground (400), like a child.
+   NestedRow starts the box 8px before the child grip column; 8 inside (edge + padding) puts the + on that column. */
+.shelf .ghost-slot {
+	--words: var(--ink);
+	background: var(--surface-sunken); min-height: var(--target-touch);
+	padding: calc(var(--space-tight) - var(--edge)) calc(var(--space-inline) - var(--edge));
+}
+.shelf .ghost-slot > .name { font-weight: 400; }
+.elist[data-density='compact'] > .ghost > .ghost-slot { min-height: var(--target-touch); padding-block: calc(var(--space-inline) - var(--edge)); }
+/* Shelf and compact rows centre their content, so the slot does too. */
+.shelf .ghost-slot > :first-child,
+.elist[data-density='compact'] > .ghost > .ghost-slot > :first-child { align-self: center; }
+
+/* ---------- Motion: the words slide 16px with the rows' names on a mode change ---------- */
+@media (prefers-reduced-motion: no-preference) {
+	.ghost-slot { transition: padding-inline-start var(--duration-settle) var(--ease-settle), border-color var(--duration-quick) var(--ease-standard), color var(--duration-quick) var(--ease-standard); }
+	.ghost-slot > :first-child { transition: width var(--duration-settle) var(--ease-settle); } /* padding + width = 16px, one clock */
+}
+
+/* ---------- Forced colours: the dashes carry it; the lit edge is Highlight (Clear filters: Button) ---------- */
+@media (forced-colors: active) {
+	.ghost-slot { border-color: CanvasText; }
+	.ghost.drop-target > .ghost-slot { border-color: Highlight; }
+}

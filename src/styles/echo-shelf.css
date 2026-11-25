@@ -1,0 +1,153 @@
+/* EchoShelf: the tab bar and the sunken band on it that names every change; UndoToast is retired (N.5).
+   Owns .tabbar (the row its Tab links sit in), .band (and its .tucked state), .echo (the band's line and its parts .echo-*), .history.
+   Markup: <nav class="tabbar" aria-label="Main">
+             <div class="band" data-mode="use|edit|select">              ← always rendered: it holds the one live region
+               <p class="vh" role="status" id="echo-status">newest text</p>   ← never re-keyed; empty while idle
+               {#if line}  ← an entry, or offline / syncing / an error; with no line the band draws nothing (idle)
+               <div class="echo focus-inset" tabindex="-1" role="group" aria-labelledby="echo-status">   ← named by the region, so focus here reads the line
+                 .echo-text.label[aria-hidden][id] ([span.status-disc] first, inside the text, errors only: Notice)
+                 [span.echo-acts: [button.quiet.echo-more "3 earlier<span.vh> changes</span>"] [button.small.echo-act[id][aria-labelledby="own-id text-id"]]] </div>
+               <ol class="history" id="…" hidden> <li> .echo-text.label[id] [button.small.echo-act[aria-labelledby]] </li> … </ol>
+               {/if}
+             </div>
+             <a class="tab label" href="/" data-reserve="Today" aria-current="page">Today</a> …   ← no tab links on link-only pages
+           </nav>
+   In select mode SelectionBar's .selbar takes the place of .echo; the status <p> stays, so changes are still announced.
+   .tucked: the layout's scroll listener adds it on scroll down and drops it on scroll up, after 900ms at rest and on
+   every new line. The CSS below refuses it in select mode, with the history open and with keyboard focus in the bar.
+   The band is out of the bar's flow, so the layout's one ResizeObserver observes both .band and .tabbar and writes
+   tabbar height + max(band height, a one-line band) + space-section to --tabbar-clear on <html>. Tucking is a
+   transform, so it never changes the band's box: the observer never sees it, and the reserve keeps the band while
+   it is tucked.
+   echo:floor (R2.6): the scroll listener, each time it toggles .tucked, and the observer's callback
+   (the band mounts or resizes) dispatch it on window. detail.floor = the resting floor, tabbar top - band.offsetHeight
+   (offsetHeight ignores the tuck and is 0 while idle), or the tab bar's top while tucked. Open menus re-place on it. */
+
+/* ---------- Reserve: the page never ends under the bar (focus never lands under it either, WCAG 2.4.11) ---------- */
+/* The app's main takes --tabbar-clear as its padding-bottom. A one-line band is always reserved (R2.15):
+   from the start, while idle and while tucked. The band appears with a change, often one made on the last row, and
+   must not land on it (24 - 32 would cover 8px). The value here is the fallback until the layout measures; a wrapped
+   message, the select-mode band or tabs wrapped at 200% text only raise the measure, never below one line. */
+html:has(.tabbar) {
+	--tabbar-clear: calc(var(--space-tabbar-clear) + var(--band-height));
+	scroll-padding-bottom: var(--tabbar-clear);
+}
+
+/* ---------- The tab bar: one fixed unit, band on top, tabs below, one outline ---------- */
+/* The tabs are the bar's own row; the band stands on the bar's top line. */
+.tabbar {
+	position: fixed; inset: auto 0 0; z-index: var(--z-band);
+	display: flex; flex-wrap: wrap; /* at 200% text the tabs take a second row rather than clip */
+	padding-bottom: env(safe-area-inset-bottom);
+	background: var(--surface-raised); border-top: 1px solid var(--line);
+}
+/* The tabs are Tab (a.tab.label), which owns their look. Content first, spare width shared (Settings never overflows
+   at 320px); 2px inline padding, so six bold-width tabs fit one row at 320px; 44px at every pointer; the bar faces the page. */
+.tabbar > .tab { flex: 1 1 auto; min-height: var(--target-touch); padding-inline: calc(var(--space-tight) / 2); }
+.tabbar > .tab::before { inset-block: 0 auto; }
+
+/* ---------- The band: recessed, inside the bar's outline, the way a shelf sits inside its holder's ---------- */
+/* Out of the bar's flow, standing on its top line (which divides band from tabs); the band's own top line
+   closes the outline. The page reserves it (--tabbar-clear), so it never covers the end of the list.
+   The 1px line counts inside the band's pitch (as a card's border does in ListRow): the padding under it gives it back. */
+.tabbar .band {
+	/* the content column: band text and Undo line up with the page's text on every width */
+	--band-pad: max(var(--space-group), (100% - var(--page-width)) / 2 + var(--space-group));
+	position: absolute; inset-inline: 0; bottom: calc(100% + 1px);
+	display: flex; align-items: center; min-height: var(--band-height); padding-inline: var(--band-pad);
+	background: var(--surface-sunken); color: var(--ink); /* ink: ink-muted on sunken is 4.03:1 in light */
+	border-top: 1px solid var(--line);
+	/* The tuck's edge: nothing of the band ever draws below its own bottom line, which is the tab bar's top.
+	   Upward it clips nothing (the history and focus rings stand above the band). */
+	clip-path: inset(-100vh 0 0);
+}
+/* The band is the selection bar's height: 1 + 7, then the bar (-8 margin, 4 + 24 + 4, -8 margin), then 8 = 32 with nothing ticked,
+   band-height as in Use mode (44 on touch, where the bar keeps 10 of its own). SelectionBar's pitch. */
+.tabbar .band[data-mode='select'] { padding-block: calc(var(--space-inline) - 1px) var(--space-inline); }
+
+/* Idle: no line yet this session, so no band. The element stays for its live region; it draws nothing, 0px tall. */
+.tabbar .band:not(:has(> .echo, > .selbar)) { min-height: 0; border-top-width: 0; }
+
+/* Tucked while scrolling down: the band slides down its own height under an edge fixed at the tab bar's top line,
+   so it passes under the bar. A transform, so its box (and the reserve) stay as they were.
+   Never in select mode, with the history open, or with keyboard focus anywhere in the bar (Tab never lands on a
+   hidden Undo). Visual only: the live region and the controls stay in the accessibility tree. */
+.tabbar:not(:has(:focus-visible)) > .band.tucked:not([data-mode='select'], :has(> .history:not([hidden]))) {
+	transform: translateY(100%); clip-path: inset(-100vh 0 100%);
+}
+
+/* The line: one entry, no timer. Text wraps, never truncates; the band grows and --tabbar-clear follows.
+   1 + 3 + 24 + 4 = 32 with a button (the band's 1px top line comes out of the padding under it, as in select mode);
+   a two-line entry is 48. The actions drop to their own trailing line before any word breaks (200% text).
+   The line fills the band down to the clip edge, so its ring is drawn just inside it, 2px clear of the text: the markup
+   adds base's .focus-inset. */
+.echo {
+	flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--space-inline);
+	min-height: calc(var(--band-height) - 1px); padding: calc(var(--space-tight) - 1px) var(--space-tight) var(--space-tight);
+	margin-inline: calc(-1 * var(--space-tight)); /* the inline padding is room for its ring; the text stays in the column */
+}
+.echo-text { flex: 1 1 10em; min-width: 0; overflow-wrap: break-word; }
+/* The count and the action wrap as one unit and keep the trailing end (loose, the count stayed on the text's
+   line while Undo dropped to the leading edge on 280px screens). A history entry has one action, bare. */
+.echo-acts { flex: none; display: flex; align-items: center; column-gap: var(--space-inline); }
+.echo-text + :is(.echo-acts, .echo-act) { margin-inline-start: auto; }
+/* Undo and Retry: Button's small (surface-raised, line-control edge 3.10:1 on light sunken) in accent text. */
+.echo-act { flex: none; position: relative; color: var(--accent-ink); }
+.echo-more { flex: none; position: relative; } /* Button's quiet: accent text, no edge (5.63:1 on light sunken) */
+.echo-act::after, .echo-more::after { content: ''; position: absolute; inset: 0 calc(var(--space-inline) / -2); }
+
+/* ---------- History: the earlier entries, pulled up out of the band as one region ---------- */
+/* bottom: 100% lays the panel over the band's top line, so panel and band join as one region; a line-inset
+   hairline divides the oldest-on-top list from the band's line, which is the newest entry. Newest first in the
+   DOM (focus walks up from the band), drawn bottom-up, so a long list starts scrolled to the band end.
+   It takes at most half the screen, and never runs past the top of a short screen: at most what the bar leaves free. */
+.tabbar .history {
+	position: absolute; bottom: 100%; inset-inline: calc(var(--band-pad) - var(--space-group));
+	display: flex; flex-direction: column-reverse;
+	max-height: 50vh; max-height: min(50dvh, 100dvh - var(--tabbar-clear)); /* one cap for overlays docked to the band (D3.17) */
+	overflow: auto; list-style: none; margin: 0; padding: 0;
+	background: var(--surface-sunken);
+	border: 1px solid var(--line); border-bottom-color: var(--line-inset);
+	border-radius: var(--radius-card) var(--radius-card) 0 0;
+}
+.tabbar .history[hidden] { display: none; }
+.tabbar .history > li {
+	display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--space-inline);
+	/* inline: the panel's 1px side borders come out of the padding, so every Undo and Retry stands in the band's column */
+	min-height: var(--band-height); padding: var(--space-tight) calc(var(--space-group) - 1px);
+}
+/* decorative hairline, as on a shelf (column-reverse: the next li is above); its 1px comes out of the padding */
+.tabbar .history > li + li { border-bottom: 1px solid var(--line-inset); padding-bottom: calc(var(--space-tight) - 1px); }
+
+/* ---------- Touch: the band is 44px, so Undo, Retry and the count get 44px hit areas ---------- */
+@media (pointer: coarse) {
+	html:has(.tabbar) { --tabbar-clear: calc(var(--space-tabbar-clear) + var(--target-touch)); }
+	.tabbar .band, .tabbar .history > li { min-height: var(--target-touch); }
+	.echo { min-height: calc(var(--target-touch) - 1px); }
+	.echo-act::after, .echo-more::after { inset-block: calc((var(--target-min) - var(--target-touch)) / 2); }
+}
+
+/* ---------- Motion (F.12): a replacement leaves, then the new line enters; nothing times out ---------- */
+/* The layout keys the line by entry id and adds .leaving / .entering (Svelte out:/in: do the same).
+   The leaving line takes no taps; the layout ignores Undo and Retry for 2 x duration-quick after a replacement
+   (duration-quick under reduced motion), so the new line has shown for duration-quick before it can act. */
+.echo.leaving { pointer-events: none; }
+@media (prefers-reduced-motion: no-preference) {
+	/* the tuck and its return: one slide on the settle clock (instant under reduced motion) */
+	.tabbar .band { transition: transform var(--duration-settle) var(--ease-settle), clip-path var(--duration-settle) var(--ease-settle); }
+	.echo.leaving { position: absolute; inset: 0 var(--band-pad); animation: echo-fade var(--duration-quick) var(--ease-standard) reverse forwards; }
+	.echo.entering { animation: echo-enter var(--duration-settle) var(--ease-settle) var(--duration-quick) backwards; }
+	/* nothing to wait for (the first line of the session): it rises at once, so the new band never shows empty */
+	.tabbar .band:not(:has(> .leaving)) > .echo.entering { animation-delay: 0s; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.echo.leaving { display: none; }
+	.echo.entering { animation: echo-fade var(--duration-quick) var(--ease-standard); }
+}
+@keyframes echo-enter { 0% { opacity: 0; transform: translateY(var(--space-inline)); } }
+@keyframes echo-fade { 0% { opacity: 0; } }
+
+/* ---------- Forced colours: the band's fill vanishes, so it is drawn by two lines ---------- */
+@media (forced-colors: active) {
+	.tabbar, .band, .history { border-color: CanvasText; }
+}

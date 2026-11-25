@@ -14,7 +14,7 @@
 	}: {
 		value: string;
 		editing?: boolean;
-		onsave: (value: string) => void | Promise<void>;
+		onsave: (value: string) => unknown;
 		/** What the text is, for screen readers ("Rename Gym", "Name"). */
 		label?: string;
 		maxlength?: number;
@@ -25,8 +25,10 @@
 	let open = $state(false);
 	let draft = $state('');
 	let box = $state<HTMLInputElement>();
+	let width = $state<number>();
 
-	async function begin() {
+	async function begin(e: MouseEvent) {
+		width = (e.currentTarget as HTMLElement).offsetWidth;
 		draft = value;
 		open = true;
 		await tick();
@@ -52,6 +54,7 @@
 		class="inline-text"
 		bind:this={box}
 		bind:value={draft}
+		style:--open-w="max({width ?? 0}px, 24ch)"
 		{maxlength}
 		aria-label={label}
 		onkeydown={(e) => {
@@ -66,30 +69,5 @@
 		onblur={() => finish(true)}
 	/>
 {:else if editing}
-	<button type="button" class="inline-text" onclick={begin} aria-label="{label}: {value}. Tap to change." title="Tap to change">{value}<span class="pen" aria-hidden="true">✎</span></button>
+	<button type="button" class="inline-text" onclick={begin} aria-label="{label}: {value}" data-reserve={value}><span>{value}</span></button>
 {:else}{value}{/if}
-
-<style>
-	input.inline-text {
-		font-weight: inherit;
-		padding: 0.15rem 0.35rem;
-		width: 100%;
-	}
-	button.inline-text {
-		border: none;
-		background: none;
-		padding: 0;
-		font: inherit;
-		font-weight: inherit;
-		color: inherit;
-		text-align: left;
-		cursor: text;
-		border-bottom: 1px dashed var(--muted);
-		border-radius: 0;
-	}
-	.pen {
-		margin-left: 0.3rem;
-		font-size: 0.8em;
-		color: var(--muted);
-	}
-</style>

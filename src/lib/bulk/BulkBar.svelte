@@ -107,14 +107,14 @@
 		}
 		close();
 		await onchanged();
-		if (!a.batch) return showToast(a.summary);
+		if (!a.batch) return void showToast(a.summary);
 		showToast(`${a.summary}.`, async () => {
 			const u = await call('bulk_undo', { batch: a.batch });
-			if (!u.ok) return showToast(u.error);
+			if (!u.ok) return void showToast(u.error);
 			const res = u.result as { kept: number };
 			await onchanged();
 			showToast(res.kept ? `Undone. ${res.kept} changed again since, so ${res.kept === 1 ? 'it was' : 'they were'} kept.` : 'Undone.');
-		}, 10000);
+		});
 	}
 
 	// A new selection or input makes an old preview wrong.

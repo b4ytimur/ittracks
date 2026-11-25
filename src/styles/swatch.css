@@ -1,0 +1,26 @@
+/* Swatch: the Area swatch (N.2), the one place an Area's colour shows (P.5, C.10). Owns .swatch.
+   An area-dot (8px) fill of the Area's stored colour in a 1px line-control ring; the ring, not the hue, carries the
+   3:1 (area-7 alone is 2.81:1 on the light page), so any stored colour, off-palette ones included, stays visible.
+   Markup, always after the Area's name, which says what the colour can't:
+     <span class="swatch" style="--c: var(--area-2)"></span>                        a heading, a block's top row
+     <span class="swatch" data-size="picker" style="--c: var(--area-2)"></span>     SwatchPicker's options
+   No role and no name beside a name; placement (flex: none, margins) is the consumer's: GroupHeading, TodayLayouts. */
+
+.swatch {
+	display: inline-block; box-sizing: content-box; width: var(--area-dot); height: var(--area-dot);
+	border: 1px solid var(--line-control); border-radius: var(--radius-pill);
+	background: var(--c) padding-box;
+	vertical-align: middle; /* inline, it follows a name's last word and centres on its lowercase */
+}
+/* Lifted (any .dragging: a held heading or Area block): line-control on dark surface-lifted is 2.96:1, ink-muted 5.64:1. */
+.dragging .swatch { border-color: var(--ink-muted); }
+/* Picker size (SwatchPicker): 16px of hue in a 24px control-sm circle: SwatchPicker keeps 3px round the ring for its 2px
+   chosen outline and a 1px gap, never on the hue. In rem, so it grows with text. */
+.swatch[data-size='picker'] {
+	width: calc(var(--control-sm) - 2 * (var(--chosen-width) + 2px));
+	height: calc(var(--control-sm) - 2 * (var(--chosen-width) + 2px));
+}
+
+@media (forced-colors: active) {
+	.swatch, .dragging .swatch { forced-color-adjust: none; border-color: CanvasText; } /* the hue stays inside */
+}

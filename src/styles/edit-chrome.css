@@ -1,0 +1,132 @@
+/* EditChrome: the title line with the back link and the mode switch, the hint line, Reset layout, the view-chip row.
+   Markup:
+     <header class="titlebar" data-mode="use|edit|select" [data-add-hidden]> a.title-back, h1.page-title, div.title-actions, div.segmented </header>
+     a.title-back               a page with a parent only (D3.31): <a class="title-back label hit" href="/settings"
+                                aria-label="Back to Settings"><span aria-hidden="true">‹</span>&nbsp;Settings</a>
+     div.title-actions          buttons only: the page's secondary a.button (Identities, Gallery), then
+                                <span data-add> holding its one a.button.primary add (New habit), last
+     div.title-actions          only when the actions don't fit beside the h1: the component renders them here instead
+     div.segmented              Segmented's control (role="radiogroup" aria-label="Mode"); EditChrome only places it
+     <div class="viewbar">…</div>
+     <p class="hint-line meta" data-mode="…">
+       <span data-hint="use">…</span>
+       <span data-hint="edit"><span id="…" [data-reserve="…"]>text</span>   the text alone: InlineEditor swaps it and
+                                                            describes by it; Today reserves its longest edit text
+         <span class="hint-tools">                                  trailing; only on pages with a default or a chooser
+           <button class="link reset" [data-at-default]>Reset layout</button>   hidden in place while the layout matches
+           <span class="layout-chooser">                        Today only, last: TodayLayouts' button and menu
+             <button class="quiet layout-pick" aria-haspopup="menu" aria-expanded aria-controls>Layout: <b data-reserve="Up next first">…</b></button>
+             <span class="menu layout-menu" role="menu" hidden>…menu-check, menu-label, menu-note items…</span>   a Menu, a span in a p
+           </span>
+         </span></span>
+       <span data-hint="select">…</span>
+     </p>
+   Each mode's text is one span; a link such as "Log a past day" goes inside it. All of them stay rendered. The edit
+   text has its own inner span, so a field's description never reads Reset layout and the chooser.
+   The page puts .pinned on <html> while the mode isn't use. The component sets .stuck on the title line while a
+   sentinel above it is out of view, and writes the line's border-box height to --titlebar-height on <html>
+   (ResizeObserver borderBoxSize, not contentRect, which leaves out the padding and the 1px stuck edge). */
+
+/* ---------- Title line: 4 + 32 + 3 + 1 = 40px in every mode, so nothing moves when the mode changes ---------- */
+.titlebar {
+	display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-tight) var(--space-group);
+	padding-block: var(--space-tight) calc(var(--space-tight) - 1px);
+	border-bottom: 1px solid transparent; /* the stuck edge, kept in every state so sticking moves nothing */
+	background: var(--surface-page);
+	container-type: inline-size; /* the switch's own-line rule asks how wide the line is */
+}
+.titlebar > h1 { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; } /* wraps, never truncates */
+/* Back link: leads the line in every mode (D3.31, C.2), 24px (target-min) on label's 20px line, beside the h1 while both
+   fit; else the h1 wraps to the next line. It stands alone, so it underlines only on hover and :active (D3.29). */
+.titlebar > .title-back {
+	min-width: 0; padding-block: max(0px, calc((var(--target-min) - 1lh) / 2));
+	color: var(--accent-ink); text-decoration: none; overflow-wrap: anywhere;
+}
+.titlebar > .title-back:is(.hover, :active) { text-decoration: underline; text-underline-offset: 3px; }
+@media (hover: hover) { .titlebar > .title-back:hover { text-decoration: underline; text-underline-offset: 3px; } }
+/* Buttons in one group, 8 apart; the group is 16 from the h1 and the switch. A Button is control-md (32px), the h1's line. */
+.titlebar > .title-actions, .titlebar + .title-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-inline); }
+.titlebar + .title-actions { padding-bottom: var(--space-tight); } /* part of the title group: 4 under the line, 8 over the chips */
+.titlebar > .segmented { margin-inline-start: auto; } /* trailing, also on its own line */
+/* Below a 28rem line (bp-phone: a 480px phone with 16px gutters) the switch takes its own line on every page. The empty
+   ::after is the break; the switch's -4px top margin cancels the empty line's row gap, so it sits 4 under its line. */
+@container (width < 28rem) {
+	.titlebar:has(> .segmented)::after { content: ''; flex-basis: 100%; order: 1; }
+	.titlebar > .segmented { order: 2; margin-top: calc(-1 * var(--space-tight)); }
+}
+/* Pinned in edit and select. Also while keyboard focus is inside it, so a mode change while scrolled never sends the
+   focused switch off-screen; the line unpins once focus moves on. */
+.titlebar:is([data-mode='edit'], [data-mode='select']), .titlebar:has(:focus-visible) { position: sticky; top: 0; z-index: var(--z-sticky); }
+/* Use-mode actions hide in edit (the ghost slot is the add) and select (Apply is the view's one primary).
+   visibility keeps their space, so the switch never jumps and the line never rewraps. */
+.titlebar:is([data-mode='edit'], [data-mode='select']) > .title-actions,
+.titlebar:is([data-mode='edit'], [data-mode='select']) + .title-actions { visibility: hidden; opacity: 0; }
+/* addHidden (the list shows EmptyState's first, whose slot is then the only add): the add alone hides, space kept;
+   the links stay. */
+.titlebar[data-add-hidden] > .title-actions > [data-add],
+.titlebar[data-add-hidden] + .title-actions > [data-add] { visibility: hidden; opacity: 0; }
+.titlebar.stuck { border-bottom-color: var(--line); }
+
+/* Pinned budget: the title line plus one stuck group heading. */
+html.pinned {
+	--titlebar-height: calc(var(--space-section) * 2); /* fallback until the page measures it */
+	/* ponytail: --space-page is room for one stuck group heading (≤ 40px); sum the real heights if headings grow */
+	scroll-padding-top: calc(var(--titlebar-height) + var(--space-page));
+}
+
+/* ---------- Hint line: every mode's text in one cell, so the line keeps one height in every mode (F.6) ---------- */
+.hint-line {
+	display: grid; grid-template-columns: minmax(0, 1fr); align-items: center;
+	min-height: var(--target-min); margin: var(--space-section) 0 var(--space-tight); color: var(--ink-muted);
+}
+.hint-line:is([data-mode='edit'], [data-mode='select']) { color: var(--ink); } /* the mode's figure, without a fill */
+.hint-line > [data-hint] { grid-area: 1 / 1; }
+.hint-line:not([data-mode='use']) > [data-hint='use'],
+.hint-line:not([data-mode='edit']) > [data-hint='edit'],
+.hint-line:not([data-mode='select']) > [data-hint='select'] { visibility: hidden; opacity: 0; }
+/* An edit text that changes with the layout (Today: Area blocks says more) reserves the longest one with base's
+   data-reserve, as the chooser reserves its longest value, so choosing a layout never rewraps the line or moves the
+   chooser. The copy is hidden, so it stays out of the text and out of a field's description. */
+.hint-line [data-hint] > [data-reserve] { display: inline-block; max-inline-size: 100%; vertical-align: top; } /* top: a baseline box adds 1px to the line */
+.hint-line [data-hint] > [data-reserve]::after { font-weight: inherit; } /* base's copy is 600; hint text never goes bold */
+/* The tools (Reset layout, then Today's layout chooser) float to the trailing edge of the edit text as one unit: on its
+   line when they fit, else on the next line, still trailing. Inside the edit span, so the reserved height includes them.
+   -2px block margins fit their 24px boxes to the 20px line (0 once text zoom makes the line taller). Squeezed (200%
+   text), the chooser wraps under Reset, trailing, rather than breaking its words. */
+.hint-line .hint-tools {
+	float: inline-end; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 0 var(--space-inline);
+	margin-block: min(0px, (1.25rem - var(--target-min)) / 2); margin-inline-start: var(--space-inline);
+}
+.hint-line .reset { min-height: var(--target-min); } /* a Button .link has none; the tools' boxes are 24px */
+/* At its default the layout has nothing to reset: Reset hides in place, so the chooser and the line never move. */
+.hint-line .reset[data-at-default] { visibility: hidden; }
+
+/* ---------- View chips: their own row under the title line, not part of the mode ---------- */
+/* 8px under the title group, twice its 4px row gap, so a wrapped switch reads with its line, not the chips. */
+.viewbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-inline); margin-top: var(--space-tight); }
+.viewbar > select { inline-size: auto; max-inline-size: 100%; } /* a board's range, beside Filter (Popover): as wide as its words */
+
+/* ---------- Touch ---------- */
+@media (pointer: coarse) {
+	/* The tools' 44px hit areas grow up into the 24px gap above, never down onto the first row's verb, so not base's
+	   centred .hit. :not([role]) skips the chooser's menu items, which size themselves (Menu). */
+	.hint-line .hint-tools button:not([role]) { position: relative; }
+	.hint-line .hint-tools button:not([role])::after { content: ''; position: absolute; inset: calc(var(--target-min) - var(--target-touch)) 0 0; }
+}
+
+/* ---------- Motion: one start for the whole mode change; reduced motion is one 150ms cross-fade ---------- */
+/* The thumb's travel is Segmented's; it starts on the same frame. */
+@media (prefers-reduced-motion: no-preference) {
+	.titlebar > .title-actions, .titlebar + .title-actions, .hint-line > * {
+		transition: opacity var(--duration-settle) var(--ease-settle), visibility var(--duration-settle) var(--ease-settle);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.titlebar > .title-actions, .titlebar + .title-actions, .hint-line > * {
+		transition: opacity var(--duration-quick) linear, visibility var(--duration-quick) linear;
+	}
+}
+/* Forced colours: the back link is LinkText by itself and takes the underline, as Button's edgeless words do. The switch
+   is Segmented's, the buttons and Reset layout Button's, the chooser TodayLayouts'; the title line's transparent bottom
+   border becomes a visible line by itself. */
+@media (forced-colors: active) { .titlebar > .title-back { text-decoration: underline; } }
