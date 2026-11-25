@@ -73,7 +73,7 @@
 
 <h2>Habits and Tasks</h2>
 <ul class="list">
-	{@render row('/settings/areas', 'Areas', data.areas.length ? list(data.areas, 4) : 'No Areas yet')}
+	<p class="muted small-text">Areas: group <a href="/habits">Habits</a> or the <a href="/library">Library</a> by Area, then choose Edit.</p>
 	{@render row('/settings/editor', 'New habits and units', editor)}
 </ul>
 

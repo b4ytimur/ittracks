@@ -8,7 +8,7 @@
 	import EmptyState from '$lib/ui/EmptyState.svelte';
 	import StatusTag from '$lib/ui/StatusTag.svelte';
 	import type { Mode } from '$lib/ui/list';
-	import GroupHeading from '$lib/ui/GroupHeading.svelte';
+	import AreaGroups from '$lib/ui/AreaGroups.svelte';
 	import InlineText from '$lib/ui/InlineText.svelte';
 	import { invalidateAll } from '$app/navigation';
 	import { runAction, showToast } from '$lib/toast.svelte';
@@ -63,7 +63,7 @@
 		return [...list].sort(by);
 	});
 
-	const groups = $derived(groupBy(shown, areaId ? 'none' : view.group, { areas: data.areas }));
+	const groups = $derived(groupBy(shown, areaId ? 'none' : view.group, { areas: data.areas }, { keepEmpty: mode === 'edit' }));
 
 	const topCollections = $derived(data.collections.filter((c) => !c.parentId));
 	const childrenOf = (id: string) => data.collections.filter((c) => c.parentId === id);
@@ -212,10 +212,8 @@
 	<BulkBar kind="task" {selected} bind:outcome visible={shown.map((t) => t.id)} today={data.today} {sources} />
 {/if}
 
-{#each groups as g (g.key)}
-	{#if g.label}
-		<GroupHeading title={area(g.key)?.name ?? g.label} color={g.color} {mode} count={String(g.items.length)} />
-	{/if}
+<AreaGroups {groups} areas={data.areas} {mode} byArea={view.group === 'area' && !areaId}>
+	{#snippet group(g)}
 	<EditableList
 		items={g.items}
 		key={(t) => t.id}
@@ -242,7 +240,8 @@
 			{/if}
 		{/snippet}
 	</EditableList>
-{/each}
+	{/snippet}
+</AreaGroups>
 
 <style>
 	.tools {

@@ -100,8 +100,9 @@
 		 * "row" (the default): handle, row and remove button side by side, for rows of one line.
 		 * "block": a bar with the handle, title and remove button above the row at full width,
 		 * for big items such as a page section that holds a list of its own.
+		 * "bare": `row` draws all of it and puts the handle (`ctx.grip`) where it belongs.
 		 */
-		layout?: 'row' | 'block';
+		layout?: 'row' | 'block' | 'bare';
 		/**
 		 * "y" (the default): one item under another. "grid": items flow in a grid the page lays out
 		 * with CSS on `class` (and `itemClass` for spans); drops go before or after the nearest cell,
@@ -162,7 +163,7 @@
 	async function focusHandle(k: string) {
 		await tick();
 		const li = `li[data-key="${CSS.escape(k)}"]`;
-		const find = (from: string) => document.querySelector<HTMLElement>(`${from}${li} > .head > .handle, ${from}${li} > .card > .slot > .handle`);
+		const find = (from: string) => document.querySelector<HTMLElement>(`${from}${li} > .head > .handle, ${from}${li} > .card > .slot > .handle, ${from}${li} > .group-heading > .slot > .handle`);
 		(find(`#${uid} > `) ?? find(''))?.focus();
 	}
 
@@ -233,7 +234,7 @@
 			// The first row whose bottom is below the pointer; past the last row means after it.
 			const r = others.find((x) => x.getBoundingClientRect().bottom > d.y) ?? others[others.length - 1];
 			// Where on the row is worked out on its own line, not on what sits under it.
-			const head = (layout === 'block' ? r : (r.querySelector(':scope > .head, :scope > .card') ?? r)).getBoundingClientRect();
+			const head = (layout !== 'row' ? r : (r.querySelector(':scope > .head, :scope > .card') ?? r)).getBoundingClientRect();
 			const target = r.dataset.key!;
 			const nest = allowed({ key: d.key, target, position: 'inside' });
 			pos = d.y < head.top ? 'before' : d.y > head.bottom ? 'after' : dropPosition(d.y, head, nest);
@@ -402,7 +403,10 @@
 					onkeydown={(e) => keydown(e, k)}><span aria-hidden="true">⠿</span></button
 				>
 			{/snippet}
-			{#if rowCard && layout !== 'block'}
+			{#snippet gripOf()}{@render grip()}{/snippet}
+			{#if layout === 'bare'}
+				{@render row(item, { ...ctx, grip: editing && onmove ? gripOf : undefined })}
+			{:else if rowCard && layout !== 'block'}
 			<div class="card" class:link={mode === 'use' && !!href?.(item)}>
 				<div class="slot">
 					{#if selecting && selected}<label class="pick-hit hit">{@render pick()}</label>

@@ -1,7 +1,6 @@
 import { checkViews } from '$lib/rules/views';
 import { getSettings, getViews } from '$lib/server/settings';
 import { subscriptionCount } from '$lib/server/push';
-import { listAreas } from '$lib/server/repo/areas';
 import { listVacations } from '$lib/server/repo/vacations';
 import { userToday } from '$lib/server/today';
 import { FEATURES, PAGE_LABEL, TEMPLATES } from '$lib/views';
@@ -16,7 +15,6 @@ export const load: PageServerLoad = ({ locals, cookies }) => {
 	const settings = getSettings(accountId);
 	const views = getViews(accountId);
 	const today = userToday(accountId, cookies.get('tz'));
-	const areas = listAreas(accountId);
 	const vacations = listVacations(accountId).filter((v) => v.end >= today);
 	return {
 		username: locals.account!.username,
@@ -29,7 +27,6 @@ export const load: PageServerLoad = ({ locals, cookies }) => {
 		vacation: vacations[0] ?? null,
 		moreVacations: Math.max(0, vacations.length - 1),
 		today,
-		areas: areas.map((a) => `${a.icon ? a.icon + ' ' : ''}${a.name}`),
 		template: TEMPLATES.find((t) => t.id === views.template)?.name ?? 'Custom',
 		startPage: PAGE_LABEL[views.startPage],
 		hidden: views.hidden.filter((f) => f in FEATURES).length,
