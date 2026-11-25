@@ -220,7 +220,8 @@ function resolveHabit(run: Run, raw: Obj, id: string | null): Obj {
 							stretchTargets: run.goals(taskId, s.stretchTargets)
 						};
 					})
-				: [];
+				: // A Variant it already has, sent without its Slots (a rename): its Slots stay.
+					(before?.variants.find((o) => o.id === vid)?.slots ?? []);
 			return { ...v, id: vid, name: v.name ?? `Variant ${i + 1}`, slots };
 		});
 	}

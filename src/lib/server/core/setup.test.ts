@@ -165,6 +165,17 @@ describe('setup', () => {
 		expect(getHabitForm(me, id)!.schedule?.kind).toBe('interval');
 	});
 
+	it('keeps a Variant\'s Slots when it is renamed without them', () => {
+		const id = habitNamed('Running')!.id;
+		const slotsBefore = getHabitForm(me, id)!.variants[0].slots;
+		const a = setup([{ op: 'edit_habit', habit: 'Running', set: { variants: [{ name: 'Run', id: getHabitForm(me, id)!.variants[0].id }, { name: 'Long run' }] } }], { apply: true });
+		const after = getHabitForm(me, id)!;
+		expect(after.variants.map((v) => v.name)).toEqual(['Run', 'Long run']);
+		expect(after.variants[0].slots).toEqual(slotsBefore);
+		run('setup_undo', { undo: a.undo });
+		expect(getHabitForm(me, id)!.variants.map((v) => v.name)).toEqual(['Run']);
+	});
+
 	it('says exactly what is wrong, and saves nothing of a request with one bad change', () => {
 		fails(() => setup([{ op: 'add_habit', habit: { name: 'Lift', variants: [{ name: 'A', slots: [{ taskId: 'Deadlift' }] }], schedule: { kind: 'interval', every: 1 } } }]), 'not_found', /Change 1 \(add_habit\): No Task called “Deadlift”/);
 		fails(() => setup([{ op: 'add_habit', habit: { name: 'Lift', variants: [{ name: 'A' }, { name: 'B' }], schedule: { kind: 'weekly', days: { '0': 'A', '2': 'C' } } } }]), 'invalid', /Variant “C”/);
