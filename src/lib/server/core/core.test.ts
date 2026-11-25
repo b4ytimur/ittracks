@@ -333,6 +333,18 @@ describe('reading and analysis', () => {
 		expect(c.actions.length).toBe(31);
 		for (const a of c.actions) expect(a.input).toHaveProperty('type', 'object');
 	});
+
+	it('shows a measure once in full (series) and in short in the statistics tools, still checked in full', () => {
+		const c = catalog(app);
+		const input = (name: string) => c.actions.find((a) => a.name === name)!.input as { properties: Record<string, { description?: string; properties?: unknown }> };
+		expect(input('series').properties.measure.description).toMatch(/How one log becomes a number/);
+		for (const [name, key] of [['stats_describe', 'measure'], ['stats_trend', 'measure'], ['stats_compare', 'measure'], ['stats_groups', 'measure'], ['correlate', 'a'], ['correlate', 'b']]) {
+			const m = input(name).properties[key];
+			expect(m.description).toMatch(/fields series takes/);
+			expect(m.properties).toBeUndefined();
+		}
+		expect(() => run(app, 'stats_describe', { measure: { source: 'nope' } })).toThrow(/measure\.source/);
+	});
 });
 
 describe('export and import', () => {

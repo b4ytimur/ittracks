@@ -54,8 +54,19 @@ const seriesSpec = z.object({
 	...range
 });
 
+/**
+ * Schemas the tool list shows in short, as an object with one sentence instead of every field:
+ * for a shape that series already spells out, so each chat doesn't read it again per tool.
+ * Input is still checked against the whole schema.
+ */
+const BRIEF = new WeakMap<z.ZodType, string>();
+const brief = <T extends z.ZodType>(schema: T, text: string) => (BRIEF.set(schema, text), schema);
+
 /** One measure, as series takes it but without split or range: what the statistics tools analyse. */
-const measureSpec = seriesSpec.omit({ split: true, bucket: true, from: true, to: true, days: true, range: true });
+const measureSpec = brief(
+	seriesSpec.omit({ split: true, bucket: true, from: true, to: true, days: true, range: true }),
+	'One measure: the fields series takes except split, bucket and range (source, measure, combine, habits, fields, task, tags).'
+);
 const statBucket = z.enum(['day', 'week', 'month']).optional().describe('One value per day (default), week or month.');
 const period = z.object({ from: z.string().max(10), to: z.string().max(10) });
 
@@ -475,6 +486,13 @@ export function runAction(actor: Actor, name: string, raw: unknown): unknown {
 	return a.run(actor, parsed.data);
 }
 
+const shortenBrief = ({ zodSchema, jsonSchema }: { zodSchema: unknown; jsonSchema: Record<string, unknown> }) => {
+	const text = BRIEF.get(zodSchema as z.ZodType);
+	if (!text) return;
+	for (const k of Object.keys(jsonSchema)) delete jsonSchema[k];
+	Object.assign(jsonSchema, { type: 'object', description: text });
+};
+
 /** The actions this actor may call, with JSON Schemas for their input. */
 export function catalog(actor: Actor) {
 	return {
@@ -489,7 +507,7 @@ export function catalog(actor: Actor) {
 			title: a.title,
 			description: a.description,
 			scope: a.scope,
-			input: z.toJSONSchema(a.input, { io: 'input', unrepresentable: 'any' })
+			input: z.toJSONSchema(a.input, { io: 'input', unrepresentable: 'any', override: shortenBrief })
 		}))
 	};
 }
