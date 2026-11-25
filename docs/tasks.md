@@ -51,7 +51,7 @@ Options per field:
 - **Required before Finish**.
 - **Show on quick logs**: the field appears on the short [quick log](integrations.md#quick-log-links). Required fields always show there.
 
-Use the arrows to reorder fields. **Use weight and reps per set** adds the Strength fields in one go.
+Drag ⠿ to reorder fields, or use the arrow keys on it.
 
 ### Changing fields that have logs
 
