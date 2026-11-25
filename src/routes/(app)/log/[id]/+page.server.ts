@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { db } from '$lib/server/db';
 import { entry, metric, occurrence, slot, task, variant } from '$lib/server/db/schema';
 import { groupOfOccurrence, ownedOccurrence } from '$lib/server/owned';
+import { currentForm } from '$lib/server/habit-patch';
 import { candidates, ensurePicks, lastEntries, recount, userToday } from '$lib/server/today';
 import { finishAs } from '$lib/server/progress';
 import { PATH_RE, place, startsRound } from '$lib/engine/parts';
@@ -211,6 +212,8 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		weightUnit: getUnits(accountId).shown('weight'),
 		levels: o.habit.levels?.enabled ? o.habit.levels : null,
 		variantName: v?.name ?? null,
+		/** The plan this log follows, to change where it stands: an open log of today only. */
+		plan: !past && o.occ.status === 'due' && v && !v.archived ? (currentForm(accountId, o.habit.id)?.variants ?? null) : null,
 		items,
 		orphans,
 		orphanNames,
