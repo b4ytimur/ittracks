@@ -16,7 +16,7 @@ Each known unit has a default **+/− step** on the log screen: 15 s, 5 min, 0.5
 
 ## Your default weight unit
 
-**Settings → New habits and units → Default weight unit for new Tasks** (kg or lb). New Tasks made from the Strength type use it, and so do templates from the [Gallery](templates.md#the-gallery). Changing it doesn't change existing fields: each field keeps its own unit.
+**Settings → Units → Weights** (kg or lb). New Tasks made from the Strength type use it, and so do templates from the [Gallery](templates.md#the-gallery). Changing it doesn't change existing fields: each field keeps its own unit.
 
 ## Change a unit
 

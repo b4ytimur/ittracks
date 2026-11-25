@@ -1,0 +1,20 @@
+/* SettingsScreen: the record of you as said lines (P.36, SE.1–SE.10, BU.1–BU.7). Owns .se-*: the sections and the rows inside an
+   open line (units, levels, members, keys). The lines are SaidLine's, the folds GroupHeading's, the Asks Ask's. Tokens only. */
+.se-find { margin-block: 0 var(--space-group); }
+.se-sec > .group-heading { margin-block: 0 var(--space-inline); }
+.se-row { min-inline-size: 0; }
+.se-row + .se-row, .se-key + .se-key { margin-block-start: var(--space-inline); }
+.se-part { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--space-inline); align-items: center; }
+.se-part input { min-inline-size: 0; }
+.se-dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-inline); }
+.se-form { padding-block-start: var(--space-inline); border-block-start: 1px solid var(--line); }
+.se-sub { border-inline-start: 1px solid var(--line); padding-inline-start: var(--space-group); min-inline-size: 0; } /* lines inside a line (SE.10) */
+.se-sub .quiet { min-inline-size: var(--target-min); }
+.se-sub .field-group .se-unit + .se-unit, .se-sub .field-group > .button { margin-block-start: var(--space-inline); }
+.se-unit { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-inline); min-inline-size: 0; }
+.se-unit > input:first-child { flex: 1 1 8rem; min-inline-size: 0; }
+.se-unit .se-to { inline-size: 5.5rem; min-inline-size: 0; flex: none; }
+.se-eq { flex: 0 1 auto; min-inline-size: 0; }
+.se-chip { display: inline-flex; align-items: center; gap: var(--space-tight); }
+.se-del { justify-self: start; color: var(--ink-muted); }
+.se-sec .su-body > button { justify-self: start; }

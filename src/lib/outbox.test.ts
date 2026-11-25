@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('$app/forms', () => ({ deserialize: (text: string) => JSON.parse(text) }));
+vi.mock('$app/environment', () => ({ browser: true }));
 
-import { discard, enqueue, outbox, retry, save } from './outbox.svelte';
+import { discard, enqueue, flush, openOutbox, outbox, retry, save } from './outbox.svelte';
 
 const answer = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
 const saved = () => answer(200, { type: 'success', status: 200 });
@@ -16,7 +17,8 @@ describe('saving', () => {
 	beforeEach(() => {
 		disk = {};
 		outbox.items = [];
-		vi.stubGlobal('localStorage', { getItem: (k: string) => disk[k] ?? null, setItem: (k: string, v: string) => void (disk[k] = v) });
+		vi.stubGlobal('localStorage', { getItem: (k: string) => disk[k] ?? null, setItem: (k: string, v: string) => void (disk[k] = v), removeItem: (k: string) => void delete disk[k] });
+		openOutbox('me');
 	});
 
 	it('waits here unless it was saved or refused', async () => {
@@ -80,8 +82,29 @@ describe('saving', () => {
 		undo();
 		expect(payloads()).toEqual(['a']);
 		outbox.items = [{ ...outbox.items[0], refused: 'Too far back.' }];
-		disk['ittracks-outbox'] = JSON.stringify(outbox.items);
+		disk['ittracks-outbox:me'] = JSON.stringify(outbox.items);
 		await retry(id);
 		expect(outbox.items[0].refused).toBeUndefined();
+	});
+	it("one person's waiting saves are never another's, and are there when they sign in again", async () => {
+		const sent: string[] = [];
+		vi.stubGlobal('fetch', async (url: string) => (sent.push(url), saved()));
+		vi.stubGlobal('navigator', { onLine: true });
+		enqueue('/journal?/dayNote', [['payload', 'private']], 'Day note');
+		openOutbox('someone else');
+		expect(outbox.items).toEqual([]);
+		expect(await flush()).toBe(0);
+		expect(sent).toEqual([]);
+		openOutbox('me');
+		expect(payloads()).toEqual(['private']);
+		expect(await flush()).toBe(1);
+		expect(sent).toEqual(['/journal?/dayNote']);
+	});
+	it('what waited before there was one per account is taken over once', () => {
+		disk['ittracks-outbox'] = JSON.stringify([{ id: 'x', url: '/log/9?/save', fields: [['payload', 'old']], label: 'Gym', at: 1 }]);
+		openOutbox('me');
+		expect(payloads()).toEqual(['old']);
+		openOutbox('someone else');
+		expect(outbox.items).toEqual([]);
 	});
 });

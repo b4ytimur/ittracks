@@ -4,7 +4,7 @@ What each page shows, and in what order, is saved as data for your account. It s
 
 ## View templates
 
-A view template is a starting layout. Pick one in **Settings → View template and start page** (or the first time you open Today):
+A view template is a starting layout. Pick one in **Settings → View template** (or the first time you open Today):
 
 | Template | For |
 | --- | --- |
@@ -69,8 +69,8 @@ Drag cards, and rename the board. What a card shows is changed in its own words,
 
 ## Day and parts of the day
 
-**Settings → Day and parts of the day**:
+**Settings → Day starts** and **Settings → Parts of the day**:
 
 - **Day starts at** (default 04:00): logs before this time count for the day before.
-- **Parts of your day**: named ranges such as Morning 05:00–11:00. They can't overlap. Habits can use a part instead of a time, and Today can group by them or show only what fits now. Removing a part a habit uses leaves that habit without a time or reminder until you pick another.
+- **Parts of the day**: named ranges such as Morning 05:00–11:00. They can't overlap. Habits can use a part instead of a time, and Today can group by them or show only what fits now. Removing a part a habit uses leaves that habit without a time or reminder until you pick another.
 

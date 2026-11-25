@@ -41,8 +41,8 @@ The user guide is in [docs/](docs/README.md): habits, schedules, Tasks, logging,
 
 - Every note (Tasks, habits, logs, slips) is plain Markdown: a Write / Preview box with bold, list and link buttons. A Task's notes show as "How to" on its log screen. Raw HTML is off, only web, mail and in-app links are kept, and images show as links, so notes from a shared template can't run code or load tracking pixels.
 - A Text field can have several lines (Markdown), with starter text and a list of prompts (one a day, in order or random, saved with the answer). A Choice can give each option a number (mood 5 to 1) so Stats can average it.
-- The journal is a normal habit: "Start a daily journal" on the new habit screen adds one. History → Journal shows everything written, by day, with search, habit and mood filters and "On this day". An optional day note (Settings → Journal) adds one free note per day to Today and the Day page.
-- Notes and journal entries are private: they never go into templates or anything shared. Settings → Journal downloads them as Markdown, one file per day, for an Obsidian vault.
+- The journal is a normal habit: "Start a daily journal" on the new habit screen adds one. History → Journal shows everything written, by day, with search, habit and mood filters and "On this day". An optional day note (Settings → Day note) adds one free note per day to Today and the Day page.
+- Notes and journal entries are private: they never go into templates or anything shared. Settings → Download the journal saves them as Markdown, one file per day, for an Obsidian vault.
 
 ## Reminders
 
@@ -50,7 +50,7 @@ Habits with a cue time (or a part of the day) can send a push notification at th
 
 ## Integrations
 
-Settings → Integrations makes keys. A key has only the access you give it (Read, Log, Notes, Export), can be limited to some habits, and is shown once; the server keeps only its hash. Every change, from the app or a key, also goes into an append-only event log that records where it came from.
+Settings → Keys makes keys. A key has only the access you give it (Read, Log, Notes, Export), can be limited to some habits, and is shown once; the server keeps only its hash. Every change, from the app or a key, also goes into an append-only event log that records where it came from.
 
 - **Quick-log links that carry a value**: `/q/<habit>?key=itk_…&value=250` (add `&field=Minutes` when the habit has several numbers, `&craving=1` for a break habit, `&reply=text` for one plain line Siri can read out). Programs can POST to the same address with `Authorization: Bearer itk_…`. The settings page builds the link and has a recipe for iPhone Shortcuts, Siri and NFC tags.
 - **AI assistants (MCP)**: `static/ittracks-mcp.mjs` (also served at `/ittracks-mcp.mjs`) is a zero-dependency MCP server for Claude Desktop, Claude Code, Cursor and other MCP clients. It needs Node 18+ and two variables, `ITTRACKS_URL` and `ITTRACKS_KEY`. It is built for analysis: `describe` explains what is tracked; `habit_summary`, `series` and `correlate` do the math on the server; `stats_describe`, `stats_trend`, `stats_compare` and `stats_groups` run real statistics (confidence intervals, least squares and Mann-Kendall trends with a change point, Welch's t-test, Mann-Whitney, Fisher's exact test, Kruskal-Wallis and ANOVA, effect sizes, unusual days), each with n, a plain reading and caveats; raw rows come as compact CSV, and every answer carries refs (`log:<id>`, `day:<date>`, …) the assistant can cite and open with `record`. It logs only through the logging tools, which need the Log access.
@@ -79,7 +79,7 @@ After changing `src/lib/server/db/schema.ts`, run `npm run db:generate` to creat
 docker compose up -d
 ```
 
-The app listens on port 3000 and keeps its database in `./data`. Set `ORIGIN` in `docker-compose.yml` to the address you open it at (links and the MCP setup on Settings → Integrations use it). On first visit you create the account for your server.
+The app listens on port 3000 and keeps its database in `./data`. Set `ORIGIN` in `docker-compose.yml` to the address you open it at (links and the MCP setup in Settings → AI assistants use it). On first visit you create the account for your server.
 
 To install it on your phone, open it in the browser and choose "Add to Home Screen". Phones only offer this over HTTPS, so put the app behind a reverse proxy with a certificate (for example Caddy or Traefik).
 

@@ -1,0 +1,17 @@
+/* CopyField: a value to take somewhere else and its Copy button. The box is Field's, its look States' read-only, the
+   row StatusRow's .act-row; owns .copy-value (the read-only textarea that shows the whole value).
+   Markup:
+     <div class="field">
+       <label class="label" for="cp">Share link</label>
+       <div class="act-row">
+         <textarea id="cp" class="copy-value" readonly rows="1" dir="ltr" translate="no" spellcheck="false" autocomplete="off">https://…</textarea>
+         <button type="button" class="hit" aria-label="Copy share link" data-reserve="Copied">Copy</button>
+       </div>
+     </div> */
+
+/* A textarea, so a link, a key or a config wraps and is never cut off. It is as tall as its value where the browser can
+   size it (field-sizing); elsewhere rows says how many lines show and the reader can pull it taller. */
+.copy-value { field-sizing: content; overflow-wrap: anywhere; }
+@supports (field-sizing: content) {
+	.copy-value { resize: none; }
+}

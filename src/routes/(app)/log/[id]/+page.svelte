@@ -699,7 +699,7 @@
 <p class="vh" role="status">{said}</p>
 
 {#if stage === 'read'}
-	<div class="notice"><span class="notice-text">This day is further back than Settings allow logging, so it can only be looked at.</span><span class="notice-acts"><a class="quiet hit" href="/settings/past-days">Change it in Settings</a></span></div>
+	<div class="notice"><span class="notice-text">This day is further back than Settings allow logging, so it can only be looked at.</span><span class="notice-acts"><a class="quiet hit" href="/settings#past">Change it in Settings</a></span></div>
 {/if}
 
 <div class="l-cluster lg-top">

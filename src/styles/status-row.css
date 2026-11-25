@@ -1,0 +1,22 @@
+/* StatusRow: one sentence that says how things stand, and the one verb that changes it. Owns .act-row (a thing and its
+   one act on one line, wrapping as one: the sentence and its verb here, the box and Show in PasswordField, the value
+   and Copy in CopyField) and .status-text (the sentence and its hint).
+   Markup:
+     <div class="act-row">
+       <div class="status-text"><p class="label" id="push-s">Reminders are off for this device.</p></div>
+       <button type="button" class="hit" aria-label="Turn on reminders for this device" aria-describedby="push-s" data-reserve="Turning on…">Turn on</button>
+     </div>
+   A form can be the row (<form class="act-row">). A BlockedReason line follows the row, in one parent with it. */
+
+/* ---------- A thing and its one act ---------- */
+/* The thing takes the room and keeps 8rem; under that the act drops to the next line, so nothing is squeezed at 200% text
+   or 320px. Tops align: a control or a sentence is at least control-md tall, beside a control-md Button, and a value or
+   a sentence that wraps keeps its act on its first line. 8px each way (separate targets, S.6), so a 44px hit area under
+   a coarse pointer (6px past the 32px box) never reaches the other row. */
+.act-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-inline); min-width: 0; }
+.act-row > :first-child { flex: 1 1 8rem; min-width: 0; }
+.act-row[data-act='under'] > :first-child { flex-basis: 100%; } /* a value with more than a line to show takes the whole width, its act under it */
+
+/* ---------- The sentence ---------- */
+/* One label line is 6 + 20 + 6 = 32, level with the verb; each more line adds 20 (P.7). */
+.status-text { padding-block: calc((var(--control-md) - 1.25rem) / 2); overflow-wrap: anywhere; }

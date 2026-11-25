@@ -164,7 +164,7 @@
 		const gone = habits.filter((h) => struck.has(h.id));
 		struck.clear();
 		if (!gone.length) return;
-		invalidateAll();
+		if (navigator.onLine) invalidateAll();
 		showToast(`Archived ${gone.length === 1 ? gone[0].name : `${gone.length} habits`}. ${gone.length === 1 ? 'Its' : 'Their'} logs are kept.`, async () => {
 			let ok = true;
 			for (const h of gone) ok = (await runAction('/habits?/unarchive', { id: h.id })).ok && ok;

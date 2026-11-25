@@ -14,7 +14,8 @@
 	onDestroy(() => (gone = true));
 	async function reset(open: string[] = [], from: ScheduleForm | null = null) {
 		if (gone) return;
-		await invalidateAll();
+		// Offline there is nothing to load, and trying would show an error page.
+		if (navigator.onLine) await invalidateAll();
 		openLines = open;
 		seed = from;
 		times++;

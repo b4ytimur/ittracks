@@ -148,7 +148,7 @@
 {/if}
 
 {#if data.ready}
-	<p class="notice" role="status"><span class="notice-text">{data.ready.includes('habit') ? 'Added the Journal habit to Today. ' : ''}{data.ready.includes('note') ? 'The day note is on Today now. ' : ''}</span><span class="notice-acts"><a class="quiet hit" href="/settings/journal">Change in Settings</a></span></p>
+	<p class="notice" role="status"><span class="notice-text">{data.ready.includes('habit') ? 'Added the Journal habit to Today. ' : ''}{data.ready.includes('note') ? 'The day note is on Today now. ' : ''}</span><span class="notice-acts"><a class="quiet hit" href="/settings#daynote">Change in Settings</a></span></p>
 {/if}
 {#if data.setup}
 	<form method="POST" action="/journal?/setup" class="card stack" use:enhance={() => async ({ result, update }) => {
@@ -232,7 +232,7 @@
 	</div>
 {/if}
 {#if data.canBackfill && data.windowFrom && days.some((d) => d.date < data.windowFrom!)}
-	<p class="meta muted">Days before {title(data.windowFrom)} can only be looked at. <a href="/settings/past-days">Change it in Settings</a>.</p>
+	<p class="meta muted">Days before {title(data.windowFrom)} can only be looked at. <a href="/settings#past">Change it in Settings</a>.</p>
 {/if}
 
 <style>

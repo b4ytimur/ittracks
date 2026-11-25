@@ -5,7 +5,7 @@
 	import { showToast } from '$lib/toast.svelte';
 	import { discard, outbox, retry, startOutbox } from '$lib/outbox.svelte';
 
-	let { children } = $props();
+	let { data, children } = $props();
 
 	const tabs = [
 		{ href: '/', label: 'Today' },
@@ -30,6 +30,7 @@
 		}
 	}
 
+	const account = $derived(data.account!.id);
 	let online = $state(true);
 	$effect(() => {
 		online = navigator.onLine;
@@ -37,7 +38,7 @@
 		const down = () => (online = false);
 		window.addEventListener('online', up);
 		window.addEventListener('offline', down);
-		const stop = startOutbox((n) => {
+		const stop = startOutbox(account, (n) => {
 			showToast(`Synced ${n} saved ${n === 1 ? 'change' : 'changes'}.`);
 			invalidateAll();
 		});

@@ -126,7 +126,7 @@
 		const gone = tasks.filter((t) => struck.has(t.id));
 		struck.clear();
 		if (!gone.length) return;
-		invalidateAll();
+		if (navigator.onLine) invalidateAll();
 		showToast(`Archived ${gone.length === 1 ? gone[0].name : `${gone.length} Tasks`}. ${gone.length === 1 ? 'Its' : 'Their'} logs are kept.`, async () => {
 			let ok = true;
 			for (const t of gone) ok = (await runAction('/library?/unarchive', { id: t.id })).ok && ok;

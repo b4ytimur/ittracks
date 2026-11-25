@@ -20,6 +20,7 @@ To install or run your own server, see the [main README](../README.md#self-host)
 | [Templates and the Gallery](templates.md) | Sharing a habit as a file, importing one, the built-in Gallery |
 | [Notes and journal](notes-and-journal.md) | Markdown notes, journal habits, prompts, the day note, Obsidian export |
 | [Stats](stats.md) | Boards and cards, card types, your own measures, a habit's Stats tab |
+| [Settings](settings.md) | One page of lines: how they open and save, finding one, backups, logging out with changes waiting |
 | [Integrations](integrations.md) | Keys, quick-log links and Shortcuts, AI assistants over MCP, export and import |
 
 ## Words the app uses
@@ -39,4 +40,4 @@ To install or run your own server, see the [main README](../README.md#self-host)
 | Routine | A habit with its own days and habits inside it that follow it |
 | Area | A life area (Fitness, Learning…) for grouping and filtering habits and Tasks |
 | Day start | When your day rolls over (default 04:00). Logs before it count for the day before |
-| Part of the day | A named time range such as Morning 05:00–11:00, set in **Settings → Day and parts of the day** |
+| Part of the day | A named time range such as Morning 05:00–11:00, set in **Settings → Parts of the day** |
