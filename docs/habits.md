@@ -78,7 +78,7 @@ Under **+ Streak and days you don't log**: how the streak counts, whether a shor
 Also on the page:
 
 - **Reframe**: a line to see on the card ("I get to do this today").
-- **Identity**: who this habit makes you ("I am a runner"). Each done day is a vote for it. Manage them on the **Identities** page.
+- **Identity**: who this habit makes you ("I am a runner"). The **Identities** page lists them: add, rename, move and delete them there (with Undo), and see in words what stands for each. Nothing about identities is said when you log; an identity's line on Today is off for new accounts (**Today → Edit**).
 - **Notes**: Markdown. See [Notes and journal](notes-and-journal.md).
 - **One-tap Done on Today (logs your targets)**, for habits with Tasks.
 - **In the app icon's menu**: the habit appears when you long-press the app icon. The menu holds four.

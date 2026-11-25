@@ -42,9 +42,9 @@ const num = (s: string): number => NUMBER_WORDS[s.toLowerCase()] ?? Number(s.rep
 const word = (src: string) => new RegExp(`(?<![\\p{L}\\d])(?:${src})(?![\\p{L}])`, 'iu');
 
 const PARTS: [string, Part][] = [
-	['(?:(?:in|on|during) the |every |each |at )?mornings?|morgens|(?:am|jeden) morgen|vormittags|am vormittag|nach dem aufstehen|after waking up', 'Morning'],
-	['(?:(?:in|during) the |every |each )?afternoons?|at (?:noon|midday|lunch)|after lunch|nachmittags|am nachmittag|mittags|am mittag', 'Afternoon'],
-	['(?:(?:in|during) the |every |each )?evenings?|after work|after dinner|abends|(?:am|jeden) abend|nach der arbeit|nach dem essen', 'Evening'],
+	['(?:(?:in|on|during) the |every |each |at )mornings?|mornings|morning(?= *$)|morgens|(?:am|jeden) morgen|vormittags|am vormittag|nach dem aufstehen|after waking up', 'Morning'],
+	['(?:(?:in|during) the |every |each )afternoons?|afternoons|afternoon(?= *$)|at (?:noon|midday|lunch)|after lunch|nachmittags|am nachmittag|mittags|am mittag', 'Afternoon'],
+	['(?:(?:in|during) the |every |each )evenings?|evenings|evening(?= *$)|after work|after dinner|abends|(?:am|jeden) abend|nach der arbeit|nach dem essen', 'Evening'],
 	['at night|(?:every|each) night|nightly|before (?:bed|sleep|going to bed)|nachts|in der nacht|vor dem (?:schlafen(?:gehen)?|einschlafen|bett)', 'Night']
 ];
 

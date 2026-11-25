@@ -35,6 +35,13 @@ export function renameIdentity(accountId: string, id: string, statement: string)
 		.run();
 }
 
+/** Put them in this order; any not named keep theirs after these. */
+export function orderIdentities(accountId: string, ids: string[]) {
+	const own = listIdentities(accountId).map((i) => i.id);
+	const next = [...ids.filter((id, i) => own.includes(id) && ids.indexOf(id) === i), ...own.filter((id) => !ids.includes(id))];
+	db.transaction((tx) => next.forEach((id, sortOrder) => tx.update(identity).set({ sortOrder }).where(and(eq(identity.id, id), eq(identity.accountId, accountId))).run()));
+}
+
 export interface DeletedIdentity {
 	id: string;
 	statement: string;

@@ -47,6 +47,10 @@ const EN: [string, string][] = [
 	['bench press 60 kg', 'Bench press · 60 kg · every day · any time'],
 	['sleep 8 hours at night', 'Sleep · 8 h · every day · at night'],
 	['1984', '1984 · 1984 · every day · any time'],
+	['morning pages', 'Morning pages · just done · every day · any time'],
+	['morning block every day at 7', 'Morning block · just done · every day · at 07:00'],
+	['evening walk 20 minutes in the evening', 'Evening walk · 20 min · every day · in the evening'],
+	['run mornings', 'Run · just done · every day · in the morning'],
 	['the sun salutation', 'The sun salutation · just done · every day · any time'],
 	['', ' · just done · every day · any time']
 ];

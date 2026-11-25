@@ -1,96 +1,74 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
+	// Who you want to be: an editable list of sentences, each with its habits and what shows it, in words.
 	import { invalidateAll } from '$app/navigation';
-	import { runAction, showToast, undoWith } from '$lib/toast.svelte';
+	import { runAction, showError, showToast, undoWith } from '$lib/toast.svelte';
+	import EditableList from '$lib/ui/EditableList.svelte';
+	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import EmptyState from '$lib/ui/EmptyState.svelte';
+	import InlineText from '$lib/ui/InlineText.svelte';
+	import type { Mode } from '$lib/ui/list';
 
-	let { data, form } = $props();
-	let editing = $state<string | null>(null);
-	async function remove(i: { id: string; statement: string }) {
-		const r = await runAction<{ deleted: object }>('?/delete', { id: i.id });
-		if (!r.ok || !r.data) return void showToast(r.error ?? 'Not deleted. Are you online?');
-		const deleted = JSON.stringify(r.data.deleted);
+	let { data } = $props();
+	let mode = $state<Mode>('use');
+	let order = $state.raw<string[] | null>(null);
+	const list = $derived(order ? [...data.identities].sort((a, b) => order!.indexOf(a.id) - order!.indexOf(b.id)) : data.identities);
+	type Row = (typeof data.identities)[number];
+
+	const times = (n: number) => (n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`);
+	/** Words, never a score, and never that there was nothing. */
+	const evidence = (i: Row) =>
+		i.week ? `You did it ${times(i.week)} this week${i.total > i.week ? `, ${times(i.total)} in all` : ''}.` : i.total ? `You did it ${times(i.total)} so far.` : i.habits.length ? 'It starts with the next one you do.' : 'No habit stands for it yet. Pick it on a habit’s page, under Identity.';
+
+	async function run<T>(action: string, fields: Record<string, string>): Promise<T | null> {
+		const r = await runAction<T>(`/identities?/${action}`, fields);
+		if (!r.ok) return showError(r.error ?? 'Not saved. Are you online?'), null;
 		await invalidateAll();
-		showToast(`Deleted “${i.statement}”. Its habits stay.`, undoWith('/identities?/restore', { deleted }));
+		return (r.data ?? {}) as T;
 	}
-	const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+	async function add(name?: string) {
+		const statement = name?.trim();
+		if (!statement) return;
+		const r = await run<{ added: string | null }>('add', { statement });
+		if (r?.added) showToast(`Added “${statement}”.`, undoWith('/identities?/delete', { id: r.added }));
+		else if (r) showToast(`“${statement}” is there already.`);
+	}
+	async function rename(i: Row, statement: string) {
+		if (await run('rename', { id: i.id, statement })) showToast(`Changed “${i.statement}”.`, undoWith('/identities?/rename', { id: i.id, statement: i.statement }));
+	}
+	async function remove(i: Row) {
+		const r = await run<{ deleted: object }>('delete', { id: i.id });
+		if (r?.deleted) showToast(`Deleted “${i.statement}”. Its habits stay.`, undoWith('/identities?/restore', { deleted: JSON.stringify(r.deleted) }));
+	}
+	async function move(ids: string[]) {
+		const was = list.map((i) => i.id);
+		order = ids;
+		if (await run('order', { ids: ids.join(',') })) showToast('Moved it.', undoWith('/identities?/order', { ids: was.join(',') }));
+		order = null;
+	}
 </script>
 
 <svelte:head><title>Identities · ittracks</title></svelte:head>
 
-<header class="bar">
-	<h1>Identities</h1>
-	<a href="/">Back</a>
-</header>
+<EditChrome title="Identities" bind:mode modes={list.length ? ['use', 'edit'] : ['use']} back={{ href: '/', label: 'Today' }} hints={{ use: 'Who do you want to be? A habit stands for one when you pick it on the habit’s page.', edit: 'Press a sentence to change it.' }} />
 
-<p class="muted">
-	Who do you want to become? Link habits to an identity in the habit editor. Every time you do one of
-	them, or resist a craving on a break habit, it's a vote for that identity.
-</p>
-
-{#if data.identities.length}
-	<ul class="list">
-		{#each data.identities as i (i.id)}
-			<li class="card">
-				{#if editing === i.id}
-					<form
-						method="POST"
-						action="?/rename"
-						class="row"
-						use:enhance={() =>
-							async ({ update }) => {
-								editing = null;
-								await update();
-							}}
-					>
-						<input type="hidden" name="id" value={i.id} />
-						<input class="grow" name="statement" value={i.statement} aria-label="Identity" required />
-						<button class="primary">Save</button>
-						<button type="button" onclick={() => (editing = null)}>Cancel</button>
-					</form>
-				{:else}
-					<div class="row">
-						<strong class="grow">{i.statement}</strong>
-						<button class="small" onclick={() => (editing = i.id)}>Edit</button>
-						<button type="button" class="small danger" onclick={() => remove(i)}>Delete</button>
-					</div>
-				{/if}
-				<div class="votes">
-					<span class="big">{i.week}</span>
-					<span class="muted">{i.week === 1 ? 'vote' : 'votes'} this week · {plural(i.total, 'vote')} in all</span>
-				</div>
-				{#if i.habits.length}
-					<div class="chips">
-						{#each i.habits as h (h.id)}<a class="chip" href="/habits/{h.id}">{h.name}</a>{/each}
-					</div>
-				{:else}
-					<p class="muted small-text">No habits linked yet.</p>
-				{/if}
-			</li>
-		{/each}
-	</ul>
-{/if}
-
-<form method="POST" action="?/add" class="row" style="margin-top: 1rem" use:enhance>
-	<label class="grow">New identity <input name="statement" placeholder="I am someone who speaks Spanish" required /></label>
-	<button class="primary">Add</button>
-</form>
-{#if form?.error}<p class="error">{form.error}</p>{/if}
-
-<style>
-	.votes {
-		margin-top: 0.5rem;
-		display: flex;
-		align-items: baseline;
-		gap: 0.5rem;
-	}
-	.big {
-		font-size: 1.6rem;
-		font-weight: 600;
-	}
-	.small-text {
-		font-size: 0.85rem;
-	}
-	a.chip {
-		text-decoration: none;
-	}
-</style>
+{#if !list.length}<EmptyState text="None yet. Write one as a sentence, such as “I am someone who speaks Spanish”." />{/if}
+<EditableList
+	items={list}
+	key={(i) => i.id}
+	label={(i) => i.statement}
+	{mode}
+	rowCard
+	ariaLabel="Identities"
+	onmove={(_, ids) => move(ids)}
+	onremove={remove}
+	removeLabel="Delete"
+	onadd={add}
+	addLabel="+ Identity"
+	addInUse
+>
+	{#snippet row(i)}
+		<span class="name"><InlineText value={i.statement} editing={mode === 'edit'} label="Change “{i.statement}”" onsave={(v) => rename(i, v)} /></span>
+		<p class="meta-line meta">{evidence(i)}</p>
+		{#if i.habits.length}<p class="row-line meta">{#each i.habits as h, n (h.id)}{n ? ' · ' : ''}<a href="/habits/{h.id}">{h.name}</a>{/each}</p>{/if}
+	{/snippet}
+</EditableList>

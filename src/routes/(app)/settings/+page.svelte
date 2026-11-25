@@ -265,7 +265,7 @@
 		</div>
 		{#each offIssues as i (i.reason)}<p class="meta" role="status">{i.reason}</p>{/each}
 	{:else if id === 'reminders'}
-		<Reminders vapidKey={data.vapidKey} devices={data.devices} bind:problem={() => problem.reminders ?? '', (v) => (problem.reminders = v)} />
+		<Reminders vapidKey={data.vapidKey} devices={data.devices} reminders={data.reminders} bind:problem={() => problem.reminders ?? '', (v) => (problem.reminders = v)} />
 	{:else if id === 'download'}
 		<div class="l-cluster"><a class="button hit" href="/api/v1/export?format=json" download>Everything (JSON)</a><a class="button hit" href="/api/v1/export?format=csv" download>Tables (CSV)</a></div>
 	{:else if id === 'restore'}

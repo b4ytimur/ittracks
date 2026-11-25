@@ -55,7 +55,7 @@ When the routine's days change (a schedule change to past days too, a past log t
 
 On Today, a routine shows the habits inside it.
 
-- **Start** opens the routine page: **Next** points to the next habit to do, and each habit has **Log**, **Done**, **Skip** and **Undo**. At the end, **Mark the rest done** gives every open habit its one tap (its last log, or its targets) and **Skip the rest** skips them. A habit with fields to fill in must be opened first.
+- **Start** opens the routine's day: the habits inside that are due, in order, each with the button it has on Today (**Log** or **Done**, and **Skip** in its ⋯). **Next** marks what to do next. The ⋯ at the top has **Mark the rest done** (every open habit gets its one tap: its last log, or its targets; one that needs values stays open) and **Skip the rest**. Everything has Undo in the band.
 - **Done** on the routine marks every habit inside that is due done. **Skip** skips them, and **Undo** takes it back. This works on [past days](logging.md#log-a-past-day) too.
 
 Routines can sit inside other routines. Deleting a routine gives each habit that followed it the closest schedule of its own: its weekdays, a rotation of the Variants it was paired with (with the routine's other days as rest days), or its average gap.

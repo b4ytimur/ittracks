@@ -2,11 +2,11 @@
 // through /api/views and Stats through /api/stats; what is an act rather than a setting is here.
 import { fail } from '@sveltejs/kit';
 import { hash, verify } from '@node-rs/argon2';
-import { and, asc, eq, inArray, isNotNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { checkViews } from '$lib/rules/views';
 import { db } from '$lib/server/db';
-import { account, metric, pause, slot, tag, task, taskTag, variant } from '$lib/server/db/schema';
+import { account, habit, metric, pause, slot, tag, task, taskTag, variant } from '$lib/server/db/schema';
 import { ActionError, ALL_SCOPES, appActor, SCOPES, type Scope } from '$lib/server/core/actor';
 import { importReplace, keepTimeZone, readExport } from '$lib/server/core/export';
 import { createKey, listKeys, revokeKey } from '$lib/server/core/tokens';
@@ -102,6 +102,14 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		stats: { measures: s.measures, fields: formulaFields(accountId), suggestions: suggestions(seedFields(accountId)) },
 		vapidKey: publicKey(),
 		devices: subscriptionCount(accountId),
+		/** Every habit that could remind you, with whether it does. */
+		reminders: db
+			.select({ id: habit.id, name: habit.name, cue: habit.cue, remind: habit.remind })
+			.from(habit)
+			.where(and(eq(habit.accountId, accountId), eq(habit.archived, false), isNull(habit.deleteAfter)))
+			.orderBy(asc(habit.name))
+			.all()
+			.flatMap((h) => (h.cue?.time || h.cue?.range ? [{ id: h.id, name: h.name, when: h.cue.time ?? h.cue.range!, remind: h.remind }] : [])),
 		habits,
 		habitFields: numberFields(habits.map((h) => h.id)),
 		keys: listKeys(accountId),

@@ -64,7 +64,12 @@ const defaults: Settings = {
 };
 
 /** What an account starts with: nothing that belongs to one kind of tracking. */
-export const newAccountSettings = () => ({ packs: [], units: STARTER_KINDS.filter((k) => k.id === TIME), groupings: starterGroupings(), stats: { seeded: true } });
+export const newAccountSettings = () => ({ packs: [], units: STARTER_KINDS.filter((k) => k.id === TIME), groupings: starterGroupings(), stats: { seeded: true }, views: newViews() });
+/** Nothing about identities is said when you log, unless you turn it on. */
+function newViews(): ViewSettings {
+	const v = readViews(undefined);
+	return { ...v, today: { ...v.today, lines: v.today.lines.filter((l) => l !== 'identities') }, own: {} };
+}
 
 export function getSettings(accountId: string): Settings {
 	const row = db.select().from(settings).where(eq(settings.accountId, accountId)).get();

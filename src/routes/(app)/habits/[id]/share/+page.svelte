@@ -1,5 +1,9 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import TemplateSentence from '$lib/say/TemplateSentence.svelte';
+	import { checkTemplate } from '$lib/template';
+	import { runAction } from '$lib/toast.svelte';
+	import EditChrome from '$lib/ui/EditChrome.svelte';
 	import { weekdayNames } from '$lib/describe';
 	import { shareForm, type ShareForm } from '$lib/share';
 	import { blocked, normalize } from '$lib/rules/core';
@@ -50,20 +54,27 @@
 			if (m && !n.unit) n.unit = m.unit;
 		}
 	}
+	// The file as it would go out, read the way the other person's page reads it.
+	let previewText = $state('');
+	const preview = $derived.by(() => {
+		const c = previewText ? checkTemplate(previewText) : null;
+		return c?.ok ? c.tpl : null;
+	});
+	$effect(() => {
+		const share = JSON.stringify(clean);
+		if (blocking.length) return;
+		const t = setTimeout(async () => {
+			const r = await runAction<{ file: string }>('?/preview', { share });
+			if (r.ok && r.data) previewText = r.data.file;
+		}, 400);
+		return () => clearTimeout(t);
+	});
 	const dayList = (days: number[]) => days.map((d) => weekdayNames[d]).join(', ');
 </script>
 
 <svelte:head><title>Share {data.name} · ittracks</title></svelte:head>
 
-<header class="bar">
-	<h1>Share as a template</h1>
-	<a href="/habits/{data.id}">Back</a>
-</header>
-
-<p class="muted small-text">
-	Makes a template file of <strong>{data.name}</strong> that someone else can import, with the questions you add here.
-	The schedule, Variants, Tasks, targets, levels, cue, streak rule and everything else you set travel as they are. Your logs stay here.
-</p>
+<EditChrome title="Share as a template" modes={['use']} back={{ href: `/habits/${data.id}`, label: data.name }} hints={{ use: 'A file someone else can add, with the questions you ask here. Your logs stay here, and a file you have sent stays sent.' }} />
 
 <form method="POST" action="/habits/{data.id}/template.json" class="stack" onsubmit={(e) => blocking.length && e.preventDefault()}>
 	<input type="hidden" name="share" value={JSON.stringify(clean)} />
@@ -101,28 +112,28 @@
 				</ul>
 			</div>
 		{/if}
-		<label class="opt" title={why('includeArea') ?? ''}
-			><input type="checkbox" bind:checked={f.includeArea} disabled={!!why('includeArea')} />
+		<label class="opt check"
+			><input type="checkbox" class="pick" bind:checked={f.includeArea} disabled={!!why('includeArea')} />
 			<span>Area{ctx.area ? ` "${ctx.area}"` : ''}, and the Areas of its Tasks{#if why('includeArea')}<br /><span class="muted small-text">{why('includeArea')}</span>{/if}</span></label
 		>
-		<label class="opt"
-			><input type="checkbox" bind:checked={f.includePool} disabled={!!why('includePool')} />
+		<label class="opt check"
+			><input type="checkbox" class="pick" bind:checked={f.includePool} disabled={!!why('includePool')} />
 			<span
 				>{ctx.pool === 1 ? 'The Task' : ctx.pool ? `The ${ctx.pool} Tasks` : 'Tasks'} the auto-filled slots pick from{#if data.poolNames.length}<br /><span class="muted small-text"
 						>{data.poolNames.slice(0, 6).join(', ')}{data.poolNames.length > 6 ? ` and ${data.poolNames.length - 6} more` : ''}</span
 					>{:else if why('includePool')}<br /><span class="muted small-text">{why('includePool')}</span>{/if}</span
 			></label
 		>
-		<label class="opt" title={why('includeNote') ?? ''}
-			><input type="checkbox" bind:checked={f.includeNote} disabled={!!why('includeNote')} />
+		<label class="opt check"
+			><input type="checkbox" class="pick" bind:checked={f.includeNote} disabled={!!why('includeNote')} />
 			<span
 				>The habit's own note<br /><span class="muted small-text"
 					>{why('includeNote') ?? 'Off unless you tick it: notes are private, and yours may say why the habit matters to you.'}</span
 				></span
 			></label
 		>
-		<label class="opt" title={why('includeHowTo') ?? ''}
-			><input type="checkbox" bind:checked={f.includeHowTo} disabled={!!why('includeHowTo')} />
+		<label class="opt check"
+			><input type="checkbox" class="pick" bind:checked={f.includeHowTo} disabled={!!why('includeHowTo')} />
 			<span
 				>How to notes of its Tasks<br /><span class="muted small-text"
 					>{why('includeHowTo') ??
@@ -130,8 +141,8 @@
 				></span
 			></label
 		>
-		<label class="opt"
-			><input type="checkbox" bind:checked={f.suggestReminder} disabled={!!why('suggestReminder')} />
+		<label class="opt check"
+			><input type="checkbox" class="pick" bind:checked={f.suggestReminder} disabled={!!why('suggestReminder')} />
 			<span
 				>Suggest turning the reminder on<br /><span class="muted small-text"
 					>{why('suggestReminder') ?? 'The person adding it is asked; reminders are never turned on by themselves.'}</span
@@ -145,8 +156,8 @@
 		<p class="muted small-text" style="margin: 0">Asked when someone adds the template, so it fits them. Each has your setting as its answer to start with.</p>
 
 		{#if data.direction === 'build'}
-			<label class="opt"
-				><input type="checkbox" bind:checked={f.askDays} disabled={!!why('askDays')} />
+			<label class="opt check"
+				><input type="checkbox" class="pick" bind:checked={f.askDays} disabled={!!why('askDays')} />
 				<span
 					>Ask which days{#if why('askDays')}<br /><span class="muted small-text">{why('askDays')}</span>{:else}<br /><span class="muted small-text"
 							>{data.schedule}. Starts as {dayList(ctx.days)}.</span
@@ -155,8 +166,8 @@
 			>
 			{#if clean.askDays}<label class="indent">Question <input bind:value={f.daysLabel} maxlength="200" /></label>{/if}
 
-			<label class="opt"
-				><input type="checkbox" bind:checked={f.askTime} />
+			<label class="opt check"
+				><input type="checkbox" class="pick" bind:checked={f.askTime} />
 				<span>Ask what time<br /><span class="muted small-text">Sets the time of day. Starts as {ctx.time ?? '07:00'}.</span></span></label
 			>
 			{#if clean.askTime}<label class="indent">Question <input bind:value={f.timeLabel} maxlength="200" /></label>{/if}
@@ -172,11 +183,11 @@
 					<div>
 						<span class="muted small-text">Sets the target of</span>
 						{#each data.metrics as m (m.id)}
-							<label class="opt"><input type="checkbox" checked={n.metrics.includes(m.id)} onchange={() => toggleMetric(i, m.id)} /> <span>{metricLabel(m)}</span></label>
+							<label class="opt check"><input type="checkbox" class="pick" checked={n.metrics.includes(m.id)} onchange={() => toggleMetric(i, m.id)} /> <span>{metricLabel(m)}</span></label>
 						{/each}
 					</div>
-					<label class="opt"
-						><input type="checkbox" bind:checked={n.scale} />
+					<label class="opt check"
+						><input type="checkbox" class="pick" bind:checked={n.scale} />
 						<span
 							>In proportion<br /><span class="muted small-text"
 								>{n.scale
@@ -204,14 +215,18 @@
 		</ul>
 	{/if}
 	{#if form?.error}<p class="error">{form.error}</p>{/if}
-	<div class="row actions">
-		<button class="primary" disabled={blocking.length > 0}>Download the template</button>
-		<button formaction="?/save" disabled={blocking.length > 0}>Save to my Gallery</button>
+	<div class="l-cluster">
+		<button class="primary hit" aria-disabled={blocking.length > 0}>Download the template</button>
+		<button class="hit" formaction="?/save" aria-disabled={blocking.length > 0}>Save to my Gallery</button>
 	</div>
-	<p class="muted small-text">
-		To share it, send the file. It imports from Habits, Import a template file. Saved to your Gallery, it stays here to add again whenever you like.
-	</p>
 </form>
+
+{#if preview}
+	<section class="ob-sec" aria-label="What the other person sees">
+		<h2 class="section-title">What the other person sees</h2>
+		<div inert>{#key previewText}<TemplateSentence tpl={preview} today={data.today} libraryNames={[]} />{/key}</div>
+	</section>
+{/if}
 
 <style>
 	h2 {
@@ -239,9 +254,6 @@
 	}
 	.small-text {
 		font-size: 0.85rem;
-	}
-	.actions {
-		flex-wrap: wrap;
 	}
 	.inside {
 		margin: 0.2rem 0 0;
