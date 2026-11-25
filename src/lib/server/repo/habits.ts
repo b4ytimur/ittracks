@@ -22,6 +22,7 @@ import { checkHabit, checkHabitPast, removedTriggers, type HabitCheck, type Habi
 import { feelingsUsed, habitLogged, PastEditError } from '../history';
 import { activeOptions, mergeOptions } from '$lib/options';
 import { mapSchedule } from '$lib/template';
+import { routineTurnFor, type RoutineTurn } from '../routine-start';
 
 /** What the habit rules need to know from the database. */
 export function habitCtx(f: HabitForm): HabitCtx {
@@ -321,6 +322,18 @@ function scheduleAfter(
 	return { earlierSchedules: keepEarlier(earliest(before.earlierSchedules), old, after.startDate, today) };
 }
 
+/** The routine a habit starts to follow, turned to start where the habit is now: from today on, as any schedule edit. */
+function turnRoutine(tx: Tx, turn: RoutineTurn, today: string) {
+	const before = tx
+		.select({ startDate: habit.startDate, unlogged: habit.unlogged, schedule: habit.schedule, earlierSchedules: habit.earlierSchedules })
+		.from(habit)
+		.where(eq(habit.id, turn.routineId))
+		.get();
+	if (!before) return;
+	const sched = scheduleAfter(tx, turn.routineId, before, { startDate: before.startDate, schedule: turn.schedule }, 'today', today);
+	tx.update(habit).set({ schedule: turn.schedule, ...sched }).where(eq(habit.id, turn.routineId)).run();
+}
+
 /**
  * Misses written for days nobody logged follow the habit's settings. Switching to ignore them
  * takes them away; switching back, or starting earlier, counts them again from the start
@@ -465,7 +478,10 @@ export function saveHabit(
 			const applies = opts.scheduleApplies ?? 'today';
 			const earlierParents = parentsAfter(owned, values, applies, today);
 			if (applies === 'past' && values.parentId && owned.parentId !== values.parentId) reachBack(accountId, values.parentId, values.startDate);
+			// A rotating habit that starts to follow a routine not yet begun starts it where the habit is now.
+			const turn = routineTurnFor(accountId, id, values, today, tx);
 			tx.update(habit).set({ ...values, ...sched, ...settled, earlierParents }).where(eq(habit.id, id)).run();
+			if (turn) turnRoutine(tx, turn, today);
 			// The rule for what counts changed: past logs are judged again by it.
 			judgeAgain = owned.minimumCounts !== values.minimumCounts || !!owned.levels?.enabled !== !!values.levels?.enabled;
 		} else {

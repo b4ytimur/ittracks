@@ -537,7 +537,7 @@
 
 	/** Its own, read once: an Undo in the band is pressed on other pages too, where `data` is theirs. */
 	const HABIT = untrack(() => data.id);
-	async function send(id: string, body: object): Promise<{ status: number; r: { form?: HabitForm; undo?: string; error?: string; moved?: Partial<HabitForm> } } | null> {
+	async function send(id: string, body: object): Promise<{ status: number; r: { form?: HabitForm; undo?: string; error?: string; moved?: Partial<HabitForm>; said?: string } } | null> {
 		const res = await fetch(`/api/habits/${HABIT}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), keepalive: true }).catch(() => null);
 		if (!res) return null;
 		return { status: res.status, r: await res.json().catch(() => ({})) };
@@ -574,7 +574,7 @@
 		problems[id] = '';
 		base = { ...base, ...set };
 		onServer = a.r.form;
-		tell(id, keys, was, a.r.undo);
+		tell(id, keys, was, a.r.undo, a.r.said);
 		if (l.held) {
 			byDays = false;
 			forgetHeld();
@@ -586,11 +586,12 @@
 		if (!l.held && keys.some(changedKey)) wait(id);
 	}
 	/** The band says what changed, with its way back. It works from any page. */
-	function tell(id: string, keys: Key[], was: Partial<HabitForm>, undo?: string) {
+	function tell(id: string, keys: Key[], was: Partial<HabitForm>, undo?: string, also?: string) {
 		const l = LINES[id];
 		const name = full.name;
 		if (undo) {
-			showToast(`Changed ${l.label.toLowerCase()} of ${name}.`, async () => {
+			// `also`: another habit the change moved too (a routine started where this one is).
+			showToast(`Changed ${l.label.toLowerCase()} of ${name}.${also ? ` ${also}` : ''}`, async () => {
 				const r = await fetch('/api/undo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: undo }) }).catch(() => null);
 				if (!r?.ok) return r?.status === 409 ? `${name} changed again since, so it is left as it is.` : false;
 				// Before the band reloads the page itself: two reloads at once would show the older one.

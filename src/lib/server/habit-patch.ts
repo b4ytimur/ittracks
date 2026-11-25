@@ -5,6 +5,7 @@ import { firstError, habitForm, type HabitForm } from '$lib/forms';
 import { checkHabitEdit, checkHabitForm, checkLinks, getHabitForm, saveHabit, type ScheduleApplies } from './repo/habits';
 import { PastEditError } from './history';
 import { withSnapshot } from './snapshot';
+import { routineTurnFor } from './routine-start';
 
 export const habitPatch = z.object({
 	set: z.record(z.string(), z.unknown()),
@@ -18,7 +19,7 @@ export const habitPatch = z.object({
 });
 export type HabitPatch = z.infer<typeof habitPatch>;
 
-export type PatchResult = { form: HabitForm; undo?: string } | { error: string; status: 400 | 404 } | { moved: Record<string, unknown>; form: HabitForm };
+export type PatchResult = { form: HabitForm; undo?: string; /** Another habit it changed, in words. */ said?: string } | { error: string; status: 400 | 404 } | { moved: Record<string, unknown>; form: HabitForm };
 
 const ordered = (v: unknown): string =>
 	JSON.stringify(v ?? null, (_, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : 1))) : x));
@@ -43,11 +44,13 @@ export function patchHabit(accountId: string, id: string, p: HabitPatch, today: 
 	const problem = checkHabitForm(parsed.data).errors[0]?.reason ?? checkLinks(accountId, id, parsed.data) ?? checkHabitEdit(accountId, id, parsed.data);
 	if (problem) return { error: problem, status: 400 };
 	const save = () => saveHabit(accountId, id, parsed.data, today, { scheduleApplies: p.applies as ScheduleApplies });
+	// Starting to follow a routine not yet begun turns it to start where this habit is now: said, and undone with it.
+	const turn = routineTurnFor(accountId, id, parsed.data, today);
 	try {
 		// A move into a group for past days too can move the group's start back: kept for the Undo too.
-		const into = typeof p.set.parentId === 'string' ? [p.set.parentId] : [];
-		const undo = p.keep ? withSnapshot(accountId, id, save, Date.now(), into).undo : (save(), undefined);
-		return { form: currentForm(accountId, id)!, undo };
+		const into = typeof p.set.parentId === 'string' ? [p.set.parentId] : turn ? [turn.routineId] : [];
+		const undo = p.keep || turn ? withSnapshot(accountId, id, save, Date.now(), into).undo : (save(), undefined);
+		return { form: currentForm(accountId, id)!, undo, ...(turn ? { said: turn.said } : {}) };
 	} catch (e) {
 		if (e instanceof PastEditError) return { error: e.message, status: 400 };
 		throw e;

@@ -245,6 +245,15 @@ export function dueOn(schedule: Schedule, history: Done[], date: ISODate, parent
 	}
 }
 
+/** The first Variant due on or after `from`, looking a year ahead at most; null when nothing comes. */
+export function firstDue(s: Plain, history: Done[], from: ISODate): string | null {
+	for (let i = 0; i < 366; i++) {
+		const v = dueOn(s, history, addDays(from, i));
+		if (v) return v;
+	}
+	return null;
+}
+
 function weekRotationDue(
 	s: Rotation,
 	date: ISODate

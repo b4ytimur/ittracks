@@ -1,7 +1,7 @@
 // A habit that follows its routine (a Follow schedule): the Follow as it is saved, and the
 // schedule it gets when it has to stand on its own (the routine was deleted, or it is shared
 // without it). Pure, so it can be tested.
-import { followVariant, isFollow, isGroup, NOTHING_DUE, variantsIn, type Follow, type Plain, type Rotation, type Schedule } from './schedule';
+import { firstDue, followVariant, isFollow, isGroup, NOTHING_DUE, variantsIn, type Follow, type Plain, type Rotation, type Schedule } from './schedule';
 import type { ISODate } from './dates';
 
 /**
@@ -28,6 +28,23 @@ export function pairByName(routine: { id: string; name: string }[], own: { id: s
 	const key = (n: string) => n.trim().toLowerCase();
 	const byName = new Map(own.map((v) => [key(v.name), v.id]));
 	return Object.fromEntries(routine.flatMap((r) => (byName.has(key(r.name)) ? [[r.id, byName.get(key(r.name))!]] : [])));
+}
+
+/**
+ * A routine's rotation turned to start where a habit put inside it is now: the
+ * fewest turns of its order that bring up first, on or after `from`, a routine Variant the habit
+ * logs as `at`. The order keeps its sequence and rest days. Null when it already starts there, or
+ * no routine Variant brings `at` up. Only for a rotation not yet begun: one under way has its place.
+ */
+export function rotationStartingAt(r: Rotation, f: Follow, at: string, from: ISODate): Rotation | null {
+	const brings = (pv: string) => (!f.on || f.on.includes(pv)) && followVariant(f, pv) === at;
+	if (!r.order.some((o) => brings(o.variantId))) return null;
+	for (let k = 0; k < r.order.length; k++) {
+		const turned: Rotation = { ...r, order: [...r.order.slice(k), ...r.order.slice(0, k)] };
+		const next = firstDue(turned, [], from);
+		if (next && brings(next)) return k ? turned : null;
+	}
+	return null;
 }
 
 /**
