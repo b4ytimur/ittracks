@@ -52,23 +52,6 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		.where(and(eq(habit.accountId, accountId), ne(occurrence.status, 'due'), gte(occurrence.date, from)))
 		.orderBy(desc(occurrence.date))
 		.all();
-	const entries = occ.length
-		? db
-				.select({ occurrenceId: entry.occurrenceId, taskId: entry.taskId, task: task.name, values: entry.values })
-				.from(entry)
-				.innerJoin(task, eq(entry.taskId, task.id))
-				.where(inArray(entry.occurrenceId, occ.map((o) => o.id)))
-				.orderBy(entry.sortOrder)
-				.all()
-		: [];
-	const metrics = entries.length
-		? db
-				.select({ id: metric.id, taskId: metric.taskId, name: metric.name, type: metric.type, unit: metric.unit, choices: metric.choices })
-				.from(metric)
-				.where(inArray(metric.taskId, [...new Set(entries.map((e) => e.taskId))]))
-				.orderBy(metric.sortOrder)
-				.all()
-		: [];
 	const slips = db
 		.select({ date: slip.date, count: slip.count, habit: habit.name, habitId: habit.id, areaId: habit.areaId })
 		.from(slip)
@@ -113,6 +96,30 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		if (w && matches(w, q)) return true;
 		return !notesOnly && words.every((x) => [...d.occurrences, ...d.slips].some((o) => o.habit.toLowerCase().includes(x)));
 	};
+	// A search can match years: the newest that match are enough to look through, and to load.
+	const shown = [...byDay.entries()].filter(kept).sort((a, b) => b[0].localeCompare(a[0])).slice(0, q || mood ? 120 : undefined);
+	const shownOcc = shown.flatMap(([, d]) => d.occurrences);
+	// A few thousand at a time: one statement holds only so many ids.
+	const entries = [];
+	for (let i = 0; i < shownOcc.length; i += 5000)
+		entries.push(
+			...db
+				.select({ occurrenceId: entry.occurrenceId, taskId: entry.taskId, task: task.name, values: entry.values })
+				.from(entry)
+				.innerJoin(task, eq(entry.taskId, task.id))
+				.where(inArray(entry.occurrenceId, shownOcc.slice(i, i + 5000).map((o) => o.id)))
+				.orderBy(entry.sortOrder)
+				.all()
+		);
+	const metrics = entries.length
+		? db
+				.select({ id: metric.id, taskId: metric.taskId, name: metric.name, type: metric.type, unit: metric.unit, choices: metric.choices })
+				.from(metric)
+				.where(inArray(metric.taskId, [...new Set(entries.map((e) => e.taskId))]))
+				.orderBy(metric.sortOrder)
+				.all()
+		: [];
+	const entriesOf = Map.groupBy(entries, (e) => e.occurrenceId);
 	const lookBack =
 		notesOnly && !q && !mood
 			? onThisDay(today)
@@ -121,7 +128,7 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 			: [];
 
 	const views = getViews(accountId);
-	const entryCounts = Object.fromEntries(occ.map((o) => [o.id, entries.filter((c) => c.occurrenceId === o.id).length]));
+	const entryCounts = Object.fromEntries(shownOcc.map((o) => [o.id, entriesOf.get(o.id)?.length ?? 0]));
 	return {
 		days,
 		today,
@@ -146,14 +153,14 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		 * that counted at its Minimum, or a missed day that got part of the way.
 		 */
 		partial: Object.fromEntries([
-			...[...progressForIds(occ.filter((o) => o.status === 'done' || (o.status === 'missed' && entryCounts[o.id])).map((o) => o.id))]
+			...[...progressForIds(shownOcc.filter((o) => o.status === 'done' || (o.status === 'missed' && entryCounts[o.id])).map((o) => o.id))]
 				.filter(([, p]) => isPartial(p))
 				.map(([id, p]) => [id, progressText(p)]),
 			// A group's day: how many of the habits inside were done.
-			...occ.filter((o) => o.rollup && o.status !== 'skipped').map((o) => [o.id, rollupText(o.rollup!)])
+			...shownOcc.filter((o) => o.rollup && o.status !== 'skipped').map((o) => [o.id, rollupText(o.rollup!)])
 		]),
 		// What was logged, one line per Task, for "Show values" in History.
-		values: Object.fromEntries(occ.map((o) => [o.id, summarize(entries.filter((e) => e.occurrenceId === o.id), metrics)])),
+		values: Object.fromEntries(shownOcc.map((o) => [o.id, summarize(entriesOf.get(o.id) ?? [], metrics)])),
 		habits: db
 			.select({ id: habit.id, name: habit.name })
 			.from(habit)
@@ -165,7 +172,7 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		initial: initialState(views, 'history'),
 		/** The last seven days, whether or not anything was logged, for the strip. */
 		strip: Array.from({ length: 7 }, (_, i) => addDays(today, i - 6)),
-		history: [...byDay.entries()].filter(kept).sort((a, b) => b[0].localeCompare(a[0]))
+		history: shown
 	};
 };
 
