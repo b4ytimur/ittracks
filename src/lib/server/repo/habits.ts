@@ -531,8 +531,9 @@ const hasSlots = (habitId: string) =>
 	!!db.select({ id: slot.id }).from(slot).innerJoin(variant, eq(slot.variantId, variant.id)).where(eq(variant.habitId, habitId)).get();
 
 export function setHabitArchived(accountId: string, id: string, archived: boolean) {
+	// Brought back, however: it is not about to be deleted any more.
 	db.update(habit)
-		.set({ archived })
+		.set(archived ? { archived } : { archived, deleteAfter: null })
 		.where(and(eq(habit.id, id), eq(habit.accountId, accountId)))
 		.run();
 }

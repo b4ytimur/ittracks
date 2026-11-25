@@ -34,7 +34,12 @@ let swept = 0;
 export const handle: Handle = async ({ event, resolve }) => {
 	if (Date.now() - swept > 60_000) {
 		swept = Date.now();
-		sweep();
+		// What can't be deleted now is tried again in a minute; nobody's page waits for it.
+		try {
+			sweep();
+		} catch (e) {
+			console.error('Deleting for good failed', e);
+		}
 	}
 	event.locals.account = readSession(event.cookies.get(SESSION_COOKIE));
 	// A quick-log link with a key (NFC tag, QR code, Shortcut) works without signing in, for

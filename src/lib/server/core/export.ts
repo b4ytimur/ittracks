@@ -417,6 +417,8 @@ function rowFor(table: SQLiteTable, raw: Record<string, unknown>, accountId: str
 			continue;
 		}
 		if (table === s.event && key === 'seq') continue;
+		// A backup made just after a delete brings it back archived; restoring never deletes.
+		if (key === 'deleteAfter') continue;
 		if (!(key in raw)) continue;
 		let v = raw[key];
 		if (col.columnType === 'SQLiteTimestamp' && v !== null && v !== undefined) {

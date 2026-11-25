@@ -35,7 +35,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json({ ok: true });
 		}
 		case 'add':
-			return json({ id: addArea(me, b.name) });
+			return json(addArea(me, b.name));
 		case 'move':
 			moveAreas(me, b.order);
 			return json({ ok: true });

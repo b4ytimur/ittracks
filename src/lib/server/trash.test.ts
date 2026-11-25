@@ -5,7 +5,8 @@ import { eq } from 'drizzle-orm';
 import { db } from './db';
 import { habit, habitIdentity, identity, task } from './db/schema';
 import { createAccount } from './auth';
-import { listTasks, saveTask } from './repo/tasks';
+import { listTasks, saveTask, setTaskArchived } from './repo/tasks';
+import { unarchiveHabit } from './habit-actions';
 import { listHabits, saveHabit } from './repo/habits';
 import { addArea, changeArea, deleteArea, listAreas, moveAreas, restoreArea } from './repo/areas';
 import { deleteIdentity, identityFor, restoreIdentity } from './repo/identities';
@@ -47,6 +48,19 @@ describe('deleting', () => {
 		expect(listHabits(me, { archived: true }).find((h) => h.id === id)?.archived).toBe(true);
 	});
 
+	it('is not deleted when it was brought back some other way', () => {
+		const h = newHabit('Kept');
+		const t = newTask('Kept too');
+		const at = Date.now();
+		trash(me, 'habit', h, today, at);
+		trash(me, 'task', t, today, at);
+		unarchiveHabit(me, h, today);
+		setTaskArchived(me, t, false);
+		sweep(at + KEEP_MS + 2000);
+		expect(listHabits(me).some((x) => x.id === h)).toBe(true);
+		expect(listTasks(me).some((x) => x.id === t)).toBe(true);
+	});
+
 	it('is gone for good after its time, and not before', () => {
 		const h = newHabit('Gone');
 		const t = newTask('Gone too');
@@ -63,7 +77,9 @@ describe('deleting', () => {
 
 describe('Areas in place', () => {
 	it('deletes and puts back with its id and what it held', () => {
-		const id = addArea(me, 'Garden')!;
+		const id = addArea(me, 'Garden')!.id;
+		// Adding it again finds it, and says so: undoing that must not delete what was there.
+		expect(addArea(me, 'garden')).toEqual({ id, existed: true });
 		const t = newTask('Water plants');
 		const moved = newTask('Prune');
 		db.update(task).set({ areaId: id }).where(eq(task.id, t)).run();

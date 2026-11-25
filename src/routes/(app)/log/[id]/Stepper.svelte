@@ -50,7 +50,7 @@
 	}
 	.stepper input {
 		padding-inline: 2px;
-		min-width: 3.5rem;
+		min-width: 3.1rem;
 		text-align: center;
 		margin: 0;
 	}

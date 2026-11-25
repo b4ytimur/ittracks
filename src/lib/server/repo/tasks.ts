@@ -467,7 +467,7 @@ export function deleteTask(accountId: string, id: string) {
 export function setTaskArchived(accountId: string, id: string, archived: boolean): boolean {
 	const r = db
 		.update(task)
-		.set({ archived })
+		.set(archived ? { archived } : { archived, deleteAfter: null })
 		.where(and(eq(task.id, id), eq(task.accountId, accountId), isNull(task.parentTaskId)))
 		.run();
 	return r.changes > 0;

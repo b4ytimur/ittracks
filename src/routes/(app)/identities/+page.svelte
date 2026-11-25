@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
-	import { runAction, showToast } from '$lib/toast.svelte';
+	import { runAction, showToast, undoWith } from '$lib/toast.svelte';
 
 	let { data, form } = $props();
 	let editing = $state<string | null>(null);
@@ -10,7 +10,7 @@
 		if (!r.ok || !r.data) return void showToast(r.error ?? 'Not deleted. Are you online?');
 		const deleted = JSON.stringify(r.data.deleted);
 		await invalidateAll();
-		showToast(`Deleted “${i.statement}”. Its habits stay.`, async () => void (await runAction('?/restore', { deleted })));
+		showToast(`Deleted “${i.statement}”. Its habits stay.`, undoWith('/identities?/restore', { deleted }));
 	}
 	const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 </script>

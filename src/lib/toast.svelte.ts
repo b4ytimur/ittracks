@@ -46,3 +46,6 @@ export async function runAction<T = Record<string, unknown>>(
 		return { ok: false };
 	}
 }
+
+/** An Undo that posts a form action. The address is whole, since the band outlives the page it came from. */
+export const undoWith = (action: `/${string}`, fields: Record<string, string>) => async () => (await runAction(action, fields)).ok;
