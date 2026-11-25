@@ -106,12 +106,15 @@ export function variantFor(s: Schedule, history: Done[], date: ISODate, variantI
 /**
  * "Last time" for an Occurrence, from finished ones sorted newest first: the latest on or
  * before its date, so a past day logged late copies the session before it, not a newer
- * one. With nothing that early, the newest one. Never the Occurrence itself.
+ * one. With nothing that early, the newest one (a prefill to start from), unless
+ * `earlierOnly` ("Same as last" never copies a day that came after). Never the Occurrence itself.
  */
 export function lastTimeFor<T extends { id: string; date: ISODate }>(
 	newestFirst: T[],
-	occ: { id: string; date: ISODate } | undefined
+	occ: { id: string; date: ISODate } | undefined,
+	opts: { earlierOnly?: boolean } = {}
 ): T | undefined {
 	const others = newestFirst.filter((o) => o.id !== occ?.id);
-	return (occ ? others.find((o) => o.date <= occ.date) : undefined) ?? others[0];
+	const before = occ ? others.find((o) => o.date <= occ.date) : undefined;
+	return opts.earlierOnly ? before : (before ?? others[0]);
 }

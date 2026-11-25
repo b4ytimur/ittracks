@@ -783,7 +783,7 @@ export interface TodayItem {
 	progression: { hits: number; by: number; unit: 'percent' | 'steps'; changes: string[] } | null;
 	/** Started on the log screen and saved, not finished yet. */
 	inProgress: boolean;
-	/** A finished log exists to copy with "Same as last time". */
+	/** "Same as last time" is the usual way to log it (see canRepeat). */
 	canRepeat: boolean;
 	areaId: string | null;
 	/** Paused until this date (inclusive), for habits in a pause. */
@@ -1026,12 +1026,7 @@ export function loadToday(accountId: string, today: string) {
 				!!occ &&
 				occ.status === 'due' &&
 				!!db.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, occ.id)).get(),
-			canRepeat: !!db
-				.select({ id: entry.id })
-				.from(entry)
-				.innerJoin(occurrence, eq(entry.occurrenceId, occurrence.id))
-				.where(and(eq(occurrence.habitId, h.id), eq(occurrence.status, 'done')))
-				.get(),
+			canRepeat: canRepeat(h.id, { id: occ?.id ?? null, date: today, variantId: occ?.variantId ?? null }),
 			areaId: h.areaId,
 			pausedUntil: pauseOn(allPauses, h.id, today)?.end ?? null,
 			stats: habitStats(marks, today),
@@ -1283,7 +1278,7 @@ export function quickDone(occurrenceId: string, level: Level | null): 'done' | '
  * Fields set to start blank: a reading such as today's weight is never copied from an old day.
  * Archived fields aren't either: they are kept for History, not logged again.
  */
-function blankMetricIds(tx: Tx, taskId: string): Set<string> {
+function blankMetricIds(tx: Tx | typeof db, taskId: string): Set<string> {
 	return new Set(
 		tx
 			.select({ id: metric.id, prefill: metric.prefill, archived: metric.archived })
@@ -1298,12 +1293,58 @@ function blankMetricIds(tx: Tx, taskId: string): Set<string> {
 type Values = Record<string, unknown>;
 
 /**
+ * The finished log "Same as last" copies for a habit's day: the latest from before that day (never
+ * one after it), of the same Variant when there is one. `id` is that day's Occurrence, if any.
+ */
+function lastLogFor(habitId: string, day: { id: string | null; date: string; variantId: string | null }) {
+	const finished = db
+		.select({ id: occurrence.id, date: occurrence.date, level: occurrence.level, variantId: occurrence.variantId, picks: occurrence.picks })
+		.from(occurrence)
+		.where(and(eq(occurrence.habitId, habitId), eq(occurrence.status, 'done')))
+		.orderBy(desc(occurrence.date), desc(occurrence.finishedAt))
+		.all();
+	const at = { id: day.id ?? '', date: day.date };
+	return (
+		lastTimeFor(
+			finished.filter((o) => o.variantId === day.variantId),
+			at,
+			{ earlierOnly: true }
+		) ?? lastTimeFor(finished, at, { earlierOnly: true })
+	);
+}
+
+/**
+ * Whether "Same as last" is the usual way to log a habit's day: its last log (see lastLogFor) holds
+ * a value it copies, or one tick. Ticked steps alone are a checklist, so the log opens and only what
+ * was done gets ticked; readings set to start blank are never copied, so there is nothing to repeat.
+ */
+export function canRepeat(habitId: string, day: { id: string | null; date: string; variantId: string | null }): boolean {
+	const src = lastLogFor(habitId, day);
+	if (!src) return false;
+	const rows = db.select({ taskId: entry.taskId, values: entry.values }).from(entry).where(eq(entry.occurrenceId, src.id)).all();
+	const blank = new Map<string, Set<string>>();
+	let ticks = 0;
+	for (const r of rows) {
+		const values = r.values as Values;
+		if (isTick(values)) {
+			ticks++;
+			continue;
+		}
+		if (!blank.has(r.taskId)) blank.set(r.taskId, blankMetricIds(db, r.taskId));
+		const skip = blank.get(r.taskId)!;
+		if (Object.entries(values).some(([k, v]) => k !== '_summary' && !skip.has(k) && v !== null && v !== undefined && v !== '')) return true;
+	}
+	return ticks === 1;
+}
+
+/**
  * "Same as last time": copy the last finished log (of the same Variant when there is one, and
  * from before this day) and finish. Everything comes from that one log, so values from
  * different days never mix: sets, single values, tick boxes, ticked steps, and the Task an
  * auto-filled Slot used. Places are matched by Task and how many times it came before, so
- * round 2 of a Circuit copies round 2. A place that log didn't have takes its Task's own last
- * log, then the targets. Fields set to start blank are never copied. Places already logged
+ * round 2 of a Circuit copies round 2. A place that log left empty stays empty: nothing is
+ * made up. A place that log didn't have takes its Task's own last log from before this day,
+ * then the targets. Fields set to start blank are never copied. Places already logged
  * here are kept as they are, so a half-done workout only gets the rest filled in.
  * Returns 'needsInput', with the Occurrence back to due, when a required field is still empty
  * or a Task got nothing to log, so the quick log can ask for it.
@@ -1312,17 +1353,7 @@ export function sameAsLast(occurrenceId: string): 'done' | 'needsInput' | 'gone'
 	ensurePicks(occurrenceId);
 	let occ = db.select().from(occurrence).where(eq(occurrence.id, occurrenceId)).get();
 	if (!occ) return 'gone';
-	const finished = db
-		.select({ id: occurrence.id, date: occurrence.date, level: occurrence.level, variantId: occurrence.variantId, picks: occurrence.picks })
-		.from(occurrence)
-		.where(and(eq(occurrence.habitId, occ.habitId), eq(occurrence.status, 'done')))
-		.orderBy(desc(occurrence.date), desc(occurrence.finishedAt))
-		.all();
-	const source =
-		lastTimeFor(
-			finished.filter((o) => o.variantId === occ!.variantId),
-			occ
-		) ?? lastTimeFor(finished, occ);
+	const source = lastLogFor(occ.habitId, occ);
 	const lastLevel = source?.level ?? null;
 	const from = source
 		? db
@@ -1378,23 +1409,26 @@ export function sameAsLast(occurrenceId: string): 'done' | 'needsInput' | 'gone'
 			if (here.get(p.path)?.length) continue;
 			const add = (values: Values) =>
 				tx.insert(entry).values({ id: randomUUID(), occurrenceId: occ!.id, taskId: p.taskId, path: p.path, values, sortOrder: order++ }).run();
-			// From the one log above; a place it didn't have falls back to its Task's own last log.
-			const prev = inSource.get(key) ?? lastEntries(p.taskId, occ!.id, p.path);
+			// From the one log above. A place it had stays as it left it, empty too; a place it
+			// didn't have falls back to its Task's own last log from before this day, then its targets.
+			const had = inSource.get(key);
+			const prev = had ?? lastEntries(p.taskId, occ!.id, p.path, { earlierOnly: true });
 			if (isTickOnly(tx, p)) {
 				if (prev.some(isTick)) add({ done: true });
 				continue;
 			}
 			const blank = blankMetricIds(tx, p.taskId);
 			let wrote = 0;
-			for (const values of prev.length ? prev : targetEntries(tx, p, p.taskId, lastLevel)) {
+			for (const values of prev.length || had ? prev : targetEntries(tx, p, p.taskId, lastLevel)) {
 				const kept = Object.fromEntries(Object.entries(values).filter(([k]) => !blank.has(k)));
 				if (Object.keys(kept).some((k) => k !== '_summary')) {
 					add(kept);
 					wrote++;
 				}
 			}
-			// Nothing to copy: ask on the quick log, if it has a field to ask with.
-			if (!wrote && tx.select({ id: metric.id }).from(metric).where(and(eq(metric.taskId, p.taskId), eq(metric.archived, false), or(eq(metric.quick, true), eq(metric.required, true)))).get())
+			// Nothing to copy from anywhere: ask on the quick log, if it has a field to ask with. A
+			// place the last log left empty is left empty again, as it was.
+			if (!wrote && !had && tx.select({ id: metric.id }).from(metric).where(and(eq(metric.taskId, p.taskId), eq(metric.archived, false), or(eq(metric.quick, true), eq(metric.required, true)))).get())
 				empty = true;
 		}
 		tx.update(occurrence)
@@ -1425,7 +1459,7 @@ export function reopen(occurrenceId: string, clear: boolean) {
  * the ones from the same place last time (round 2 of a Circuit prefills round 2), else the
  * first place it had there, so rounds and Slots don't run together.
  */
-export function lastEntries(taskId: string, beforeOccurrenceId: string, path?: string) {
+export function lastEntries(taskId: string, beforeOccurrenceId: string, path?: string, opts: { earlierOnly?: boolean } = {}) {
 	const occ = db
 		.select({ id: occurrence.id, date: occurrence.date })
 		.from(occurrence)
@@ -1439,7 +1473,8 @@ export function lastEntries(taskId: string, beforeOccurrenceId: string, path?: s
 			.where(and(eq(entry.taskId, taskId), eq(occurrence.status, 'done')))
 			.orderBy(desc(occurrence.date), desc(occurrence.finishedAt))
 			.all(),
-		occ
+		occ,
+		opts
 	);
 	if (!prev) return [];
 	const rows = db

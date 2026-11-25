@@ -16,16 +16,16 @@ Each habit that is due has one control: the usual way to log it on the button, a
 
 | Button | Does |
 | --- | --- |
-| **Done** | A habit with nothing to fill in: marks it done. A habit with Tasks and **One-tap Done** on: logs your targets |
+| **Done** | A habit with nothing to fill in: marks it done. A habit with Tasks and **One-tap Done** on: logs your targets. One-tap Done comes before **Same as last** |
 | **+1**, **+5 min**, **+2.5 kg**… | A habit with one number to reach (glasses of water, minutes read): counts one step toward the target. The step is the field's **+/− step** |
 | **Log** | Opens the log screen |
-| **Same as last** | Copies your last log and finishes it, with Undo |
+| **Same as last** | Copies your last log and finishes it, with Undo. A Task that log left empty stays empty. Shown when that log has values to repeat, or one tick; a log of only ticked steps (a morning and an evening dose) or of readings that start blank opens with **Log** instead |
 | **Resume** | A log you started and haven't finished |
 | **⋯ → Minimum, Target, Stretch** | With Levels on: logs at that level |
 | **⋯ → Log details…** | Opens the log screen |
 | **⋯ → Skip today** | Skips the day. A skip neither adds to nor breaks a streak |
 
-A habit you finish keeps its place for a moment, with its reward and **Undo**; then it goes where finished habits go. The line above the tabs keeps the Undo of your last ten changes, also on other pages.
+A habit you finish keeps its place for a moment, with its reward and **Undo**; then it goes where finished habits go. The line above the tabs keeps the Undo of your last ten changes, also on other pages. A finished row keeps its own **Undo** after a reload; when the day was logged with one tap (Done or Same as last) and nothing was saved since, it takes away what that tap wrote.
 
 A day logged short of its target reads like "Done · 5 of 6 glasses" or "Missed · 1 of 2 steps". Whether it counts is the habit's [short-day rule](streaks.md#a-day-that-falls-short).
 
@@ -43,7 +43,7 @@ A day logged short of its target reads like "Done · 5 of 6 glasses" or "Missed 
 - With Levels on, pick the level you are logging at.
 - The note box takes Markdown.
 - **Finish** saves the log. Fields marked **Required before Finish** must be filled. A line above it says how many planned sets aren't ticked and so won't be saved, with **Tick all**.
-- Values that start from last time or the target are suggestions until you finish: saving as you go leaves them out. If some places still show only those values while you logged others (rounds you stopped before), a line says so, with **Keep them**. Finishing a log of values without touching anything saves it as planned.
+- Values that start from last time or the target are suggestions until you finish: saving as you go leaves them out. A value you type, pick or time is logged, even when it is the same as the suggestion. A choice that only shows last time's pick (or the target) says so; tap it to keep it. If some places still show only suggested values while you logged others (rounds you stopped before), a line says so, with **Keep them**. Finishing a log of values without touching anything saves it as planned.
 - A finished log saves as you correct it, with one **Undo** back to what it was. A past day that isn't finished is kept on your device until **Finish**.
 
 The log saves as you go. It also works offline: changes wait on the device and sync when the connection is back. They wait just the same when the server has a problem or you were signed out, and go once it answers. If the server refuses a change, a line at the top says why, with **Try again** and **Discard**; nothing is dropped by itself. If the same log was changed on another device in the meantime, nothing is saved over it: the log says what differs and you choose **Keep mine** or **Use the other one**. Choosing the other one leaves an **Undo** that brings yours back.
@@ -60,7 +60,7 @@ A duration field has a timer: **Stopwatch**, **Countdown** to the target, or a *
 
 Open a day from **Log a past day** on Today or History, a day in Today's week strip, **Log this day** in History, or a cell in a habit's chain. The day page shows:
 
-- **Due that day**: each habit with the same control as on Today (the usual way, and the others behind **⋯**), or **Change** and **Clear** (take the log away) when it is logged, and a Variant picker. **Same as last** copies the last log from before that day.
+- **Due that day**: each habit with the same control as on Today (the usual way, and the others behind **⋯**), or **Change** and **Clear** (take the log away) when it is logged, and a Variant picker. **Same as last** copies the last log from before that day, never one from a later day.
 - **Not due that day**, folded: habits that weren't due, so you can log an extra day.
 - **Started later**: habits that start after this day. **Start from this day** moves their start back.
 - **Breaking**: that day's slips, with **Remove**, and **Log a slip…**

@@ -17,7 +17,7 @@ import { limitOn, planOn, usedIn } from '$lib/engine/limit';
 import type { Level } from '$lib/engine/streak';
 import { DEFAULT_TRIGGERS, NOTE_MAX, type ScheduleForm } from '$lib/forms';
 import { optionName } from '$lib/options';
-import { createOccurrence, history, pausesOf, pickForVariant, recount, reopen, scheduleAt, settle } from './today';
+import { canRepeat, createOccurrence, history, pausesOf, pickForVariant, recount, reopen, scheduleAt, settle } from './today';
 import { getSettings } from './settings';
 
 type HabitRow = typeof habit.$inferSelect;
@@ -35,7 +35,7 @@ export interface PastItem {
 	/** Offered only when the habit has more than one. */
 	variants: { id: string; name: string }[];
 	slotCount: number;
-	/** A finished log exists to copy with "Same as last time". */
+	/** "Same as last time" is the usual way to log it (see canRepeat in ./today). */
 	canRepeat: boolean;
 	quickDone: boolean;
 	levels: { minimum: string; target: string; stretch: string } | null;
@@ -137,7 +137,7 @@ export function loadDay(accountId: string, date: string, today: string) {
 			variantId,
 			variants: variants.length > 1 ? variants : [],
 			slotCount: variantId ? db.select({ id: slot.id }).from(slot).where(eq(slot.variantId, variantId)).all().length : 0,
-			canRepeat: canRepeat(h.id, occ?.id ?? null),
+			canRepeat: canRepeat(h.id, { id: occ?.id ?? null, date, variantId }),
 			quickDone: h.quickDone,
 			levels: h.levels?.enabled ? { minimum: h.levels.minimum, target: h.levels.target, stretch: h.levels.stretch } : null
 		};
@@ -168,16 +168,6 @@ export function startFrom(h: HabitRow, date: string) {
 		})
 		.where(eq(habit.id, h.id))
 		.run();
-}
-
-function canRepeat(habitId: string, except: string | null): boolean {
-	return db
-		.select({ id: occurrence.id })
-		.from(entry)
-		.innerJoin(occurrence, eq(entry.occurrenceId, occurrence.id))
-		.where(and(eq(occurrence.habitId, habitId), eq(occurrence.status, 'done')))
-		.all()
-		.some((o) => o.id !== except);
 }
 
 /**

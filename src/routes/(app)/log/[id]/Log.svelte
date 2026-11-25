@@ -24,7 +24,7 @@
 	import Markdown from '$lib/Markdown.svelte';
 	import { starterFor, untouched } from '$lib/journal';
 	import { saveSetting } from '$lib/settings/save';
-	import { hasLog, isSuggestion, keepsSuggestions, onlySuggested, type PlaceStart } from '$lib/prefill';
+	import { hasLog, isSuggestion, keepsSuggestions, onlySuggested, setByHand, type PlaceStart } from '$lib/prefill';
 
 	import type { ActionData, PageData } from './$types';
 
@@ -39,6 +39,8 @@
 		tick?: boolean;
 		/** A station of a round, answered by its tick: its values count, also those only suggested (or, false, none do). */
 		kept?: boolean;
+		/** Once-per-log fields set by hand: logged, even when the value is the suggested one (see src/lib/prefill.ts). */
+		own?: string[];
 	}
 	type Item = (typeof data.items)[number];
 	type Metric = NonNullable<Item['task']>['metrics'][number];
@@ -355,10 +357,18 @@
 		saveTimer = undefined;
 	};
 
-	/** What each place started with: its suggested values (last time's, or targets) and what was saved. */
+	/**
+	 * What each place started with: its suggested values (last time's, or targets) and what was saved.
+	 * A finished log suggests nothing: it shows only what was saved, so whatever is typed into it is a log.
+	 */
 	const starts = $derived<PlaceStart[]>(
-		data.items.map((it) => ({ prefill: planned(it).summary, saved: it.saved.find(isSummary) ?? {}, savedAny: it.saved.length > 0 }))
+		data.items.map((it) => ({ prefill: correcting ? {} : planned(it).summary, saved: it.saved.find(isSummary) ?? {}, savedAny: it.saved.length > 0 }))
 	);
+	/** A once-per-log field set by hand. */
+	const setOnce = (i: number, id: string, v: unknown) => void setByHand(log[i], id, v);
+	/** A chip that only shows a suggestion is picked by a tap; one picked by hand is unpicked. */
+	const pickChip = (i: number, id: string, choice: string) =>
+		setOnce(i, id, log[i].summary[id] === choice && !isSuggestion(log[i], starts[i], id) ? null : choice);
 	/** Finish was answered "Yes" for places that still show only suggested values: they are kept. */
 	let suggestionsConfirmed = $state(false);
 
@@ -658,8 +668,7 @@
 	 * The value is still the prefill (last time or the target), not something logged now. It is
 	 * compared with the prefill itself, so an autosave and a reload don't turn it into time logged.
 	 */
-	const isPrefill = (i: number, id: string) =>
-		isOpen && starts[i]?.prefill[id] != null && (log[i].summary[id] ?? null) === starts[i].prefill[id];
+	const isPrefill = (i: number, id: string) => isOpen && !!starts[i] && isSuggestion(log[i], starts[i], id);
 
 	/** Something is logged already: Same as last fills in only the rest. */
 	const started = $derived(data.items.some((it, i) => it.saved.length || log[i]?.sets.some((x) => x.done) || log[i]?.tick));
@@ -937,17 +946,18 @@
 		{@const unit = m.unit || (m.type === 'duration' ? 'min' : '')}
 		<div class="field">
 			{#if m.type === 'checkbox'}
-				<label class="check"><input type="checkbox" class="tick" disabled={stage === 'read'} checked={!!log[i].summary[m.id]} onchange={(e) => (log[i].summary[m.id] = e.currentTarget.checked)} /> {m.name}{m.required ? ', required' : ''}</label>
+				<label class="check"><input type="checkbox" class="tick" disabled={stage === 'read'} checked={!!log[i].summary[m.id]} onchange={(e) => setOnce(i, m.id, e.currentTarget.checked)} /> {m.name}{m.required ? ', required' : ''}</label>
 			{:else if m.type === 'choice' && (m.choices?.length ?? 0) <= 7}
 				<span class="label">{m.name}{m.required ? ', required' : ''}</span>
+				{#if isPrefill(i, m.id)}<span class="meta">{log[i].summary[m.id] === prev ? 'As last time' : 'Target'}. Tap it to keep it.</span>{/if}
 				<div class="chips" role="group" aria-label={m.name}>
 					{#each m.choices ?? [] as c (c.id)}
-						<button type="button" class="toggle" disabled={stage === 'read'} aria-pressed={log[i].summary[m.id] === c.id} onclick={() => (log[i].summary[m.id] = log[i].summary[m.id] === c.id ? null : c.id)}>{c.name}</button>
+						<button type="button" class="toggle" disabled={stage === 'read'} aria-pressed={log[i].summary[m.id] === c.id} onclick={() => pickChip(i, m.id, c.id)}>{c.name}</button>
 					{/each}
 				</div>
 			{:else if m.type === 'choice'}
 				<label class="label" for="f-{i}-{m.id}">{m.name}{m.required ? ', required' : ''}</label>
-				<select id="f-{i}-{m.id}" disabled={stage === 'read'} value={num(log[i].summary[m.id])} onchange={(e) => (log[i].summary[m.id] = e.currentTarget.value)}>
+				<select id="f-{i}-{m.id}" disabled={stage === 'read'} value={num(log[i].summary[m.id])} onchange={(e) => setOnce(i, m.id, e.currentTarget.value)}>
 					<option value=""></option>
 					{#each m.choices ?? [] as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
 				</select>
@@ -958,11 +968,11 @@
 					label="{m.name}{m.required ? ', required' : ''}"
 					placeholder="Write here. Markdown works."
 					rows={6}
-					bind:value={() => num(log[i].summary[m.id]), (v) => (log[i].summary[m.id] = v)}
+					bind:value={() => num(log[i].summary[m.id]), (v) => setOnce(i, m.id, v)}
 				/>
 			{:else if m.type === 'text'}
 				<label class="label" for="f-{i}-{m.id}">{m.name}{m.required ? ', required' : ''}</label>
-				<input id="f-{i}-{m.id}" disabled={stage === 'read'} value={num(log[i].summary[m.id])} oninput={(e) => (log[i].summary[m.id] = e.currentTarget.value)} />
+				<input id="f-{i}-{m.id}" disabled={stage === 'read'} value={num(log[i].summary[m.id])} oninput={(e) => setOnce(i, m.id, e.currentTarget.value)} />
 			{:else if isNumeric(m)}
 				<span class="label">{m.name}{unit ? ` (${unit})` : ''}{m.required ? ', required' : ''}</span>
 				<NumberField
@@ -972,11 +982,11 @@
 					label="{m.name} for {it.task?.name}"
 					disabled={stage === 'read'}
 					caption={[targetAt(it, m.id) !== undefined ? `${data.levels ? levelNames[level] : 'Target'} ${targetAt(it, m.id)}` : '', prev !== undefined && isOpen ? `last time ${prev}` : ''].filter(Boolean).join(' · ')}
-					onchange={(v) => (log[i].summary[m.id] = v)}
+					onchange={(v) => setOnce(i, m.id, v)}
 				/>
 				{#if m.type === 'duration' && !quickMode && !data.past && stage === 'run'}
 					<Timer
-						bind:value={() => log[i].summary[m.id] as number | null, (v) => (log[i].summary[m.id] = v)}
+						bind:value={() => log[i].summary[m.id] as number | null, (v) => setOnce(i, m.id, v)}
 						replace={isPrefill(i, m.id)}
 						target={targetAt(it, m.id) ?? null}
 						storageKey="timer:{data.occurrence.id}:{m.id}"

@@ -1,7 +1,8 @@
 // What the log screen saves of the values it suggests. A once-per-log field starts at last
 // time's value or its target (its log setting), as a planned set does. Like a planned set
-// nobody ticked, a suggested value nobody touched is not something logged now. Pure, so the
-// log screen and the tests share the rule.
+// nobody ticked, a suggested value nobody touched is not something logged now. A value set by
+// hand is logged, even when it is the same number as the suggestion. Pure, so the log screen
+// and the tests share the rule.
 
 export type Values = Record<string, unknown>;
 
@@ -10,6 +11,8 @@ export interface PlaceState {
 	sets: { done: boolean; values: Values }[];
 	summary: Values;
 	tick?: boolean;
+	/** Once-per-log fields set by hand (typed, picked, timed): never a suggestion, whatever their value. */
+	own?: string[];
 }
 
 /** What the screen started a place with. */
@@ -24,9 +27,16 @@ export interface PlaceStart {
 
 const empty = (v: unknown) => v === undefined || v === null || v === '' || v === false;
 
-/** A once-per-log value still at the suggestion it started with, never saved. */
+/** A once-per-log value still at the suggestion it started with: never set by hand, never saved. */
 export const isSuggestion = (s: PlaceState, start: PlaceStart, id: string): boolean =>
-	start.prefill[id] != null && !(id in start.saved) && (s.summary[id] ?? null) === start.prefill[id];
+	start.prefill[id] != null && !(id in start.saved) && !s.own?.includes(id) && (s.summary[id] ?? null) === start.prefill[id];
+
+/** The same place with a once-per-log field set by hand. */
+export function setByHand<S extends PlaceState>(s: S, id: string, v: unknown): S {
+	s.summary[id] = v;
+	if (!s.own?.includes(id)) s.own = [...(s.own ?? []), id];
+	return s;
+}
 
 /** Something is logged at a place: a ticked set, a tick, something saved, or a value that isn't a suggestion. */
 export const hasLog = (s: PlaceState, start: PlaceStart): boolean =>
