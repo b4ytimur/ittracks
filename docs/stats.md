@@ -4,7 +4,7 @@ The **Stats** page holds boards of cards. Each card asks one question of your lo
 
 ## Boards
 
-- **⋯ → New board…**, next to the boards, starts one from a template, made from the habits and Tasks you already have, or empty.
+- **⋯ → New board…**, next to the boards, starts one from a template, made from the habits and Tasks you already have, or empty. The templates are plain (Overview, Measures, Time, Numbers, Breaking habits); a [pack](packs.md) you have names its own in place of the plain one (Gym, Reading, Learner).
 - Each board has a range, as buttons (**This week**, **Last 7 days**, **This month**, **Last 30 days**, **Last 90 days**, **This year**, **Last 12 months**, **All time**), and a **Filter**: building or breaking habits, one habit, an identity, Areas and tags.
 - In **Edit**, press a board's name to rename it. **⋯** moves it left or right, deletes it (with Undo), and sets whether Stats opens with the last board or with this one.
 

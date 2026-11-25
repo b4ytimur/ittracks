@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { groupingList, type Grouping } from './groupings';
 import { compile, FormulaError } from './stats/formula';
 import { customMeasure, type CustomMeasure } from './stats/model';
+import type { BoardSeed } from './stats/auto';
 import { seedMeasures } from './stats/seed';
 import { taskTypeSchema, type TaskType } from './task-types';
 import { STARTER_KINDS, unitKinds, unitTable, unitWord, type Unit, type UnitKind } from './units';
@@ -16,6 +17,8 @@ export interface Pack {
 	groupings: (Grouping & { members: string[] })[];
 	measures: CustomMeasure[];
 	types: TaskType[];
+	/** Boards it names in its own words (stats/auto.ts makes them from what you track). */
+	boards?: BoardSeed[];
 }
 
 const kind = (id: string) => STARTER_KINDS.find((k) => k.id === id)!;
@@ -56,7 +59,8 @@ export const PACKS: Pack[] = [
 				]
 			},
 			{ key: 'bodyweight', name: 'Bodyweight', description: 'Reps for each set', restTimerEnabled: true, words: sets, metrics: [{ name: 'Reps', type: 'count', unit: '', repeats: true, step: 1 }] }
-		]
+		],
+		boards: [{ id: 'gym', shape: 'rows', name: 'Gym', blurb: 'Sessions per week, sets per muscle group, volume, estimated 1RM and records.', days: 'Sessions' }]
 	},
 	{
 		id: 'running',
@@ -126,7 +130,8 @@ export const PACKS: Pack[] = [
 					{ name: 'Minutes', type: 'duration', unit: 'min', repeats: false, step: 5 }
 				]
 			}
-		]
+		],
+		boards: [{ id: 'reading', shape: 'time', name: 'Reading', blurb: 'Minutes per week, pages so far, and which weekdays you read.' }]
 	},
 	{
 		id: 'study',
@@ -146,7 +151,8 @@ export const PACKS: Pack[] = [
 					{ name: 'Items', type: 'count', unit: '', repeats: false, step: 1 }
 				]
 			}
-		]
+		],
+		boards: [{ id: 'learner', shape: 'time', name: 'Learner', blurb: 'Minutes per week, running totals and minutes by weekday.' }]
 	}
 ];
 /** What an account that was there before packs has: what used to be built in. */

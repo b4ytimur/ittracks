@@ -1,5 +1,5 @@
 // Views: what each page shows and in what order, saved per user.
-// A view template (Routine, Minimal, Gym-focused...) is only a starting bundle of these settings;
+// A view template (Routine, Minimal, Week first...) is only a starting bundle of these settings;
 // after picking one, every setting can still be changed on its own.
 import { z } from 'zod';
 
@@ -240,8 +240,8 @@ export const TEMPLATES: ViewTemplate[] = [
 	},
 	{
 		id: 'gym',
-		name: 'Gym-focused',
-		blurb: 'For training plans: the week at a glance and your progress.',
+		name: 'Week first',
+		blurb: 'The week at a glance and your progress.',
 		summary: 'Adds a week strip and progress to Today, shows "done this week" on each habit, and sorts the Library by most logged.',
 		patch: {
 			today: {

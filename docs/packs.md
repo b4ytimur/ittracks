@@ -4,11 +4,11 @@ Nothing about one kind of tracking is built in. What belongs to a gym, a run or 
 
 | Pack | Brings |
 | --- | --- |
-| Gym | Weight (g, kg, lb), the grouping Muscle groups, the measures Volume, Estimated 1RM, Hard sets and Heaviest set, the Task types Strength and Bodyweight |
+| Gym | Weight (g, kg, lb), the grouping Muscle groups, the measures Volume, Estimated 1RM, Hard sets and Heaviest set, the Task types Strength and Bodyweight, the Stats board Gym |
 | Running | Distance (m, km, mi), the measure Pace, the Task type Cardio |
 | Music practice | Tempo (bpm), the grouping Skills, the Task type Piece, logged in takes |
-| Reading | The Task type Book |
-| Study | The Task type Study |
+| Reading | The Task type Book, the Stats board Reading |
+| Study | The Task type Study, the Stats board Learner |
 
 - A pack is **copied in and yours**: change or delete any of it under [Units](units.md), [Groupings](tasks.md#groupings-and-levels), [Measures](stats.md#measures) and Task types. What you already have under the same name is left as it is.
 - **Taking a pack out** removes only what nothing uses, and says what stays.

@@ -6,7 +6,7 @@ import { cardRules, checkCard, checkStatsSettings } from '$lib/rules/stats';
 import { normalize } from '$lib/rules/core';
 import { computeCard, drill, unitOf, type Prepared } from '$lib/stats/engine';
 import { statCtx, type Catalog } from '$lib/stats/catalog';
-import { BOARD_TEMPLATES, boardTemplate, habitCards, type BoardTemplateId } from '$lib/stats/auto';
+import { boardFrom, habitCards, seedById } from '$lib/stats/auto';
 import { manualOrder } from '$lib/views';
 import { cardsUsing, board, boardFilter, customMeasure, MAX_BOARDS, MAX_CARDS, newId, rangeValue, SHARE_MEASURES, statCard, statsSettings, type StatCard, type StatsSettings } from '$lib/stats/model';
 import type { RequestHandler } from './$types';
@@ -18,7 +18,7 @@ const ctxIn = z.object({ range: rangeValue.default('30d'), filter: boardFilter.p
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 const body = z.discriminatedUnion('op', [
-	z.object({ op: z.literal('board.add'), template: z.enum(Object.keys(BOARD_TEMPLATES) as [BoardTemplateId]).nullable().default(null), name: z.string().trim().min(1).max(40).optional() }),
+	z.object({ op: z.literal('board.add'), template: z.string().max(40).refine((x) => !!seedById(x), 'No such board').nullable().default(null), name: z.string().trim().min(1).max(40).optional() }),
 	z.object({ op: z.literal('board.patch'), id, name: z.string().trim().min(1).max(40).optional(), range: rangeValue.optional(), filter: boardFilter.optional() }),
 	z.object({ op: z.literal('board.delete'), id }),
 	z.object({ op: z.literal('board.move'), id, dir: z.union([z.literal(-1), z.literal(1)]) }),
@@ -122,7 +122,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 		case 'board.add': {
 			if (s.boards.length >= MAX_BOARDS) error(400, `At most ${MAX_BOARDS} boards`);
 			const nb = b.template
-				? boardTemplate(b.template, P!)
+				? boardFrom(seedById(b.template)!, P!)
 				: board.parse({ id: newId(), name: b.name ?? 'New board', cards: [] });
 			if (b.name) nb.name = b.name;
 			added = nb.id;
