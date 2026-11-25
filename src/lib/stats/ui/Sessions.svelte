@@ -13,7 +13,7 @@
 			<div class="head">
 				<strong>{shortDay(s.date)}</strong>
 				<span class="muted">{s.task}</span>
-				{#if met(s.met)}<span class="chip" class:on={s.met === 1}>{met(s.met)}</span>{/if}
+				{#if met(s.met)}<span class="tag" class:strong={s.met === 1}>{met(s.met)}</span>{/if}
 			</div>
 			<div class="text">{s.text}</div>
 		</li>
@@ -29,7 +29,7 @@
 	}
 	li {
 		padding: 0.35rem 0;
-		border-bottom: 1px solid var(--grid);
+		border-bottom: 1px solid var(--chart-grid);
 	}
 	li:last-child {
 		border-bottom: none;

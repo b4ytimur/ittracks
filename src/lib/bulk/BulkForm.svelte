@@ -62,10 +62,10 @@
 		align-items: center;
 	}
 	.label {
-		color: var(--text);
+		color: var(--ink);
 	}
 	.check {
-		color: var(--text);
+		color: var(--ink);
 		display: flex;
 		gap: 0.35rem;
 		align-items: center;

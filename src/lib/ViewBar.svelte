@@ -170,7 +170,7 @@
 				{/if}
 			</div>
 			{#if archived}
-				<label style="color: var(--text)"><input type="checkbox" bind:checked={current.archived} /> Include archived</label>
+				<label style="color: var(--ink)"><input type="checkbox" bind:checked={current.archived} /> Include archived</label>
 			{/if}
 
 			<div class="row">

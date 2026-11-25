@@ -48,10 +48,10 @@
 	dialog {
 		width: min(36rem, calc(100vw - 2rem));
 		max-height: 80dvh;
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		background: var(--surface);
-		color: var(--text);
+		border: 1px solid var(--line);
+		border-radius: var(--radius-card);
+		background: var(--surface-raised);
+		color: var(--ink);
 		padding: 1rem;
 	}
 	dialog::backdrop {
@@ -66,7 +66,7 @@
 		gap: 0.6rem;
 		align-items: center;
 		padding: 0.35rem 0;
-		border-bottom: 1px solid var(--grid);
+		border-bottom: 1px solid var(--chart-grid);
 	}
 	.list li + li {
 		margin-top: 0;

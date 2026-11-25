@@ -248,7 +248,7 @@
 		<fieldset>
 			<legend class="small-text">Lines on each habit</legend>
 			{#each Object.entries(HABIT_LINES) as [k, label] (k)}
-				<label style="color: var(--text)"
+				<label style="color: var(--ink)"
 					><input type="checkbox" checked={show(k as HabitLineKey)} onchange={() => toggleLine(k as HabitLineKey)} /> {label}</label
 				>
 			{/each}

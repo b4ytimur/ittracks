@@ -3,6 +3,7 @@
 	// break habit's feelings. Renaming edits the name in place and keeps the id, so past logs
 	// follow the rename. An option a log used is archived when removed, and says so.
 	import type { Snippet } from 'svelte';
+	import EditableList from './ui/EditableList.svelte';
 
 	type Item = { id: string; name: string };
 	let {
@@ -20,40 +21,41 @@
 		/** Names one input, for screen readers: "Option", "Feeling". */
 		label: string;
 		addLabel: string;
-		/** Why removing a used option archives it, shown on its button. */
+		/** Why removing a used option archives it. */
 		usedTitle: string;
 		placeholder?: string;
 		/** Anything more on an option's row, such as its number. */
 		after?: Snippet<[Item]>;
 	} = $props();
-
-	function move(i: number, by: number) {
-		const j = i + by;
-		if (j < 0 || j >= options.length) return;
-		[options[i], options[j]] = [options[j], options[i]];
-	}
 </script>
 
 <div class="options">
-	{#each options as o, i (o.id)}
-		<div class="option">
-			<input bind:value={o.name} maxlength="40" required aria-label="{label} {i + 1}" {placeholder} />
-			{@render after?.(o)}
-			<span class="controls">
-				<button type="button" class="small" onclick={() => move(i, -1)} disabled={i === 0} aria-label="Move {o.name || label} up">↑</button>
-				<button type="button" class="small" onclick={() => move(i, 1)} disabled={i === options.length - 1} aria-label="Move {o.name || label} down">↓</button>
-				{#if used(o.id)}
-					<button type="button" class="small danger" title={usedTitle} onclick={() => options.splice(i, 1)}>Archive</button>
-				{:else}
-					<button type="button" class="small danger" onclick={() => options.splice(i, 1)}>Remove</button>
-				{/if}
-			</span>
-		</div>
-	{/each}
+	<EditableList
+		items={options}
+		key={(o) => o.id}
+		label={(o) => o.name || label}
+		mode="edit"
+		layout="bare"
+		ariaLabel={label}
+		onmove={(_, order) => (options = order.map((id) => options.find((o) => o.id === id)!))}
+	>
+		{#snippet row(o, ctx)}
+			<div class="option">
+				{@render ctx.grip?.()}
+				<input bind:value={o.name} maxlength="40" required aria-label="{label} {options.indexOf(o) + 1}" {placeholder} />
+				{@render after?.(o)}
+				<button type="button" class="quiet hit" aria-label="{used(o.id) ? 'Archive' : 'Remove'} {o.name || label}" onclick={() => (options = options.filter((x) => x.id !== o.id))}>{used(o.id) ? 'Archive' : 'Remove'}</button>
+			</div>
+		{/snippet}
+	</EditableList>
+	{#if options.some((o) => used(o.id))}<p class="meta muted">{usedTitle}</p>{/if}
 	<button type="button" onclick={() => options.push({ id: crypto.randomUUID(), name: '' })}>{addLabel}</button>
 </div>
 
 <style>
+	p {
+		margin: 0;
+	}
 	.options {
 		display: grid;
 		gap: 0.6rem;
@@ -61,24 +63,14 @@
 	.options > button {
 		justify-self: start;
 	}
-	/* The name keeps room to be read: on a narrow screen the buttons move under it, to the right. */
 	.option {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.4rem;
+		gap: var(--space-inline);
 		align-items: center;
 	}
 	.option > input {
-		flex: 1 1 9rem;
+		flex: 1 1 8rem;
 		min-width: 0;
-	}
-	.controls {
-		display: flex;
-		gap: 0.4rem;
-		margin-left: auto;
-	}
-	/* Archive and Remove take the same width, so the rows line up. */
-	.controls > .danger {
-		min-width: 4.6rem;
 	}
 </style>

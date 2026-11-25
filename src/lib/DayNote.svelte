@@ -76,7 +76,4 @@
 		justify-content: space-between;
 		margin-top: 0.3rem;
 	}
-	.small-text {
-		font-size: 0.85rem;
-	}
 </style>

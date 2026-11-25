@@ -826,7 +826,7 @@
 							<label>New Task name <input bind:value={newTaskName} placeholder="Bench press" /></label>
 							<div class="chips">
 								{#each data.types as type (type.key)}
-									<button type="button" class="toggle" aria-pressed={newTaskType === type.key} title={type.description} onclick={() => (newTaskType = type.key)}>{type.name}</button>
+									<button type="button" class="toggle" aria-pressed={newTaskType === type.key} onclick={() => (newTaskType = type.key)}>{type.name}</button>
 								{/each}
 							</div>
 							<p class="muted small-text" style="margin: 0">{data.types.find((x) => x.key === newTaskType)?.description}</p>
@@ -838,7 +838,7 @@
 						</div>
 					{/if}
 					{#if s.taskId && !repeating.has(s.taskId) && data.withParts.includes(s.taskId)}
-						<label style="width: 8rem" title="Everything inside this Task is logged once per round"
+						<label style="width: 8rem"
 							>Rounds
 							<input
 								type="number"
@@ -1025,7 +1025,7 @@
 		{#if groupTarget !== null}
 			<label style="width: 10rem">How many <input type="number" min="1" max="100" bind:value={groupTarget} /></label>
 		{/if}
-		<label style="color: var(--text)"
+		<label style="color: var(--ink)"
 			><input type="checkbox" checked={groupMinimum !== null} onchange={(e) => (groupMinimum = e.currentTarget.checked ? 1 : null)} /> A day with fewer done still counts at the Minimum</label
 		>
 		{#if groupMinimum !== null}
@@ -1094,7 +1094,7 @@
 			{#if groupTarget !== null}
 				<label style="width: 10rem">How many <input type="number" min="1" max="100" bind:value={groupTarget} /></label>
 			{/if}
-			<label style="color: var(--text)"
+			<label style="color: var(--ink)"
 				><input type="checkbox" checked={groupMinimum !== null} onchange={(e) => (groupMinimum = e.currentTarget.checked ? 1 : null)} /> A day with fewer done still counts at the Minimum</label
 			>
 			{#if groupMinimum !== null}
@@ -1164,8 +1164,8 @@
 			placeholder="I pour my morning coffee" aria-label="What this comes after" />
 	{/if}
 	{#if intention}<p class="intention">{intention}</p>{/if}
-	<label style="color: var(--text)"
-		><input type="checkbox" bind:checked={h.remind} disabled={!!remindBlock && !h.remind} title={remindBlock?.reason} /> Remind me {h.cue.time ? 'at this time' : h.cue.range ? `when the ${h.cue.range.toLowerCase()} starts` : `(${remindBlock?.reason.toLowerCase() ?? 'set a time first'})`}</label
+	<label style="color: var(--ink)"
+		><input type="checkbox" bind:checked={h.remind} disabled={!!remindBlock && !h.remind} /> Remind me {h.cue.time ? 'at this time' : h.cue.range ? `when the ${h.cue.range.toLowerCase()} starts` : `(${remindBlock?.reason.toLowerCase() ?? 'set a time first'})`}</label
 	>
 	{#if h.remind}
 		<p class="muted small-text">Turn on reminders for this device in <a href="/settings#reminders">Settings</a>.</p>
@@ -1194,10 +1194,10 @@
 {#snippet typePart()}
 	<fieldset class="card">
 		<legend class="muted">Type</legend>
-		<label style="color: var(--text)"
+		<label style="color: var(--ink)"
 			><input type="radio" bind:group={h.direction} value="build" disabled={!!directionLocked && h.direction !== 'build'} /> Build: something to do</label
 		>
-		<label style="color: var(--text)"
+		<label style="color: var(--ink)"
 			><input type="radio" bind:group={h.direction} value="break" disabled={!!directionLocked && h.direction !== 'break'} /> Break: something to stop, with
 			a slip counter</label
 		>
@@ -1301,7 +1301,7 @@
 
 {#snippet limitPart()}
 	<p class="meta">{h.limit ? 'Log each one as it happens; the counter shows how many days in a row you stayed within the limit.' : 'The habit shows the days since your last slip. To cut down instead of quitting, set a limit.'}</p>
-	<label style="color: var(--text)"
+	<label style="color: var(--ink)"
 		><input
 			type="checkbox"
 			checked={!!h.limit}
@@ -1322,7 +1322,7 @@
 				</select>
 			</label>
 		</div>
-		<label style="color: var(--text)"
+		<label style="color: var(--ink)"
 			><input
 				type="checkbox"
 				checked={!!h.limit.taper}
@@ -1363,7 +1363,7 @@
 {/snippet}
 
 {#snippet levelsPart()}
-			<label style="color: var(--text)"
+			<label style="color: var(--ink)"
 				><input type="checkbox" bind:checked={h.levels.enabled} /> Use levels: a two-minute Minimum, your Target, and a Stretch</label
 			>
 			{#if h.levels.enabled}
@@ -1401,11 +1401,11 @@
 			{#if h.direction === 'build' && (kind !== 'group' || groupMinimum !== null)}
 				<fieldset class="card">
 					<legend class="muted">A day that falls short of the target</legend>
-					<label style="color: var(--text)"
+					<label style="color: var(--ink)"
 						><input type="radio" bind:group={h.minimumCounts} value={true} />
 						{kind === 'group' ? `Counts once ${groupMinimum} inside are done` : h.levels.enabled ? 'Counts once it reaches the Minimum' : 'Counts once anything is logged'}</label
 					>
-					<label style="color: var(--text)"
+					<label style="color: var(--ink)"
 						><input type="radio" bind:group={h.minimumCounts} value={false} /> Only the full target counts</label
 					>
 					<p class="muted small-text" style="margin: 0.25rem 0 0" hidden={kind === 'group'}>
@@ -1421,10 +1421,10 @@
 			{#if kind !== 'group'}
 			<fieldset class="card">
 				<legend class="muted">Days you don't log</legend>
-				<label style="color: var(--text)"
+				<label style="color: var(--ink)"
 					><input type="radio" bind:group={h.unlogged} value="missed" /> Count as missed once the day is over</label
 				>
-				<label style="color: var(--text)"
+				<label style="color: var(--ink)"
 					><input type="radio" bind:group={h.unlogged} value="ignore" /> Don't count them: only what you log counts</label
 				>
 				<p class="muted small-text" style="margin: 0.25rem 0 0">
@@ -1442,7 +1442,7 @@
 			<input bind:value={h.bundle.reward} placeholder="my favourite podcast" />
 		</label>
 		{#if h.bundle.reward}
-			<label style="color: var(--text)"
+			<label style="color: var(--ink)"
 				><input type="checkbox" bind:checked={h.bundle.strict} /> Save it as a treat for after the habit is done</label
 			>
 		{/if}
@@ -1464,13 +1464,13 @@
 {/snippet}
 
 {#snippet rewardPart()}
-		<label style="color: var(--text)"
+		<label style="color: var(--ink)"
 			><input type="checkbox" bind:checked={h.reward.celebrate} /> Celebrate when I finish</label
 		>
 		{#if h.reward.celebrate}
 			<label>Message <input bind:value={h.reward.message} placeholder="What you want to hear when it is done" /></label>
 		{/if}
-		<label style="color: var(--text)"
+		<label style="color: var(--ink)"
 			><input
 				type="checkbox"
 				checked={!!h.reward.jar}
@@ -1629,7 +1629,7 @@
 			<li class="card">
 				<strong>Copy one of my habits</strong>
 				<div class="chips">
-					{#each data.habits as x (x.id)}<a class="chip" href="?from={x.id}">{x.name}</a>{/each}
+					{#each data.habits as x (x.id)}<a class="toggle" href="?from={x.id}">{x.name}</a>{/each}
 				</div>
 			</li>
 		{/if}
@@ -1726,7 +1726,7 @@
 				{#if intention}<div class="intention">{intention}</div>{/if}
 				<div class="muted small-text">Streak: never miss twice (one miss is forgiven). Levels, identity and more are in the full editor any time.</div>
 			</div>
-			<label style="color: var(--text)"><input type="checkbox" bind:checked={pinned} /> Add to home screen shortcuts</label>
+			<label style="color: var(--ink)"><input type="checkbox" bind:checked={pinned} /> Add to home screen shortcuts</label>
 		{/if}
 
 		{#if form?.error}<p class="error save-error" role="alert">{form.error}</p>{/if}
@@ -1784,10 +1784,6 @@
 		margin-block-end: var(--space-inline);
 	}
 	.blocked,
-	.small-text {
-		color: var(--ink-muted);
-		font-size: var(--font-size-meta);
-	}
 	.menu-at {
 		position: relative;
 		display: inline-flex;

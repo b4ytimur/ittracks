@@ -82,7 +82,7 @@
 	}
 	h3 {
 		font-size: 0.85rem;
-		color: var(--muted);
+		color: var(--ink-muted);
 		font-weight: 500;
 		margin: 0.8rem 0 0.3rem;
 	}
@@ -91,7 +91,7 @@
 		align-items: center;
 		gap: 0.6rem;
 		padding: 0.35rem 0;
-		border-bottom: 1px solid var(--grid);
+		border-bottom: 1px solid var(--chart-grid);
 	}
 	.list li + li {
 		margin-top: 0;

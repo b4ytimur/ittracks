@@ -44,11 +44,11 @@
 	td {
 		padding: 0.3rem 0.4rem;
 		text-align: right;
-		border-bottom: 1px solid var(--grid);
+		border-bottom: 1px solid var(--chart-grid);
 		vertical-align: top;
 	}
 	thead th {
-		color: var(--muted);
+		color: var(--ink-muted);
 		font-weight: 500;
 	}
 	th[scope='row'] {
@@ -57,7 +57,7 @@
 	}
 	th[scope='row'] button {
 		text-align: left;
-		color: var(--text);
+		color: var(--ink);
 	}
 	.small {
 		font-size: 0.7rem;

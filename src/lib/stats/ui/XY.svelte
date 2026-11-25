@@ -87,8 +87,8 @@
 
 	const legend = $derived([
 		...(r.series.length > 1 ? r.series.map((s, i) => ({ label: s.label || 'All', color: seriesColor(i, s.key), line: chart === 'line' })) : []),
-		...(r.previous ? [{ label: 'Period before', color: 'var(--muted)', line: true }] : []),
-		...(r.rolling ? [{ label: 'Rolling average', color: 'var(--text)', line: true }] : [])
+		...(r.previous ? [{ label: 'Period before', color: 'var(--ink-muted)', line: true }] : []),
+		...(r.rolling ? [{ label: 'Rolling average', color: 'var(--ink)', line: true }] : [])
 	]);
 
 	// Horizontal bars: one labelled row per series.
@@ -101,7 +101,7 @@
 		{#each r.series as s (s.key)}
 			{@const v = s.values[0]}
 			<li>
-				<button type="button" class="hrow" onclick={() => onpick?.(0, s.key)} title="Show the logs behind this">
+				<button type="button" class="hrow" onclick={() => onpick?.(0, s.key)} aria-label="Show the logs of {s.label}">
 					<span class="hlabel">{s.label || 'All'}</span>
 					<span class="htrack">
 						{#if r.goal}
@@ -234,10 +234,10 @@
 					<div class="tiprow"><i></i><strong>{fmt(sums[hover])}</strong><span class="muted">Total</span></div>
 				{/if}
 				{#if r.previous}
-					<div class="tiprow"><i style:background="var(--muted)"></i><strong>{fmt(r.previous[hover])}</strong><span class="muted">Period before</span></div>
+					<div class="tiprow"><i style:background="var(--ink-muted)"></i><strong>{fmt(r.previous[hover])}</strong><span class="muted">Period before</span></div>
 				{/if}
 				{#if r.rolling}
-					<div class="tiprow"><i style:background="var(--text)"></i><strong>{fmt(r.rolling[hover])}</strong><span class="muted">Rolling average</span></div>
+					<div class="tiprow"><i style:background="var(--ink)"></i><strong>{fmt(r.rolling[hover])}</strong><span class="muted">Rolling average</span></div>
 				{/if}
 			</div>
 		{/if}
@@ -261,18 +261,18 @@
 		border-radius: 4px;
 	}
 	.grid {
-		stroke: var(--grid);
+		stroke: var(--chart-grid);
 		stroke-width: 1;
 	}
 	.grid.zero {
-		stroke: var(--border);
+		stroke: var(--line);
 	}
 	.axis {
-		fill: var(--muted);
+		fill: var(--ink-muted);
 		font-size: 11px;
 	}
 	.hover {
-		fill: var(--text);
+		fill: var(--ink);
 		opacity: 0.05;
 	}
 	.line {
@@ -282,16 +282,16 @@
 		stroke-linecap: round;
 	}
 	.previous {
-		stroke: var(--muted);
+		stroke: var(--ink-muted);
 		stroke-width: 1.5;
 		opacity: 0.8;
 	}
 	.rolling {
-		stroke: var(--text);
+		stroke: var(--ink);
 		opacity: 0.6;
 	}
 	.dot {
-		stroke: var(--surface);
+		stroke: var(--surface-raised);
 		stroke-width: 2;
 	}
 	.goal {
@@ -310,7 +310,7 @@
 		padding: 0;
 		margin: 0 0 0.4rem;
 		font-size: 0.8rem;
-		color: var(--muted);
+		color: var(--ink-muted);
 	}
 	.legend i {
 		display: inline-block;
@@ -330,8 +330,8 @@
 		top: 0;
 		width: 170px;
 		pointer-events: none;
-		background: var(--surface);
-		border: 1px solid var(--border);
+		background: var(--surface-raised);
+		border: 1px solid var(--line);
 		border-radius: var(--radius-control);
 		padding: 0.4rem 0.55rem;
 		font-size: 0.8rem;
@@ -371,7 +371,7 @@
 		font-size: 0.85rem;
 	}
 	.hrow:hover .htrack {
-		background: var(--grid);
+		background: var(--chart-grid);
 	}
 	.hlabel {
 		overflow: hidden;
@@ -391,7 +391,7 @@
 		min-width: 2px;
 	}
 	.hfill.other {
-		background: var(--muted);
+		background: var(--ink-muted);
 	}
 	.hgoal {
 		position: absolute;
