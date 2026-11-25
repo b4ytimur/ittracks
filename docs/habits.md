@@ -17,7 +17,7 @@ Go to **Habits → New habit**. You choose how to start:
 - **Start blank in the full editor**: every option on one page.
 - **Start a daily journal**: see [Notes and journal](notes-and-journal.md#journal).
 
-To skip this choice and always open the full editor, untick **Ask how to start** in **Settings → New habits**. Tick **Show every section of a habit** there to see all sections without pressing the **+** buttons.
+To skip this choice and always open the full editor, untick **Ask how to start** in **Settings → New habits**. Which lines a new habit starts with is chosen at the end of its page under **On every new habit**, and on any habit's page in **Edit**: press the ones you want there from the start. It is kept per kind (habits, groups, habits you break).
 
 ## A habit's page
 

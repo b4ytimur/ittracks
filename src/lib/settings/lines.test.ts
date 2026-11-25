@@ -15,7 +15,6 @@ const now: Now = {
 	dayNote: false,
 	journalOff: false,
 	guidedSetup: true,
-	showAllSections: false,
 	units: STARTER_KINDS,
 	measures: [],
 	taskTypes: [],

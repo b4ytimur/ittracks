@@ -11,14 +11,14 @@
 	// The list knows nothing about what a row is: the page renders it with `row` and gets moves
 	// back as keys (see list.ts). Drops inside a row only happen where `canDrop` allows them.
 	//
-	// Nesting, the outliner way: a row's `children` can hold another EditableList. Indent drops a
-	// row inside the row it is over (or the right arrow puts it inside the row above); outdent
-	// (`onoutdent`, in a nested list) takes it out to just after the row holding the list, by a
-	// drag left past the list's edge or the left arrow.
+	// Nesting, the outliner way: a row's `children` can hold another EditableList. While a row is
+	// held, height picks the gap and sideways travel the depth: toward the end puts it inside the row
+	// above the gap (as the right arrow does), toward the start takes it out of a nested list, to just
+	// after the row holding it (`onoutdent`, as the left arrow does).
 	import { tick, type Snippet } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { prefersReducedMotion } from 'svelte/motion';
-	import { applyMove, dropPosition, gridDrop, rangeKeys, withDescendants, type Mode, type Move, type Position, type RowContext } from './list';
+	import { applyMove, dropDepth, dropPosition, gridDrop, rangeKeys, withDescendants, type Mode, type Move, type Position, type RowContext } from './list';
 
 	let {
 		items,
@@ -174,11 +174,9 @@
 		dy: number;
 		over: string | null;
 		pos: Position | null;
-		/** Held far enough left of a nested list to outdent. */
+		/** Held far enough toward the start of a nested list to leave it. */
 		out: boolean;
 	} | null>(null);
-	/** How far left of the list's edge the pointer goes to outdent. */
-	const OUTDENT_PX = 16;
 	let raf = 0;
 
 	const rows = () => (list ? Array.from(list.querySelectorAll<HTMLElement>(':scope > li[data-row]')) : []);
@@ -207,9 +205,12 @@
 		if (!drag) return;
 		const d = drag;
 		d.dy = d.y - d.startY + (window.scrollY - d.startScroll);
-		// A nested row follows the pointer left, toward the level it would outdent to.
-		d.dx = axis === 'grid' ? d.x - d.startX : onoutdent ? Math.min(0, d.x - d.startX) : 0;
-		d.out = !!onoutdent && axis === 'y' && !!list && d.x < list.getBoundingClientRect().left - OUTDENT_PX;
+		// Height picks the gap, sideways travel how deep the row joins there; a finger needs twice as much.
+		const indent = parseFloat(getComputedStyle(document.documentElement).fontSize);
+		const rtl = !!list && getComputedStyle(list).direction === 'rtl';
+		const depth = (max: number) => dropDepth(d.x - d.startX, matchMedia('(pointer: coarse)').matches ? 2 * indent : indent, onoutdent ? -1 : 0, max, rtl);
+		d.dx = axis === 'grid' ? d.x - d.startX : 0;
+		d.out = axis === 'y' && depth(0) < 0;
 		if (d.out) {
 			d.over = d.pos = null;
 			return;
@@ -229,12 +230,13 @@
 			const r = others.find((x) => x.getBoundingClientRect().bottom > d.y) ?? others[others.length - 1];
 			// Where on the row is worked out on its own line, not on what sits under it.
 			const head = (layout ? r : (r.querySelector(':scope > .card') ?? r)).getBoundingClientRect();
-			const target = r.dataset.key!;
-			const nest = allowed({ key: d.key, target, position: 'inside' });
-			pos = d.y < head.top ? 'before' : d.y > head.bottom ? 'after' : dropPosition(d.y, head, nest);
-			const m = { key: d.key, target, position: pos };
-			over = allowed(m) && changes(m) ? target : null;
-			if (!over) pos = null;
+			const gap = dropPosition(d.y, head);
+			const above = gap === 'after' ? r : others[others.indexOf(r) - 1];
+			const into = above && { key: d.key, target: above.dataset.key!, position: 'inside' as const };
+			const m: Move = into && depth(allowed(into) ? 1 : 0) === 1 ? into : { key: d.key, target: r.dataset.key!, position: gap };
+			if (allowed(m) && changes(m)) [over, pos] = [m.target, m.position];
+			// On a shelf the held row steps with the line; at the top both depths start at one column.
+			if (pos === 'inside' && onoutdent) d.dx = rtl ? -indent : indent;
 		}
 		d.over = over;
 		d.pos = pos;

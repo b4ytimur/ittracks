@@ -23,6 +23,7 @@
 	import NoteBox from '$lib/NoteBox.svelte';
 	import Markdown from '$lib/Markdown.svelte';
 	import { starterFor, untouched } from '$lib/journal';
+	import { saveSetting } from '$lib/settings/save';
 	import { hasLog, isSuggestion, keepsSuggestions, onlySuggested, type PlaceStart } from '$lib/prefill';
 
 	import type { ActionData, PageData } from './$types';
@@ -615,23 +616,16 @@
 		endRest();
 	}
 
-	// How the places stand: one open and the others a line each, or all open. Kept per habit on this device.
-	const LAYOUT = untrack(() => `log-layout:${data.habitId}`);
-	let layout = $state<'current' | 'all'>('current');
-	onMount(() => {
-		try {
-			if (localStorage.getItem(LAYOUT) === 'all') layout = 'all';
-		} catch {
-			/* storage blocked */
-		}
-	});
-	function setLayout(v: string) {
-		layout = v === 'all' ? 'all' : 'current';
-		try {
-			localStorage.setItem(LAYOUT, layout);
-		} catch {
-			/* storage blocked */
-		}
+	// How the places stand: one open and the others a line each, or all open. Kept per habit, in the account.
+	let picked = $state<'current' | 'all' | null>(null);
+	const layout = $derived(picked ?? data.logLayouts[data.habitId] ?? 'current');
+	async function setLayout(v: string) {
+		picked = v === 'all' ? 'all' : 'current';
+		const { [data.habitId]: _, ...rest } = data.logLayouts;
+		const why = await saveSetting({ logLayouts: v === 'all' ? { ...rest, [data.habitId]: 'all' } : rest }, () => ({ logLayouts: data.logLayouts }), `${data.habitName} shows ${v === 'all' ? 'all of its log open' : 'one open at a time'}.`);
+		// Not saved: it stays as picked for this visit, and says so.
+		if (why) return showError(why);
+		picked = null;
 	}
 
 	/** Correcting a finished log: one Undo per visit, back to what it was. It works from any page. */

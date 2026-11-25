@@ -83,14 +83,14 @@ function tagsWithUses(accountId: string) {
 
 export const load: PageServerLoad = ({ locals, cookies, url }) => {
 	const accountId = locals.account!.id;
-	const { dayStart, ranges, pastDays, nudgeYesterday, dayNote, guidedSetup, showAllSections } = getSettings(accountId);
+	const { dayStart, ranges, pastDays, nudgeYesterday, dayNote, guidedSetup } = getSettings(accountId);
 	const views = getViews(accountId);
 	const s = getStats(accountId);
 	const habits = listHabits(accountId).map((h) => ({ id: h.id, name: h.name, direction: h.direction }));
 	return {
 		username: locals.account!.username,
 		today: userToday(accountId, cookies.get('tz')),
-		settings: { dayStart: dayStart ?? null, ranges, pastDays, nudgeYesterday, dayNote, guidedSetup, showAllSections, units: getKinds(accountId), groupings: getGroupings(accountId), taskTypes: ownTypes(accountId) },
+		settings: { dayStart: dayStart ?? null, ranges, pastDays, nudgeYesterday, dayNote, guidedSetup, units: getKinds(accountId), groupings: getGroupings(accountId), taskTypes: ownTypes(accountId) },
 		packs: getPacks(accountId),
 		plainTypes: PLAIN_TASK_TYPES,
 		tags: tagsWithUses(accountId),

@@ -7,7 +7,7 @@ import { db } from './db';
 import { habit, settings } from './db/schema';
 import { createAccount } from './auth';
 import { saveHabit } from './repo/habits';
-import { getSettings, saveSettings, type Settings } from './settings';
+import { getNewLines, getSettings, saveSettings, type Settings } from './settings';
 import { patchSettings, type SettingsSet } from './settings-patch';
 import { habitForm } from '$lib/forms';
 import type { DayRange } from '$lib/engine/day';
@@ -140,5 +140,31 @@ describe('a line of the settings', () => {
 		undo(r);
 		expect(getGroupings(me)).toEqual(before);
 		expect(patch({ groupings: [] }, { groupings: before })).toHaveProperty('error');
+	});
+
+	it('keeps how a habit’s log is laid out, checked like any setting', () => {
+		const h = crypto.randomUUID();
+		const r = patchSettings(me, { set: { logLayouts: { [h]: 'all' } }, was: { logLayouts: {} } });
+		expect(r).toMatchObject({ now: { logLayouts: { [h]: 'all' } } });
+		expect(getSettings(me).logLayouts).toEqual({ [h]: 'all' });
+		// A page from before that doesn't overwrite it, and only known layouts go in.
+		expect(patchSettings(me, { set: { logLayouts: {} }, was: { logLayouts: { [crypto.randomUUID()]: 'all' } } })).toEqual({ moved: ['logLayouts'] });
+		expect(patchSettings(me, { set: { logLayouts: { [h]: 'sideways' } }, was: { logLayouts: { [h]: 'all' } } })).toHaveProperty('error');
+		patchSettings(me, { set: { logLayouts: {} }, was: { logLayouts: { [h]: 'all' } } });
+		expect(getSettings(me).logLayouts).toEqual({});
+	});
+
+	it('says per kind which lines a new habit starts with; the old switch meant all of them', () => {
+		expect(getNewLines(now())).toEqual({});
+		expect(patch({ newLines: { build: ['levels'] } }, { newLines: {} })).toMatchObject({ now: { newLines: { build: ['levels'] } } });
+		expect(getNewLines(now())).toEqual({ build: ['levels'] });
+		saveSettings(me, { showAllSections: true, newLines: undefined } as Partial<Settings>);
+		const all = getNewLines(now());
+		expect(all.break).toContain('cost');
+		const r = patch({ newLines: { ...all, break: [] } }, { newLines: all });
+		expect(getNewLines(now()).break).toEqual([]);
+		undo(r);
+		expect(getNewLines(now())).toEqual(all);
+		expect(patch({ newLines: { plant: ['x'] } }, { newLines: all })).toHaveProperty('error');
 	});
 });

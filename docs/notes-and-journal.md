@@ -29,7 +29,7 @@ A journal is a normal habit with a writing field. Set one up from **Habits → N
 - **Add a Journal habit**: a few lines each evening with a daily prompt, and a mood you can chart in Stats.
 - **Add a day note to Today**: one free note per day, no streak.
 
-The journal is **History** with **Notes only** on: everything you wrote, by day, newest first. **Search** for words in any entry, filter by **Habit** and **Mood**, and see **On this day**: what you wrote a week, a month and a year ago. **Edit** opens an entry's log.
+The journal is **History** with **Notes only** on: everything you wrote, by day, newest first: the day's own note, then each habit with its note under it. **Search** for words in any entry, filter by **Habit** and **Mood**, and see **On this day**: what you wrote a week, a month and a year ago. **Edit** opens an entry's log.
 
 ## The day note
 
