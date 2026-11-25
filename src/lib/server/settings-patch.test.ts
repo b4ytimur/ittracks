@@ -112,6 +112,12 @@ describe('a line of the settings', () => {
 		undo(r);
 		expect(other()).toEqual(before);
 		expect(getKinds(me)).toEqual(STARTER_KINDS);
+		// A word another field already uses as its own is refused: the Undo would take that field along.
+		const own = saveTask(me, null, taskForm.parse({ name: 'Own', restTimerEnabled: false, restTimerSeconds: 90, tags: [], parts: [], metrics: metricsFromType({ key: 'x', name: 'x', description: '', restTimerEnabled: false, metrics: [{ name: 'Load', type: 'number', unit: 'plates', repeats: true, step: null }] }, STARTER) }))!;
+		const asPlates = STARTER_KINDS.map((k) => ({ ...k, units: k.units.map((x) => (x.name === 'lb' ? { ...x, name: 'plates', also: ['lbs', 'lb'] } : x)) }));
+		expect(patch({ units: asPlates }, { units: getKinds(me) }, {}, { lb: 'plates' })).toHaveProperty('error');
+		expect(getKinds(me)).toEqual(STARTER_KINDS);
+		expect(db.select({ unit: metric.unit }).from(metric).where(eq(metric.taskId, own)).get()!.unit).toBe('plates');
 		// A rename to a word that is no unit moves nothing.
 		patch({ units: kinds }, { units: getKinds(me) }, {}, { kg: 'nowhere' });
 		expect(getUnits(me).find('kg')).not.toBeNull();

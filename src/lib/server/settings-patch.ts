@@ -5,7 +5,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { checkSettings, cleanSettings } from '$lib/rules/settings';
 import { firstError } from '$lib/forms';
-import { kindsProblem, unitKinds, unitWord } from '$lib/units';
+import { kindsProblem, unitKinds, unitTable, unitWord } from '$lib/units';
 import { db } from './db';
 import { metric, task } from './db/schema';
 import { renameRanges } from './repo/ranges';
@@ -40,13 +40,13 @@ export const settingsPatch = z.object({
 
 export type SettingsResult = { was: SettingsSet; now: SettingsSet; renames: Record<string, string>; unitRenames: Record<string, string> } | { error: string } | { moved: string[] };
 
+/** The account's fields written in this unit. */
+const writtenIn = (accountId: string, unit: string) => and(sql`lower(trim(${metric.unit})) = ${unitWord(unit)}`, inArray(metric.taskId, db.select({ id: task.id }).from(task).where(eq(task.accountId, accountId))));
+const fieldsIn = (accountId: string, unit: string) => db.select({ id: metric.id }).from(metric).where(writtenIn(accountId, unit)).all();
+
 /** Fields written in a unit's old name get its new one. Their values mean the same. */
 function renameUnits(accountId: string, renames: [string, string][]) {
-	for (const [from, to] of renames)
-		db.update(metric)
-			.set({ unit: to })
-			.where(and(sql`lower(trim(${metric.unit})) = ${unitWord(from)}`, inArray(metric.taskId, db.select({ id: task.id }).from(task).where(eq(task.accountId, accountId)))))
-			.run();
+	for (const [from, to] of renames) db.update(metric).set({ unit: to }).where(writtenIn(accountId, from)).run();
 }
 
 const ordered = (v: unknown): string =>
@@ -70,6 +70,13 @@ export function patchSettings(accountId: string, body: unknown): SettingsResult 
 	const block = checkSettings(next).find((i) => i.severity === 'block');
 	if (block) return { error: block.reason };
 	const clean = cleanSettings(next);
+	// A unit's rename counts when the new name is a unit now, and the old one isn't.
+	const isUnit = (n: string) => clean.units!.some((k) => k.units.some((x) => unitWord(x.name) === unitWord(n)));
+	const moves = Object.entries(p.unitRenames).filter(([from, to]) => from !== to && isUnit(to) && (unitWord(from) === unitWord(to) || !isUnit(from)));
+	// Fields that use the new name as a word of its own would become this unit, and its Undo would take them along.
+	const before = unitTable(cur.units!);
+	const taken = moves.find(([from, to]) => !before.same(from, to) && fieldsIn(accountId, to).length);
+	if (taken) return { error: `“${taken[1]}” is already on ${fieldsIn(accountId, taken[1]).length === 1 ? 'a field' : 'fields'} as a word of its own. Pick another name.` };
 	// What it clears with it belongs to this change too.
 	const changed = (Object.keys(fields.shape) as (keyof SettingsSet)[]).filter((k) => ordered(cur[k]) !== ordered(clean[k]));
 	const pick = (s: Settings) => Object.fromEntries(changed.map((k) => [k, s[k] ?? null])) as SettingsSet;
@@ -78,9 +85,6 @@ export function patchSettings(accountId: string, body: unknown): SettingsResult 
 	const has = (n: string) => clean.ranges.some((r) => r.name === n);
 	const renames = new Map(Object.entries(p.renames).filter(([from, to]) => from !== to && has(to) && !has(from)));
 	renameRanges(accountId, renames);
-	// A unit's rename counts when the new name is a unit now, and the old one isn't.
-	const isUnit = (n: string) => clean.units!.some((k) => k.units.some((x) => unitWord(x.name) === unitWord(n)));
-	const moves = Object.entries(p.unitRenames).filter(([from, to]) => from !== to && isUnit(to) && (unitWord(from) === unitWord(to) || !isUnit(from)));
 	renameUnits(accountId, moves);
 	return { was: pick(cur), now: pick(clean), renames: Object.fromEntries(renames), unitRenames: Object.fromEntries(moves) };
 }
