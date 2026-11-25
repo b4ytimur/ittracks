@@ -3,7 +3,7 @@
 	// adding it takes one press. Under it, in lines: what it adds, what it brings and what is yours
 	// already. Inside the page's own form; the fields are named for the server's add action.
 	import { describeSchedule, weekdayNames } from '$lib/describe';
-	import { applyAnswers, fromTemplate, type TemplateAnswers, type TemplateFile } from '$lib/template';
+	import { applyAnswers, fromTemplate, hasPlanStart, type TemplateAnswers, type TemplateFile } from '$lib/template';
 
 	let {
 		tpl,
@@ -21,7 +21,7 @@
 		habitNames?: string[];
 		/** Your Area names, lower case. */
 		areaNames?: string[];
-		/** The pack that comes with it. */
+		/** The packs that come with it, in words. */
 		brings?: string;
 	} = $props();
 
@@ -33,6 +33,10 @@
 	// svelte-ignore state_referenced_locally
 	let remind = $state(tpl.habit.remind);
 	let addAreas = $state(true);
+	/** When its plan starts, for one with days that count from a start (a rotation, phases). */
+	// svelte-ignore state_referenced_locally
+	let start = $state(today);
+	const asks = $derived(hasPlanStart(tpl));
 
 	const toggleDay = (key: string, d: number) => {
 		const cur = (answers[key] as number[]) ?? [];
@@ -42,7 +46,7 @@
 	const made = $derived.by(() => {
 		let n = 0;
 		const filled = applyAnswers(tpl, $state.snapshot(answers));
-		const m = fromTemplate(filled, today, () => `id${n++}`);
+		const m = fromTemplate(filled, today, () => `id${n++}`, asks && start ? start : today);
 		const byKey = new Map<string | null, { habit: typeof m.habit; depth: number }>([[null, { habit: m.habit, depth: 0 }]]);
 		const inside = m.children.map((c) => {
 			const parent = byKey.get(c.parent);
@@ -88,6 +92,13 @@
 			<div class="field"><label class="label" for="q-{q.key}">{q.label}</label><input id="q-{q.key}" type="time" class="short" name="q_{q.key}" bind:value={answers[q.key]} /></div>
 		{/if}
 	{/each}
+	{#if asks}
+		<div class="field">
+			<label class="label" for="tpl-start">Its plan starts on</label>
+			<input id="tpl-start" type="date" class="short" name="start" bind:value={start} required />
+			<p class="meta">{start < today ? 'A day before today puts you where the plan is now. Nothing before today counts.' : start > today ? 'Nothing is due before then.' : 'Today, unless you pick another day.'}</p>
+		</div>
+	{/if}
 	<div class="field">
 		<label class="label" for="tpl-name">Called</label>
 		<input id="tpl-name" name="name" bind:value={name} required maxlength="120" />

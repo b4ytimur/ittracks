@@ -23,7 +23,7 @@
 {#if data.saved}<p class="notice" role="status"><span class="notice-text">Saved to your Gallery. Add it from here whenever you like, or download it to send to someone.</span></p>{/if}
 
 <form onsubmit={add}>
-	<TemplateSentence tpl={data.template} today={data.today} libraryNames={data.libraryNames} habitNames={data.habitNames} areaNames={data.areaNames} brings={data.pack ? `The ${data.pack} pack: ${data.brings}` : ''} />
+	<TemplateSentence tpl={data.template} today={data.today} libraryNames={data.libraryNames} habitNames={data.habitNames} areaNames={data.areaNames} brings={data.brings} />
 	{#if problem}<p class="error" role="alert">{problem}</p>{/if}
 	<div class="ob-add l-cluster"><button class="primary hit" aria-disabled={busy}>{busy ? 'Adding…' : inside ? `Add these ${inside + 1} habits` : 'Add this habit'}</button><span class="meta muted">Anything can be changed on its page afterwards.</span></div>
 </form>

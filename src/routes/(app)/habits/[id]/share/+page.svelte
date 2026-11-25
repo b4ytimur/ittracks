@@ -34,25 +34,24 @@
 	const metricLabel = (m: (typeof data.metrics)[number]) =>
 		`${m.task}: ${m.name}${m.target !== null ? ` (target ${m.target}${m.unit ? ' ' + m.unit : ''})` : ''}`;
 
+	/** What a starting number reads as for the field it scales first: its label, unit and starting value. */
+	function suggested(id: string | undefined) {
+		const m = data.metrics.find((x) => x.id === id);
+		return { label: m ? `Your starting ${m.name.toLowerCase()}` : 'Your starting number', unit: m?.unit ?? '', default: m?.target ?? 0 };
+	}
 	function addNumber() {
 		const first = data.metrics.find((m) => !f.numbers.some((n) => n.metrics.includes(m.id)));
-		f.numbers.push({
-			label: first ? `Your starting ${first.name.toLowerCase()}` : 'Your starting number',
-			unit: first?.unit ?? '',
-			metrics: first ? [first.id] : [],
-			default: first?.target ?? 0,
-			scale: true
-		});
+		f.numbers.push({ ...suggested(first?.id), metrics: first ? [first.id] : [], scale: true });
 	}
 	function toggleMetric(i: number, id: string) {
 		const n = f.numbers[i];
+		const was = suggested(n.metrics[0]);
 		n.metrics = n.metrics.includes(id) ? n.metrics.filter((x) => x !== id) : [...n.metrics, id];
-		// The first field picked suggests the starting number and unit.
-		if (n.metrics.length === 1 && n.metrics[0] === id) {
-			const m = data.metrics.find((x) => x.id === id);
-			if (m?.target !== null && m?.target !== undefined && !n.default) n.default = m.target;
-			if (m && !n.unit) n.unit = m.unit;
-		}
+		// What still reads as the first field's suggestion follows the field that is first now; what you typed stays.
+		const now = suggested(n.metrics[0]);
+		if (n.label === was.label) n.label = now.label;
+		if (n.unit === was.unit) n.unit = now.unit;
+		if (n.default === was.default) n.default = now.default;
 	}
 	// The file as it would go out, read the way the other person's page reads it.
 	let previewText = $state('');

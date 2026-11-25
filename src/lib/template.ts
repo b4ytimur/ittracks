@@ -40,7 +40,7 @@ export const TEMPLATE_FORMAT = 'ittracks-template';
  * Variants (the follow schedule's `map`, routine Variant key -> the habit's own key).
  * Older files still import; the new fields take their defaults.
  */
-export const TEMPLATE_VERSION = 10;
+export const TEMPLATE_VERSION = 11;
 
 const key = z.string().min(1).max(64);
 
@@ -223,7 +223,7 @@ export type TemplateChild = z.infer<typeof templateChild>;
 
 export const templateFile = z.object({
 	format: z.literal(TEMPLATE_FORMAT),
-	version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6), z.literal(7), z.literal(8), z.literal(9), z.literal(10)]),
+	version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6), z.literal(7), z.literal(8), z.literal(9), z.literal(10), z.literal(11)]),
 	name: z.string().min(1).max(120),
 	/** Version 4: a view template this habit works well with (e.g. "gym"). Only ever offered, never applied by itself. */
 	view: z.string().max(32).nullable().default(null),
@@ -233,7 +233,9 @@ export const templateFile = z.object({
 	habit: templateHabit,
 	/** Version 8: the habits inside it, parents before the habits inside them. */
 	children: z.array(templateChild).max(100).default([]),
-	tasks: z.array(templateTask)
+	tasks: z.array(templateTask),
+	/** Version 11: starter packs its Tasks use (their units, groupings), by id; adding it takes those you don't have. */
+	packs: z.array(z.string().max(40)).max(10).default([])
 });
 export type TemplateFile = z.infer<typeof templateFile>;
 
@@ -288,6 +290,8 @@ export interface ShareDetails {
 	withNote?: boolean;
 	/** Leave out the Tasks' How to notes (default: they travel, they explain the Task). */
 	noHowTo?: boolean;
+	/** Starter packs its Tasks use (lib/packs.ts packsUsed), for the other side to take. */
+	packs?: string[];
 }
 
 /** A habit inside the one being shared: its id, the habit it sits in, and its form. */
@@ -442,7 +446,8 @@ export function toTemplate(
 							]
 						: []
 			)
-		}))
+		})),
+		packs: share.packs ?? []
 	};
 }
 
@@ -467,17 +472,24 @@ export interface MadeChild extends MadeHabit {
 	parent: string | null;
 }
 
+/** It has days that count from a start (a rotation, an interval, phases), so adding it asks when it starts. */
+export const hasPlanStart = (tpl: TemplateFile) => [tpl.habit, ...tpl.children].some((h) => !!h.schedule && typeof h.schedule === 'object' && 'start' in h.schedule);
+
 /**
  * Turn a template into new Tasks and new Habits with fresh ids: the file's habit, and the habits
  * inside it in the file's order (their `parentId` is left for the caller, who saves them).
- * `newId` is injectable for tests; `startDate` is today's date.
+ * `newId` is injectable for tests; `today` is today's date. `start` is when its plan starts: its
+ * rotations, intervals and phases count from it. One before today puts you where the plan is now,
+ * with nothing before today counted; one after today starts the habits that day.
  * Identity statements come back separately; the caller links them to real Identities.
  */
 export function fromTemplate(
 	tpl: TemplateFile,
-	startDate: string,
-	newId: () => string = () => crypto.randomUUID()
+	today: string,
+	newId: () => string = () => crypto.randomUUID(),
+	start = today
 ): { tasks: { id: string; form: TaskForm }[]; habit: HabitForm; identities: string[]; children: MadeChild[] } {
+	const startDate = start > today ? start : today;
 	const taskIds = new Map(tpl.tasks.map((t) => [t.key, newId()]));
 	const metricIds = new Map<string, string>();
 	const tasks = tpl.tasks.map((t) => {
@@ -604,8 +616,8 @@ export function fromTemplate(
 			progression: th.progression,
 			areaId: null
 		};
-		// Rotations, intervals and phases start from the day of import.
-		if (habit.schedule && 'start' in habit.schedule) habit.schedule = { ...habit.schedule, start: startDate };
+		// Rotations, intervals and phases count from the plan's start (the day it is added, unless asked).
+		if (habit.schedule && 'start' in habit.schedule) habit.schedule = { ...habit.schedule, start };
 		if (habit.schedule?.kind === 'phases') habit.schedule = tidyPhases(habit.schedule);
 		return { made: { habit, identities: th.identities }, variantIds };
 	};

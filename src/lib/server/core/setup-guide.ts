@@ -37,7 +37,7 @@ const OVERVIEW = {
 		'5. Only when the user says yes: call setup again with the same changes, apply: true and the check. Then say what changed; setup_undo with the undo id takes it all back for a day.'
 	],
 	changes: {
-		add_template: '{ template } or { from: "<slug or id>", answers: { "<question key>": value } }, plus reuse (default true: a Task named like one in the Library uses that one) and remind. Best for anything new with new Tasks, several Variants, habits inside, or phases. Topic "template".',
+		add_template: '{ template } or { from: "<slug or id>", answers: { "<question key>": value } }, plus reuse (default true: a Task named like one in the Library uses that one), remind, and start ("YYYY-MM-DD": when its rotations, intervals and phases start; before today puts it where the plan is now). It takes the starter packs the template names that the account lacks. Best for anything new with new Tasks, several Variants, habits inside, or phases. Topic "template".',
 		add_habit: '{ habit }: a new habit using Tasks already in the Library (by name), or none (a plain yes/no habit). Topic "habit".',
 		edit_habit: '{ habit: "<id or name>", set: { only the fields that change }, scheduleApplies: "today" (default: past days keep their plan) or "past" }. Read the form with setup_read first.',
 		add_task: '{ task }: a new Library Task. Topic "task".',

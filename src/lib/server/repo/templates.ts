@@ -46,10 +46,12 @@ export function addTemplate(
 		remind?: boolean;
 		/** Add the template's Areas that you don't have yet (default: on). Off: only use Areas you have. */
 		addAreas?: boolean;
+		/** When its plan starts (fromTemplate); the day it is added unless given. */
+		start?: string;
 	}
 ): AddResult | { error: string } {
 	const filled = applyAnswers(tpl, opts.answers ?? {});
-	const { tasks, habit, identities, children } = fromTemplate(filled, opts.today);
+	const { tasks, habit, identities, children } = fromTemplate(filled, opts.today, undefined, opts.start ?? opts.today);
 	if (opts.remind && filled.habit.remind && (habit.cue.time || habit.cue.range)) habit.remind = true;
 	// Each habit inside comes after the one it sits in, so it can be put there once that one is saved.
 	const before = new Set<string | null>([null]);
@@ -177,13 +179,15 @@ export function readAddForm(f: FormData, tpl: TemplateFile) {
 	}
 	const named = structuredClone(tpl);
 	const name = String(f.get('name') ?? '').trim().slice(0, 120);
+	const start = String(f.get('start') ?? '');
 	if (name) named.habit.name = name;
 	return {
 		tpl: named,
 		answers,
 		reuse: f.get('separate') !== 'on',
 		remind: plain ? tpl.habit.remind : f.get('remind') === 'on',
-		addAreas: f.get('addAreas') === 'on'
+		addAreas: f.get('addAreas') === 'on',
+		start: /^\d{4}-\d{2}-\d{2}$/.test(start) && !Number.isNaN(Date.parse(start)) ? start : undefined
 	};
 }
 

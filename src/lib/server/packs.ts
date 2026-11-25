@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import { z } from 'zod';
-import { drop, packById, packState, take, type PackState } from '$lib/packs';
+import { drop, packById, packState, take, type Pack, type PackState } from '$lib/packs';
 import { cardsUsing } from '$lib/stats/model';
 import { unitTable } from '$lib/units';
 import { db } from './db';
@@ -55,6 +55,24 @@ export function takePack(accountId: string, id: string): PackResult {
 		for (const t of made) db.insert(tag).values({ ...t, accountId }).run();
 		return { undo: { before, after: stateOf(accountId), made, gone: [] }, kept: [] };
 	});
+}
+
+/** The packs of these (by id) that the account hasn't taken. */
+export function missingPacks(accountId: string, ids: readonly string[]): Pack[] {
+	const have = getPacks(accountId);
+	return [...new Set(ids)].filter((id) => !have.includes(id)).flatMap((id) => packById(id) ?? []);
+}
+
+/** Take each of these the account hasn't taken, with one Undo for them all; null when nothing was taken. */
+export function takePacks(accountId: string, ids: readonly string[]): PackUndo | null {
+	const before = stateOf(accountId);
+	const made: PackUndo['made'] = [];
+	for (const p of missingPacks(accountId, ids)) {
+		const r = takePack(accountId, p.id);
+		if ('undo' in r) made.push(...r.undo.made);
+	}
+	const after = stateOf(accountId);
+	return ordered(before) === ordered(after) ? null : { before, after, made, gone: [] };
 }
 
 export function dropPack(accountId: string, id: string): PackResult {

@@ -11,7 +11,8 @@ import { templateFile, toTemplate, type InsideHabit, type ShareDetails, type Tem
 import { scheduleDays, shareDetails, shareForm, type ShareCtx } from '$lib/share';
 import { checkShare, shareRules } from '$lib/rules/share';
 import { normalize } from '$lib/rules/core';
-import { getGroups } from './settings';
+import { getGroups, getPacks } from './settings';
+import { packsUsed } from '$lib/packs';
 import type { HabitForm, TaskForm } from '$lib/forms';
 import { isFollow, isGroup } from '$lib/engine/schedule';
 import { standaloneSchedule } from '$lib/engine/follow';
@@ -90,7 +91,8 @@ export function shareFile(accountId: string, habitId: string, opts: ShareOptions
 			identities: new Map(listIdentities(accountId).map((i) => [i.id, i.statement])),
 			areas: new Map(listAreas(accountId).map((a) => [a.id, a.name]))
 		},
-		opts,
+		// The packs its Tasks' units and tags come from travel by name, for the other side to take.
+		{ ...opts, packs: packsUsed(getPacks(accountId), [...tasks.values()]) },
 		inside
 	);
 }

@@ -155,6 +155,26 @@ export const PACKS: Pack[] = [
 		boards: [{ id: 'learner', shape: 'time', name: 'Learner', blurb: 'Minutes per week, running totals and minutes by weekday.' }]
 	}
 ];
+/**
+ * Which of these packs (by id) the Tasks use: a field written in one of its units, or a tag that is
+ * one of its grouping's members. A shared file names them, so the other side can take them too.
+ */
+export function packsUsed(ids: readonly string[], tasks: readonly { metrics: readonly { unit: string }[]; tags: readonly { name: string }[] }[]): string[] {
+	const units = new Set(tasks.flatMap((t) => t.metrics.map((m) => unitWord(m.unit))).filter(Boolean));
+	const tags = new Set(tasks.flatMap((t) => t.tags.map((g) => unitWord(g.name))));
+	return ids.filter((id) => {
+		const p = packById(id);
+		return (
+			!!p &&
+			(p.kinds.some((k) => k.units.some((u) => [u.name, ...(u.also ?? [])].some((w) => units.has(unitWord(w))))) ||
+				p.groupings.some((g) => g.members.some((m) => tags.has(unitWord(m)))))
+		);
+	});
+}
+
+/** What packs bring, said in one line each: "The Gym pack: Weight with kg and lb, …". */
+export const bringsLine = (packs: readonly Pack[]) => packs.map((p) => `The ${p.name} pack: ${p.brings}`).join(' ');
+
 /** What an account that was there before packs has: what used to be built in. */
 export const PACKS_BEFORE = ['gym', 'running', 'study'];
 export const packById = (id: string) => PACKS.find((p) => p.id === id);

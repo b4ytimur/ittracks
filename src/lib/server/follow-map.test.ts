@@ -208,7 +208,7 @@ describe('a habit that follows its routine with a Variant map', () => {
 		});
 		const file = roundTrip(shareFile(me, r.id));
 		expect(file.version).toBe(TEMPLATE_VERSION);
-		expect(TEMPLATE_VERSION).toBe(10);
+		expect(TEMPLATE_VERSION).toBe(11);
 		// By keys: the routine's v2 and v4 (Lower A, Lower B), Light is the habit's v2.
 		expect(file.children[0].schedule).toEqual({ kind: 'follow', variantId: 'v1', on: ['v2', 'v4'], map: { v4: 'v2' } });
 

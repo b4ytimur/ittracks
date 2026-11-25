@@ -28,7 +28,7 @@ import { archiveHabit, unarchiveHabit } from '../habit-actions';
 import { shareFile } from '../share';
 import { restoreSnapshot, withSnapshot } from '../snapshot';
 import { restoreTaskSnapshot, withTaskSnapshot } from '../task-snapshot';
-import { takePack, undoPack, unitsWith, type PackUndo } from '../packs';
+import { takePacks, undoPack, unitsWith, type PackUndo } from '../packs';
 import { getPacks, getUnits, getViews } from '../settings';
 import { changeViews } from '../views';
 import { DEFAULT_VIEW, emptyState, FEATURES, GROUPS, HABIT_LINES, LAYOUTS, LINES, PAGE_LABEL, PAGES, SECTIONS, SORTS, STATS, TEMPLATES, WIDGETS, DONE_MODES, type ViewSettings } from '$lib/views';
@@ -61,7 +61,8 @@ export const setupChange = z.discriminatedUnion('op', [
 		from: z.string().trim().max(200).optional().describe('Or a template slug or id.'),
 		answers: z.record(z.string(), z.union([z.number(), z.string().max(20), z.array(z.number().int().min(0).max(6)).max(7)])).optional(),
 		reuse: z.boolean().optional(),
-		remind: z.boolean().optional()
+		remind: z.boolean().optional(),
+		start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('When its plan starts (rotations, intervals, phases count from it). Before today: where the plan is now, nothing before today counted. Default: today.')
 	}),
 	z.object({ op: z.literal('archive'), habit: ref.optional(), task: ref.optional(), archived: z.boolean().optional() }),
 	z.object({ op: z.literal('save_template'), habit: ref, name: z.string().trim().min(1).max(120).optional(), description: z.string().max(2000).optional() }),
@@ -518,13 +519,13 @@ const changedFields = (a: object | null, b: object | null) =>
 	);
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** A ready-made template (with the starter pack it brings) or a saved one. */
-function templateFrom(run: Run, from: string): { tpl: TemplateFile; pack?: string } {
+/** A ready-made template (with the starter pack it brings) or a saved one (with the packs it names). */
+function templateFrom(run: Run, from: string): { tpl: TemplateFile; packs: string[] } {
 	const pack = PACK_OF[from] && !getPacks(run.accountId).includes(PACK_OF[from]) ? packById(PACK_OF[from]) : undefined;
 	const builtIn = galleryItem(from, pack ? unitsWith(run.accountId, pack.id) : getUnits(run.accountId));
-	if (builtIn) return { tpl: builtIn.template, pack: pack?.id };
+	if (builtIn) return { tpl: builtIn.template, packs: pack ? [pack.id] : [] };
 	const saved = getSavedTemplate(run.accountId, from);
-	if (saved) return { tpl: saved.template };
+	if (saved) return { tpl: saved.template, packs: saved.template.packs };
 	throw new ActionError('not_found', `No template “${from}”. setup_read with ref "templates" lists them.`);
 }
 
@@ -631,27 +632,26 @@ const OPS: { [K in SetupChange['op']]: Op<K> } = {
 	},
 	add_template: (run, c) => {
 		let tpl: TemplateFile;
-		let packId: string | undefined;
-		if (c.from) ({ tpl, pack: packId } = templateFrom(run, c.from));
+		let packs: string[] = [];
+		if (c.from) ({ tpl, packs } = templateFrom(run, c.from));
 		else if (c.template) {
 			const t = c.template;
 			const name = isObj(t.habit) && typeof t.habit.name === 'string' ? t.habit.name : 'Template';
 			const p = templateFile.safeParse(tidyTemplate({ format: TEMPLATE_FORMAT, version: TEMPLATE_VERSION, name, tasks: [], ...t }));
 			if (!p.success) throw zodError('Template', p.error);
 			tpl = p.data;
+			packs = tpl.packs;
 		} else throw invalid('add_template needs a template, or from: a template\'s slug or id.');
 		// Say which habit and field is wrong, before adding says only that something is.
-		const made = fromTemplate(applyAnswers(tpl, c.answers ?? {}), run.today);
+		const made = fromTemplate(applyAnswers(tpl, c.answers ?? {}), run.today, undefined, c.start ?? run.today);
 		for (const h of [made.habit, ...made.children.map((x) => x.habit)]) {
 			const p = habitForm.safeParse(h);
 			if (!p.success) throw zodError(`Template habit “${h.name}”`, p.error);
 		}
-		// A ready-made template brings its starter pack (units, groupings, measures) first, as the Gallery does.
-		if (packId) {
-			const taken = takePack(run.accountId, packId);
-			if ('undo' in taken) run.undo.push({ k: 'pack', undo: taken.undo });
-		}
-		const r = addTemplate(run.accountId, tpl, { today: run.today, answers: c.answers, reuse: c.reuse ?? true, remind: c.remind });
+		// A template brings the starter packs it uses (units, groupings, measures) first, as the Gallery does.
+		const taken = takePacks(run.accountId, packs);
+		if (taken) run.undo.push({ k: 'pack', undo: taken });
+		const r = addTemplate(run.accountId, tpl, { today: run.today, answers: c.answers, reuse: c.reuse ?? true, remind: c.remind, start: c.start });
 		if ('error' in r) throw invalid(r.error);
 		if (c.key) run.made.habits.set(c.key, r.habitId);
 		for (const h of r.made.habits) run.touched.habits.add(h);
