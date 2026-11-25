@@ -1,5 +1,5 @@
 // Conflict rules for the Task editor and its Metrics. Ids (M1...) match the proposal.
-import type { MetricForm, TaskForm } from '../forms';
+import { partForm, taskForm, type MetricForm, type PartForm, type TaskForm } from '../forms';
 import { check, defineRules, evaluate, exclusive, independent, normalize, onlyWhen, type Issue } from './core';
 import { archive, definePolicies, display, locked, migrate, pastIssues, removedItems, unguarded, versioned } from './history';
 import { effectiveUnit, STARTER, type UnitChange, type UnitChoice, type UnitTable } from '../units';
@@ -96,6 +96,26 @@ export function checkTask(input: TaskForm): { form: TaskForm; errors: Issue[]; w
 		errors: issues.filter((i) => i.severity === 'block'),
 		warnings: issues.filter((i) => i.severity === 'warn')
 	};
+}
+
+const metricShape = taskForm.shape.metrics.element;
+/** A field still being typed, that a save would refuse: no name yet, an option without one, a Choice with one option. */
+export const unfinishedMetric = (m: MetricForm) =>
+	!metricShape.safeParse(m).success || evaluate(metricRules, normalize(metricRules, keepScores(m), undefined).form, undefined).some((i) => i.severity === 'block');
+const unfinishedPart = (p: PartForm) => !partForm.safeParse(p).success;
+
+/**
+ * What an autosave sends of the Task's fields and parts: one still being typed waits, a new one
+ * left out and a saved one as it was saved, so the rest saves and nothing is refused mid-typing.
+ */
+export function readyToSave(f: TaskForm, saved: Pick<TaskForm, 'metrics' | 'parts'>): TaskForm {
+	const keep = <T extends { id: string }>(items: T[], was: T[], unfinished: (x: T) => boolean) =>
+		items.flatMap((x) => {
+			if (!unfinished(x)) return [x];
+			const old = was.find((w) => w.id === x.id);
+			return old ? [old] : [];
+		});
+	return { ...f, metrics: keep(f.metrics, saved.metrics, unfinishedMetric), parts: keep(f.parts, saved.parts, unfinishedPart) };
 }
 
 // ---------- history: what an edit may do to data already logged (rules/history.ts) ----------

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { habitForm, taskForm, type HabitForm, type TaskForm } from '../forms';
 import { blocked, get, set } from './core';
 import { checkHabit, habitRules, slotRules } from './habit';
-import { checkTask, metricRules } from './task';
+import { checkTask, metricRules, readyToSave } from './task';
 import { checkSettings, cleanSettings, overlappingRanges, settingsRules } from './settings';
 import type { Settings } from '../server/settings';
 import { fromTemplate } from '../views';
@@ -353,6 +353,27 @@ describe('task rules', () => {
 			expect(checkTask(t).errors.length).toBeGreaterThan(0);
 		});
 	}
+});
+
+describe('what an autosave of a Task sends', () => {
+	it('leaves out a field or step still being typed, keeps a saved one as saved, and sends the rest', () => {
+		const saved = task();
+		const t = task();
+		t.metrics[0] = { ...t.metrics[0], name: 'Sentences' };
+		const blank = { ...t.metrics[0], id: crypto.randomUUID(), name: '' };
+		const oneOption = { ...t.metrics[0], id: crypto.randomUUID(), name: 'Mood', type: 'choice' as const, repeats: false, choices: [opt('Great')] };
+		const twoOptions = { ...oneOption, id: crypto.randomUUID(), name: 'Energy', choices: [opt('High'), opt('Low')] };
+		t.metrics.push(blank, oneOption, twoOptions);
+		t.parts = [{ kind: 'step', id: crypto.randomUUID(), name: '' }];
+		const sent = readyToSave(t, saved);
+		expect(sent.metrics.map((m) => m.name)).toEqual(['Sentences', 'Energy']);
+		expect(sent.parts).toEqual([]);
+		expect(checkTask(sent).errors).toEqual([]);
+
+		// A saved field emptied while typing goes out as it was saved.
+		t.metrics[0] = { ...t.metrics[0], name: ' ' };
+		expect(readyToSave(t, saved).metrics[0].name).toBe('Reps');
+	});
 });
 
 describe('settings rules', () => {

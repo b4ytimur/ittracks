@@ -12,6 +12,7 @@
 	import InlineText from '$lib/ui/InlineText.svelte';
 	import { invalidateAll } from '$app/navigation';
 	import { runAction, showToast, undoWith } from '$lib/toast.svelte';
+	import { goneAt } from '$lib/undelete';
 	import BulkBar from '$lib/bulk/BulkBar.svelte';
 	import { unitOptions } from '$lib/bulk/catalog';
 	import { units } from '$lib/units-here';
@@ -112,10 +113,12 @@
 	}
 	async function archive(t: Task) {
 		const to = !t.archived;
-		patch(t.id, { archived: to });
+		const { deleteAfter } = t;
+		// Put back, for a deleted one: brought back, it isn't about to go any more.
+		patch(t.id, { archived: to, deleteAfter: null });
 		const r = await runAction(to ? '/library?/archive' : '/library?/unarchive', { id: t.id });
 		if (!r.ok) {
-			patch(t.id, { archived: !to });
+			patch(t.id, { archived: !to, deleteAfter });
 			return showToast(r.error ?? "Couldn't change it. Are you online?");
 		}
 		// The row shows its own way back until editing ends.
@@ -141,7 +144,9 @@
 		mode = m;
 	};
 	const metaOf = (t: Task) =>
-		[view.group === 'area' || areaId ? '' : area(t.areaId)?.name, t.usedIn.length ? `In ${t.usedIn.join(', ')}` : ''].filter(Boolean).join(' · ');
+		t.deleteAfter
+			? `Deleted. It goes for good with its logs on ${goneAt(t.deleteAfter)}.`
+			: [view.group === 'area' || areaId ? '' : area(t.areaId)?.name, t.usedIn.length ? `In ${t.usedIn.join(', ')}` : ''].filter(Boolean).join(' · ');
 </script>
 
 <svelte:head><title>Library · ittracks</title></svelte:head>
@@ -226,7 +231,7 @@
 		href={(t) => `/library/${t.id}`}
 		itemClass={(t) => (struck.has(t.id) ? 'struck' : '')}
 		onremove={archive}
-		removeLabel={(t) => (t.archived ? 'Unarchive' : 'Archive')}
+		removeLabel={(t) => (t.deleteAfter ? 'Put back' : t.archived ? 'Unarchive' : 'Archive')}
 		ariaLabel={g.label || 'Tasks'}
 	>
 		{#snippet row(t)}

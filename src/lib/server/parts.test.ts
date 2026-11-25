@@ -101,6 +101,15 @@ describe('saving parts', () => {
 		expect(checkTaskLinks(me, push.id, { parts: [inside(circuit.id)] })).toMatch(/already has this Task inside it/);
 		expect(checkTaskLinks(me, push.id, { parts: [inside(stepRow.id)] })).toMatch(/Library/);
 	});
+
+	it('holds a new Task to the same depth limit as a saved one', () => {
+		let below = libTask('Level 1', null).id;
+		const chain = [below];
+		for (const n of [2, 3, 4, 5]) chain.push((below = libTask(`Level ${n}`, null, [inside(below)]).id));
+		// Level 4 is 4 deep with the new Task on top; Level 5 would make it 5.
+		expect(checkTaskLinks(me, null, { parts: [inside(chain[3])] })).toBeNull();
+		expect(checkTaskLinks(me, null, { parts: [inside(chain[4])] })).toMatch(/levels deep/);
+	});
 });
 
 describe('logging a Circuit', () => {

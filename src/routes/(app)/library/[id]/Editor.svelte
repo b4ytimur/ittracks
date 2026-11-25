@@ -7,18 +7,19 @@
 	import SaidLine from '$lib/detail/SaidLine.svelte';
 	import * as W from '$lib/detail/words';
 	import EditableList from '$lib/ui/EditableList.svelte';
+	import { focusOn, rowOf } from '$lib/ui/focus';
 	import EditChrome from '$lib/ui/EditChrome.svelte';
 	import GroupHeading from '$lib/ui/GroupHeading.svelte';
 	import MenuButton, { type Way } from '$lib/ui/MenuButton.svelte';
 	import { dismiss, showToast } from '$lib/toast.svelte';
 	import { enhance } from '$app/forms';
-	import { deleteHere } from '$lib/undelete';
+	import { deleteHere, goneAt } from '$lib/undelete';
 	import { noteDefaults, rowWords, type MetricForm, type TaskForm } from '$lib/forms';
 	import NoteBox from '$lib/NoteBox.svelte';
 	import OptionList from '$lib/OptionList.svelte';
 	import { defaultStep, metricsFromType, type TaskType } from '$lib/task-types';
 	import { blocked } from '$lib/rules/core';
-	import { checkTask, checkTaskPast, metricPast, metricRules, taskRules } from '$lib/rules/task';
+	import { checkTask, checkTaskPast, metricPast, metricRules, readyToSave, taskRules, unfinishedMetric } from '$lib/rules/task';
 	import { allowedNow, lockedNow } from '$lib/rules/history';
 	import type { UnitChoice } from '$lib/units';
 	import { units } from '$lib/units-here';
@@ -43,7 +44,6 @@
 	let newTag = $state('');
 
 	// Conflict rules (src/lib/rules): what is blocked right now, and why.
-	const ruleCheck = $derived(checkTask(t));
 	const restBlock = $derived(blocked(taskRules, t, 'restTimerEnabled', undefined));
 	const quickBlock = (m: MetricForm) => blocked(metricRules, m, 'quick', undefined);
 	const prefillBlock = (m: MetricForm) => blocked(metricRules, m, 'prefill', undefined);
@@ -62,8 +62,16 @@
 	let addPart = $state('');
 	function addLibraryPart(taskId: string) {
 		if (!taskId) return;
-		t.parts.push({ kind: 'task', id: crypto.randomUUID(), taskId, sets: null, targets: {}, minTargets: {}, stretchTargets: {} });
+		const id = crypto.randomUUID();
+		t.parts.push({ kind: 'task', id, taskId, sets: null, targets: {}, minTargets: {}, stretchTargets: {} });
 		addPart = '';
+		void focusOn(`${rowOf(id)} a`);
+	}
+	/** A new step, with focus in its name: typing goes there, not to the button again. */
+	function addStep() {
+		const id = crypto.randomUUID();
+		t.parts.push({ kind: 'step', id, name: '' });
+		void focusOn(`${rowOf(id)} input`);
 	}
 	function setPartTarget(map: Record<string, number>, id: string, v: string) {
 		if (v === '' || !Number.isFinite(Number(v))) delete map[id];
@@ -138,6 +146,7 @@
 			...noteDefaults(),
 			...preset
 		});
+		void focusOn(`${rowOf(id)} input`);
 	}
 
 	/** Start from a Task type: its fields replace the current ones. */
@@ -182,7 +191,19 @@
 		JSON.stringify(v ?? null, (_, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : 1))) : x));
 	const copy = <T,>(v: T): T => JSON.parse(JSON.stringify(v ?? null));
 	let base = $state.raw(untrack(() => copy(data.task)));
-	const changedKey = (k: Key) => ordered(t[k]) !== ordered(base[k]);
+	/** What the lines send: a field or step still being typed waits, so a rename beside it still saves. */
+	const sent = $derived(data.isNew ? t : readyToSave(t, base));
+	const waiting = $derived(
+		data.isNew
+			? []
+			: [
+					...t.metrics.filter(unfinishedMetric).map((m) => m.name.trim() || base.metrics.find((x) => x.id === m.id)?.name || 'The new field'),
+					...t.parts.filter((p) => p.kind === 'step' && !p.name.trim()).map((p) => (base.parts.find((x) => x.id === p.id) as { name?: string } | undefined)?.name || 'The new step')
+				]
+	);
+	const changedKey = (k: Key) => ordered(sent[k]) !== ordered(base[k]);
+	/** Checked as the lines send it, so a field still being typed isn't red: it waits, said quietly. */
+	const ruleCheck = $derived(checkTask(sent));
 	const edited = $derived(Object.fromEntries(Object.entries(LINES).map(([id, l]) => [id, l.fields.some(changedKey)])));
 	/** Fields and steps with logs that this change takes away, by name. */
 	const goneFields = $derived(base.metrics.filter((m) => isLogged(m.id) && !t.metrics.some((x) => x.id === m.id)).map((m) => m.name));
@@ -222,7 +243,7 @@
 		const held = holds(id);
 		if (saving[id]) return void (held || wait(id));
 		saving[id] = true;
-		const set = pick(t, keys);
+		const set = pick(sent, keys);
 		const was = pick(onServer, keys);
 		const a = await send({ set, was, keep: held, units: id === 'fields' ? JSON.parse(unitsPayload) : {} });
 		saving[id] = false;
@@ -658,11 +679,13 @@
 		</p>
 	{/if}
 	<div class="row">
-		<button type="button" onclick={() => t.parts.push({ kind: 'step', id: crypto.randomUUID(), name: '' })}>Add a step</button>
-		<select class="grow" bind:value={addPart} onchange={() => addLibraryPart(addPart)} aria-label="Add a Task from your Library">
+		<button type="button" onclick={addStep}>Add a step</button>
+		<!-- Picked, then added with its button: arrow keys pass through the list without adding. -->
+		<select class="grow" bind:value={addPart} aria-label="A Task from your Library">
 			<option value="">Add a Task from your Library…</option>
 			{#each data.library as l (l.id)}<option value={l.id}>{l.name}</option>{/each}
 		</select>
+		<button type="button" disabled={!addPart} onclick={() => addLibraryPart(addPart)}>Add</button>
 	</div>
 
 {/snippet}
@@ -688,8 +711,8 @@
 
 {#if data.archived}
 	<form method="POST" action="?/unarchive" class="notice" use:enhance>
-		<span class="notice-text">This Task is archived: hidden from the Library and pickers, with its history kept.</span>
-		<span class="notice-acts"><button class="quiet hit">Unarchive</button></span>
+		<span class="notice-text">{data.deleteAfter ? `Deleted. It goes for good with its logs on ${goneAt(data.deleteAfter)}.` : 'This Task is archived: hidden from the Library and pickers, with its history kept.'}</span>
+		<span class="notice-acts"><button class="quiet hit">{data.deleteAfter ? 'Put back' : 'Unarchive'}</button></span>
 	</form>
 {/if}
 {#if elsewhere}
@@ -742,6 +765,7 @@
 			{#each toAdd as id (id)}<button type="button" class="small" onclick={() => add(id)}>+ {words[id]}</button>{/each}
 		</div>
 	{/if}
+	{#if waiting.length}<p class="muted small-text">{waiting.join(', ')} {waiting.length === 1 ? 'is' : 'are'} saved once finished: a field or step needs a name, and a Choice two options.</p>{/if}
 	{#each [...new Set([...ruleCheck.errors, ...(past?.errors ?? [])].map((i) => i.reason))] as reason (reason)}<p class="error">{reason}</p>{/each}
 	{#each [...new Set(ruleCheck.warnings.map((i) => i.reason))] as reason (reason)}<p class="muted small-text">{reason}.</p>{/each}
 

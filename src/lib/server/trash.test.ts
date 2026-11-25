@@ -1,4 +1,4 @@
-// Delete, put back, and gone for good after a while; Areas and identities with their links.
+// Delete, put back (for a day), and gone for good after that; Areas and identities with their links.
 import { beforeAll, describe, expect, it } from 'vitest';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { eq } from 'drizzle-orm';
@@ -34,6 +34,11 @@ describe('deleting', () => {
 		expect(trash(me, 'task', id, today)).toEqual({ archived: false });
 		expect(trash(me, 'task', id, today)).toBeNull();
 		expect(listTasks(me, { archived: true }).some((t) => t.id === id)).toBe(false);
+		// Kept a day, listed with the archived ones to be put back.
+		const listed = listTasks(me, { archived: true, deleted: true }).find((t) => t.id === id);
+		expect(listed?.archived).toBe(true);
+		expect(listed!.deleteAfter!.getTime() - Date.now()).toBeGreaterThan(KEEP_MS - 60_000);
+		expect(KEEP_MS).toBe(24 * 3600_000);
 		expect(untrash(other, 'task', id, false, today)).toBe(false);
 		expect(untrash(me, 'task', id, false, today)).toBe(true);
 		expect(listTasks(me).some((t) => t.id === id)).toBe(true);
@@ -44,7 +49,9 @@ describe('deleting', () => {
 		db.update(habit).set({ archived: true }).where(eq(habit.id, id)).run();
 		expect(trash(me, 'habit', id, today)).toEqual({ archived: true });
 		expect(listHabits(me, { archived: true }).some((h) => h.id === id)).toBe(false);
+		expect(listHabits(me, { archived: true, deleted: true }).find((h) => h.id === id)?.deleteAfter).toBeInstanceOf(Date);
 		expect(untrash(me, 'habit', id, true, today)).toBe(true);
+		expect(listHabits(me, { archived: true, deleted: true }).find((h) => h.id === id)?.deleteAfter).toBeNull();
 		expect(listHabits(me, { archived: true }).find((h) => h.id === id)?.archived).toBe(true);
 	});
 

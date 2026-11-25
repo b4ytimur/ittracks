@@ -17,6 +17,7 @@
 	import { consistencyText } from '$lib/engine/stats';
 	import { saveLayout, viewOp } from '$lib/viewclient';
 	import { runAction, showToast, undoWith } from '$lib/toast.svelte';
+	import { goneAt } from '$lib/undelete';
 	import { HABIT_LINES, groupBy, manualOrder, passes, type HabitLineKey } from '$lib/views';
 
 	let { data } = $props();
@@ -174,10 +175,11 @@
 
 	async function archive(h: Habit) {
 		const to = !h.archived;
-		habits = habits.map((x) => (x.id === h.id ? { ...x, archived: to } : x));
+		// Put back, for a deleted one: brought back, it isn't about to go any more.
+		habits = habits.map((x) => (x.id === h.id ? { ...x, archived: to, deleteAfter: null } : x));
 		const r = await runAction(to ? '/habits?/archive' : '/habits?/unarchive', { id: h.id });
 		if (!r.ok) {
-			habits = habits.map((x) => (x.id === h.id ? { ...x, archived: !to } : x));
+			habits = habits.map((x) => (x.id === h.id ? { ...x, archived: !to, deleteAfter: h.deleteAfter } : x));
 			return showToast(r.error ?? "Couldn't change it. Are you online?");
 		}
 		// The row shows its own way back until editing ends.
@@ -205,6 +207,7 @@
 	const cueText = (c: { time: string | null; range?: string | null } | null) => c?.time ?? c?.range ?? null;
 	const ago = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 	const lineFor = (h: (typeof data.habits)[number]) => {
+		if (h.deleteAfter) return `Deleted. It goes for good with its logs on ${goneAt(h.deleteAfter)}.`;
 		const a = area(h.areaId);
 		return [
 			show('schedule') ? (h.direction === 'break' ? 'Break habit' : (isGroup(h.schedule) || !h.holds || !habits.some((x) => x.parentId === h.id) ? '' : 'Routine · ') + describeSchedule(h.schedule, data.habits.find((x) => x.id === h.parentId), h.variants)) : null,
@@ -312,7 +315,7 @@
 		onmove={(m, order, text) => (m.position === 'inside' ? (indent(m.key, m.target), true) : reorder(order, text))}
 		onoutdent={holder ? (k) => outdent(k, holder) : undefined}
 		onremove={archive}
-		removeLabel={(h) => (h.archived ? 'Unarchive' : 'Archive')}
+		removeLabel={(h) => (h.deleteAfter ? 'Put back' : h.archived ? 'Unarchive' : 'Archive')}
 	>
 		{#snippet row(h)}
 			{@const o = outcome.get(h.id)}

@@ -1,5 +1,5 @@
-// A deleted habit or Task is archived and goes for good after a while, so Delete needs no question:
-// it can be put back until then.
+// A deleted habit or Task is archived and goes for good a day later, so Delete needs no question:
+// until then the band's Undo, or Put back on its page or in the archived list, brings it back.
 import { and, eq, isNotNull, lt } from 'drizzle-orm';
 import { db } from './db';
 import { habit, task } from './db/schema';
@@ -8,7 +8,7 @@ import { deleteHabit } from './repo/habits';
 import { deleteTask, setTaskArchived } from './repo/tasks';
 import { getSettings, saveSettings } from './settings';
 
-export const KEEP_MS = 10 * 60_000;
+export const KEEP_MS = 24 * 60 * 60_000;
 const tables = { habit, task };
 export type Kind = keyof typeof tables;
 

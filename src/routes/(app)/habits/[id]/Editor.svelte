@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { deleteHere } from '$lib/undelete';
+	import { deleteHere, goneAt } from '$lib/undelete';
 	import { onMount, tick, untrack } from 'svelte';
 	import { beforeNavigate } from '$app/navigation';
 	import type { ActionData, PageData } from './$types';
@@ -1765,8 +1765,8 @@
 
 {#if data.archived}
 	<form method="POST" action="?/unarchive" class="notice" use:enhance>
-		<span class="notice-text">This habit is archived: hidden from Today, with its history kept.</span>
-		<span class="notice-acts"><button class="quiet hit">Unarchive</button></span>
+		<span class="notice-text">{data.deleteAfter ? `Deleted. It goes for good with its logs on ${goneAt(data.deleteAfter)}.` : 'This habit is archived: hidden from Today, with its history kept.'}</span>
+		<span class="notice-acts"><button class="quiet hit">{data.deleteAfter ? 'Put back' : 'Unarchive'}</button></span>
 	</form>
 {/if}
 {#if elsewhere}

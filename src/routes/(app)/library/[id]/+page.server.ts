@@ -62,14 +62,16 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		const c = url.searchParams.get('collection');
 		if (c) form.collectionIds = [c];
 	}
-	const archived = isNew
-		? false
-		: !!db.select({ a: task.archived }).from(task).where(and(eq(task.id, params.id), eq(task.accountId, accountId))).get()?.a;
+	const row = isNew
+		? null
+		: db.select({ a: task.archived, gone: task.deleteAfter }).from(task).where(and(eq(task.id, params.id), eq(task.accountId, accountId))).get();
 	return {
 		isNew,
 		taskId: params.id,
 		task: form,
-		archived,
+		archived: !!row?.a,
+		/** Deleted: when it goes for good (ms), so the page can offer Put back. */
+		deleteAfter: row?.gone?.getTime() ?? null,
 		allTags: listTagNames(accountId),
 		areas: listAreas(accountId),
 		collections: listCollections(accountId).filter((c) => !c.filter),

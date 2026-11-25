@@ -56,7 +56,7 @@ export function habitCtx(f: HabitForm): HabitCtx {
 export const checkHabitForm = (f: HabitForm, opts: { resolve?: boolean } = {}): HabitCheck =>
 	checkHabit(f, habitCtx(f), opts);
 
-export function listHabits(accountId: string, opts: { archived?: boolean } = {}) {
+export function listHabits(accountId: string, opts: { archived?: boolean; /** Also the deleted ones still to be put back (they are archived). */ deleted?: boolean } = {}) {
 	return db
 		.select({
 			id: habit.id,
@@ -68,10 +68,11 @@ export function listHabits(accountId: string, opts: { archived?: boolean } = {})
 			archived: habit.archived,
 			createdAt: habit.createdAt,
 			parentId: habit.parentId,
-			startDate: habit.startDate
+			startDate: habit.startDate,
+			deleteAfter: habit.deleteAfter
 		})
 		.from(habit)
-		.where(and(eq(habit.accountId, accountId), isNull(habit.deleteAfter), opts.archived ? undefined : eq(habit.archived, false)))
+		.where(and(eq(habit.accountId, accountId), opts.deleted ? undefined : isNull(habit.deleteAfter), opts.archived ? undefined : eq(habit.archived, false)))
 		.orderBy(asc(habit.sortOrder), asc(habit.name))
 		.all()
 		.map((h) => ({ ...h, schedule: h.schedule as ScheduleForm | null }));

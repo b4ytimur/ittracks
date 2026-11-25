@@ -1,6 +1,9 @@
 import { goto } from '$app/navigation';
 import { runAction, showError, showToast } from './toast.svelte';
 
+/** When a deleted habit or Task goes for good: "Thu 14:05". */
+export const goneAt = (ms: number) => new Date(ms).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+
 /** Delete what this page is about, go to `to`, and leave an Undo in the band. */
 export async function deleteHere(kind: 'habit' | 'task', id: string, name: string, to: string) {
 	const r = await runAction<{ deleted: { archived: boolean } }>('?/delete', {});

@@ -52,11 +52,12 @@ export const load: PageServerLoad = ({ locals, url, cookies }) => {
 	const initial = initialState(views, 'habits');
 	if (url.searchParams.has('archived')) initial.archived = true;
 	return {
-		habits: listHabits(accountId, { archived: true }).map((h) => {
+		habits: listHabits(accountId, { archived: true, deleted: true }).map((h) => {
 			const st = habitStats(marks.get(h.id) ?? [], today);
 			return {
 				...h,
 				createdAt: h.createdAt.getTime(),
+				deleteAfter: h.deleteAfter?.getTime() ?? null,
 				identities: idents.get(h.id) ?? [],
 				variants: variantsOf.get(h.id) ?? [],
 				/** Can hold habits: a group, or a build habit with a schedule and no Tasks of its own (a routine). */

@@ -3,7 +3,7 @@
 A **Task** is a reusable thing you do: an exercise, "new words", "read", "meditate". Tasks live in your **Library** and are used by habits through [Slots](habits.md#what-you-do-variants-slots-and-targets). One Task can be used by many habits, and its history is shared.
 
 
-A Task's page is one page of lines, like a [habit's](habits.md#a-habits-page): each line says what it means, opens where it stands, and saves by itself with **Undo**. Only a change that touches what is logged waits for its own **Save**: a unit on a field with values (you choose whether they are converted or kept), or a field or step with logs taken away. Its Undo puts back exactly what it replaced, and leaves values you corrected since.
+A Task's page is one page of lines, like a [habit's](habits.md#a-habits-page): each line says what it means, opens where it stands, and saves by itself with **Undo**. A field or step still being typed (no name yet, or a Choice with fewer than two options) waits until it is finished, and the page says so; the rest of its line saves. Only a change that touches what is logged waits for its own **Save**: a unit on a field with values (you choose whether they are converted or kept), or a field or step with logs taken away. Its Undo puts back exactly what it replaced, and leaves values you corrected since.
 
 ## Find Tasks
 
@@ -101,7 +101,7 @@ On the log screen, **⋯ → Pick another** picks another Task and **Swap…** l
 A Task can hold other things under **Inside this Task**, in order:
 
 - **Add a step**: something you tick off, like "warm-up set".
-- **Add a Task from your Library…**: a Task logged inside this one, like the exercises of a circuit. A Task can sit inside several others.
+- **Add a Task from your Library…**, then **Add**: a Task logged inside this one, like the exercises of a circuit. A Task can sit inside several others.
 
 Each Task inside can have its own **Sets** (or **Rounds**, when it has Tasks inside it) and **Minimum**, **Target** and **Stretch** per number field.
 
@@ -113,7 +113,7 @@ Limits: nesting goes up to 4 levels deep, and a Task can't end up inside itself.
 
 - **Archive** keeps the Task's history and hides it from the Library and pickers. You can also archive and rename Tasks in place in the Library's [edit mode](views-and-edit-mode.md#edit-mode).
 - **Duplicate** makes a copy.
-- **Delete** removes the Task and every log of it. It asks first.
+- **Delete** removes the Task and every log of it, with no question. **Undo** in the band brings it back. Until a day later it also waits under **Show archived** in the Library and on its own page, with **Put back**; then it goes for good with its logs.
 - **History** at the top of a Task shows its charts.
 
 Several Tasks can change unit at once: see [Bulk editing](bulk-editing.md).

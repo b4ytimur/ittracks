@@ -178,6 +178,8 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		hidden: getViews(accountId).hidden,
 		pinned: !isNew && settings.pinned.includes(params.id),
 		archived: !isNew && !!ownedHabit(accountId, params.id)?.archived,
+		/** Deleted: when it goes for good. Until then it can be put back. */
+		deleteAfter: isNew ? null : (ownedHabit(accountId, params.id)?.deleteAfter?.getTime() ?? null),
 		pauses: isNew
 			? []
 			: db

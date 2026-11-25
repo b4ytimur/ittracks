@@ -23,19 +23,21 @@ export interface TaskSummary {
 	areaId: string | null;
 	archived: boolean;
 	createdAt: Date;
+	/** Deleted: when it goes for good, until then it can be put back. */
+	deleteAfter: Date | null;
 	tags: { name: string; level: number }[];
 }
 
 /** Top-level Tasks (not sub-tasks) with their Tags, for the Library and pickers. Archived ones only on request. */
-export function listTasks(accountId: string, opts: { archived?: boolean } = {}): TaskSummary[] {
+export function listTasks(accountId: string, opts: { archived?: boolean; /** Also the deleted ones still to be put back (they are archived). */ deleted?: boolean } = {}): TaskSummary[] {
 	const tasks = db
-		.select({ id: task.id, name: task.name, areaId: task.areaId, archived: task.archived, createdAt: task.createdAt })
+		.select({ id: task.id, name: task.name, areaId: task.areaId, archived: task.archived, createdAt: task.createdAt, deleteAfter: task.deleteAfter })
 		.from(task)
 		.where(
 			and(
 				eq(task.accountId, accountId),
 				isNull(task.parentTaskId),
-				isNull(task.deleteAfter),
+				opts.deleted ? undefined : isNull(task.deleteAfter),
 				opts.archived ? undefined : eq(task.archived, false)
 			)
 		)
@@ -168,14 +170,14 @@ export function checkTaskLinks(accountId: string, id: string | null, f: Pick<Tas
 			.map((t) => [t.id, t])
 	);
 	for (const c of childIds) if (!mine.get(c) || mine.get(c)!.parentTaskId) return 'Pick a Task from your Library';
-	if (!id) return null;
 	const others = db
 		.select({ taskId: taskPart.taskId, childTaskId: taskPart.childTaskId })
 		.from(taskPart)
 		.innerJoin(task, eq(taskPart.taskId, task.id))
 		.where(and(eq(task.accountId, accountId), eq(taskPart.archived, false)))
 		.all();
-	return checkParts(others, id, childIds, (c) => mine.get(c)?.name ?? 'That Task');
+	// A new Task has nothing above it yet, but what it holds can still be too deep.
+	return checkParts(others, id ?? 'new', childIds, (c) => mine.get(c)?.name ?? 'That Task');
 }
 
 export interface PartChoice {

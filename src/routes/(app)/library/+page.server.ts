@@ -14,13 +14,14 @@ import type { Actions, PageServerLoad } from './$types';
 export const load: PageServerLoad = ({ locals, url, cookies }) => {
 	const accountId = locals.account!.id;
 	const showArchived = url.searchParams.has('archived');
-	const tasks = listTasks(accountId, { archived: showArchived });
+	const tasks = listTasks(accountId, { archived: showArchived, deleted: showArchived });
 	const usage = taskUsage(accountId);
 	const collections = listCollections(accountId);
 	return {
 		tasks: tasks.map((t) => ({
 			...t,
 			createdAt: t.createdAt.getTime(),
+			deleteAfter: t.deleteAfter?.getTime() ?? null,
 			usedIn: usage.get(t.id)?.habits.map((h) => h.name) ?? [],
 			lastLogged: usage.get(t.id)?.lastLogged ?? null,
 			timesLogged: usage.get(t.id)?.timesLogged ?? 0
