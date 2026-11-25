@@ -67,7 +67,7 @@ const sectionKeys = Object.keys(SECTIONS) as [SectionKey, ...SectionKey[]];
 export const DONE_MODES = {
 	keep: 'Stay where they are',
 	bottom: 'Move to the bottom',
-	collapse: 'Fold into a "Done" line',
+	collapse: 'Fold into a "Done" heading',
 	hide: 'Hide them'
 } as const;
 
@@ -148,7 +148,9 @@ export const viewSettings = z.object({
 			headline: z.enum(keysOf(STATS)).default('streak'),
 			headlineFor: z.record(str(64), z.enum(keysOf(STATS))).default({}),
 			/** Habit ids in the user's own order, for the "My order" sort. */
-			order: z.array(str(64)).max(500).default([])
+			order: z.array(str(64)).max(500).default([]),
+			/** Section and group keys that are folded. */
+			folded: z.array(str(64)).max(100).default(['done', 'focus:later', 'blocks:later'])
 		})
 		.prefault({}),
 	habits: z
@@ -527,7 +529,7 @@ export function switchTemplate(current: ViewSettings, id: string, opts: { keep?:
 		startPage: current.startPage,
 		open: current.open,
 		last: current.last,
-		today: { ...next.today, order: current.today.order, headlineFor: current.today.headlineFor },
+		today: { ...next.today, order: current.today.order, folded: current.today.folded, headlineFor: current.today.headlineFor },
 		own: {}
 	};
 	if (!keep) return out;
@@ -594,7 +596,8 @@ export interface Group<T> {
 export function groupBy<T extends Groupable>(
 	items: T[],
 	group: string,
-	ctx: { areas: { id: string; name: string; icon: string; color: string }[]; parts?: string[] }
+	ctx: { areas: { id: string; name: string; icon: string; color: string }[]; parts?: string[] },
+	opts: { /** Areas with no items show too (while editing). */ keepEmpty?: boolean } = {}
 ): Group<T>[] {
 	if (group === 'area') {
 		const known = (id: string | null) => !!id && ctx.areas.some((a) => a.id === id);
@@ -606,7 +609,7 @@ export function groupBy<T extends Groupable>(
 				items: items.filter((i) => i.areaId === a.id)
 			})),
 			{ key: 'none', label: 'No area', color: null, items: items.filter((i) => !known(i.areaId)) }
-		].filter((g) => g.items.length);
+		].filter((g) => g.items.length || (opts.keepEmpty && g.key !== 'none'));
 	}
 	if (group === 'identity') {
 		const names = [...new Set(items.flatMap((i) => i.identities ?? []))].sort((a, b) => a.localeCompare(b));

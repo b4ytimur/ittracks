@@ -68,7 +68,7 @@ export function listHabits(accountId: string, opts: { archived?: boolean } = {})
 			parentId: habit.parentId
 		})
 		.from(habit)
-		.where(and(eq(habit.accountId, accountId), opts.archived ? undefined : eq(habit.archived, false)))
+		.where(and(eq(habit.accountId, accountId), isNull(habit.deleteAfter), opts.archived ? undefined : eq(habit.archived, false)))
 		.orderBy(asc(habit.sortOrder), asc(habit.name))
 		.all()
 		.map((h) => ({ ...h, schedule: h.schedule as ScheduleForm | null }));

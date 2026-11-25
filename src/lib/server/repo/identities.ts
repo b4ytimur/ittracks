@@ -35,10 +35,31 @@ export function renameIdentity(accountId: string, id: string, statement: string)
 		.run();
 }
 
-export function deleteIdentity(accountId: string, id: string) {
-	db.delete(identity)
-		.where(and(eq(identity.id, id), eq(identity.accountId, accountId)))
-		.run();
+export interface DeletedIdentity {
+	id: string;
+	statement: string;
+	sortOrder: number;
+	habitIds: string[];
+}
+
+/** Delete an identity and say what it was, so it can be put back. */
+export function deleteIdentity(accountId: string, id: string): DeletedIdentity | null {
+	return db.transaction((tx) => {
+		const row = tx.select().from(identity).where(and(eq(identity.id, id), eq(identity.accountId, accountId))).get();
+		if (!row) return null;
+		const habitIds = tx.select({ id: habitIdentity.habitId }).from(habitIdentity).where(eq(habitIdentity.identityId, id)).all().map((x) => x.id);
+		tx.delete(identity).where(eq(identity.id, id)).run();
+		return { id, statement: row.statement, sortOrder: row.sortOrder, habitIds };
+	});
+}
+
+export function restoreIdentity(accountId: string, d: DeletedIdentity) {
+	db.transaction((tx) => {
+		tx.insert(identity).values({ id: d.id, accountId, statement: d.statement, sortOrder: d.sortOrder }).onConflictDoNothing().run();
+		if (!tx.select({ id: identity.id }).from(identity).where(and(eq(identity.id, d.id), eq(identity.accountId, accountId))).get()) return;
+		const own = new Set(tx.select({ id: habit.id }).from(habit).where(eq(habit.accountId, accountId)).all().map((h) => h.id));
+		for (const habitId of d.habitIds) if (own.has(habitId)) tx.insert(habitIdentity).values({ habitId, identityId: d.id }).onConflictDoNothing().run();
+	});
 }
 
 export interface IdentityVotes {

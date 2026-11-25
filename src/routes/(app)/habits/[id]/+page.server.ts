@@ -13,7 +13,6 @@ import {
 	checkHabitForm,
 	checkLinks,
 	copyHabitForm,
-	deleteHabit,
 	getHabitForm,
 	listHabits,
 	saveHabit
@@ -25,6 +24,7 @@ import { listAreas } from '$lib/server/repo/areas';
 import { getViews, getSettings, saveSettings } from '$lib/server/settings';
 import { repaused, userToday } from '$lib/server/today';
 import { ownedHabit } from '$lib/server/owned';
+import { trash } from '$lib/server/trash';
 import { archiveHabit, unarchiveHabit } from '$lib/server/habit-actions';
 import { BUILTIN_TASK_TYPES, defaultStep, metricsFromType } from '$lib/task-types';
 import { randomUUID } from 'node:crypto';
@@ -307,10 +307,8 @@ export const actions: Actions = {
 		unarchiveHabit(locals.account!.id, params.id, userToday(locals.account!.id, cookies.get('tz')));
 		return { unarchived: true };
 	},
-	delete: ({ locals, params }) => {
-		deleteHabit(locals.account!.id, params.id);
-		const s = getSettings(locals.account!.id);
-		if (s.pinned.includes(params.id)) saveSettings(locals.account!.id, { pinned: s.pinned.filter((x) => x !== params.id) });
-		redirect(303, '/habits');
+	delete: ({ locals, params, cookies }) => {
+		const deleted = trash(locals.account!.id, 'habit', params.id, userToday(locals.account!.id, cookies.get('tz')));
+		return deleted ? { deleted } : fail(404, { error: 'No such habit' });
 	}
 };

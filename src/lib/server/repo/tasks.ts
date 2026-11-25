@@ -34,6 +34,7 @@ export function listTasks(accountId: string, opts: { archived?: boolean } = {}):
 			and(
 				eq(task.accountId, accountId),
 				isNull(task.parentTaskId),
+				isNull(task.deleteAfter),
 				opts.archived ? undefined : eq(task.archived, false)
 			)
 		)

@@ -110,7 +110,9 @@ export const task = sqliteTable('task', {
 	createdAt: createdAt(),
 	areaId: text('area_id').references(() => area.id, { onDelete: 'set null' }),
 	/** Archived Tasks keep their history but are hidden from the Library and pickers. */
-	archived: integer('archived', { mode: 'boolean' }).notNull().default(false)
+	archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+	/** Deleted, and gone for good once this passes; until then it can be put back. */
+	deleteAfter: integer('delete_after', { mode: 'timestamp' })
 });
 
 export const tag = sqliteTable('tag', {
@@ -263,6 +265,8 @@ export const habit = sqliteTable('habit', {
 	/** The Schedule (see src/lib/engine/schedule.ts); null for break habits. */
 	schedule: text('schedule', { mode: 'json' }),
 	archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+	/** As a Task's. */
+	deleteAfter: integer('delete_after', { mode: 'timestamp' }),
 	sortOrder: integer('sort_order').notNull().default(0),
 	createdAt: createdAt(),
 	cue: text('cue', { mode: 'json' }).$type<Cue>(),

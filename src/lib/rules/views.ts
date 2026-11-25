@@ -57,6 +57,7 @@ export const viewRules = defineRules<ViewSettings, ViewCtx>({
 	'today.headline': independent,
 	'today.headlineFor': independent,
 	'today.order': independent,
+	'today.folded': independent,
 	'habits.lines': independent,
 	'history.values': independent,
 	// A record of which settings you changed by hand; it blocks nothing.

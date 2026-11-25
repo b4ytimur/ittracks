@@ -8,6 +8,7 @@ import { readSession, SESSION_COOKIE } from '$lib/server/auth';
 import { startReminders } from '$lib/server/push';
 import { actorForKey } from '$lib/server/core/tokens';
 import { restorePartialDays } from '$lib/server/today';
+import { sweep } from '$lib/server/trash';
 import { upgradeOptionIds } from '$lib/server/db/upgrade';
 
 // Bring the database up to date on startup, so self-hosters never run migrations by hand.
@@ -29,7 +30,12 @@ once('partial-days-restored', restorePartialDays);
 once('partial-days-restored-2', restorePartialDays);
 if (!building) startReminders();
 
+let swept = 0;
 export const handle: Handle = async ({ event, resolve }) => {
+	if (Date.now() - swept > 60_000) {
+		swept = Date.now();
+		sweep();
+	}
 	event.locals.account = readSession(event.cookies.get(SESSION_COOKIE));
 	// A quick-log link with a key (NFC tag, QR code, Shortcut) works without signing in, for
 	// that one page only: the key never stands in for a login anywhere else.

@@ -1,0 +1,36 @@
+/* Ask: one question in place, only for an act Undo can't cover (D4.4): revoke a key, replace all data, log out over
+   changes that haven't synced, delete an account. It opens in the flow under the control that asked, with two buttons, the
+   safe one first. Never a dialog, never confirm(). Owns .ask only: the buttons are Button's, their row Layout's
+   .l-cluster, the trigger the consumer's.
+   Markup (the trigger's row and the Ask share one parent, so nothing spaces them apart):
+     <div class="act-row"> …the thing… <button type="button" class="hit" aria-expanded="true" aria-controls="ask-z" aria-label="Revoke Zapier…">Revoke…</button> </div>
+     <div class="ask" id="ask-z" role="group" aria-labelledby="ask-z-q" [hidden]>
+       <p class="name" id="ask-z-q">Revoke Zapier?</p>
+       <p class="label" id="ask-z-w">Anything that uses this key stops working at once. A revoked key can't be brought back.</p>
+       <div class="l-cluster">
+         <button type="button" class="hit" aria-describedby="ask-z-q ask-z-w">Keep it</button>          focus lands here
+         <button class="danger hit" form="revoke-z" data-reserve="Revoking…">Revoke Zapier</button>
+       </div>
+     </div> */
+
+/* A control's box (as RadioCard's), because it is one: raised wherever it sits, so the danger words keep 4.83 / 6.32 and
+   never stand on a light shelf (S.2). Its edge is neutral: danger is the verb's alone (C.7).
+   1 + 11 + 24 + 4 + 20 a line + 12 + 32 + 11 + 1 = 116 with one line; 8 under the control that asked, its row's nearest thing. */
+.ask {
+	display: flex; flex-direction: column; gap: var(--space-tight);
+	margin-block-start: var(--space-inline); padding: calc(3 * var(--pitch) - 1px);
+	background: var(--surface-raised); border: 1px solid var(--line-control); border-radius: var(--radius-control);
+	color: var(--ink); overflow-wrap: anywhere;
+}
+.ask[hidden] { display: none; }
+.ask > .l-cluster { margin-block-start: var(--space-inline); }
+.elist > li > .card > .ask { flex: 1 1 100%; } /* in a row card (a wrapping line) it takes the line under the content and the verb */
+
+/* ---------- The trigger holds its hover look while its question is open (as a menu's does); an Ask's id starts with ask- ---------- */
+[aria-controls^='ask-'][aria-expanded='true'] { border-color: var(--ink); }
+.quiet[aria-controls^='ask-'][aria-expanded='true'] { text-decoration: underline; text-underline-offset: 3px; }
+
+/* ---------- Coarse pointers: wrapped buttons' 44px areas meet and never overlap (as ActionsBar's) ---------- */
+@media (pointer: coarse) { .ask > .l-cluster { row-gap: calc(3 * var(--pitch)); } }
+@media (forced-colors: active) { .ask { border-color: CanvasText; } }
+/* Reduced motion: nothing moves; it is there, or it isn't. */

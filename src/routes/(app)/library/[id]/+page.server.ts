@@ -1,3 +1,5 @@
+import { userToday } from '$lib/server/today';
+import { trash } from '$lib/server/trash';
 import { error, fail, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 import { firstError, taskForm, type TaskForm } from '$lib/forms';
@@ -5,7 +7,6 @@ import { checkTask } from '$lib/rules/task';
 import {
 	checkTaskEdit,
 	checkTaskLinks,
-	deleteTask,
 	libraryForParts,
 	duplicateTask,
 	getTaskForm,
@@ -188,8 +189,8 @@ export const actions: Actions = {
 		saveSettings(accountId, { taskTypes: [...s.taskTypes.filter((x) => x.key !== key), type].slice(-20) });
 		return { typeSaved: t.name };
 	},
-	delete: ({ locals, params }) => {
-		deleteTask(locals.account!.id, params.id);
-		redirect(303, '/library');
+	delete: ({ locals, params, cookies }) => {
+		const deleted = trash(locals.account!.id, 'task', params.id, userToday(locals.account!.id, cookies.get('tz')));
+		return deleted ? { deleted } : fail(404, { error: 'No such Task' });
 	}
 };
