@@ -370,8 +370,10 @@
 		text-align: left;
 		font-size: 0.85rem;
 	}
-	.hrow:hover .htrack {
-		background: var(--chart-grid);
+	@media (hover: hover) {
+		.hrow:hover .htrack {
+			background: var(--chart-grid);
+		}
 	}
 	.hlabel {
 		overflow: hidden;

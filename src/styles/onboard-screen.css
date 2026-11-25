@@ -9,7 +9,8 @@
 	border: 0; background: none; font: inherit; line-height: inherit; vertical-align: baseline; color: var(--ink); text-align: start; cursor: pointer;
 	text-decoration: underline dashed var(--line-control) 1px; text-underline-offset: 3px;
 }
-.ob-slot:is(:hover, [aria-expanded='true']) { text-decoration: underline solid var(--ink) 1px; }
+.ob-slot[aria-expanded='true'] { text-decoration: underline solid var(--ink) 1px; }
+@media (hover: hover) { .ob-slot:hover { text-decoration: underline solid var(--ink) 1px; } }
 .ob-sec { margin-block-start: var(--space-section); display: grid; gap: var(--space-inline); }
 .ob-sec > .group-heading { margin-block: 0; }
 .ob-hint { display: flex; align-items: center; justify-content: space-between; gap: var(--space-inline); margin-block: var(--space-inline); padding: var(--space-inline) var(--space-group); border: 1px solid var(--line); border-radius: var(--radius-control); }
