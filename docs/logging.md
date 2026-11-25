@@ -57,11 +57,11 @@ A duration field has a timer: **Stopwatch**, **Countdown** to the target, or a *
 
 Open a day from **Log a past day** on Today or History, a day in Today's week strip, **Log this day** in History, or a cell in a habit's chain. The day page shows:
 
-- **Due that day**: each habit with **Log**, **Same as last**, **Done**, **Skip** and **Clear** (take the log away), and a Variant picker. **Same as last** copies the last log from before that day.
-- **Not due that day. Did one anyway?**: habits that weren't due, so you can log an extra day.
+- **Due that day**: each habit with the same control as on Today (the usual way, and the others behind **⋯**), or **Change** and **Clear** (take the log away) when it is logged, and a Variant picker. **Same as last** copies the last log from before that day.
+- **Not due that day**, folded: habits that weren't due, so you can log an extra day.
 - **Started later**: habits that start after this day. **Start from this day** moves their start back.
-- **Breaking**: that day's slips, with **Remove**, and a form to add one.
-- Arrows to the previous and next day, with how many habits were left unlogged.
+- **Breaking**: that day's slips, with **Remove**, and **Log a slip…**
+- The day before and the day after, with how many habits were left unlogged, and a date to jump to.
 
 A late log counts like one made on the day, streaks included.
 
@@ -82,6 +82,6 @@ Today shows the feelings that come up most ("Most slips: Stressed"). Remove a sl
 
 ## History and the chain
 
-**History** lists recent days with what was done, skipped, missed and slipped. Filter it by status, habit, Area and more, tick **Show logged values** to see values like "80 kg × 8", and press **Show older** to go back further.
+**History** is one page of days, newest first: what was done, skipped, missed and slipped, and what you wrote. The strip on top is the last seven days; press a day to go to it. A day's count is done of what was due: a skip was not due, and a log on a day off changes nothing. Press a row to open its log, or its day when it was missed or skipped. Search, filter by status, habit, Area and more, and use **⋯ → Show what a log holds** to see values like "80 kg × 8". **Show older** goes back further. **Notes only** is the [journal](notes-and-journal.md).
 
-A habit's **Chain** (from its editor or Stats) is a calendar of the last weeks. Each cell is one day: **Done**, **Minimum**, **Stretch**, **Missed, forgiven** (a single miss under "never miss twice"), **Missed**, **Skipped** or **Not logged**. For a break habit: **Clean**, **Within limit** or **Slip**. Tap a cell to open that day.
+A habit's **Chain** tab is twelve weeks, a column a week. Press a day to read it, again to open it; the arrow keys move from day to day. The legend names the marks there are: **Done**, **Minimum**, **Stretch**, **Missed, forgiven** (a single miss under "never miss twice"), **Missed**, **Skipped**, **Not logged**; for a break habit **Clean**, **Within limit** or **Slip**.

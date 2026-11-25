@@ -28,6 +28,8 @@
 @import './styles/actions-bar.css';
 @import './styles/said-line.css';
 @import './styles/form-section.css';
+@import './styles/history-screen.css';
+@import './styles/day-tile.css';
 
 /* The names from before the design system's tokens. Screens move off them one by one. */
 :root {
@@ -51,6 +53,8 @@ p.hint-line { margin-block: 0; }
 h1 { font-size: var(--font-size-page-title); line-height: 2rem; margin: 0; overflow-wrap: anywhere; }
 h2 { font-size: var(--font-size-section-title); line-height: 1.5rem; margin: var(--space-section) 0 var(--space-inline); }
 a { color: var(--accent-ink); }
+a.quiet { text-decoration: none; }
+@media (hover: hover) { a.quiet:hover { text-decoration: underline; text-underline-offset: 3px; } }
 input:where([type='checkbox'], [type='radio']) { width: auto; min-height: 0; padding: 0; margin: 0 0.4rem 0 0; vertical-align: middle; accent-color: var(--ink); }
 label > input:where([type='checkbox'], [type='radio']) { margin-top: 0; }
 fieldset label + label { margin-top: 0.5rem; }

@@ -38,7 +38,7 @@ export function loadJournal(accountId: string, range: JournalRange, opts: { toda
 	const days = new Map<string, JournalDay>();
 	const day = (date: string) => days.get(date) ?? days.set(date, { date, items: [], moods: [], done: [] }).get(date)!;
 	const inRange = (col: Parameters<typeof gte>[0]) => and(gte(col, range.from), lte(col, range.to));
-	const back = encodeURIComponent('/journal');
+	const back = encodeURIComponent('/history?notes');
 
 	for (const n of db
 		.select()
@@ -140,4 +140,14 @@ export function loadJournal(accountId: string, range: JournalRange, opts: { toda
 	}
 
 	return [...days.values()].filter((d) => d.items.length || d.moods.length).sort((a, b) => b.date.localeCompare(a.date));
+}
+
+/** Does the account already have a habit with a long text field (a journal)? */
+export function hasJournal(accountId: string): boolean {
+	return !!db
+		.select({ id: metric.id })
+		.from(metric)
+		.innerJoin(task, eq(metric.taskId, task.id))
+		.where(and(eq(task.accountId, accountId), eq(metric.long, true), eq(task.archived, false)))
+		.get();
 }
