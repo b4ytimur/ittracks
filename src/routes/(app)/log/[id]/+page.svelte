@@ -310,6 +310,11 @@
 		if (!d) return;
 		const mine = d;
 		showToast('Showing what the other device saved.', () => {
+			if (!mounted) {
+				// Kept for the next time it is opened, which offers it again.
+				localStorage.setItem(ASIDE, JSON.stringify(mine));
+				return 'Open the log to bring yours back.';
+			}
 			Object.assign(places, fromDraft(mine.log, data.items));
 			notes = mine.notes;
 			level = mine.level;
@@ -529,8 +534,13 @@
 	}
 	function removeSet(i: number) {
 		const gone = log[i].sets.pop();
+		const key = placeKey(data.items[i]);
 		at = null;
-		if (gone) showToast(`Removed ${data.items[i].task?.rowOne} ${log[i].sets.length + 1} of ${data.items[i].task?.name}, for this log.`, () => void log[i]?.sets.push(gone));
+		if (gone)
+			showToast(`Removed ${data.items[i].task?.rowOne} ${log[i].sets.length + 1} of ${data.items[i].task?.name}, for this log.`, () => {
+				if (!mounted) return 'Open the log to put it back.';
+				places[key].sets.push(gone);
+			});
 	}
 	function tickAll() {
 		for (const [i, it] of data.items.entries()) {
