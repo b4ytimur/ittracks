@@ -46,7 +46,7 @@ Each Task with a field of that name changes once, even when it is both selected 
 
 ### Skip
 
-On **History**, press **Select**, tick the days, and press **Skip**. Each ticked day is skipped, as **Skip** on the day itself: a missed day becomes skipped, which neither adds to nor breaks a streak. Done days stay done, and days after today or too far back to log are left out with the reason (you can change how far back in **Settings → Past days**). For every day in a date range, use **Skip days** on the Habits page instead.
+On **History**, press **Select**, tick the days, and press **Skip**. Each ticked day is skipped, as **Skip** on the day itself: a missed day becomes skipped, which neither adds to nor breaks a streak. Done days stay done, and days after today or too far back to log are left out with the reason (you can change how far back in **Settings → Logging past days**). For every day in a date range, use **Skip days** on the Habits page instead.
 
 ## From scripts and AI assistants
 

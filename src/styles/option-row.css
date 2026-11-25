@@ -1,0 +1,38 @@
+/* OptionRow: one option with its words and one line under them: a description, or why it can't be chosen now.
+   A checkbox (a setting, a thing that travels with a template) or a radio (one answer of a few, each needing a sentence).
+   Owns .option-row and .option-more (what a ticked option opens). The box and its words are Checkbox's label.check, the
+   description is Field's .field-hint, the reason is BlockedReason's line: this only puts them in one row and makes the
+   row one target. RadioCard is this row drawn as a card.
+   Markup:
+     <div class="option-row">
+       <label class="check"><input type="checkbox" class="pick" aria-describedby="o-d"> The habit's own note</label>
+       <p class="field-hint meta" id="o-d">Off unless you tick it: …</p>            or <p class="blocked-reason meta">, never both
+     </div>
+     <div class="option-more">…a Field, a nested group: shown while the option above is on…</div>
+   Rows stack on Layout's .l-stack with --gap: var(--space-inline), inside Field's fieldset.field-group (or a radiogroup).
+   Pitch (P.7): title 24 + line 20 = 44px with one line (target-touch as it stands), 24 without; rows 8 apart. */
+
+.option-row { position: relative; --words: calc(1rem + var(--space-inline)); } /* the words' column: Checkbox's 1rem box + its 8px gap */
+/* The whole row is the label's target, so a tap on the description ticks the box, while the option's name stays its title
+   and the line under it stays a description. A link or a way out in that line comes back above the cover. */
+.option-row > .check::after { content: ''; position: absolute; inset: 0; }
+.option-row > p > :is(a, button) { position: relative; }
+/* The description starts at the words, as BlockedReason's line already does after a label.check. */
+.option-row > .field-hint { padding-inline-start: var(--words); }
+
+/* What an option opens, on the words' column: 8px under its row (the stack's gap) and 16px from the next one, so it
+   reads as that option's. It is beside the row, not in it: a tap that misses the field must not untick the option. */
+.option-more { margin-inline-start: calc(1rem + var(--space-inline)); min-width: 0; }
+.option-more:not(:last-child) { margin-block-end: var(--space-inline); }
+/* A list it opens stands on a shelf of its own, rounded on every corner, since no holder's card is over it. */
+.option-more > .shelf { border-radius: var(--radius-card); }
+
+/* ---------- Coarse pointers: the row is the target, so a row with a line needs no padding (24 + 20 = target-touch) ---------- */
+@media (pointer: coarse) {
+	.option-row:has(> p) > .check { --check-h: var(--target-min); } /* Checkbox's 44px would part the title from its line */
+}
+@media (forced-colors: active) {
+	.option-more > .shelf { border: 1px solid CanvasText; } /* the band's fill goes, and no holder's outline is round it */
+}
+/* Hover (the box's edge turns ink), focus, chosen, blocked and forced colours are Checkbox's, all on the box and its
+   words; the cover is part of the label, so it takes the label's hover and cursor. */

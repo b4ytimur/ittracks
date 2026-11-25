@@ -1,12 +1,12 @@
 # Integrations
 
-Everything here lives in **Settings → Integrations** and **Settings → Export, import and templates**.
+Everything here lives in [Settings](settings.md), under **Other apps** and **Data**.
 
 ## Keys
 
 A key lets something other than the app use your account: a Shortcut, a quick-log link, an AI assistant or a backup script.
 
-1. Open **New key**, and give it a **Name** ("iPhone Shortcuts", "Claude").
+1. Under **Settings → Keys**, press **+ Key** and give it a **Name** ("iPhone Shortcuts", "Claude").
 2. Under **It may**, tick only the access it needs:
 
    | Access | Allows |
@@ -18,7 +18,7 @@ A key lets something other than the app use your account: a Shortcut, a quick-lo
    | **Edit** | Change habits and Tasks in bulk (archive, Area, pause, reminders, streak rule, units) |
 
 3. Under **For**, choose **Every habit, now and later** or **Only some habits**. A key limited to some habits can't download an export.
-4. **Make key**, and copy it now. It is shown only once; the server keeps only its hash. Treat it like a password.
+4. **Make the key**, and copy it now. It is shown only once; the server keeps only its hash. Treat it like a password.
 
 For a Shortcut, Read and Log are enough. For an AI assistant, Read lets it analyse; add Log if it may log for you, and Notes only if it may read your notes and journal.
 
@@ -59,7 +59,7 @@ Claude, Cursor and other assistants that support MCP can read your habits, run s
 
 ### Set it up
 
-1. Download `ittracks-mcp.mjs` from **Settings → Integrations** (it is also at `https://<your server>/ittracks-mcp.mjs`, and in the repository at `static/ittracks-mcp.mjs`). It needs Node.js 18 or newer and nothing else.
+1. Download `ittracks-mcp.mjs` from **Settings → AI assistants** (it is also at `https://<your server>/ittracks-mcp.mjs`, and in the repository at `static/ittracks-mcp.mjs`). It needs Node.js 18 or newer and nothing else.
 2. Make a key for it: **Read**, plus **Log** if it may log for you, **Notes** if it may search your notes, and **Edit** for bulk changes.
 3. Add it to your assistant, replacing `/path/to/` with where you saved the file, and using your server's address and key. The settings page fills both in for you.
 
@@ -103,16 +103,16 @@ What the assistant reads is sent to its provider, so pick the key's access with 
 
 ## Export and import
 
-**Settings → Export, import and templates**:
+**Settings → Data**:
 
 - **Everything (JSON)**: a full backup of habits, Tasks, every log, slip, note and setting. It imports here or on another ittracks server, keeping ids so links keep working.
 - **Tables (CSV)**: a zip of tidy tables (one row per logged value, per habit day, per habit and per field) with a README that explains every column. For Excel, Google Sheets, Python, R or an AI chat.
 
 ### Restore
 
-Under **Restore from an export**, pick a JSON export and press **Check file**. It shows who exported it, when, and what it holds. Tick **Replace all my data with this file** and press **Replace my data**.
+Under **Restore from a backup**, pick a JSON export. It shows who made it, when, and what it holds. Press **Replace my data**, then **Download it, then replace**: what is here now is downloaded first, and if that fails nothing is replaced.
 
-Restoring replaces every habit, Task, log, note and setting in the account. Your login, keys and reminder devices stay. Download an export first if you might want today's data back. Large files need the server's `BODY_SIZE_LIMIT` raised (the Docker image sets 50M).
+Restoring replaces every habit, Task, log, note and setting in the account. Your login, keys and reminder devices stay. To go back, restore the file it downloaded. Large files need the server's `BODY_SIZE_LIMIT` raised (the Docker image sets 50M).
 
 ### From a script
 

@@ -7,7 +7,9 @@ import { keyOf, overriding, readAnswer, sendAll, type Answer, type Queued } from
 
 export type { Queued } from './queue';
 
-const KEY = 'ittracks-outbox';
+const SHARED = 'ittracks-outbox';
+/** Whose saves these are: another person signing in here never sends them as theirs. */
+let KEY = SHARED;
 
 export const outbox = $state<{ items: Queued[]; syncing: boolean }>({ items: [], syncing: false });
 
@@ -105,14 +107,30 @@ export function discard(id: string): () => void {
 	};
 }
 
+/** What waits from now on is this account's. What was kept before there was one per account is taken over. */
+export function openOutbox(accountId: string) {
+	const key = `${SHARED}:${accountId}`;
+	if (KEY !== SHARED && KEY !== key) {
+		memoryOnly = false;
+		outbox.items = [];
+	}
+	KEY = key;
+	try {
+		const before: Queued[] = JSON.parse(localStorage.getItem(SHARED) ?? '[]');
+		localStorage.removeItem(SHARED);
+		if (before.length) write([...before.filter((b) => !read().some((q) => keyOf(q) === keyOf(b))), ...read()]);
+	} catch {
+		// No storage here: what waits is in memory.
+	}
+	outbox.items = read();
+}
+
 /** Start watching the connection. Call once from the app layout. */
-export function startOutbox(onSent: (n: number) => void) {
+export function startOutbox(accountId: string, onSent: (n: number) => void) {
 	// Untracked: an effect that calls this would otherwise run again after every round, and with
 	// something still waiting that is a round without pause.
 	const go = () => untrack(() => flush().then((n) => n && onSent(n)));
-	untrack(() => {
-		outbox.items = read();
-	});
+	untrack(() => openOutbox(accountId));
 	window.addEventListener('online', go);
 	const t = setInterval(go, 30_000);
 	go();

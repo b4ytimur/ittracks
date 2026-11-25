@@ -33,11 +33,11 @@ The journal is **History** with **Notes only** on: everything you wrote, by day,
 
 ## The day note
 
-**Settings → Journal → A day note on Today** adds one free note per day to Today and the day page. It has no streak.
+**Settings → Day note** adds one free note per day to Today and the day page. It has no streak.
 
 ## Export to Obsidian
 
-**Settings → Journal → Download the journal** (or **History → ⋯ → Export the journal**) downloads your journal as Markdown, one file per day, ready to drop into an Obsidian vault.
+**Settings → Download the journal** (or **History → ⋯ → Export the journal**) downloads your journal as Markdown, one file per day, ready to drop into an Obsidian vault.
 
 ## Switching the journal off
 

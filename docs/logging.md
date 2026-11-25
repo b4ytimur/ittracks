@@ -67,7 +67,7 @@ A late log counts like one made on the day, streaks included.
 
 A value logged for a past day, here or through a [key](integrations.md) or [quick-log link](#quick-logs), is judged at once by the habit's [rule for a day that falls short](streaks.md#a-day-that-falls-short): done when it counts, missed when it doesn't.
 
-**Settings → Logging past days** sets **How far back you can log**: **Any time** (default), a month, a week, 3 days, **Yesterday only**, or **Off: only today can be logged**. Slips can always be added for a past day. **Tell me on Today when yesterday has habits left unlogged** shows a **Log yesterday** nudge on Today. **Hide** dismisses it until tomorrow.
+**Settings → Logging past days** sets how far back you can log: **Any time** (default), a month, a week, 3 days, **Yesterday only**, or **Off: only today can be logged**. Slips can always be added for a past day. **Ask about yesterday** shows a **Log yesterday** nudge on Today. **Hide** dismisses it until tomorrow.
 
 To skip a run of days at once (a sick week), see [Bulk editing](bulk-editing.md).
 

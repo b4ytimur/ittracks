@@ -1,0 +1,36 @@
+/* SearchField: the native search input in Field's frame, its clear ×, and the one line that says how many are left.
+   Owns .search (the box and its ×), .search-clear, .result-line. The box's height, edge, hover and focus are Field's.
+   Markup:
+     <div class="field">
+       <label class="label" for="s-tasks">Find Tasks</label>
+       <div class="search">
+         <input id="s-tasks" type="search" placeholder="Name or tag" autocomplete="off" autocorrect="off" enterkeyhint="search">
+         <button type="button" class="quiet glyph search-clear hit focus-inset" aria-label="Clear search">×</button>
+       </div>
+     </div>
+     in a FilterBar the label is hidden and wraps the input (a hidden label can't grow its hit area: .vh clips it):
+       <div class="field"><div class="search"><label><span class="vh">Search Tasks and tags</span> <input type="search" …></label> <button …>×</button></div></div>
+     the line, after the field (or after the FilterBar), in a wrapper that stays mounted:
+       <div role="status"><p class="result-line meta num">12 of 48 Tasks</p></div>
+   Script: the × empties the field, fires its input event and gives it focus; Esc does the same where the browser doesn't. */
+
+.search { position: relative; }
+.search > label { display: block; }
+/* Safari rounds and insets a search field unless the appearance goes; the trailing padding is the ×'s 24px plus 4 each side. */
+.search input { appearance: none; padding-inline-end: calc(var(--control-sm) + 2 * var(--space-tight)); text-overflow: ellipsis; }
+/* The browser's own clear mark: Firefox has none, Chrome shows it only on hover or focus, none can take focus. The × replaces it. */
+.search input::-webkit-search-cancel-button { display: none; }
+
+/* ---------- Clear: × (D4.11), Button's quiet, there while there is something to clear ---------- */
+.search > .search-clear {
+	position: absolute; inset-inline-end: var(--space-tight); inset-block: 0; margin-block: auto;
+	inline-size: var(--control-sm); block-size: var(--control-sm); padding: 0;
+}
+.search:has(input:placeholder-shown) > .search-clear { display: none; } /* so the input always has a placeholder */
+
+/* ---------- The line: how many are left, said once ---------- */
+.result-line { margin-block-start: var(--space-inline); color: var(--ink-muted); overflow-wrap: anywhere; }
+.shelf .result-line, .band .result-line { color: var(--ink); } /* ink-muted is 4.03:1 on light sunken (S.2) */
+
+/* Coarse pointers: a hidden label that wraps the input grows its area to 44px, as a visible one does (Field). */
+/* Forced colours: the box's edge is Field's CanvasText, the × is text. Reduced motion: nothing moves. */

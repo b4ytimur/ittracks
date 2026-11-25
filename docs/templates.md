@@ -20,7 +20,7 @@ A template is a file (`.ittracks.json`) holding one habit, and the habits inside
 
 A routine or a group shares as a whole program: the habits inside it come along, at any depth, with their schedules and Tasks. Habits that follow the routine keep following it, on the same Variants and with the same pairs of Variants. Archived habits stay out, and so does what sits inside them. A group with no habits inside can't be shared, since its days come from them. A habit inside a routine shared on its own takes the routine's days as a schedule of its own, with the Variants it was paired with.
 
-For a plain export with no questions, use **Settings → Export, import and templates → Export a habit**.
+For a plain export with no questions, use **Settings → Templates → Save as a file**.
 
 ## Import a template
 

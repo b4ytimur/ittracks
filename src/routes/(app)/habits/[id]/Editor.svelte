@@ -1168,7 +1168,7 @@
 		><input type="checkbox" bind:checked={h.remind} disabled={!!remindBlock && !h.remind} title={remindBlock?.reason} /> Remind me {h.cue.time ? 'at this time' : h.cue.range ? `when the ${h.cue.range.toLowerCase()} starts` : `(${remindBlock?.reason.toLowerCase() ?? 'set a time first'})`}</label
 	>
 	{#if h.remind}
-		<p class="muted small-text">Turn on reminders for this device in <a href="/settings/reminders">Settings</a>.</p>
+		<p class="muted small-text">Turn on reminders for this device in <a href="/settings#reminders">Settings</a>.</p>
 	{/if}
 {/snippet}
 
@@ -1638,7 +1638,7 @@
 			<li><a class="card" href="/journal?setup"><strong>Start a daily journal</strong><div class="muted small-text">A few lines each evening with a prompt, a mood to chart, and an optional day note on Today.</div></a></li>
 		{/if}
 	</ul>
-	<p class="muted small-text">You can skip this choice in <a href="/settings/editor">Settings</a>.</p>
+	<p class="muted small-text">You can skip this choice in <a href="/settings#newhabits">Settings</a>.</p>
 {:else}
 <EditChrome
 	title={data.isNew ? (data.copiedFrom ? `Copy of ${data.copiedFrom}` : 'New habit') : h.name || 'Habit'}
@@ -1753,7 +1753,7 @@
 {#if !data.isNew && h.direction === 'build' && mode === 'full'}
 	<GroupHeading title="Pauses" />
 	<section class="card stack" id="pause">
-		<p class="muted small-text" style="margin: 0">Paused days aren't due and never break the streak. For a break from every habit, use <a href="/settings/vacation">Vacation</a> in Settings.</p>
+		<p class="muted small-text" style="margin: 0">Paused days aren't due and never break the streak. For a break from every habit, use <a href="/settings#vacation">Vacation</a> in Settings.</p>
 		{#each data.pauses as p (p.id)}
 			<form method="POST" action="?/unpause" class="row" style="align-items: center" use:enhance>
 				<input type="hidden" name="id" value={p.id} />

@@ -141,7 +141,7 @@
 				? 'Logging past days is off, so this day can only be looked at.'
 				: `You can log up to ${data.pastDays === 1 ? 'yesterday' : `${data.pastDays} days back`}, so this day can only be looked at. Slips can still be added.`}</span
 		>
-		<span class="notice-acts"><a class="quiet hit" href="/settings/past-days">Change it in Settings</a></span>
+		<span class="notice-acts"><a class="quiet hit" href="/settings#past">Change it in Settings</a></span>
 	</div>
 {/if}
 {#if form?.error && !form?.habit}<p class="error" role="alert">{form.error}</p>{/if}

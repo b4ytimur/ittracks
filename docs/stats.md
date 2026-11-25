@@ -48,7 +48,7 @@ Each habit has a **Stats** tab (from its editor or chain) with cards made automa
 
 ## Your measures
 
-**Settings → Your measures and formulas**. A measure is a formula over the fields you log, with field names in square brackets: `[Weight] * [Reps]` (tonnage) or `[Distance] / [Time] * 60` (speed).
+**Settings → Your measures**. A measure is a formula over the fields you log, with field names in square brackets: `[Weight] * [Reps]` (tonnage) or `[Distance] / [Time] * 60` (speed).
 
 - Give it a **Name** and a **Unit**.
 - Work it out **On each set** (then **Add the sets up**, **Take the best set** or **Average the sets**) or **Once per log**.
