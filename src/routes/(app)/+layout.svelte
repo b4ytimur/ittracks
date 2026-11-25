@@ -71,7 +71,7 @@
 			<button class="small" onclick={() => showToast(`Discarded a change to ${q.label}.`, discard(q.id))}>{q.stale ? 'Use the other one' : 'Discard'}</button>
 		</div>
 	{/each}
-	<main class="content">
+	<main class="main">
 		{@render children()}
 	</main>
 	{#if toast.current}

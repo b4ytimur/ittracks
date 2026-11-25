@@ -1142,7 +1142,7 @@
 		padding: 1rem;
 		border-radius: var(--radius);
 		background: var(--accent);
-		color: var(--accent-text);
+		color: var(--on-accent);
 		border: none;
 		text-align: left;
 		animation: pop 0.25s ease-out;
