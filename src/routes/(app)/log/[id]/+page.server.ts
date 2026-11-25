@@ -17,7 +17,8 @@ import { NOTE_MAX, type ScheduleForm } from '$lib/forms';
 import { pickTask, type FillRule } from '$lib/engine/fill';
 import { appActor } from '$lib/server/core/actor';
 import { emit } from '$lib/server/core/events';
-import { isRoutine, kidsOn } from '$lib/server/rollup';
+import { doneOcc, reopenOcc, skipOcc } from '$lib/server/core/log';
+import { routineDay, routineSteps, undoRoutine, withRoutineUndo } from '$lib/server/routine-day';
 import { contentOf, staleSave } from '$lib/server/stale';
 import { revOf } from '$lib/logrev';
 import type { Actions, PageServerLoad } from './$types';
@@ -128,10 +129,12 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		if (group) redirect(303, `/habits/${group}/chain`);
 		error(404, 'Not found');
 	}
-	// A routine's day with habits inside it is run from its own page.
-	if (isRoutine(o.habit.id, o.occ.date) && kidsOn(o.habit.id, o.occ.date).some((k) => !k.occ.extra)) redirect(303, `/routine/${o.occ.id}`);
 	const today = userToday(accountId, cookies.get('tz'));
 	const past = o.occ.date < today;
+	const back = safeBack(url.searchParams.get('back')) ?? (past ? `/day/${o.occ.date}` : '/');
+	// A routine's day: the habits inside it are its places.
+	const routine = routineSteps(accountId, params.id);
+	if (routine) return { routine, today, back };
 	const win = windowFor(accountId, o.occ.date, today);
 	const v = o.occ.variantId
 		? db.select().from(variant).where(eq(variant.id, o.occ.variantId)).get()
@@ -193,6 +196,7 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		.filter((n): n is string => !!n);
 
 	return {
+		routine: null,
 		occurrence: {
 			id: o.occ.id,
 			date: o.occ.date,
@@ -208,7 +212,7 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		past,
 		/** False for a past day outside the window in Settings: only a finished log can be changed. */
 		canLog: win === 'ok' || win === 'today',
-		back: safeBack(url.searchParams.get('back')) ?? (past ? `/day/${o.occ.date}` : '/'),
+		back,
 		levels: o.habit.levels?.enabled ? o.habit.levels : null,
 		variantName: v?.name ?? null,
 		/** The plan this log follows, to change where it stands: an open log of today only. */
@@ -252,7 +256,36 @@ const savePayload = z.object({
 	)
 });
 
+/** A routine's day, or a habit inside it, from the form. */
+function step(event: Parameters<Actions[string]>[0], f: FormData) {
+	const accountId = event.locals.account!.id;
+	const day = routineDay(accountId, event.params.id ?? '');
+	if (!day) error(404, 'Not found');
+	const id = String(f.get('occurrence') ?? '');
+	const occ = id === day.o.occ.id ? day.o.occ : day.kids.find((k) => k.occ.id === id)?.occ;
+	if (!occ) error(404, 'Not found');
+	return { occ, actor: appActor(accountId, event.cookies.get('tz')) };
+}
+
 export const actions: Actions = {
+	/** Done: a habit inside a routine, or the routine (every habit inside still open gets its one tap). */
+	stepDone: async (event) => {
+		const { occ, actor } = step(event, await event.request.formData());
+		const { result, undo } = withRoutineUndo(occ, () => doneOcc(actor, occ, 'mark', null));
+		return { needsInput: result === 'needsInput', undo };
+	},
+	stepSkip: async (event) => {
+		const { occ, actor } = step(event, await event.request.formData());
+		return { undo: withRoutineUndo(occ, () => skipOcc(actor, occ)).undo };
+	},
+	stepUndo: async (event) => {
+		const f = await event.request.formData();
+		const { occ, actor } = step(event, f);
+		const undo = String(f.get('undo') ?? '');
+		if (undo) return undoRoutine(actor, occ, undo) ? undefined : fail(400, { error: 'Could not undo.' });
+		// What Same as last filled in goes again; what you logged stays.
+		reopenOcc(actor, occ, f.get('clear') === '1');
+	},
 	save: async ({ request, locals, params, cookies }) => {
 		const o = ownedOccurrence(locals.account!.id, params.id);
 		if (!o) error(404);
@@ -319,8 +352,10 @@ export const actions: Actions = {
 			if (p.finish) recount(locals.account!.id, o.habit.id, schedule, o.occ.date, today);
 		}
 		if (p.finish && !p.stay) {
-			if (past) {
-				const back = safeBack(p.back) ?? `/day/${o.occ.date}`;
+			const from = safeBack(p.back);
+			// A routine's step comes back to the routine, which says what it did.
+			if (past || from?.startsWith('/log/')) {
+				const back = from ?? `/day/${o.occ.date}`;
 				redirect(303, `${back}${back.includes('?') ? '&' : '?'}did=${o.occ.id}`);
 			}
 			// Short of what counts: back on Today it shows how far it got, and stays open.
