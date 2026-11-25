@@ -40,17 +40,18 @@
 				created = (r.data as { created: { name: string; secret: string } }).created;
 				adding = false;
 				limit = 'all';
+				await invalidateAll();
 			} else problem = (r.type === 'failure' && (r.data as { error?: string })?.error) || 'Not made.';
 		} catch {
 			problem = 'Not made. Are you online?';
 		}
 		busy = false;
-		await invalidateAll();
 	}
 	async function revoke(k: { id: string; name: string }) {
 		const r = await runAction('/settings?/revokeKey', { id: k.id });
-		if (r.ok) showToast(`Revoked ${k.name}.`);
-		else problem = r.error ?? 'Not revoked. Are you online?';
+		problem = r.ok ? '' : (r.error ?? 'Not revoked. Are you online?');
+		if (!r.ok) return;
+		showToast(`Revoked ${k.name}.`);
 		await invalidateAll();
 	}
 </script>

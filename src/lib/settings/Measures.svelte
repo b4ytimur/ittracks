@@ -21,13 +21,12 @@
 	async function put(m: CustomMeasure) {
 		try {
 			await statsOp({ op: 'measure.save', measure: m });
-			return true;
 		} catch (e) {
-			problem[m.id] = (e as Error).message;
+			problem[m.id] = navigator.onLine ? (e as Error).message : 'Not saved. Are you online?';
 			return false;
-		} finally {
-			await invalidateAll();
 		}
+		await invalidateAll();
+		return true;
 	}
 	async function change(m: CustomMeasure, values: Partial<CustomMeasure>) {
 		const next = { ...$state.snapshot(m), ...values } as CustomMeasure;

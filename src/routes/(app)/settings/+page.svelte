@@ -18,7 +18,7 @@
 	import QuickLinks from '$lib/settings/QuickLinks.svelte';
 	import Reminders from '$lib/settings/Reminders.svelte';
 	import Restore from '$lib/settings/Restore.svelte';
-	import { saveSetting } from '$lib/settings/save';
+	import { NO_ANSWER, saveSetting } from '$lib/settings/save';
 	import Template from '$lib/settings/Template.svelte';
 	import Vacations from '$lib/settings/Vacations.svelte';
 	import { statsOp } from '$lib/stats/client';
@@ -104,19 +104,37 @@
 	});
 
 	// ----- Saving -----
-	async function save(line: string, set: SettingsSet, said: string, renames?: Record<string, string>) {
-		problem[line] = await saveSetting(set, () => Object.fromEntries(Object.keys(set).map((k) => [k, data.settings[k as keyof typeof data.settings]])) as SettingsSet, said, renames);
+	let drawn = $state<Record<string, number>>({});
+	/** It wasn't saved: say why, and show the line's controls as they are saved. */
+	async function failed(line: string, why: string) {
+		problem[line] = why;
+		const controls = () => [...document.querySelectorAll<HTMLElement>(`#line-${line} > .su-body :is(input, button, select)`)];
+		const at = controls().indexOf(document.activeElement as HTMLElement);
+		drawn[line] = (drawn[line] ?? 0) + 1;
+		await tick();
+		controls()[at]?.focus();
 	}
-	async function view(body: Record<string, unknown>, back: Record<string, unknown>, said: string) {
+	async function save(line: string, set: SettingsSet, said: string, renames?: Record<string, string>) {
+		const why = await saveSetting(set, () => Object.fromEntries(Object.keys(set).map((k) => [k, data.settings[k as keyof typeof data.settings]])) as SettingsSet, said, renames);
+		if (why === NO_ANSWER) showError(why, () => save(line, set, said, renames));
+		// The parts keep what is being typed.
+		if (why && line !== 'parts') return void failed(line, why);
+		problem[line] = why;
+	}
+	async function view(line: string, body: Record<string, unknown>, back: Record<string, unknown>, said: string) {
 		const r = await viewOp({ op: 'patch', ...body });
-		if (r) showToast(said, async () => !!(await viewOp({ op: 'patch', ...back })));
-		else showError('Not saved. Are you online?', () => view(body, back, said));
+		if (!r) {
+			showError(NO_ANSWER, () => view(line, body, back, said));
+			return void failed(line, NO_ANSWER);
+		}
+		problem[line] = '';
+		showToast(said, async () => !!(await viewOp({ op: 'patch', ...back })));
 		await invalidateAll();
 	}
 	function toggle(f: FeatureKey) {
 		const was = [...views.hidden];
 		const off = !was.includes(f);
-		view({ hidden: off ? [...was, f] : was.filter((x) => x !== f) }, { hidden: was }, `${featureName(f)} ${off ? 'is off. What you set in it is kept.' : 'is on.'}`);
+		view('features', { hidden: off ? [...was, f] : was.filter((x) => x !== f) }, { hidden: was }, `${featureName(f)} ${off ? 'is off. What you set in it is kept.' : 'is on.'}`);
 	}
 	/** What the view rules say only because a feature is off. */
 	const offIssues = $derived.by(() => {
@@ -126,11 +144,11 @@
 	async function stat(line: string, body: Record<string, unknown>, back: Record<string, unknown>, said: string) {
 		try {
 			await statsOp({ op: 'settings', ...body });
-			problem[line] = '';
-			showToast(said, () => statsOp({ op: 'settings', ...back }).then(() => true));
 		} catch (e) {
-			problem[line] = (e as Error).message;
+			return void failed(line, navigator.onLine ? (e as Error).message : NO_ANSWER);
 		}
+		problem[line] = '';
+		showToast(said, () => statsOp({ op: 'settings', ...back }).then(() => true));
 		await invalidateAll();
 	}
 	function formula(f: string) {
@@ -189,7 +207,7 @@
 				{#each g.lines as l (l.id)}
 					<SaidLine id={l.id} label={l.label} words={l.words} bind:open={() => !!open[l.id], (v) => (open[l.id] = v)} problem={problem[l.id]}>
 						{#if l.id !== 'password'}<p class="field-hint meta">{l.says}</p>{/if}
-						{@render body(l.id)}
+						{#key drawn[l.id]}{@render body(l.id)}{/key}
 					</SaidLine>
 				{/each}
 			</div>
@@ -259,10 +277,10 @@
 		{#if data.stats.muscle.high < data.stats.muscle.medium || data.stats.muscle.medium < data.stats.muscle.low}<p class="meta">A high tag usually counts at least as much as a medium one, and medium as much as low.</p>{/if}
 	{:else if id === 'startpage'}
 		<div class="chips" role="radiogroup" aria-label="Start page">
-			{#each PAGES as p (p)}<label class="toggle"><input type="radio" class="vh" name="startpage" checked={views.startPage === p} onchange={() => view({ startPage: p }, { startPage: views.startPage as Page }, `The app opens on ${PAGE_LABEL[p]}.`)} /><span data-reserve={PAGE_LABEL[p]}>{PAGE_LABEL[p]}</span></label>{/each}
+			{#each PAGES as p (p)}<label class="toggle"><input type="radio" class="vh" name="startpage" checked={views.startPage === p} onchange={() => view('startpage', { startPage: p }, { startPage: views.startPage as Page }, `The app opens on ${PAGE_LABEL[p]}.`)} /><span data-reserve={PAGE_LABEL[p]}>{PAGE_LABEL[p]}</span></label>{/each}
 		</div>
 	{:else if id === 'template'}
-		<Template {views} templates={data.templates} issues={data.viewIssues} />
+		<Template {views} templates={data.templates} issues={data.viewIssues} onfail={(why) => (why ? failed('template', why) : (problem.template = ''))} />
 	{:else if id === 'features'}
 		<div class="l-stack" style="--gap: var(--space-inline)">
 			{#each Object.keys(FEATURES) as FeatureKey[] as f (f)}

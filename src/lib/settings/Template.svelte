@@ -5,7 +5,7 @@
 	import { viewOp } from '$lib/viewclient';
 	import { ownChanges, type ViewSettings } from '$lib/views';
 
-	let { views, templates, issues }: { views: ViewSettings; templates: { id: string; name: string; blurb: string; summary: string }[]; issues: { reason: string }[] } = $props();
+	let { views, templates, issues, onfail }: { /** It wasn't saved, and why; '' when it was. */ onfail: (why: string) => void; views: ViewSettings; templates: { id: string; name: string; blurb: string; summary: string }[]; issues: { reason: string }[] } = $props();
 
 	const mine = $derived(ownChanges(views));
 	const name = $derived(templates.find((t) => t.id === views.template)?.name ?? 'Custom');
@@ -15,8 +15,9 @@
 		const r = await viewOp({ op: 'template', id, keep });
 		if (!r) {
 			showError('Not switched. Are you online?', () => use(id, keep));
-			return void (await invalidateAll());
+			return onfail('Not switched. Are you online?');
 		}
+		onfail('');
 		const before = r.previous;
 		await invalidateAll();
 		showToast(keep ? `Switched to ${t.name}${kept ? ', your own changes kept' : ''}.` : `Went back to ${t.name} as it comes.`, async () => !!(await viewOp({ op: 'restore', views: before })));
