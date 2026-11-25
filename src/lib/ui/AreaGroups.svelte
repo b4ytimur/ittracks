@@ -51,10 +51,10 @@
 		await invalidateAll();
 		return out;
 	}
-	async function change(a: Area, values: { name?: string; color?: string }) {
-		const was = 'name' in values ? { name: a.name } : { color: a.color };
+	async function change(a: Area, values: { name?: string; color?: string; icon?: string }) {
+		const was = 'name' in values ? { name: a.name } : 'icon' in values ? { icon: a.icon } : { color: a.color };
 		if (!(await call({ op: 'change', id: a.id, ...values }))) return;
-		showToast(values.name ? `Renamed ${a.name} to ${values.name}.` : `${a.name} has a new colour.`, async () => void (await call({ op: 'change', id: a.id, ...was })));
+		showToast(values.name ? `Renamed ${a.name} to ${values.name}.` : `${a.name} has a new ${'icon' in values ? 'icon' : 'colour'}.`, async () => void (await call({ op: 'change', id: a.id, ...was })));
 	}
 	async function remove(a: Area) {
 		const r = await call({ op: 'delete', id: a.id });
@@ -95,6 +95,7 @@
 			<GroupHeading
 				title={a?.name ?? g.label}
 				color={g.color}
+				icon={a?.icon}
 				{mode}
 				count={String(g.items.length)}
 				grip={a ? ctx.grip : undefined}
@@ -117,6 +118,7 @@
 							><span class="swatch" data-size="picker" style:--c={c}></span></button
 						>
 					{/each}
+					<input class="icon" aria-label="Icon of {a.name}" placeholder="Icon" maxlength="8" value={a.icon} onchange={(e) => change(a, { icon: e.currentTarget.value.trim() })} />
 				</div>
 			{/if}
 			{@render group(g)}
@@ -149,6 +151,9 @@
 	.pick-color[aria-pressed='true'] {
 		border-color: var(--line-chosen);
 		box-shadow: var(--chosen-shadow);
+	}
+	.icon {
+		width: 4.5rem;
 	}
 	.new {
 		margin: var(--space-section) 0 0;

@@ -1,14 +1,14 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { queueable } from '$lib/queueable';
-	import { postAction, showToast } from '$lib/toast.svelte';
-	import type { ActionResult } from '@sveltejs/kit';
+	import { dismiss, hold, postAction, release, showToast } from '$lib/toast.svelte';
+	import type { ActionResult, SubmitFunction } from '@sveltejs/kit';
 	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { replaceState } from '$app/navigation';
 	import { outbox } from '$lib/outbox.svelte';
 	import ViewBar from '$lib/ViewBar.svelte';
-	import { viewOp } from '$lib/viewclient';
+	import { saveLayout, viewOp } from '$lib/viewclient';
 	import { headlineText } from '$lib/engine/stats';
 	import { isPartial, progressText } from '$lib/engine/progress';
 	import { rollupDay, rollupText } from '$lib/engine/rollup';
@@ -16,15 +16,22 @@
 	import { addDays } from '$lib/engine/dates';
 	import DayNote from '$lib/DayNote.svelte';
 	import EditableList from '$lib/ui/EditableList.svelte';
-	import EditButton from '$lib/ui/EditButton.svelte';
-	import { reorderFrom } from '$lib/ui/list';
+	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import EmptyState from '$lib/ui/EmptyState.svelte';
+	import GroupHeading from '$lib/ui/GroupHeading.svelte';
+	import LogControl, { type Way } from '$lib/ui/LogControl.svelte';
+	import StatusTag from '$lib/ui/StatusTag.svelte';
+	import { SvelteMap } from 'svelte/reactivity';
+	import { reorderFrom, type Mode } from '$lib/ui/list';
 	import {
 		DONE_MODES,
+		LAYOUTS,
 		LINES,
 		SECTIONS,
 		STATS,
 		TODAY_STATUSES,
 		WIDGETS,
+		fromTemplate,
 		groupBy,
 		initialState,
 		manualOrder,
@@ -32,6 +39,7 @@
 		passes,
 		sectionOrder,
 		type FeatureKey,
+		type LayoutKey,
 		type LineKey,
 		type SectionKey,
 		type StatKey,
@@ -40,24 +48,45 @@
 
 	let { data, form } = $props();
 	let slipOpen = $state<string | null>(null);
-	let celebrating = $state<{ name: string; message: string; jar: string | null } | null>(null);
-
-	// A finished habit with a reward gets a short celebration, from Today or from the Log screen.
-	$effect(() => {
-		const id = form?.finished ?? data.finished;
-		const item = id ? data.build.find((b) => b.habitId === id) : null;
-		if (!item?.reward?.celebrate) return;
-		const jar = item.reward.jar;
-		celebrating = {
-			name: item.name,
-			message:
-				item.reward.message ||
-				(item.identities.length ? 'Done. Another vote for who you want to be.' : 'Done. Nice work.'),
-			jar: jar ? `${fmt(jar.total)} ${jar.unit}${jar.goal ? ` toward ${jar.goal}` : ''}` : null
-		};
-		if (data.finished) history.replaceState(history.state, '', '/');
-		const t = setTimeout(() => (celebrating = null), 4500);
-		return () => clearTimeout(t);
+	/**
+	 * A row that was just finished keeps its place for a moment, with its reward and its own Undo;
+	 * then it goes where finished rows go, and the band has the Undo.
+	 */
+	const just = new SvelteMap<string, { words: string; undo?: () => void }>();
+	const HOLD_MS = 4500;
+	function celebrate(habitId: string, entry?: number, undo?: () => Promise<void>) {
+		const item = data.build.find((b) => b.habitId === habitId);
+		const jar = item?.reward?.jar;
+		const words = item?.reward?.celebrate
+			? [
+					item.reward.message || (item.identities.length ? 'Another vote for who you want to be.' : 'Nice work.'),
+					jar ? `${fmt(jar.total)} ${jar.unit}${jar.goal ? ` toward ${jar.goal}` : ''}` : ''
+				]
+					.filter(Boolean)
+					.join(' · ')
+			: '';
+		just.set(habitId, {
+			words,
+			undo:
+				undo &&
+				(async () => {
+					if (entry) dismiss(entry);
+					just.delete(habitId);
+					await undo();
+					await invalidateAll();
+				})
+		});
+		if (entry) hold(entry);
+		setTimeout(() => {
+			just.delete(habitId);
+			if (entry) release(entry);
+		}, HOLD_MS);
+	}
+	onMount(() => {
+		if (data.finished) {
+			celebrate(data.finished);
+			history.replaceState(history.state, '', '/');
+		}
 	});
 	let feeling = $state('');
 
@@ -112,7 +141,11 @@
 				`Logged ${did.habit}. It counts once it reaches ${did.short === 'target' ? 'the full target' : 'the Minimum'}, and stays open until the day ends.`,
 				undo
 			);
-		else showToast(`${did.skipped ? 'Skipped' : 'Logged'} ${did.habit}.`, undo);
+		else {
+			const entry = showToast(`${did.skipped ? 'Skipped' : 'Logged'} ${did.habit}.`, undo);
+			const item = data.build.find((b) => b.occurrence?.id === did.occurrence);
+			if (item && !did.skipped) celebrate(item.habitId, entry, undo);
+		}
 	}
 	const quick = (occurrenceId: string, name: string, kind: 'done' | 'skipped' = 'done') =>
 		queueable(`${name}`, {
@@ -138,6 +171,16 @@
 				});
 			}
 		});
+	const resisted =
+		(vote: boolean): SubmitFunction =>
+		() =>
+		async ({ result, update }) => {
+			await update();
+			if (result.type === 'success' && result.data?.cravingId) {
+				const id = String(result.data.cravingId);
+				showToast(vote ? `Resisted. That's a vote for who you want to be.` : `Craving resisted. Nice.`, () => postAction('?/uncraving', { id }).then(() => {}));
+			}
+		};
 	const stepLabel = (p: { type: string; unit: string; step: number | null }) => {
 		const step = p.step ?? (p.type === 'duration' ? 5 : p.unit === 'kg' ? 2.5 : p.unit === 'lb' || p.unit === 'lbs' ? 5 : 1);
 		return `+${step}${p.type === 'duration' || (p.type === 'number' && p.unit) ? ` ${p.unit}` : ''}`;
@@ -165,14 +208,33 @@
 
 	/** Change a Today layout setting here at once, and save it. */
 	function setToday(patch: Partial<typeof views.today>) {
+		const before = views.today;
 		views.today = { ...views.today, ...patch };
-		viewOp({ op: 'patch', today: patch });
+		saveLayout({ op: 'patch', today: patch }, () => (views.today = before), () => setToday(patch));
 	}
 	const sections = $derived(sectionOrder(views));
 	const toggleIn = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
 	// ----- Edit mode: the same page, with widgets, sections and habits to drag, hide and show -----
-	let editing = $state(false);
+	let mode = $state<Mode>('use');
+	const editing = $derived(mode === 'edit');
+	const layout = $derived(view.layout);
+	function setLayout(to: LayoutKey) {
+		const was = view.layout;
+		view.layout = to;
+		showToast(`Today now uses ${LAYOUTS[to]}.`, () => void (view.layout = was));
+	}
+	const template = $derived(fromTemplate(views.template).today);
+	const atDefault = $derived(
+		(['sections', 'done', 'widgets', 'lines', 'timeAware', 'headline'] as const).every((k) => JSON.stringify(views.today[k]) === JSON.stringify(template[k]))
+	);
+	function resetLayout() {
+		const { sections, done, widgets, lines, timeAware, headline } = views.today;
+		setToday({ sections: template.sections, done: template.done, widgets: template.widgets, lines: template.lines, timeAware: template.timeAware, headline: template.headline });
+		showToast('Layout reset.', () => setToday({ sections, done, widgets, lines, timeAware, headline }));
+	}
+	const folded = (k: string) => views.today.folded.includes(k);
+	const fold = (k: string) => setToday({ folded: toggleIn(views.today.folded, k) });
 	/** Every widget, the shown ones first in their order. */
 	const allWidgets = $derived([...views.today.widgets, ...(Object.keys(WIDGETS) as WidgetKey[]).filter((w) => !views.today.widgets.includes(w))]);
 	const reorderWidgets = (order: string[]) => setToday({ widgets: (order as WidgetKey[]).filter((w) => views.today.widgets.includes(w)) });
@@ -249,25 +311,38 @@
 		);
 	});
 	const isDone = (b: Item) => statusOf(b.occurrence!) !== 'due';
+	/** Finished, and past its moment in place. */
+	const settled = (b: Item) => isDone(b) && !just.has(b.habitId);
 	const shownBuild = $derived.by(() => {
 		let list = sorted.filter((b) => !timeHidden.has(b.habitId));
-		const mode = views.today.done;
-		if (mode === 'bottom') list = [...list.filter((b) => !isDone(b)), ...list.filter(isDone)];
-		if (mode === 'collapse' || mode === 'hide') list = list.filter((b) => !isDone(b));
+		const at = layout === 'flat' ? 'bottom' : layout === 'focus' ? 'collapse' : views.today.done;
+		if (at === 'bottom') list = [...list.filter((b) => !settled(b)), ...list.filter(settled)];
+		if (at === 'collapse' || at === 'hide') list = list.filter((b) => !settled(b));
 		return list;
 	});
 	const doneFolded = $derived(
-		views.today.done === 'collapse' || views.today.done === 'hide' ? sorted.filter((b) => !timeHidden.has(b.habitId) && isDone(b)) : []
+		layout === 'focus' || views.today.done === 'collapse' || views.today.done === 'hide' ? sorted.filter((b) => !timeHidden.has(b.habitId) && settled(b)) : []
 	);
-	let showDone = $state(false);
+	/** The one row whose Log stands out: what is stacked on something done, or else the first one due. */
+	const upNext = $derived.by(() => {
+		const due = shownBuild.flatMap((b) => [b, ...kidsOf(b.habitId)]).filter((b) => !isDone(b) && !(b.group && !b.group.routine && kidsOf(b.habitId).length));
+		return (due.find((b) => b.upNext) ?? due[0])?.habitId;
+	});
+	const areaOf = (id: string | null) => data.areas.find((a) => a.id === id);
+	const countOf = (items: Item[]) => {
+		const all = items.flatMap((b) => (b.group ? kidsOf(b.habitId) : [b]));
+		return all.length ? `${all.filter(isDone).length} of ${all.length} done` : '';
+	};
 	const groups = $derived(
 		groupBy(
 			shownBuild.map((b) => ({ ...b, part: partOf(b) })),
-			view.group,
+			layout === 'blocks' ? 'area' : view.group,
 			{ areas: data.areas, parts: partNames }
 		)
 	);
 	const breakingShown = $derived(data.breaking.filter((b) => passes(view, { ...b, direction: 'break' })));
+	const sizeOf = (k: SectionKey) => ({ due: sorted.length, breaking: breakingShown.length, prep: hidden('prep') ? 0 : data.prep.length, paused: data.paused.length, resting: data.resting.length })[k];
+	const emptySection = (k: SectionKey) => sizeOf(k) === 0;
 	const showSection = (k: SectionKey) =>
 		view.direction === 'build' ? k !== 'breaking' : view.direction === 'break' ? k === 'breaking' : true;
 	const identityNames = $derived([...new Set([...data.build, ...data.breaking].flatMap((b) => b.identities))].sort());
@@ -314,6 +389,53 @@
 	type Item = (typeof data.build)[number];
 	const cueLine = (c: Item['cue']) =>
 		[c.after ? `after ${c.after}` : null, c.time ?? c.range, c.place].filter(Boolean).join(' · ');
+	const meta = (item: Item) => {
+		const o = item.occurrence!;
+		const st = item.group ? groupNow(item).status : statusOf(o);
+		const g = item.group ? groupNow(item) : null;
+		return [
+			(layout === 'focus' || layout === 'flat') && view.group !== 'area' ? areaOf(item.areaId)?.name : null,
+			st === 'due' ? (item.inProgress ? 'In progress' : 'Due') : null,
+			item.multiVariant ? o.variantName : null,
+			g?.total ? rollupText(g) : null,
+			item.progress && st !== 'skipped' && (st === 'due' || isPartial(item.progress)) ? progressText(item.progress) : null,
+			line('cue') ? cueLine(item.cue) : null,
+			headlineOf(item)
+		]
+			.filter(Boolean)
+			.join(' · ');
+	};
+	/** Finished, in words: "Done at Minimum". */
+	const ended = (item: Item) => {
+		const st = item.group ? groupNow(item).status : statusOf(item.occurrence!);
+		if (st === 'done') return `Done${item.levels || (item.group && item.occurrence?.level === 'minimum') ? ` at ${levelName[item.occurrence?.level ?? 'target']}` : ''}`;
+		return st === 'skipped' ? 'Skipped' : null;
+	};
+	/** The usual way to log a habit, and the others. */
+	function waysOf(item: Item): { act: Way; ways: (Way | '-')[] } {
+		const o = item.occurrence!;
+		const fields = { occurrence: o.id };
+		const log = quick(o.id, item.name);
+		const skip: Way = { label: 'Skip today', action: '?/skip', fields, submit: quick(o.id, item.name, 'skipped') };
+		if (item.group) return { act: { label: 'Start', href: `/routine/${o.id}` }, ways: [{ label: 'Mark all done', action: '?/done', fields, submit: log }, '-', skip] };
+		const details: Way[] = o.slotCount ? [{ label: 'Log details…', href: `/log/${o.id}` }] : [];
+		const post = o.slotCount ? '?/quick' : '?/done';
+		const levels: Way[] =
+			item.levels && line('levels') && !item.inProgress && (o.slotCount === 0 || item.quickDone || item.canRepeat)
+				? (['minimum', 'target', 'stretch'] as const).map((l) => ({ label: levelName[l], value: item.levels![l], action: post, fields: { ...fields, level: l }, submit: log }))
+				: [];
+		const rest = [...levels, ...details, '-' as const, skip];
+		if (item.progress?.kind === 'amount' && !pending[o.id])
+			return { act: { label: stepLabel(item.progress), action: '?/plus', fields, submit: plus(o.id, item.name) }, ways: [...(details.length ? [] : [{ label: 'Log details…', href: `/log/${o.id}` }]), ...rest] };
+		if (o.slotCount) {
+			if (item.inProgress) return { act: { label: 'Resume', href: `/log/${o.id}` }, ways: ['-' as const, skip].slice(1) };
+			if (item.canRepeat) return { act: { label: 'Same as last', action: '?/same', fields, submit: log }, ways: rest };
+			if (item.quickDone) return { act: { label: 'Done', action: '?/quick', fields, submit: log }, ways: rest };
+			return { act: { label: 'Log', href: `/log/${o.id}` }, ways: [...levels, ...(levels.length ? ['-' as const] : []), skip] };
+		}
+		return { act: { label: 'Done', action: '?/done', fields, submit: log }, ways: levels.length ? rest : [skip] };
+	}
+
 	const triggerLine = (t: { kind: string; label: string; percent: number }) =>
 		t.kind === 'feeling'
 			? `${t.percent}% when ${t.label}`
@@ -326,13 +448,22 @@
 
 <svelte:head><title>Today · ittracks</title></svelte:head>
 
-<header class="bar">
-	<div>
-		<h1>Today</h1>
-		<div class="muted">{dateLabel}{#if data.canBackfill}{' · '}<a href="/day">Log a past day</a>{/if}</div>
-	</div>
-	{#if !hidden('identities')}<a href="/identities">Identities</a>{/if}
-</header>
+<EditChrome
+	title="Today"
+	bind:mode
+	modes={['use', 'edit']}
+	hints={{ use: dateLabel, edit: 'Drag ⠿ to move. Order is shared with Habits.' }}
+	onreset={resetLayout}
+	{atDefault}
+>
+	{#snippet actions()}
+		{#if data.canBackfill}<a class="button" href="/day">Log a past day</a>{/if}
+		{#if !hidden('identities')}<a class="button" href="/identities">Identities</a>{/if}
+	{/snippet}
+	{#snippet tools()}
+		<label class="layout-pick">Layout <select value={layout} onchange={(e) => setLayout(e.currentTarget.value as LayoutKey)}>{#each Object.entries(LAYOUTS) as [k, label] (k)}<option value={k}>{label}</option>{/each}</select></label>
+	{/snippet}
+</EditChrome>
 
 {#if data.askDay}
 	<form method="POST" action="?/day" class="card stack ask" use:enhance>
@@ -383,7 +514,8 @@
 {/if}
 
 {#if !data.build.length && !data.resting.length && !data.breaking.length && !data.paused.length}
-	<p class="muted">Nothing here yet. <a href="/habits/new">Create a habit</a> or <a href="/gallery">pick a ready-made one</a>.</p>
+	<EmptyState text="Nothing here yet." />
+	<div class="l-cluster"><a class="button primary" href="/habits/new">New habit</a><a class="button" href="/gallery">Gallery</a></div>
 {:else}
 	<ViewBar
 		page="today"
@@ -394,11 +526,10 @@
 		statuses={TODAY_STATUSES}
 		direction={data.breaking.length > 0}
 	>
-		{#snippet end()}<EditButton bind:editing look="chip" />{/snippet}
+		{@render layoutOptions()}
 	</ViewBar>
 
 	{#if editing}
-		{@render layoutPanel()}
 		<EditableList
 			layout="block"
 			items={allWidgets}
@@ -422,29 +553,107 @@
 	{/if}
 {/if}
 
-{#if editing}
+{#if layout === 'outline'}
 	<EditableList
 		class="sections"
-		layout="block"
-		items={sections}
+		layout="bare"
+		items={editing ? sections : sections.filter((x) => x.show && showSection(x.key) && !emptySection(x.key))}
 		key={(s) => s.key}
 		label={(s) => SECTIONS[s.key]}
-		editing
+		{mode}
 		ariaLabel="Sections of Today"
 		onmove={(_, order) => reorderSections(order)}
-		onremove={(s) => toggleSection(s.key)}
-		removeLabel={(s) => (s.show ? 'Hide' : 'Show')}
 	>
-		{#snippet title(sec)}{sec.key === 'breaking' && !limiting ? 'Breaking' : SECTIONS[sec.key]}{sec.show ? '' : ' (hidden)'}{/snippet}
-		{#snippet row(sec)}
-			{#if sec.show && showSection(sec.key)}{@render section(sec.key)}{/if}
+		{#snippet row(sec, ctx)}
+			{@const k = `section:${sec.key}`}
+			<GroupHeading
+				title={sec.key === 'breaking' && !limiting ? 'Breaking' : SECTIONS[sec.key]}
+				{mode}
+				count={sec.key === 'due' ? countOf(sorted) : String(sizeOf(sec.key))}
+				grip={ctx.grip}
+				hidden={!sec.show}
+				folded={folded(k)}
+				onfold={sec.show ? () => fold(k) : undefined}
+				verb={editing ? verb : undefined}
+			/>
+			{#snippet verb()}<button type="button" class="quiet verb hit" aria-label="{sec.show ? 'Hide' : 'Show'} {SECTIONS[sec.key]}" onclick={() => toggleSection(sec.key)}>{sec.show ? 'Hide' : 'Show'}</button>{/snippet}
+			{#if sec.show && showSection(sec.key) && !folded(k) && !ctx.dragging}{@render section(sec.key)}{/if}
 		{/snippet}
 	</EditableList>
+{:else if layout === 'focus'}
+	{@const first = shownBuild.filter((b) => b.habitId === upNext || kidsOf(b.habitId).some((k) => k.habitId === upNext))}
+	{@const rest = shownBuild.filter((b) => !first.includes(b))}
+	{#if first.length}
+		<GroupHeading title="Up next" {mode} />
+		{@render habitList(first, 'Up next')}
+	{/if}
+	{#if rest.length}
+		<GroupHeading title="Still to do" {mode} count={String(rest.length)} />
+		{@render habitList(rest, 'Still to do')}
+	{/if}
+	{@render timeLine()}
+	{#if breakingShown.length}
+		<GroupHeading title={limiting ? 'Limits' : 'Breaking'} {mode} count={String(breakingShown.length)} />
+		{@render breakingSection()}
+	{/if}
+	{#if doneFolded.length}
+		<GroupHeading title="Done today" {mode} count={String(doneFolded.length)} folded={folded('focus:done')} onfold={() => fold('focus:done')} />
+		{#if !folded('focus:done')}{@render habitList(doneFolded, 'Done today')}{/if}
+	{/if}
+	{#if data.resting.length}
+		<GroupHeading title="Not today" {mode} count={String(data.resting.length)} folded={folded('focus:later')} onfold={() => fold('focus:later')} />
+		{#if !folded('focus:later')}{@render restingSection()}{/if}
+	{/if}
+	{@render laterLines(false)}
+{:else if layout === 'blocks'}
+	<ul class="elist blocks" data-mode="use">
+		{#each groups as g (g.key)}
+			<li class="holder area-block">
+				<div class="card">
+					<div class="content">
+						<span class="name">{areaOf(g.key)?.icon ?? ''} {areaOf(g.key)?.name ?? 'No Area'}</span>{#if g.color}<span class="swatch" style:--c={g.color}></span>{/if}
+						<span class="tags"><span class="tag count">{countOf(g.items)}</span></span>
+					</div>
+				</div>
+				<div class="shelf">{@render habitList(g.items, g.label)}</div>
+			</li>
+		{/each}
+		{#if breakingShown.length}
+			<li class="holder area-block">
+				<div class="card"><div class="content"><span class="name">{limiting ? 'Limits' : 'Breaking'}</span><span class="tags"><span class="tag count">{breakingShown.length}</span></span></div></div>
+				<div class="shelf">{@render breakingSection()}</div>
+			</li>
+		{/if}
+		{#if data.resting.length}
+			<li class="holder area-block">
+				<div class="card">
+					<button type="button" class="fold" aria-expanded={!folded('blocks:later')} aria-label="Not today" onclick={() => fold('blocks:later')}><span class="chev" aria-hidden="true">›</span></button>
+					<div class="content">
+						<span class="name">Not today</span><span class="tags"><span class="tag count">{data.resting.length}</span></span>
+						{#if folded('blocks:later')}<p class="meta-line">{data.resting.map((x) => x.name).join(', ')}</p>{/if}
+					</div>
+				</div>
+				{#if !folded('blocks:later')}<div class="shelf">{@render restingSection()}</div>{/if}
+			</li>
+		{/if}
+	</ul>
+	{@render timeLine()}
+	{@render laterLines(false)}
 {:else}
-	{#each sections as sec (sec.key)}
-		{#if sec.show && showSection(sec.key)}{@render section(sec.key)}{/if}
-	{/each}
+	{@render habitList(shownBuild, 'Today')}
+	{@render breakingSection()}
+	{@render timeLine()}
+	{@render laterLines(true)}
 {/if}
+
+{#snippet laterLines(resting: boolean)}
+	{#if data.prep.length && !hidden('prep')}
+		<GroupHeading title="Prepare for tomorrow" {mode} depth={2} />
+		{@render prepSection()}
+	{/if}
+	{#if data.paused.length}<p class="later-line">Paused: {data.paused.map((x) => `${x.name} until ${shortDate(x.pausedUntil!)}`).join(', ')}</p>{/if}
+	{#if resting && data.resting.length}<p class="later-line">Not today: {data.resting.map((x) => x.name).join(', ')}</p>{/if}
+{/snippet}
 
 {#snippet section(key: SectionKey)}
 	{#if key === 'due'}{@render dueSection()}
@@ -496,11 +705,8 @@
 	{/if}
 {/snippet}
 
-{#snippet layoutPanel()}
-	<div class="card stack layout">
-		<p class="muted small-text" style="margin: 0">
-			Drag ⠿ to move widgets, sections and habits; Hide or Show each one. Moving habits changes My order, shared with the Habits page.
-		</p>
+{#snippet layoutOptions()}
+	<div class="stack">
 		<div class="row">
 			<label class="grow"
 				>Done items
@@ -532,8 +738,7 @@
 					{#if !f || !hidden(f)}
 						<button
 							type="button"
-							class="chip small"
-							class:on={views.today.lines.includes(k as LineKey)}
+							class="toggle"
 							aria-pressed={views.today.lines.includes(k as LineKey)}
 							onclick={() => setToday({ lines: toggleIn(views.today.lines, k as LineKey) })}>{label}</button
 						>
@@ -541,14 +746,82 @@
 				{/each}
 			</div>
 		</div>
-		<p class="muted small-text" style="margin: 0">To switch template, go to <a href="/settings/views">Settings, Views</a>. To hide whole features, go to <a href="/settings/features">Settings, Features</a>.</p>
 	</div>
 {/snippet}
 
 {#snippet habitList(items: Item[], name: string)}
-	<EditableList {items} key={(b) => b.habitId} label={(b) => b.name} {editing} ariaLabel={name} onmove={(_, order) => reorderHabits(order)}>
-		{#snippet row(item)}{@render card(item)}{/snippet}
+	<EditableList
+		{items}
+		key={(b) => b.habitId}
+		label={(b) => b.name}
+		{mode}
+		rowCard
+		holder={(b) => !!b.group && kidsOf(b.habitId).length > 0}
+		itemClass={(b) => [isDone(b) && statusOf(b.occurrence!) === 'skipped' ? 'skipped' : isDone(b) ? 'done' : '', just.has(b.habitId) ? 'just-done' : '', b.afterHabitId ? 'stacked' : ''].join(' ')}
+		ariaLabel={name}
+		onmove={(_, order) => reorderHabits(order)}
+	>
+		{#snippet row(item)}{@render habitRow(item)}{/snippet}
+		{#snippet actions(item)}{@render verb(item)}{/snippet}
+		{#snippet children(item)}{@render habitList(kidsOf(item.habitId), `Inside ${item.name}`)}{/snippet}
 	</EditableList>
+{/snippet}
+
+{#snippet habitRow(item: Item)}
+	{@const o = item.occurrence!}
+	{@const st = item.group ? groupNow(item).status : statusOf(o)}
+	{@const done = ended(item)}
+	<a class="name" href="/habits/{item.habitId}/chain">{item.name}</a>
+	{#if item.habitId === upNext && layout !== 'focus'}<span class="tags"><StatusTag status="upNext" /></span>{/if}
+	<p class="meta-line">
+		{#if done}<span class="mark" aria-hidden="true">{st === 'skipped' ? '↷' : '✓'}</span> {done}{#if just.get(item.habitId)?.words}{' · '}{just.get(item.habitId)?.words}{/if}{meta(item) ? ' · ' : ''}{/if}{meta(item)}
+	</p>
+	{#if item.atRisk && st === 'due'}<p class="row-line warn meta">You missed last time. Don't miss twice{item.levels ? ': even the Minimum counts' : ''}.</p>{/if}
+	{#if item.levels?.minimum && line('levels') && st === 'due'}<p class="row-line meta">Minimum: {item.levels.minimum}</p>{/if}
+	{#if item.reframe && line('reframe')}<p class="row-line meta">{item.reframe}</p>{/if}
+	{#if item.bundle && line('bundle')}
+		<p class="row-line meta">{item.bundle.strict ? (o.status === 'done' ? 'Earned' : 'After this') : 'Pair with'}: {item.bundle.reward}</p>
+	{/if}
+	{#if item.reward?.jar && line('reward')}
+		<p class="row-line meta">Jar: {fmt(item.reward.jar.total)} {item.reward.jar.unit}{item.reward.jar.goal ? ` toward ${item.reward.jar.goal}` : ''}</p>
+	{/if}
+	{#if item.identities.length && line('identities')}<p class="row-line meta">Vote for: {item.identities.join(' · ')}</p>{/if}
+	{#if item.progression && line('progression')}
+		{@const p = item.progression}
+		<div class="notice" data-mode={mode}>
+			<span class="notice-text meta"
+				>You've hit your targets {p.hits} times in a row. Raise them by {p.by}{p.unit === 'percent' ? '%' : p.by === 1 ? ' step' : ' steps'}? {p.changes.join(' · ')}</span
+			>
+			<span class="notice-acts">
+				<form method="POST" action="?/raise" use:enhance><input type="hidden" name="habit" value={item.habitId} /><button class="quiet hit" aria-label="Raise the targets of {item.name}">Raise</button></form>
+				<form method="POST" action="?/notYet" use:enhance><input type="hidden" name="habit" value={item.habitId} /><button class="quiet hit" aria-label="Not yet for {item.name}">Not yet</button></form>
+			</span>
+		</div>
+	{/if}
+	{#if form?.raised === item.habitId}<p class="row-line meta">Targets raised. Keep going.</p>{/if}
+	{#if editing && !item.group}{@render headlinePick(item)}{/if}
+{/snippet}
+
+{#snippet verb(item: Item)}
+	{@const o = item.occurrence!}
+	{@const st = item.group ? groupNow(item).status : statusOf(o)}
+	{#if item.group && !item.group.routine}
+		<!-- A group is done through the habits inside it. -->
+	{:else if st === 'due'}
+		{@const w = waysOf(item)}
+		<LogControl name={item.name} act={w.act} ways={w.ways} primary={item.habitId === upNext} />
+	{:else if !pending[o.id]}
+		{#if item.group || o.slotCount > 0}<a class="quiet hit" href={item.group ? `/routine/${o.id}` : `/log/${o.id}`} aria-label="View {item.name}">View</a>{/if}
+		{@const undo = just.get(item.habitId)?.undo}
+		{#if undo}
+			<button type="button" class="quiet hit" aria-label="Undo {item.name}" onclick={undo}>Undo</button>
+		{:else}
+			<form method="POST" action="?/undo" use:enhance>
+				<input type="hidden" name="occurrence" value={o.id} />
+				<button class="quiet hit" aria-label="Undo {item.name}">Undo</button>
+			</form>
+		{/if}
+	{/if}
 {/snippet}
 
 {#snippet headlinePick(item: Item)}
@@ -561,13 +834,7 @@
 	</label>
 {/snippet}
 
-{#snippet dueSection()}
-	{#each groups as g (g.key)}
-		{#if g.label}
-			<h2 class="area" style="--area: {g.color ?? 'var(--border)'}">{g.label}</h2>
-		{/if}
-		{@render habitList(g.items, g.label || 'Due today')}
-	{/each}
+{#snippet timeLine()}
 	{#if timeHidden.size}
 		<p class="muted small-text">
 			Showing what fits {currentPart}. <button class="link" onclick={() => (showAll = true)}>Show all ({timeHidden.size} more)</button>
@@ -575,276 +842,60 @@
 	{:else if showAll && views.today.timeAware}
 		<p class="muted small-text"><button class="link" onclick={() => (showAll = false)}>Only show what fits now</button></p>
 	{/if}
+{/snippet}
+
+{#snippet dueSection()}
+	{#each groups as g (g.key)}
+		{@const a = view.group === 'area' ? areaOf(g.key) : undefined}
+		{#if g.label}
+			<GroupHeading depth={2} title={a?.name ?? g.label} icon={a?.icon} color={g.color} {mode} count={countOf(g.items)} folded={folded(`group:${g.key}`)} onfold={() => fold(`group:${g.key}`)} />
+		{/if}
+		{#if !g.label || !folded(`group:${g.key}`)}{@render habitList(g.items, g.label || 'Due today')}{/if}
+	{/each}
+	{@render timeLine()}
 	{#if doneFolded.length}
-		{#if views.today.done === 'collapse'}
-			<button class="link small-text" aria-expanded={showDone} onclick={() => (showDone = !showDone)}>Done ({doneFolded.length})</button>
-			{#if showDone}
-				<div style="margin-top: 0.5rem">{@render habitList(doneFolded, 'Done today')}</div>
-			{/if}
-		{:else}
-			<p class="muted small-text">{doneFolded.length} done today, hidden.</p>
-		{/if}
+		<GroupHeading
+			depth={2}
+			title="Done"
+			{mode}
+			count={String(doneFolded.length)}
+			folded={views.today.done === 'hide' || folded('done')}
+			onfold={views.today.done === 'hide' ? undefined : () => fold('done')}
+		/>
+		{#if views.today.done !== 'hide' && !folded('done')}{@render habitList(doneFolded, 'Done today')}{/if}
 	{/if}
-{/snippet}
-
-{#snippet card(item: Item)}
-	{#if item.group}
-		{@render groupCard(item)}
-	{:else}
-		{@render habitCard(item)}
-	{/if}
-{/snippet}
-
-{#snippet groupCard(item: Item)}
-	{@const g = groupNow(item)}
-	{@const kids = kidsOf(item.habitId)}
-	<div class="card group" class:stacked={!!item.afterHabitId}>
-		<div class="row" class:finished={g.status !== 'due'}>
-			<div class="grow">
-				<a class="name" href="/habits/{item.habitId}/chain"><strong>{item.name}</strong></a>
-				{#if line('cue') && cueLine(item.cue)}<div class="muted small-text">{cueLine(item.cue)}</div>{/if}
-				<div class="muted small-text">
-					{#if g.status === 'done'}Done{#if item.occurrence?.level === 'minimum'}&nbsp;at Minimum{/if}{:else if g.status === 'skipped'}Skipped{:else}Due{/if}
-					{#if g.total}<span class="progress">· {rollupText(g)}</span>{/if}
-					{#if headlineOf(item)}· {headlineOf(item)}{/if}
-				</div>
-				{#if g.status === 'due' && g.total}
-					<progress class="bar" max={g.total} value={g.done} aria-label="{item.name}: {rollupText(g)}"></progress>
-				{/if}
-				{#if item.atRisk && g.status === 'due'}
-					<div class="warn small-text">You missed last time. Don't miss twice.</div>
-				{/if}
-				{#if item.reframe && line('reframe')}<div class="reframe small-text">{item.reframe}</div>{/if}
-			</div>
-			{#if item.group?.routine && item.occurrence && !editing}
-				{@const o = item.occurrence}
-				<!-- A routine is done or skipped as a whole: the habits inside it are marked with it. -->
-				{#if g.status === 'due'}
-					<a class="button primary" href="/routine/{o.id}" aria-label="Start {item.name}">Start</a>
-					<form method="POST" action="?/done" use:enhance={quick(o.id, item.name)}>
-						<input type="hidden" name="occurrence" value={o.id} />
-						<button title="Mark every habit inside done" aria-label="Done: {item.name}">Done</button>
-					</form>
-					<form method="POST" action="?/skip" use:enhance={quick(o.id, item.name, 'skipped')}>
-						<input type="hidden" name="occurrence" value={o.id} />
-						<button aria-label="Skip {item.name}">Skip</button>
-					</form>
-				{:else if !pending[o.id]}
-					<a class="button" href="/routine/{o.id}">View</a>
-					<form method="POST" action="?/undo" use:enhance>
-						<input type="hidden" name="occurrence" value={o.id} />
-						<button class="link" aria-label="Undo {item.name}">Undo</button>
-					</form>
-				{/if}
-			{/if}
-		</div>
-		{#if kids.length}
-			<div class="inside">{@render habitList(kids, `Inside ${item.name}`)}</div>
-		{/if}
-		{#if item.identities.length && line('identities')}
-			<div class="votes small-text">Vote for: {item.identities.join(' · ')}</div>
-		{/if}
-	</div>
-{/snippet}
-
-{#snippet habitCard(item: Item)}
-	{@const o = item.occurrence!}
-	{@const st = statusOf(o)}
-	{@const levels = item.levels}
-	<div class="card" class:finished={st !== 'due'} class:stacked={!!item.afterHabitId} class:next={item.upNext}>
-		<div class="row">
-			<div class="grow">
-				<a class="name" href="/habits/{item.habitId}/chain"><strong>{item.name}</strong></a>
-				{#if item.multiVariant && o.variantName}<span class="chip">{o.variantName}</span>{/if}
-				{#if item.upNext}<span class="chip on">Up next</span>{/if}
-				{#if item.inProgress && st === 'due'}<span class="chip on">In progress</span>{/if}
-				{#if line('cue') && cueLine(item.cue)}<div class="muted small-text">{cueLine(item.cue)}</div>{/if}
-				<div class="muted small-text">
-					{#if st === 'done'}Done{#if levels}&nbsp;at {levelName[o.level ?? 'target']}{/if}{:else if st === 'skipped'}Skipped{:else}Due{/if}
-					{#if item.progress && st !== 'skipped' && (st === 'due' || isPartial(item.progress))}<span class="progress">· {progressText(item.progress)}</span>{/if}
-					{#if headlineOf(item)}· {headlineOf(item)}{/if}
-				</div>
-				{#if item.progress && st === 'due' && (item.progress.kind === 'steps' || item.progress.value > 0)}
-					<progress
-						class="bar"
-						max={item.progress.kind === 'steps' ? item.progress.total : item.progress.target}
-						value={item.progress.kind === 'steps' ? item.progress.done : item.progress.value}
-						aria-label="{item.name}: {progressText(item.progress)}"
-					></progress>
-				{/if}
-				{#if item.atRisk && st === 'due'}
-					<div class="warn small-text">You missed last time. Don't miss twice{levels ? ': even the Minimum counts' : ''}.</div>
-				{/if}
-				{#if levels && line('levels') && st === 'due' && levels.minimum}
-					<div class="muted small-text">Minimum: {levels.minimum}</div>
-				{/if}
-				{#if item.reframe && line('reframe')}<div class="reframe small-text">{item.reframe}</div>{/if}
-				{#if item.bundle && line('bundle')}
-					<div class="small-text bundle">
-						{#if item.bundle.strict}
-							{o.status === 'done' ? `Earned: ${item.bundle.reward}` : `After this: ${item.bundle.reward}`}
-						{:else}
-							Pair with: {item.bundle.reward}
-						{/if}
-					</div>
-				{/if}
-				{#if item.reward?.jar && line('reward')}
-					<div class="muted small-text">
-						Jar: {fmt(item.reward.jar.total)} {item.reward.jar.unit}{item.reward.jar.goal ? ` toward ${item.reward.jar.goal}` : ''}
-					</div>
-				{/if}
-			</div>
-			{#if editing}
-				<!-- Edit mode is for the layout: the buttons for logging come back when it's done. -->
-			{:else if st === 'due'}
-				{#if item.progress?.kind === 'amount' && !pending[o.id]}
-					<form method="POST" action="?/plus" use:enhance={plus(o.id, item.name)}>
-						<input type="hidden" name="occurrence" value={o.id} />
-						<button class="primary" title="Count one more toward {item.progress.target}" aria-label="{stepLabel(item.progress)} for {item.name}">{stepLabel(item.progress)}</button>
-					</form>
-					<a class="button" href="/log/{o.id}" aria-label="Log {item.name}">Log</a>
-				{:else if o.slotCount > 0}
-					{#if item.inProgress}
-						<a class="button primary" href="/log/{o.id}" aria-label="Resume {item.name}">Resume</a>
-					{:else}
-						<a class="button" class:primary={!item.canRepeat && !item.quickDone} href="/log/{o.id}" aria-label="Log {item.name}">Log</a>
-						{#if item.canRepeat}
-							<form method="POST" action="?/same" use:enhance={quick(o.id, item.name)}>
-								<input type="hidden" name="occurrence" value={o.id} />
-								<button class="primary" title="Copy your last log and finish" aria-label="Same as last time: {item.name}">Same as last</button>
-							</form>
-						{:else if item.quickDone}
-							<form method="POST" action="?/quick" use:enhance={quick(o.id, item.name)}>
-								<input type="hidden" name="occurrence" value={o.id} />
-								<button class="primary" title="Log your targets" aria-label="Done: {item.name}">Done</button>
-							</form>
-						{/if}
-					{/if}
-				{:else}
-					<form method="POST" action="?/done" use:enhance={quick(o.id, item.name)}>
-						<input type="hidden" name="occurrence" value={o.id} />
-						<button class="primary" aria-label="Done: {item.name}">Done</button>
-					</form>
-				{/if}
-				<form method="POST" action="?/skip" use:enhance={quick(o.id, item.name, 'skipped')}>
-					<input type="hidden" name="occurrence" value={o.id} />
-					<button aria-label="Skip {item.name}">Skip</button>
-				</form>
-			{:else if !pending[o.id]}
-				{#if o.slotCount > 0}<a class="button" href="/log/{o.id}">View</a>{/if}
-				<form method="POST" action="?/undo" use:enhance>
-					<input type="hidden" name="occurrence" value={o.id} />
-					<button class="link" aria-label="Undo {item.name}">Undo</button>
-				</form>
-			{/if}
-		</div>
-		{#if levels && line('levels') && st === 'due' && !item.inProgress && (o.slotCount === 0 || item.quickDone || item.canRepeat)}
-			<div class="row levels">
-				<span class="muted small-text">Or log</span>
-				{#each ['minimum', 'stretch'] as const as l (l)}
-					<form method="POST" action={o.slotCount ? '?/quick' : '?/done'} use:enhance={quick(o.id, item.name)}>
-						<input type="hidden" name="occurrence" value={o.id} />
-						<input type="hidden" name="level" value={l} />
-						<button class="small" title={levels[l] || undefined}>{levelName[l]}</button>
-					</form>
-				{/each}
-			</div>
-		{/if}
-		{#if item.progression && line('progression')}
-			{@const p = item.progression}
-			<div class="suggest">
-				<span class="small-text"
-					>You've hit your targets {p.hits} times in a row. Raise them by {p.by}{p.unit === 'percent' ? '%' : p.by === 1 ? ' step' : ' steps'}?</span
-					>
-					{#each p.changes as line (line)}<div class="muted small-text">{line}</div>{/each}
-				<div class="row">
-					<form method="POST" action="?/raise" use:enhance>
-						<input type="hidden" name="habit" value={item.habitId} />
-						<button class="small primary">Raise</button>
-					</form>
-					<form method="POST" action="?/notYet" use:enhance>
-						<input type="hidden" name="habit" value={item.habitId} />
-						<button class="small">Not yet</button>
-					</form>
-				</div>
-			</div>
-		{/if}
-		{#if form?.raised === item.habitId}<p class="muted small-text">Targets raised. Keep going.</p>{/if}
-		{#if item.identities.length && line('identities')}
-			<div class="votes small-text">Vote for: {item.identities.join(' · ')}</div>
-		{/if}
-		{#if editing}{@render headlinePick(item)}{/if}
-	</div>
 {/snippet}
 
 {#snippet breakingSection()}
-	{#if breakingShown.length}
-		{#if !editing}<h2>{limiting ? 'Breaking and limiting' : 'Breaking'}</h2>{/if}
-		<ul class="list">
-			{#each breakingShown as b (b.habitId)}
-				{@const plan = b.ifThen}
-				<li class="card">
-					<div class="row">
-						<div class="grow">
-							<a class="name" href="/habits/{b.habitId}/chain"><strong>{b.name}</strong></a>
-							<div class="big">
-								{plural(b.days, b.limit?.period === 'week' ? 'week' : 'day')}{#if b.limit}{' '}<span class="muted small-text">within limit</span>{/if}
-							</div>
-							{#if b.limit}
-								<div class="small-text" class:warn={b.limit.used > b.limit.max}>
-									{b.limit.used} of {b.limit.max} {b.limit.period === 'week' ? 'this week' : 'today'}{#if b.limit.next}<span class="muted">
-										· {b.limit.next.max} from {shortDate(b.limit.next.date)}</span
-									>{/if}
-								</div>
-							{/if}
-							<div class="muted small-text">
-								{[
-									b.limit ? null : `Longest run ${plural(b.longest, 'day')}`,
-									b.slippedToday && !b.limit ? `${b.slippedToday} today` : null,
-									b.resistedThisWeek ? `resisted ${b.resistedThisWeek}× this week` : null
-								]
-									.filter(Boolean)
-									.join(' · ')}
-							</div>
-						</div>
-						<form method="POST" action="?/craving" use:enhance={() => async ({ result, update }) => {
-							await update();
-							if (result.type === 'success' && result.data?.cravingId) {
-								const id = String(result.data.cravingId);
-								showToast(b.identities.length ? `Resisted. That's a vote for who you want to be.` : `Craving resisted. Nice.`, () => postAction('?/uncraving', { id }).then(() => {}));
-							}
-						}}>
-							<input type="hidden" name="habit" value={b.habitId} />
-							<button class="primary" title="Log a craving you didn't give in to" aria-label="Resisted: {b.name}">Resisted</button>
-						</form>
-						<button
-							aria-expanded={slipOpen === b.habitId}
-							aria-label="{b.limit ? 'Log one' : 'Slip'}: {b.name}"
-							onclick={() => ((slipOpen = slipOpen === b.habitId ? null : b.habitId), (feeling = ''))}
-							>{b.limit ? 'Log one' : 'Slip'}</button
-						>
-					</div>
-					{#if plan && (plan.then || plan.habit) && !hidden('ifThen')}
-						<p class="plan small-text">
-							If I {plan.when || 'feel the urge'}, I will {[plan.then, plan.habit].filter(Boolean).join(' or ')}.
-						</p>
-					{/if}
-					{#if b.reframe && !hidden('reframe')}<div class="reframe small-text">{b.reframe}</div>{/if}
-					{#if b.cost && !hidden('cost')}
-						<div class="muted small-text">
-							Slips this month cost {fmt(b.cost.month)} {b.cost.unit}{b.cost.saved !== null
-								? ` · saved ${fmt(b.cost.saved)} ${b.cost.unit} so far`
-								: ''}
-						</div>
-					{/if}
-					{#if form?.habit === b.habitId && form?.error}<p class="error small-text">{form.error}</p>{/if}
-					{#if b.top.length}
-						<div class="muted small-text">Most slips: {b.top.slice(0, 2).map(triggerLine).join(' · ')}</div>
-					{/if}
-					{#if b.identities.length && !hidden('identities')}
-						<div class="votes small-text">Vote for: {b.identities.join(' · ')}</div>
-					{/if}
-					{#if slipOpen === b.habitId}
+	<EditableList items={breakingShown} key={(b) => b.habitId} label={(b) => b.name} mode="use" rowCard ariaLabel={limiting ? 'Limits' : 'Breaking'}>
+		{#snippet row(b)}
+			{@const plan = b.ifThen}
+			<a class="name" href="/habits/{b.habitId}/chain">{b.name}</a>
+			<p class="meta-line">
+				{[
+					b.limit ? `${b.limit.used} of ${b.limit.max} ${b.limit.period === 'week' ? 'this week' : 'today'}` : null,
+					`${plural(b.days, b.limit?.period === 'week' ? 'week' : 'day')}${b.limit ? ' within limit' : ''}`,
+					b.limit ? null : `longest ${plural(b.longest, 'day')}`,
+					b.slippedToday && !b.limit ? `${b.slippedToday} today` : null,
+					b.resistedThisWeek ? `resisted ${b.resistedThisWeek}× this week` : null
+				]
+					.filter(Boolean)
+					.join(' · ')}
+			</p>
+			{#if b.limit && b.limit.used > b.limit.max}<p class="row-line warn meta">Over the limit.</p>{/if}
+			{#if b.limit?.next}<p class="row-line meta">{b.limit.next.max} from {shortDate(b.limit.next.date)}</p>{/if}
+			{#if plan && (plan.then || plan.habit) && !hidden('ifThen')}
+				<p class="row-line meta">If I {plan.when || 'feel the urge'}, I will {[plan.then, plan.habit].filter(Boolean).join(' or ')}.</p>
+			{/if}
+			{#if b.reframe && !hidden('reframe')}<p class="row-line meta">{b.reframe}</p>{/if}
+			{#if b.cost && !hidden('cost')}
+				<p class="row-line meta">Slips this month cost {fmt(b.cost.month)} {b.cost.unit}{b.cost.saved !== null ? ` · saved ${fmt(b.cost.saved)} ${b.cost.unit} so far` : ''}</p>
+			{/if}
+			{#if form?.habit === b.habitId && form?.error}<p class="row-line error meta">{form.error}</p>{/if}
+			{#if b.top.length}<p class="row-line meta">Most slips: {b.top.slice(0, 2).map(triggerLine).join(' · ')}</p>{/if}
+			{#if b.identities.length && !hidden('identities')}<p class="row-line meta">Vote for: {b.identities.join(' · ')}</p>{/if}
+			{#if slipOpen === b.habitId}
+				<div class="row-line">
 						<form
 							method="POST"
 							action="?/slip"
@@ -874,7 +925,7 @@
 								<input type="hidden" name="feeling" value={feeling} />
 								<div class="chips">
 									{#each b.triggers as t (t.id)}
-										<button type="button" class="chip" class:on={feeling === t.id} onclick={() => (feeling = feeling === t.id ? '' : t.id)}>{t.name}</button>
+										<button type="button" class="toggle" aria-pressed={feeling === t.id} onclick={() => (feeling = feeling === t.id ? '' : t.id)}>{t.name}</button>
 									{/each}
 								</div>
 							</div>
@@ -887,16 +938,23 @@
 							</datalist>
 							<button class="primary">{b.limit ? 'Log' : 'Log slip'}</button>
 						</form>
-					{/if}
-				</li>
-			{/each}
-		</ul>
-	{/if}
+				</div>
+			{/if}
+		{/snippet}
+		{#snippet actions(b)}
+			{#if !editing}
+				<LogControl
+					name={b.name}
+					act={{ label: 'Resisted', action: '?/craving', fields: { habit: b.habitId }, submit: resisted(b.identities.length > 0) }}
+					ways={[{ label: b.limit ? 'Log one…' : 'Log a slip…', onselect: () => ((slipOpen = slipOpen === b.habitId ? null : b.habitId), (feeling = '')) }]}
+				/>
+			{/if}
+		{/snippet}
+	</EditableList>
 {/snippet}
 
 {#snippet prepSection()}
 	{#if data.prep.length && !hidden('prep')}
-		{#if !editing}<h2>Prepare for tomorrow</h2>{/if}
 		<ul class="list">
 			{#each data.prep as p (p.habitId)}
 				<li class="card">
@@ -918,64 +976,39 @@
 {/snippet}
 
 {#snippet pausedSection()}
-	{#if data.paused.length}
-		{#if !editing}<h2>Paused</h2>{/if}
-		<ul class="list">
-			{#each data.paused as item (item.habitId)}
-				<li class="card row">
-					<div class="grow">
-						<strong>{item.name}</strong>
-						<div class="muted small-text">Paused until {shortDate(item.pausedUntil!)}. Streak is safe.</div>
-					</div>
-					<a class="button small" href="/habits/{item.habitId}#pause">Change</a>
-				</li>
-			{/each}
-		</ul>
-	{/if}
+	<EditableList items={data.paused} key={(x) => x.habitId} label={(x) => x.name} mode="use" rowCard ariaLabel="Paused">
+		{#snippet row(item)}
+			<span class="name">{item.name}</span>
+			<p class="meta-line">Paused until {shortDate(item.pausedUntil!)}. Streak is safe.</p>
+		{/snippet}
+		{#snippet actions(item)}<a class="quiet hit" href="/habits/{item.habitId}#pause" aria-label="Change the pause of {item.name}">Change</a>{/snippet}
+	</EditableList>
 {/snippet}
 
 {#snippet restingSection()}
-	{#if data.resting.length}
-		{#if !editing}<h2>Not due today</h2>{/if}
-		<ul class="list">
-			{#each data.resting as item (item.habitId)}
-				<li class="card row">
-					<div class="grow">
-						<strong>{item.name}</strong>
-						{#if item.streak}<div class="muted small-text">{item.streak}</div>{/if}
-					</div>
-					{#if item.earlyVariant}
-						<form method="POST" action="?/early" use:enhance>
-							<input type="hidden" name="habit" value={item.habitId} />
-							<input type="hidden" name="variant" value={item.earlyVariant.id} />
-							<button class="small">Start {item.multiVariant ? item.earlyVariant.name : ''} early</button>
-						</form>
-					{/if}
-				</li>
-			{/each}
-		</ul>
-	{/if}
+	<EditableList items={data.resting} key={(x) => x.habitId} label={(x) => x.name} mode="use" rowCard ariaLabel="Not due today">
+		{#snippet row(item)}
+			<span class="name">{item.name}</span>
+			{#if item.streak}<p class="meta-line">{item.streak}</p>{/if}
+		{/snippet}
+		{#snippet actions(item)}
+			{#if item.earlyVariant}
+				<form method="POST" action="?/early" use:enhance>
+					<input type="hidden" name="habit" value={item.habitId} />
+					<input type="hidden" name="variant" value={item.earlyVariant.id} />
+					<button class="quiet hit" aria-label="Start early: {item.multiVariant ? item.earlyVariant.name : item.name}">Start early</button>
+				</form>
+			{/if}
+		{/snippet}
+	</EditableList>
 {/snippet}
 
 {#if data.dayNote !== null}<DayNote date={data.today} text={data.dayNote} />{/if}
 
 {#if form?.error && !form?.habit}<p class="error">{form.error}</p>{/if}
 
-{#if celebrating}
-	<button class="celebrate" onclick={() => (celebrating = null)} aria-live="polite">
-		<span class="burst" aria-hidden="true">{#each Array(14) as _, i (i)}<i style="--i: {i}"></i>{/each}</span>
-		<strong>{celebrating.name}</strong>
-		<span>{celebrating.message}</span>
-		{#if celebrating.jar}<span class="small-text">Jar: {celebrating.jar}</span>{/if}
-	</button>
-{/if}
-
 <style>
 	.widget {
-		margin-bottom: 0.75rem;
-	}
-	/* Edit mode: each widget and section is a block with a title bar (see EditableList layout="block"). */
-	.layout {
 		margin-bottom: 0.75rem;
 	}
 	:global(.elist.block .widget) {
@@ -989,13 +1022,6 @@
 	}
 	.widget progress {
 		width: 100%;
-	}
-	progress.bar {
-		display: block;
-		width: 100%;
-		max-width: 12rem;
-		height: 0.4rem;
-		margin-top: 0.25rem;
 	}
 	.week {
 		display: grid;
@@ -1034,72 +1060,28 @@
 		border: 1px solid var(--border);
 		border-radius: 6px;
 	}
-	.finished {
-		opacity: 0.7;
+	:global(.elist > li.stacked) {
+		margin-inline-start: var(--space-indent);
 	}
-	/* The habits inside a group sit in its card, each faded on its own when finished. */
-	.inside {
-		margin-top: 0.6rem;
+	.blocks {
+		--gap: var(--space-group);
 	}
-	.stacked {
-		margin-left: 1rem;
-		border-left: 3px solid var(--border);
-	}
-	.next {
-		border-left-color: var(--accent);
-	}
-	.small-text {
-		font-size: 0.85rem;
-	}
-	.big {
-		font-size: 1.6rem;
-		font-weight: 600;
-	}
-	.chip {
-		margin-left: 0.35rem;
-	}
-	.chips .chip {
-		margin-left: 0;
-	}
-	.warn {
-		color: var(--danger);
-	}
-	.levels {
-		margin-top: 0.5rem;
+	.layout-pick {
+		display: inline-flex;
 		align-items: center;
+		gap: var(--space-tight);
 	}
-	.votes {
-		margin-top: 0.4rem;
-		color: var(--accent);
-	}
-	.plan {
-		margin: 0.5rem 0 0;
-		font-style: italic;
+	.layout-pick select {
+		width: auto;
+		padding-block: 0;
 	}
 	.slip {
 		margin-top: 0.75rem;
-	}
-	a.name {
-		color: inherit;
-		text-decoration: none;
 	}
 	.grow,
 	.card strong {
 		min-width: 0;
 		overflow-wrap: anywhere;
-	}
-	.reframe {
-		font-style: italic;
-		margin-top: 0.2rem;
-	}
-	.bundle {
-		margin-top: 0.2rem;
-	}
-	.suggest {
-		margin-top: 0.6rem;
-		padding: 0.5rem 0.6rem;
-		border: 1px dashed var(--accent);
-		border-radius: 8px;
 	}
 	.check {
 		display: flex;
@@ -1126,59 +1108,6 @@
 		color: var(--muted);
 		text-decoration: line-through;
 	}
-	.celebrate {
-		position: fixed;
-		left: 1rem;
-		right: 1rem;
-		bottom: 5rem;
-		max-width: 608px;
-		margin: 0 auto;
-		display: flex;
-		flex-direction: column;
-		gap: 0.2rem;
-		padding: 1rem;
-		border-radius: var(--radius);
-		background: var(--accent);
-		color: var(--on-accent);
-		border: none;
-		text-align: left;
-		animation: pop 0.25s ease-out;
-	}
-	.burst {
-		position: absolute;
-		top: 0;
-		left: 50%;
-		pointer-events: none;
-	}
-	.burst i {
-		position: absolute;
-		width: 6px;
-		height: 10px;
-		border-radius: 2px;
-		background: hsl(calc(var(--i) * 26deg) 85% 60%);
-		animation: fly 1.1s ease-out forwards;
-		transform: rotate(calc(var(--i) * 25.7deg)) translateY(0);
-	}
-	@keyframes fly {
-		to {
-			transform: rotate(calc(var(--i) * 25.7deg)) translateY(-90px);
-			opacity: 0;
-		}
-	}
-	@keyframes pop {
-		from {
-			transform: translateY(12px);
-			opacity: 0;
-		}
-	}
-	@media (prefers-reduced-motion: reduce) {
-		.burst {
-			display: none;
-		}
-		.celebrate {
-			animation: none;
-		}
-	}
 	.ask {
 		margin-bottom: 1rem;
 		border-color: var(--accent);
@@ -1186,9 +1115,5 @@
 	.range {
 		margin-top: 0.35rem;
 		align-items: center;
-	}
-	h2.area {
-		border-left: 4px solid var(--area);
-		padding-left: 0.5rem;
 	}
 </style>

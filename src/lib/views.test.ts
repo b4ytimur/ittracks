@@ -287,6 +287,11 @@ describe('view rules', async () => {
 	});
 });
 
+it('a view keeps its own layout, and one from before is the outline', () => {
+	expect(viewState.parse({}).layout).toBe('outline');
+	expect(sameState(viewState.parse({}), viewState.parse({ layout: 'flat' }))).toBe(false);
+});
+
 it('folded headings: the defaults for old views, kept over a template switch', () => {
 	const old = JSON.parse(JSON.stringify(fromTemplate('standard')));
 	delete old.today.folded;
