@@ -6,12 +6,15 @@
 	import { invalidateAll } from '$app/navigation';
 	import ViewBar from '$lib/ViewBar.svelte';
 	import EditableList from '$lib/ui/EditableList.svelte';
-	import EditButton from '$lib/ui/EditButton.svelte';
+	import AreaGroups from '$lib/ui/AreaGroups.svelte';
+	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import EmptyState from '$lib/ui/EmptyState.svelte';
+	import StatusTag from '$lib/ui/StatusTag.svelte';
 	import InlineText from '$lib/ui/InlineText.svelte';
 	import BulkBar from '$lib/bulk/BulkBar.svelte';
-	import { moveKey, reorderFrom, type Move } from '$lib/ui/list';
+	import { moveKey, reorderFrom, type Mode, type Move } from '$lib/ui/list';
 	import { isFollow, isGroup } from '$lib/engine/schedule';
-	import { viewOp } from '$lib/viewclient';
+	import { saveLayout, viewOp } from '$lib/viewclient';
 	import { runAction, showToast } from '$lib/toast.svelte';
 	import { HABIT_LINES, groupBy, manualOrder, passes, type HabitLineKey } from '$lib/views';
 
@@ -20,12 +23,13 @@
 	type Habit = (typeof data.habits)[number];
 	/** The list as shown, changed at once by edits here and refreshed from the server after. */
 	let habits = $derived(data.habits);
-	/** Edit mode is a flag on this same page: drag to reorder, rename in place, archive. */
-	let editing = $state(false);
-	/** So is selecting: tick habits, then change them together from the bulk bar. One mode at a time. */
-	let selecting = $state(false);
+	/** One of three on this same page. Editing: drag to reorder, rename in place, archive. Selecting: change several together. */
+	let mode = $state<Mode>('use');
 	const selected = new SvelteSet<string>();
-	const areaOptions = $derived(data.areas.map((a) => ({ value: a.id, label: `${a.icon} ${a.name}`.trim() })));
+	let outcome = $state(new Map<string, { tag?: string; reason?: string }>());
+	/** Archived while editing: they stay in the list, struck, until editing ends. */
+	const struck = new SvelteSet<string>();
+	const areaOptions = $derived(data.areas.map((a) => ({ value: a.id, label: a.name })));
 
 	let views = $state(untrack(() => data.views));
 	let viewDismissed = $state(false);
@@ -44,21 +48,22 @@
 	const show = (k: HabitLineKey) => views.habits.lines.includes(k);
 	function toggleLine(k: HabitLineKey) {
 		const lines = show(k) ? views.habits.lines.filter((x) => x !== k) : [...views.habits.lines, k];
+		const before = views.habits;
 		views.habits = { ...views.habits, lines };
-		viewOp({ op: 'patch', habits: { lines } });
+		saveLayout({ op: 'patch', habits: { lines } }, () => (views.habits = before), () => toggleLine(k));
 	}
 
 	const area = (id: string | null) => data.areas.find((a) => a.id === id);
 	/** "My order": one order of habits, shared with Today. */
 	const mine = (list: Habit[]) => manualOrder(list, views.today.order, (h) => h.id);
 	const shown = $derived.by(() => {
-		const list = habits.filter((h) => (view.archived || !h.archived) && passes(view, h));
+		const list = habits.filter((h) => (view.archived || !h.archived || struck.has(h.id)) && passes(view, h));
 		if (view.sort === 'name') return [...list].sort((a, b) => a.name.localeCompare(b.name));
 		if (view.sort === 'consistency') return [...list].sort((a, b) => (b.consistency ?? -1) - (a.consistency ?? -1));
 		if (view.sort === 'created') return [...list].sort((a, b) => b.createdAt - a.createdAt);
 		return mine(list);
 	});
-	const groups = $derived(groupBy(shown, view.group, { areas: data.areas }));
+	const groups = $derived(groupBy(shown, view.group, { areas: data.areas }, { keepEmpty: mode === 'edit' }));
 	const identityNames = $derived([...new Set(habits.flatMap((h) => h.identities))].sort());
 
 	/**
@@ -67,8 +72,16 @@
 	 */
 	function reorder(part: string[]) {
 		const order = reorderFrom(mine(habits).map((h) => h.id), shown.map((h) => h.id), part, view.sort === 'manual');
+		const before = { today: views.today, sort: view.sort };
 		views.today = { ...views.today, order };
-		viewOp({ op: 'patch', today: { order } });
+		saveLayout(
+			{ op: 'patch', today: { order } },
+			() => {
+				views.today = before.today;
+				view.sort = before.sort;
+			},
+			() => reorder(part)
+		);
 		if (view.sort !== 'manual') {
 			view.sort = 'manual';
 			showToast('Sorted by My order, shared with Today.');
@@ -107,7 +120,7 @@
 			views.today = { ...views.today, order: was.order };
 			return showToast(r.error ?? "Couldn't move it. Are you online?");
 		}
-		viewOp({ op: 'patch', today: { order } });
+		saveLayout({ op: 'patch', today: { order } }, () => (views.today = { ...views.today, order: was.order }));
 		showToast(done, async () => {
 			await runAction('?/move', { id, parent: was.parentId ?? '' });
 			views.today = { ...views.today, order: was.order };
@@ -145,19 +158,32 @@
 			habits = habits.map((x) => (x.id === h.id ? { ...x, archived: !to } : x));
 			return showToast(r.error ?? "Couldn't change it. Are you online?");
 		}
-		showToast(to ? `Archived ${h.name}. Its logs are kept.` : `${h.name} is back.`, async () => {
-			await runAction(to ? '?/unarchive' : '?/archive', { id: h.id });
-			await invalidateAll();
+		// The row shows its own way back until editing ends.
+		if (to) struck.add(h.id);
+		else if (!struck.delete(h.id)) showToast(`${h.name} is back.`, async () => void (await runAction('?/archive', { id: h.id })));
+	}
+	/** Editing ended: the struck rows go, and the band can bring them back. */
+	function leave() {
+		const gone = habits.filter((h) => struck.has(h.id));
+		struck.clear();
+		if (!gone.length) return;
+		invalidateAll();
+		showToast(`Archived ${gone.length === 1 ? gone[0].name : `${gone.length} habits`}. ${gone.length === 1 ? 'Its' : 'Their'} logs are kept.`, async () => {
+			for (const h of gone) await runAction('?/unarchive', { id: h.id });
 		});
 	}
+	const setMode = (m: Mode) => {
+		if (mode === 'edit' && m !== 'edit') leave();
+		mode = m;
+	};
 	const cueText = (c: { time: string | null; range?: string | null } | null) => c?.time ?? c?.range ?? null;
 	const ago = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 	const lineFor = (h: (typeof data.habits)[number]) => {
 		const a = area(h.areaId);
 		return [
-			show('schedule') ? (h.direction === 'break' ? 'Break habit' : describeSchedule(h.schedule, data.habits.find((x) => x.id === h.parentId), h.variants)) : null,
+			show('schedule') ? (h.direction === 'break' ? 'Break habit' : (isGroup(h.schedule) || !h.holds || !habits.some((x) => x.parentId === h.id) ? '' : 'Routine · ') + describeSchedule(h.schedule, data.habits.find((x) => x.id === h.parentId), h.variants)) : null,
 			show('cue') ? cueText(h.cue) : null,
-			show('area') && a && view.group !== 'area' ? `${a.icon} ${a.name}` : null,
+			show('area') && a && view.group !== 'area' ? `${a.name}` : null,
 			show('consistency') && h.consistency !== null ? `${h.consistency}% in 30 days` : null,
 			show('last') && h.direction !== 'break' ? (h.lastDone ? `last done ${ago(h.lastDone)}` : 'not done yet') : null
 		]
@@ -168,14 +194,23 @@
 
 <svelte:head><title>Habits · ittracks</title></svelte:head>
 
-<header class="bar">
-	<h1>Habits</h1>
-	<div class="row" style="align-items: center">
-		{#if !views.hidden.includes('identities')}<a href="/identities">Identities</a>{/if}
-		<a href="/gallery">Gallery</a>
+<EditChrome
+	title="Habits"
+	{mode}
+	modes={['use', 'edit', 'select']}
+	onmode={setMode}
+	hints={{
+		use: `${shown.length} ${shown.length === 1 ? 'habit' : 'habits'}`,
+		edit: 'Drag ⠿ to reorder, tap a name to rename it. Drop a habit on a group or routine to put it inside, or drag it left to take it out. The order is shared with Today.',
+		select: 'Tick habits to change them together.'
+	}}
+>
+	{#snippet actions()}
+		{#if !views.hidden.includes('identities')}<a class="button" href="/identities">Identities</a>{/if}
+		<a class="button" href="/gallery">Gallery</a>
 		<a class="button primary" href="/habits/new" data-sveltekit-reload>New habit</a>
-	</div>
-</header>
+	{/snippet}
+</EditChrome>
 
 {#if data.added}
 	<p class="card added">
@@ -196,10 +231,7 @@
 {/if}
 
 {#if habits.length === 0}
-	<p class="muted">
-		A habit can be something to build, like a gym plan or language practice, or something to
-		break, like smoking. <a href="/gallery">Pick a ready-made one</a> or <a href="/habits/new" data-sveltekit-reload>create your own</a>.
-	</p>
+	<EmptyState text="A habit can be something to build, like a gym plan or language practice, or something to break, like smoking. Pick a ready-made one from the Gallery or make your own." />
 {/if}
 
 {#if habits.length}
@@ -212,10 +244,6 @@
 		direction
 		archived
 	>
-		{#snippet end()}
-			<EditButton bind:editing look="chip" onchange={(on) => on && (selecting = false)} />
-			<EditButton bind:editing={selecting} label="Select" look="chip" onchange={(on) => on && (editing = false)} />
-		{/snippet}
 		<fieldset>
 			<legend class="small-text">Lines on each habit</legend>
 			{#each Object.entries(HABIT_LINES) as [k, label] (k)}
@@ -225,36 +253,34 @@
 			{/each}
 		</fieldset>
 	</ViewBar>
-	{#if !shown.length}<p class="muted">No habits match these filters.</p>{/if}
+	{#if !shown.length}<EmptyState kind="filtered" text="No habits match these filters." />{/if}
 {/if}
 
-{#if editing}
-	<p class="muted small-text">
-		Drag ⠿ to reorder, tap a name to rename it. This is My order, shared with Today. Drop a habit on a group or routine to put it
-		inside, or drag it left to take it out.
-	</p>
-{/if}
-{#if selecting}
-	<BulkBar kind="habit" {selected} visible={shown.map((h) => h.id)} today={data.today} sources={{ areas: areaOptions }} />
+{#if mode === 'select'}
+	<BulkBar kind="habit" {selected} bind:outcome visible={shown.map((h) => h.id)} today={data.today} sources={{ areas: areaOptions }} />
 {/if}
 
-{#each groups as g (g.key)}
-	{#if g.label}
-		<h2 class="area" style="--c: {g.color ?? 'var(--border)'}">{g.label}</h2>
-	{/if}
-	<!-- A habit inside a group sits in a list of its own under it; one whose group isn't listed sits at the top. -->
-	{@const tree = forest(g.items)}
-	{@render habitList(tree.roots, tree.kids, g.label || 'Habits', null)}
-{/each}
+<AreaGroups {groups} areas={data.areas} {mode} byArea={view.group === 'area'}>
+	{#snippet group(g)}
+		<!-- A habit inside a group sits in a list of its own under it; one whose group isn't listed sits at the top. -->
+		{@const tree = forest(g.items)}
+		{@render habitList(tree.roots, tree.kids, g.label || 'Habits', null)}
+	{/snippet}
+</AreaGroups>
 
 {#snippet habitList(items: Habit[], kids: Map<string, Habit[]>, name: string, holder: Habit | null)}
 	<EditableList
 		{items}
 		key={(h) => h.id}
 		label={(h) => h.name}
-		{editing}
-		{selecting}
+		{mode}
 		{selected}
+		rowCard
+		holder={(h) => !!kids.get(h.id)?.length}
+		href={(h) => `/habits/${h.id}`}
+		selectScope={(h) => (kids.get(h.id)?.length ? 'unit' : 'item')}
+		childKeys={(k) => (kids.get(k) ?? []).map((x) => x.id)}
+		itemClass={(h) => (struck.has(h.id) ? 'struck' : '')}
 		ariaLabel={name}
 		{canDrop}
 		onmove={(m, order) => (m.position === 'inside' ? indent(m.key, m.target) : reorder(order))}
@@ -263,24 +289,16 @@
 		removeLabel={(h) => (h.archived ? 'Unarchive' : 'Archive')}
 	>
 		{#snippet row(h)}
-			{@const a = area(h.areaId)}
-			{#if editing}
-				<div class="card habit" style="--c: {a?.color ?? 'transparent'}">
-					<strong><InlineText value={h.name} {editing} label="Name of {h.name}" maxlength={120} onsave={(v) => rename(h, v)} /></strong>
-					{#if h.archived}<span class="chip">Archived</span>{/if}
-					{#if lineFor(h)}<div class="muted" style="font-size: 0.9rem">{lineFor(h)}</div>{/if}
-				</div>
-			{:else}
-				<a class="card habit" href="/habits/{h.id}" data-sveltekit-reload style="--c: {a?.color ?? 'transparent'}">
-					<strong>{h.name}</strong>
-					{#if h.archived}<span class="chip">Archived</span>{/if}
-					{#if lineFor(h)}<div class="muted" style="font-size: 0.9rem">{lineFor(h)}</div>{/if}
-				</a>
-			{/if}
+			{@const o = outcome.get(h.id)}
+			{#if mode === 'use'}<a class="name" href="/habits/{h.id}" data-sveltekit-reload>{h.name}</a>
+			{:else}<span class="name"><InlineText value={h.name} editing={mode === 'edit' && !struck.has(h.id)} label="Name of {h.name}" maxlength={120} onsave={(v) => rename(h, v)} /></span>{/if}
+			{#if o?.tag}<span class="tags"><span class="tag pending"><span aria-hidden="true">→</span> {o.tag}</span></span>
+			{:else if h.archived}<span class="tags"><StatusTag status="archived" /></span>{/if}
+			{#if o?.reason || lineFor(h)}<p class="meta-line label">{o?.reason ?? lineFor(h)}</p>{/if}
 		{/snippet}
 		{#snippet children(h)}
 			{#if kids.get(h.id)?.length}
-				<div class="inside">{@render habitList(kids.get(h.id)!, kids, `Inside ${h.name}`, h)}</div>
+				{@render habitList(kids.get(h.id)!, kids, `Inside ${h.name}`, h)}
 			{/if}
 		{/snippet}
 	</EditableList>
@@ -289,28 +307,12 @@
 <p style="margin-top: 1rem"><a class="button" href="/habits/import">Import a template file</a></p>
 
 <style>
-	.habit {
-		border-left: 4px solid var(--c);
-	}
 	.added {
 		border-color: var(--accent);
 		margin-bottom: 0.75rem;
 	}
-	h2.area {
-		border-left: 4px solid var(--c);
-		padding-left: 0.5rem;
-	}
-	.small-text {
-		font-size: 0.85rem;
-	}
 	fieldset {
-		border: 1px solid var(--border);
-		border-radius: 6px;
-	}
-	.chip {
-		margin-left: 0.35rem;
-	}
-	.inside {
-		margin: 0.5rem 0 0 1.25rem;
+		border: 1px solid var(--line);
+		border-radius: var(--radius-inset);
 	}
 </style>

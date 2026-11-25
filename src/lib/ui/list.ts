@@ -2,6 +2,8 @@
 // tested without a browser: where a drop lands, what order a move gives, and range selection.
 // Lists work on keys (strings), never on the items themselves, so any kind of row fits.
 
+import type { Snippet } from 'svelte';
+
 /** What a list tells each row it renders. */
 export type Mode = 'use' | 'edit' | 'select';
 
@@ -12,6 +14,8 @@ export interface RowContext {
 	selecting: boolean;
 	selected: boolean;
 	dragging: boolean;
+	/** The handle, for a "bare" row to put where it belongs. */
+	grip?: Snippet;
 }
 
 /** Where a dragged row lands relative to the row it is dropped on. */

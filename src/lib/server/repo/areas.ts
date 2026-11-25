@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db';
 import { area, habit, task } from '../db/schema';
+import { AREA_COLORS } from '$lib/area-colors';
 import { getSettings, saveSettings } from '../settings';
 
 export interface AreaRow {
@@ -11,7 +12,6 @@ export interface AreaRow {
 	icon: string;
 }
 
-export const AREA_COLORS = ['#65a30d', '#16a34a', '#dc2626', '#9333ea', '#ea580c', '#0891b2', '#ca8a04', '#db2777'];
 
 const STARTERS: Omit<AreaRow, 'id'>[] = [
 	{ name: 'Fitness', color: '#65a30d', icon: '💪' },
@@ -54,24 +54,6 @@ export function areaFor(accountId: string, name: string | null | undefined, crea
 		.values({ id, accountId, name: name.trim().slice(0, 40), color: AREA_COLORS[all.length % AREA_COLORS.length], icon: '', sortOrder: all.length })
 		.run();
 	return id;
-}
-
-/** Replace the account's Areas with this ordered list. Rows not listed are deleted; their items lose the Area. */
-export function saveAreas(accountId: string, rows: (Omit<AreaRow, 'id'> & { id: string | null })[]) {
-	db.transaction((tx) => {
-		const existing = new Set(
-			tx.select({ id: area.id }).from(area).where(eq(area.accountId, accountId)).all().map((r) => r.id)
-		);
-		const keep = new Set<string>();
-		rows.forEach((r, i) => {
-			const values = { name: r.name, color: r.color, icon: r.icon, sortOrder: i };
-			if (r.id && existing.has(r.id)) {
-				tx.update(area).set(values).where(and(eq(area.id, r.id), eq(area.accountId, accountId))).run();
-				keep.add(r.id);
-			} else tx.insert(area).values({ id: randomUUID(), accountId, ...values }).run();
-		});
-		for (const id of existing) if (!keep.has(id)) tx.delete(area).where(eq(area.id, id)).run();
-	});
 }
 
 const mine = (accountId: string, id: string) => and(eq(area.id, id), eq(area.accountId, accountId));
