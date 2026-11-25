@@ -588,6 +588,7 @@ export function fromTemplate(
 			// Reminders are a choice for each device, so imports start with them off. The import
 			// page offers to turn on one the template suggests (`tpl.habit.remind`).
 			remind: false,
+			reminder: null,
 			unlogged: th.unlogged,
 			// Added at the top level; the caller puts the habits inside where they belong.
 			parentId: null,

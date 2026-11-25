@@ -105,12 +105,15 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		devices: subscriptionCount(accountId),
 		/** Every habit that could remind you, with whether it does. */
 		reminders: db
-			.select({ id: habit.id, name: habit.name, cue: habit.cue, remind: habit.remind })
+			.select({ id: habit.id, name: habit.name, cue: habit.cue, remind: habit.remind, reminder: habit.reminder })
 			.from(habit)
 			.where(and(eq(habit.accountId, accountId), eq(habit.archived, false), isNull(habit.deleteAfter)))
 			.orderBy(asc(habit.name))
 			.all()
-			.flatMap((h) => (h.cue?.time || h.cue?.range ? [{ id: h.id, name: h.name, when: h.cue.time ?? h.cue.range!, remind: h.remind }] : [])),
+			.flatMap((h) => {
+				const when = h.reminder?.time ?? h.cue?.time ?? h.cue?.range;
+				return when ? [{ id: h.id, name: h.name, when, remind: h.remind }] : [];
+			}),
 		habits,
 		habitFields: numberFields(habits.map((h) => h.id)),
 		keys: listKeys(accountId),

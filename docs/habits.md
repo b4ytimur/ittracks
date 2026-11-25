@@ -58,7 +58,7 @@ Optional. A clear time and place make a habit easier to start.
 - **Time**, or **Or part of the day** (one or the other, not both).
 - **Where**, such as "in the park".
 - **After**: **Another habit** or **Something else I do** ("I pour my morning coffee"). This stacks the habit after something you already do.
-- **Remind me** sends a push notification at the time, or when the part of the day starts. It needs a time or part of the day, and reminders turned on for the device in **Settings → Reminders**. The notification has **Done**, **Minimum** and **Snooze** (30 minutes) buttons.
+- **Reminder** is a line of its own. **Remind me** sends a push notification at the habit's time, or when its part of the day starts, or at a **Time of its own**. **What it says** replaces its words, and you pick what it offers besides **Done**: **Minimum** (with Levels) and **Snooze 30 min**. This device's permission stands in the same line; **Settings → Reminders** lists every habit's reminder.
 
 Push needs HTTPS (or `localhost`). On iPhone and iPad it works only after adding the app to the Home Screen.
 

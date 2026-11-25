@@ -4,10 +4,10 @@ import { defaultLevels, emptyCue } from '$lib/forms';
 
 describe('what a line of a habit says', () => {
 	it('when and where', () => {
-		expect(cueWords({ ...emptyCue(), afterText: 'work', time: '18:15', place: 'the gym' }, true)).toBe('After work, at 18:15, at the gym. Reminds you.');
-		expect(cueWords({ ...emptyCue(), range: 'Morning', place: 'in the park' }, false)).toBe('In the morning, in the park.');
-		expect(cueWords({ ...emptyCue(), afterText: 'x' }, false, 'Spanish')).toBe('After Spanish.');
-		expect(cueWords(emptyCue(), false)).toBe('');
+		expect(cueWords({ ...emptyCue(), afterText: 'work', time: '18:15', place: 'the gym' })).toBe('After work, at 18:15, at the gym.');
+		expect(cueWords({ ...emptyCue(), range: 'Morning', place: 'in the park' })).toBe('In the morning, in the park.');
+		expect(cueWords({ ...emptyCue(), afterText: 'x' }, 'Spanish')).toBe('After Spanish.');
+		expect(cueWords(emptyCue())).toBe('');
 	});
 	it('levels and streak', () => {
 		expect(levelWords(defaultLevels())).toBe('Off.');

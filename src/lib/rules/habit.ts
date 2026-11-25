@@ -12,7 +12,6 @@ import {
 	isSet,
 	normalize,
 	onlyWhen,
-	requiresAny,
 	type FieldPath,
 	type Issue
 } from './core';
@@ -143,7 +142,8 @@ export const habitRules = defineRules<HabitForm, HabitCtx>({
 		})
 	],
 	// H3: a reminder needs a moment to fire.
-	remind: [onlyWhen(build, BUILD_ONLY, false), onlyWhen(notGroup, NOT_GROUP, false), requiresAny(['cue.time', 'cue.range'], 'Set a time or a part of the day first', false)],
+	remind: [onlyWhen(build, BUILD_ONLY, false), onlyWhen(notGroup, NOT_GROUP, false), onlyWhen((h) => !!(h.cue.time || h.cue.range || h.reminder?.time), 'Set a time or a part of the day first', false)],
+	reminder: [onlyWhen(build, BUILD_ONLY, null)],
 
 	// L1 is the streakRule type itself. S5: grace that can never run out.
 	streakRule: [
@@ -285,7 +285,7 @@ export const habitPast = definePolicies<HabitForm>({
 	parentId: recompute("A group's or routine's past days are counted again from the habits inside it now"),
 	identityIds: recompute('Identity votes are counted again from the days done'),
 	reframe: display(),
-	variants: unguarded('Removing a Variant unlinks the days logged with it from it'),
+	variants: versioned('Past days keep the Variant they were logged on: one with logs is archived, not removed'),
 	schedule: versioned('Earlier days keep the schedule they had, unless the change applies to past days too'),
 	'cue.time': display(),
 	'cue.range': display(),
@@ -293,6 +293,7 @@ export const habitPast = definePolicies<HabitForm>({
 	'cue.afterHabitId': display(),
 	'cue.afterText': display(),
 	remind: display(),
+	reminder: display(),
 	streakRule: recompute('Streaks are worked out again from the days logged'),
 	'levels.enabled': recompute(RECOUNT),
 	'levels.minimum': display(),

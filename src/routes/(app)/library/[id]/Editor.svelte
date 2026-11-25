@@ -207,8 +207,10 @@
 	const said = new Map<string, { entry: number; was: Partial<TaskForm> }>();
 	const pick = (f: TaskForm, keys: Key[]) => Object.fromEntries(keys.map((k) => [k, copy(f[k])])) as Partial<TaskForm>;
 
+	/** Its own, read once: an Undo in the band is pressed on other pages too, where `data` is theirs. */
+	const TASK = untrack(() => data.taskId);
 	async function send(body: object): Promise<{ status: number; r: { form?: TaskForm; undo?: string; error?: string; moved?: Partial<TaskForm> } } | null> {
-		const res = await fetch(`/api/tasks/${data.taskId}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), keepalive: true }).catch(() => null);
+		const res = await fetch(`/api/tasks/${TASK}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), keepalive: true }).catch(() => null);
 		return res && { status: res.status, r: await res.json().catch(() => ({})) };
 	}
 	let onServer = $state.raw(untrack(() => copy(data.task)));

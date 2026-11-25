@@ -214,7 +214,7 @@
 	{#snippet actions()}
 		{#if !views.hidden.includes('identities')}<a class="button" href="/identities">Identities</a>{/if}
 		<a class="button" href="/gallery">Gallery</a>
-		<a class="button primary" href="/habits/new" data-sveltekit-reload>New habit</a>
+		<a class="button primary" href="/habits/new">New habit</a>
 	{/snippet}
 </EditChrome>
 
@@ -296,7 +296,7 @@
 	>
 		{#snippet row(h)}
 			{@const o = outcome.get(h.id)}
-			{#if mode === 'use'}<a class="name" href="/habits/{h.id}" data-sveltekit-reload>{h.name}</a>
+			{#if mode === 'use'}<a class="name" href="/habits/{h.id}">{h.name}</a>
 			{:else}<span class="name"><InlineText value={h.name} editing={mode === 'edit' && !struck.has(h.id)} label="Name of {h.name}" maxlength={120} onsave={(v) => rename(h, v)} /></span>{/if}
 			{#if o?.tag}<span class="tags"><span class="tag pending"><span aria-hidden="true">→</span> {o.tag}</span></span>
 			{:else if h.archived}<span class="tags"><StatusTag status="archived" /></span>{/if}

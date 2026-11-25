@@ -5,8 +5,8 @@ export const sentence = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(
 const n = (x: number) => String(Math.round(x * 100) / 100);
 const times = (x: number, word: string) => `${x} ${word}${x === 1 ? '' : 's'}`;
 
-/** "After work, at 18:15, at the gym. Reminds you." */
-export function cueWords(c: HabitForm['cue'], remind: boolean, afterName?: string): string {
+/** "After work, at 18:15, at the gym." */
+export function cueWords(c: HabitForm['cue'], afterName?: string): string {
 	const after = afterName ?? c.afterText?.trim();
 	const place = c.place?.trim();
 	const parts = [
@@ -14,7 +14,7 @@ export function cueWords(c: HabitForm['cue'], remind: boolean, afterName?: strin
 		c.time ? `at ${c.time}` : c.range ? `in the ${c.range.toLowerCase()}` : '',
 		place ? (/^(in|at|on|by|near|under|inside|outside)\s/i.test(place) ? place : `at ${place}`) : ''
 	].filter(Boolean);
-	return parts.length ? `${sentence(parts.join(', '))}${remind ? ' Reminds you.' : ''}` : '';
+	return parts.length ? sentence(parts.join(', ')) : '';
 }
 
 export function levelWords(l: HabitForm['levels']): string {

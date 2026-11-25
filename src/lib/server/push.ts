@@ -7,6 +7,7 @@ import { db } from './db';
 import { appValue, habit, pushSubscription, reminderSent } from './db/schema';
 import { getSettings } from './settings';
 import { ensureToday, timeIn, todayIn } from './today';
+import { reminderActions, reminderBody, reminderTime, SNOOZE_MIN } from '$lib/reminder';
 import type { ScheduleForm } from '$lib/forms';
 
 const KEY = 'vapid';
@@ -87,8 +88,6 @@ export async function sendToAccount(accountId: string, msg: PushMessage): Promis
 const minutes = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
 const clock = (n: number) => `${String(Math.floor(n / 60) % 24).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
 
-export const SNOOZE_MIN = 30;
-
 /** Ask for the reminder again in 30 minutes. */
 export function snooze(habitId: string, date: string, now: string) {
 	const againAt = clock(Math.min(minutes(now) + SNOOZE_MIN, 23 * 60 + 59));
@@ -115,8 +114,8 @@ export async function runReminders(at = new Date()) {
 			.where(and(eq(habit.accountId, accountId), eq(habit.remind, true), eq(habit.archived, false)))
 			.all();
 		for (const h of habits) {
-			// A cue that names only a part of the day reminds at that part's start.
-			const time = h.cue?.time ?? settings.ranges.find((r) => r.name === h.cue?.range)?.start;
+			// Its own time, the cue's, or the start of the cue's part of the day.
+			const time = reminderTime(h, settings.ranges);
 			if (!time || h.direction !== 'build' || !h.schedule) continue;
 			const sent = db
 				.select()
@@ -137,17 +136,13 @@ export async function runReminders(at = new Date()) {
 			}
 			const occ = ensureToday(accountId, h.id, h.schedule as ScheduleForm, today);
 			if (!occ || occ.status !== 'due') continue;
-			const minimum = h.levels?.enabled && h.levels.minimum ? `Even ${h.levels.minimum} counts.` : '';
-			const actions = [{ action: 'done', title: 'Done' }];
-			if (h.levels?.enabled) actions.push({ action: 'minimum', title: 'Minimum' });
-			actions.push({ action: 'snooze', title: `Snooze ${SNOOZE_MIN} min` });
 			await sendToAccount(accountId, {
 				title: h.name,
-				body: [[h.cue?.time ?? h.cue?.range, h.cue?.place].filter(Boolean).join(' '), minimum].filter(Boolean).join(' · '),
+				body: reminderBody(h),
 				url: '/',
 				tag: `habit-${h.id}`,
 				occurrenceId: occ.id,
-				actions
+				actions: reminderActions(h)
 			});
 		}
 	}

@@ -102,6 +102,7 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 		levels: h.levels ?? defaultLevels(),
 		quickDone: h.quickDone,
 		remind: h.remind,
+		reminder: h.reminder ?? null,
 		identityIds: db
 			.select({ id: habitIdentity.identityId })
 			.from(habitIdentity)
@@ -382,6 +383,7 @@ export function saveHabit(
 			levels: f.levels.enabled ? f.levels : null,
 			quickDone: f.quickDone,
 			remind: f.remind,
+			reminder: isBreak ? null : f.reminder,
 			ifThen: isBreak && (f.ifThen.when || f.ifThen.then || f.ifThen.habitId) ? f.ifThen : null,
 			triggers: isBreak ? f.triggers : null,
 			reframe: f.reframe || null,
