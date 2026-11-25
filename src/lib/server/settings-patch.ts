@@ -16,7 +16,7 @@ import { getGroupings, getKinds, getNewLines, getPacks, getSettings, getTaskType
 
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Pick a time like 04:00');
 
-const fields = z
+export const settingsFields = z
 	.object({
 		/** Null goes back to not set. */
 		dayStart: hhmm.nullable(),
@@ -35,10 +35,10 @@ const fields = z
 	})
 	.partial()
 	.strict();
-export type SettingsSet = z.infer<typeof fields>;
+export type SettingsSet = z.infer<typeof settingsFields>;
 
 export const settingsPatch = z.object({
-	set: fields,
+	set: settingsFields,
 	was: z.record(z.string(), z.unknown()),
 	/** Parts of the day by their old name, when one was renamed: its habits go with it. */
 	renames: z.record(z.string(), z.string()).default({}),
@@ -63,16 +63,21 @@ const ordered = (v: unknown): string =>
 /** Task types without the plain ones, which are always there. */
 export const ownTypes = (accountId: string) => getTaskTypes(accountId).filter((t) => !PLAIN_TASK_TYPES.some((p) => p.key === t.key));
 
-export function patchSettings(accountId: string, body: unknown): SettingsResult {
-	const parsed = settingsPatch.safeParse(body);
-	if (!parsed.success) return { error: firstError(parsed.error) };
-	const p = parsed.data;
-	// Units and groupings are read as the account has them, also before any were stored.
+/** The settings as this patch reads them: units and groupings as the account has them, also before any were stored. */
+export function settingsNow(accountId: string): Settings {
 	const cur: Settings = { ...getSettings(accountId), units: getKinds(accountId), groupings: getGroupings(accountId), taskTypes: ownTypes(accountId) };
 	cur.hints ??= [];
 	cur.detail ??= {};
 	cur.logLayouts ??= {};
 	cur.newLines = getNewLines(cur);
+	return cur;
+}
+
+export function patchSettings(accountId: string, body: unknown): SettingsResult {
+	const parsed = settingsPatch.safeParse(body);
+	if (!parsed.success) return { error: firstError(parsed.error) };
+	const p = parsed.data;
+	const cur = settingsNow(accountId);
 	const keys = Object.keys(p.set) as (keyof SettingsSet)[];
 	if (!keys.length) return { error: 'Nothing to change' };
 	const moved = keys.filter((k) => ordered(cur[k]) !== ordered(p.was[k]) && ordered(cur[k]) !== ordered(p.set[k]));
@@ -93,7 +98,7 @@ export function patchSettings(accountId: string, body: unknown): SettingsResult 
 	const taken = moves.find(([from, to]) => !before.same(from, to) && fieldsIn(accountId, to).length);
 	if (taken) return { error: `“${taken[1]}” is already on ${fieldsIn(accountId, taken[1]).length === 1 ? 'a field' : 'fields'} as a word of its own. Pick another name.` };
 	// What it clears with it belongs to this change too.
-	const changed = (Object.keys(fields.shape) as (keyof SettingsSet)[]).filter((k) => ordered(cur[k]) !== ordered(clean[k]));
+	const changed = (Object.keys(settingsFields.shape) as (keyof SettingsSet)[]).filter((k) => ordered(cur[k]) !== ordered(clean[k]));
 	const pick = (s: Settings) => Object.fromEntries(changed.map((k) => [k, s[k] ?? null])) as SettingsSet;
 	// Types of an account from before there were packs are stored with the packs they came from.
 	if (changed.length) saveSettings(accountId, { ...Object.fromEntries(changed.map((k) => [k, clean[k]])), ...(changed.includes('taskTypes') ? { packs: getPacks(accountId) } : {}) } as Partial<Settings>);

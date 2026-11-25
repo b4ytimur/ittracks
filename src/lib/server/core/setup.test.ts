@@ -6,12 +6,15 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '../db';
 import { habit, metric, task } from '../db/schema';
 import { createAccount } from '../auth';
-import { saveSettings } from '../settings';
+import { getSettings, saveSettings } from '../settings';
+import { getStats } from '../stats';
+import { pausesOf } from '../pauses';
 import { getHabitForm } from '../repo/habits';
 import { getTaskForm } from '../repo/tasks';
 import { appActor, ActionError, type Actor } from './actor';
 import { catalog, runAction } from './actions';
 import { EXAMPLES } from './setup-guide';
+import type { readAccount, readStats } from './setup-account';
 
 let me: string;
 let app: Actor;
@@ -272,5 +275,173 @@ describe('setup', () => {
 		expect(JSON.stringify(setupTools).length).toBeLessThan(8_000);
 		const guide = run('setup_guide', { topic: 'habit' }) as unknown as { schema: { properties: Record<string, unknown> } };
 		expect(Object.keys(guide.schema.properties)).toContain('variants');
+	});
+});
+
+describe('setup: the account', () => {
+	const stats = () => getStats(me);
+
+	it('adds a measure, a board with a card and a number on Today, and undo takes them away', () => {
+		const ex = EXAMPLES.filter((e) => e.changes.some((c) => c.op === 'measure' || c.op === 'stats')).flatMap((e) => e.changes as unknown[]);
+		const p = setup(ex);
+		expect(p.summary).toEqual([
+			'Add the measure “Speed”: [Distance] / [Time] * 60 in km/h',
+			'Add the Stats board “Running”',
+			'Save the card “Km per week” on a Stats board',
+			'Show a number for “Running” on Today'
+		]);
+		// The preview shows only the parts of the account that change.
+		const before = (p.before as { account: Record<string, unknown> }).account;
+		const after = (p.after as { account: Record<string, unknown> }).account;
+		expect(Object.keys(after).sort()).toEqual(['boards', 'measures', 'todayNumbers']);
+		expect(before.measures).toEqual([]);
+		expect(after.boards).toEqual([{ name: 'Running', range: '30d', cards: ['Km per week'] }]);
+		expect(stats().measures).toEqual([]);
+
+		const a = setup(ex, { apply: true, check: p.check });
+		const s = stats();
+		const speed = s.measures.find((m) => m.name === 'Speed')!;
+		expect(speed).toMatchObject({ formula: '[Distance] / [Time] * 60', per: 'log', combine: 'avg', unit: 'km/h' });
+		const board = s.boards.find((b) => b.name === 'Running')!;
+		expect(board.cards[0]).toMatchObject({ title: 'Km per week', what: { source: 'field' }, overTime: 'sum', bucket: 'week', range: '12m', look: { chart: 'bars' } });
+		const running = habitNamed('Running')!.id;
+		expect(s.headlines[running]).toMatchObject({ title: 'Km this week', look: { chart: 'tile' } });
+
+		// A measure is changed and deleted by name; one a card counts by is turned off instead.
+		const u1 = setup([{ op: 'measure', measure: 'speed', set: { unit: 'kph' } }], { apply: true });
+		expect(stats().measures.find((m) => m.name === 'Speed')!.unit).toBe('kph');
+		const c1 = setup([{ op: 'stats', change: { op: 'card.save', where: { habit: 'Running' }, card: { title: 'Speed', source: 'task', task: 'Run', measure: 'Speed', combine: 'avg' } } }], { apply: true });
+		const del = setup([{ op: 'measure', measure: 'Speed', delete: true }], { apply: true });
+		expect(del.summary[0]).toMatch(/Turn off the measure “Speed” \(1 card still count/);
+		expect(stats().measures.find((m) => m.name === 'Speed')!.off).toBe(true);
+		run('setup_undo', { undo: del.undo });
+		expect(stats().measures.find((m) => m.name === 'Speed')!.off).toBeUndefined();
+
+		fails(() => setup([{ op: 'measure', set: { name: 'Broken', formula: '[Weight] *' } }]), 'invalid', /can't be worked out/);
+		fails(() => setup([{ op: 'measure', set: { name: 'speed', formula: '[Distance]' } }]), 'conflict', /already a measure/);
+		fails(() => setup([{ op: 'stats', change: { op: 'board.delete', board: 'Nope' } }]), 'not_found', /No board “Nope”/);
+
+		// Undo in reverse order: the card on the Stats tab, the unit, then the first request.
+		const later = setup([{ op: 'stats', change: { op: 'habit.reset', habit: 'Running' } }], { apply: true });
+		run('setup_undo', { undo: later.undo });
+		for (const x of [c1, u1, a]) expect((run('setup_undo', { undo: x.undo }) as unknown as { kept: string[] }).kept).toEqual([]);
+		fails(() => run('setup_undo', { undo: a.undo }), 'conflict', /already undone/);
+		expect(stats().measures).toEqual([]);
+		expect(stats().boards.some((b) => b.name === 'Running')).toBe(false);
+	});
+
+	it('changes settings lines through the Settings checks, and puts them back', () => {
+		const was = getSettings(me);
+		const ex = EXAMPLES.find((e) => e.goal.startsWith('The day starts'))!;
+		const a = setup(ex.changes, { apply: true });
+		expect(a.summary[0]).toBe('Change settings: day start, parts of the day');
+		expect(getSettings(me).dayStart).toBe('04:00');
+		expect(getSettings(me).ranges.map((r) => r.name)).toEqual(['Morning', 'Evening']);
+		expect(pausesOf(me, null)).toMatchObject([{ start: '2026-12-24', end: '2026-12-31', note: 'Holidays' }]);
+		fails(() => setup([{ op: 'settings', set: { ranges: [{ name: 'Day', start: '06:00', end: '10:00' }, { name: 'day', start: '11:00', end: '12:00' }] } }]), 'invalid', /Two parts of the day/);
+		fails(() => setup([{ op: 'settings', set: { colour: 'blue' } }]), 'invalid');
+		run('setup_undo', { undo: a.undo });
+		expect(getSettings(me).dayStart).toBe(was.dayStart);
+		expect(getSettings(me).ranges).toEqual(was.ranges);
+		expect(pausesOf(me, null)).toEqual([]);
+	});
+
+	it('Areas, identities, packs, tags, pauses, shortcuts, Collections, Task types and My templates, all undone together', () => {
+		const p = setup([
+			{ op: 'area', area: 'Garden', set: { color: '#16a34a', icon: '🌱' } },
+			{ op: 'identity', identity: 'I am a runner' },
+			{ op: 'pack', pack: 'Gym' },
+			{ op: 'tag', tag: 'glutes', grouping: 'Muscle groups' },
+			{ op: 'add_task', key: 'dl', task: { name: 'Deadlift', type: 'Strength' } },
+			{ op: 'collection', set: { name: 'Pulls', tasks: ['dl'] } },
+			{ op: 'pause', habit: 'Running', from: '2026-12-01', to: '2026-12-07', note: 'Sick' },
+			{ op: 'pin', habit: 'Running' },
+			{ op: 'save_template', habit: 'Running', name: 'My running' },
+			{ op: 'remove_template', template: 'My running' }
+		]);
+		const changed = Object.keys((p.after as { account: object }).account).sort();
+		expect(changed).toEqual(expect.arrayContaining(['areas', 'collections', 'groupings', 'identities', 'packs', 'pauses', 'shortcuts', 'tags', 'taskTypes', 'units']));
+		expect(changed).not.toContain('myTemplates');
+		const a = setup(
+			[
+				{ op: 'area', area: 'Garden', set: { color: '#16a34a', icon: '🌱' } },
+				{ op: 'identity', identity: 'I am a runner' },
+				{ op: 'pack', pack: 'Gym' },
+				{ op: 'tag', tag: 'glutes', grouping: 'Muscle groups' },
+				{ op: 'add_task', key: 'dl', task: { name: 'Deadlift', type: 'Strength' } },
+				{ op: 'collection', set: { name: 'Pulls', tasks: ['dl'] } },
+				{ op: 'pause', habit: 'Running', from: '2026-12-01', to: '2026-12-07', note: 'Sick' },
+				{ op: 'pin', habit: 'Running' }
+			],
+			{ apply: true }
+		);
+		const read = run('setup_read', { ref: 'settings' }) as unknown as ReturnType<typeof readAccount>;
+		expect(read.areas.find((x) => x.name === 'Garden')).toMatchObject({ color: '#16a34a', icon: '🌱' });
+		expect(read.identities.map((i) => i.statement)).toContain('I am a runner');
+		expect(read.packs.find((x) => x.id === 'gym')!.in).toBe(true);
+		expect(read.tags.find((t) => t.name === 'glutes')).toMatchObject({ grouping: 'Muscle groups' });
+		expect(read.collections.find((c) => c.name === 'Pulls')!.tasks).toEqual(['Deadlift']);
+		expect(read.pauses).toMatchObject([{ habit: 'Running', from: '2026-12-01', to: '2026-12-07', note: 'Sick' }]);
+		expect(read.shortcuts.map((x) => x.name)).toEqual(['Running']);
+		const dl = getTaskForm(me, taskNamed('Deadlift')!.id)!;
+		expect(dl.metrics.map((m) => m.name)).toEqual(['Weight', 'Reps']);
+		expect(dl.restTimerEnabled).toBe(true);
+
+		// Changing and taking away by name.
+		const b = setup(
+			[
+				{ op: 'area', area: 'garden', set: { name: 'Yard' } },
+				{ op: 'identity', identity: 'I am a runner', statement: 'I run' },
+				{ op: 'tag', tag: 'glutes', name: 'bum' },
+				{ op: 'pause', habit: 'Running', from: '2026-12-03', remove: true },
+				{ op: 'pin', habit: 'Running', pinned: false },
+				{ op: 'collection', collection: 'Pulls', delete: true }
+			],
+			{ apply: true }
+		);
+		const r2 = run('setup_read', { ref: 'settings' }) as unknown as ReturnType<typeof readAccount>;
+		expect(r2.areas.some((x) => x.name === 'Yard')).toBe(true);
+		expect(r2.identities.map((i) => i.statement)).toContain('I run');
+		expect(r2.tags.some((t) => t.name === 'bum')).toBe(true);
+		expect(r2.pauses).toEqual([]);
+		expect(r2.shortcuts).toEqual([]);
+		expect(r2.collections.some((c) => c.name === 'Pulls')).toBe(false);
+		run('setup_undo', { undo: b.undo });
+		const r3 = run('setup_read', { ref: 'settings' }) as unknown as ReturnType<typeof readAccount>;
+		expect(r3.areas.some((x) => x.name === 'Garden')).toBe(true);
+		expect(r3.identities.map((i) => i.statement)).toContain('I am a runner');
+		expect(r3.tags.some((t) => t.name === 'glutes')).toBe(true);
+		expect(r3.pauses).toHaveLength(1);
+		expect(r3.shortcuts.map((x) => x.name)).toEqual(['Running']);
+		expect(r3.collections.find((c) => c.name === 'Pulls')!.tasks).toEqual(['Deadlift']);
+
+		const back = run('setup_undo', { undo: a.undo }) as unknown as { kept: string[] };
+		expect(back.kept).toEqual([]);
+		const r4 = run('setup_read', { ref: 'settings' }) as unknown as ReturnType<typeof readAccount>;
+		expect(r4.areas.some((x) => x.name === 'Garden')).toBe(false);
+		expect(r4.identities.map((i) => i.statement)).not.toContain('I am a runner');
+		expect(r4.packs.find((x) => x.id === 'gym')!.in).toBe(false);
+		expect(r4.tags.some((t) => t.name === 'glutes')).toBe(false);
+		expect(r4.collections).toEqual([]);
+		expect(r4.pauses).toEqual([]);
+		expect(r4.shortcuts).toEqual([]);
+	});
+
+	it('deletes a habit, and setup_undo puts it back while it can', () => {
+		setup([{ op: 'add_habit', habit: { name: 'Throwaway', schedule: { kind: 'interval', every: 1 } } }], { apply: true });
+		const d = setup([{ op: 'delete', habit: 'Throwaway' }], { apply: true });
+		expect(d.changes[0].warnings).toEqual([expect.stringMatching(/gone for good after 24 hours/)]);
+		expect(habitNamed('Throwaway')!.deleteAfter).not.toBeNull();
+		run('setup_undo', { undo: d.undo });
+		expect(habitNamed('Throwaway')!.deleteAfter).toBeNull();
+		expect(habitNamed('Throwaway')!.archived).toBe(false);
+	});
+
+	it('reads Stats in the shape the changes take', () => {
+		const r = run('setup_read', { ref: 'stats' }) as unknown as ReturnType<typeof readStats>;
+		expect(r.boardTemplates.map((b) => b.id)).toContain('overview');
+		expect(Array.isArray(r.measures)).toBe(true);
+		const guide = run('setup_guide', { topic: 'stats' }) as unknown as { cardSchema: object; examples: unknown[] };
+		expect(guide.examples.length).toBe(2);
 	});
 });

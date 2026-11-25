@@ -18,6 +18,7 @@ import { BULK, BULK_NAMES, bulkInput } from '$lib/bulk/catalog';
 import { runBulk, undoBulk } from '../bulk';
 import { readSetup, runSetup, setupInput, undoSetup } from './setup';
 import { GUIDE_TOPICS, setupGuide } from './setup-guide';
+import { brief, shortenBrief } from './brief';
 
 export const API_VERSION = 1;
 
@@ -53,14 +54,6 @@ const seriesSpec = z.object({
 	range: z.string().max(20).optional().describe('Instead of from/to: week, 7d, month, 30d, 90d, year, 12m, all, since:YYYY-MM-DD.'),
 	...range
 });
-
-/**
- * Schemas the tool list shows in short, as an object with one sentence instead of every field:
- * for a shape that series already spells out, so each chat doesn't read it again per tool.
- * Input is still checked against the whole schema.
- */
-const BRIEF = new WeakMap<z.ZodType, string>();
-const brief = <T extends z.ZodType>(schema: T, text: string) => (BRIEF.set(schema, text), schema);
 
 /** One measure, as series takes it but without split or range: what the statistics tools analyse. */
 const measureSpec = brief(
@@ -434,7 +427,7 @@ export const ACTIONS: ActionDef[] = [
 		scope: 'read',
 		title: 'Read something to change',
 		description:
-			'What setup changes, in the shape it takes: habit:<id or name> (its form, with names for the ids in it; as "template" gives it as a template file to copy), task:<id or name> (its form), templates (the ready-made and saved templates, with their questions), template:<slug or id> (one of them), views (the views and layout, with every option).',
+			'What setup changes, in the shape it takes: habit:<id or name> (its form, with names for the ids in it; as "template" gives it as a template file to copy), task:<id or name> (its form), templates (the ready-made and saved templates, with their questions), template:<slug or id> (one of them), views (the views and layout, with every option), settings (settings, Areas, identities, tags, pauses, packs, Collections, My templates), stats (measures, boards and cards, board templates).',
 		input: z.object({ ref: z.string().trim().min(3).max(240), as: z.enum(['form', 'template']).optional() }),
 		run: (a, i) => readSetup(a, i)
 	}),
@@ -443,9 +436,9 @@ export const ACTIONS: ActionDef[] = [
 		version: 1,
 		kind: 'write',
 		scope: 'edit',
-		title: 'Create or change habits, Tasks, templates and views',
+		title: 'Set up anything the app can: habits, Tasks, templates, views, settings, measures, Stats',
 		description:
-			'Propose, then apply. changes is a list run in order: add_template (a template file, or from a ready-made one with answers: anything new with its own Tasks, Variants, schedule, habits inside, phases), add_habit, edit_habit (set: only the fields that change), add_task, edit_task, archive, save_template, view (saved views and layout). Without apply nothing is saved: it returns a preview (summary, warnings, each touched habit and Task before and after) and a check. Show the user the preview and only after they agree call again with the same changes, apply: true and the check; it applies all or nothing and returns an undo id. Names and short keys work wherever the forms want ids. Read setup_guide first.',
+			'Propose, then apply. changes is a list run in order: add_template (a template file, or from a ready-made one with answers: anything new with its own Tasks, Variants, schedule, habits inside, phases), add_habit, edit_habit (set: only the fields that change), add_task (type: start from a Task type), edit_task, archive, save_template, view (saved views and layout); and for the account: settings (day start, parts of the day, units, groupings, Task types…), measure (formulas like [Weight] * [Reps]), stats (boards, cards, the number on Today), area, identity, tag, pause (or a vacation), delete, pin, pack, collection, remove_template. Without apply nothing is saved: it returns a preview (summary, warnings, each touched habit and Task, and the parts of the account that change, before and after) and a check. Show the user the preview and only after they agree call again with the same changes, apply: true and the check; it applies all or nothing and returns an undo id. Names and short keys work wherever the forms want ids. Read setup_guide first.',
 		input: setupInput,
 		run: (a, i) => runSetup(a, i)
 	}),
@@ -485,13 +478,6 @@ export function runAction(actor: Actor, name: string, raw: unknown): unknown {
 	}
 	return a.run(actor, parsed.data);
 }
-
-const shortenBrief = ({ zodSchema, jsonSchema }: { zodSchema: unknown; jsonSchema: Record<string, unknown> }) => {
-	const text = BRIEF.get(zodSchema as z.ZodType);
-	if (!text) return;
-	for (const k of Object.keys(jsonSchema)) delete jsonSchema[k];
-	Object.assign(jsonSchema, { type: 'object', description: text });
-};
 
 /** The actions this actor may call, with JSON Schemas for their input. */
 export function catalog(actor: Actor) {

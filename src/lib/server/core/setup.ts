@@ -12,7 +12,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../db';
 import { habit, metric, slot, task, taskPart, undoSnapshot, variant } from '../db/schema';
-import { defaultLevels, defaultTriggers, emptyCue, habitForm, type HabitForm, type TaskForm } from '$lib/forms';
+import { defaultLevels, defaultTriggers, emptyCue, habitForm, rowWords, type HabitForm, type TaskForm } from '$lib/forms';
 import { DEFAULT_STREAK_RULE } from '$lib/engine/streak';
 import { isPhases, tidyPhases } from '$lib/engine/schedule';
 import { applyAnswers, fromTemplate, mapSchedule, templateFile, TEMPLATE_FORMAT, TEMPLATE_VERSION, type TemplateFile } from '$lib/template';
@@ -29,16 +29,19 @@ import { shareFile } from '../share';
 import { restoreSnapshot, withSnapshot } from '../snapshot';
 import { restoreTaskSnapshot, withTaskSnapshot } from '../task-snapshot';
 import { takePacks, undoPack, unitsWith, type PackUndo } from '../packs';
-import { getPacks, getUnits, getViews } from '../settings';
+import { getPacks, getTaskTypes, getUnits, getViews } from '../settings';
+import { metricsFromType, PLAIN_TASK_TYPES } from '$lib/task-types';
 import { changeViews } from '../views';
 import { DEFAULT_VIEW, emptyState, FEATURES, GROUPS, HABIT_LINES, LAYOUTS, LINES, PAGE_LABEL, PAGES, SECTIONS, SORTS, STATS, TEMPLATES, WIDGETS, DONE_MODES, type ViewSettings } from '$lib/views';
 import { trash } from '../trash';
 import { userToday } from '../today';
 import { ActionError, requireScope, type Actor } from './actor';
+import { brief } from './brief';
 import { findHabit } from './day';
 import { describe } from './read';
 import { emit } from './events';
 import { saveHabitChecked, saveTaskChecked, type Refused, type Saved } from './save';
+import { ACCOUNT_CHANGES, ACCOUNT_OPS, accountDiff, accountOf, readAccount, readStats, undoAccount, type AccountOp, type AccountUndo } from './setup-account';
 
 // ---------- input ----------
 
@@ -66,7 +69,11 @@ export const setupChange = z.discriminatedUnion('op', [
 	}),
 	z.object({ op: z.literal('archive'), habit: ref.optional(), task: ref.optional(), archived: z.boolean().optional() }),
 	z.object({ op: z.literal('save_template'), habit: ref, name: z.string().trim().min(1).max(120).optional(), description: z.string().max(2000).optional() }),
-	z.object({ op: z.literal('view'), change: fields })
+	z.object({ op: z.literal('view'), change: fields }),
+	brief(
+		z.discriminatedUnion('op', [...ACCOUNT_CHANGES]),
+		'Or a change to the account: settings, measure, stats, area, identity, tag, pause, delete, pin, pack, collection or remove_template. Shapes: setup_guide topics account and stats.'
+	)
 ]);
 export type SetupChange = z.infer<typeof setupChange>;
 
@@ -487,6 +494,15 @@ const blankHabit = (today: string): HabitForm => ({
 	unlogged: 'missed'
 });
 
+/** A new Task's fields, timer and words from a Task type (by key or name), as the editor's Make a Task does. */
+function fromType(run: Run, raw: Obj): Partial<TaskForm> {
+	if (typeof raw.type !== 'string' || !raw.type) return {};
+	const types = getTaskTypes(run.accountId);
+	const t = types.find((x) => x.key === raw.type) ?? types.find((x) => low(x.name) === low(raw.type));
+	if (!t) throw new ActionError('not_found', `No Task type “${raw.type}”. setup_read ref "settings" lists them (taskTypes), with the plain ones: ${PLAIN_TASK_TYPES.map((p) => p.name).join(', ')}.`);
+	return { metrics: metricsFromType(t, getUnits(run.accountId)) as TaskForm['metrics'], restTimerEnabled: t.restTimerEnabled, ...rowWords(), ...t.words };
+}
+
 const blankTask = (): Partial<TaskForm> => ({ notes: '', restTimerEnabled: false, restTimerSeconds: 90, tags: [], metrics: [], parts: [], areaId: null, collectionIds: [] });
 
 /** How to undo one change. */
@@ -497,7 +513,8 @@ type UndoStep =
 	| { k: 'archive'; t: 'habit' | 'task'; id: string; archived: boolean }
 	| { k: 'pack'; undo: PackUndo }
 	| { k: 'saved'; id: string }
-	| { k: 'views'; before: ViewSettings; after: ViewSettings };
+	| { k: 'views'; before: ViewSettings; after: ViewSettings }
+	| AccountUndo;
 
 export interface ChangeResult {
 	op: SetupChange['op'];
@@ -556,6 +573,7 @@ function resolveView(run: Run, raw: Obj): Obj {
 const viewName = (v: ViewSettings, id: string | undefined) => (!id || id === DEFAULT_VIEW ? 'Default' : (v.saved.find((x) => x.id === id)?.name ?? id));
 
 const OPS: { [K in SetupChange['op']]: Op<K> } = {
+	...(ACCOUNT_OPS as unknown as { [K in AccountOp]: Op<K> }),
 	view: (run, c) => {
 		const before = getViews(run.accountId);
 		const change = resolveView(run, c.change);
@@ -606,7 +624,8 @@ const OPS: { [K in SetupChange['op']]: Op<K> } = {
 		};
 	},
 	add_task: (run, c) => {
-		const raw = { ...blankTask(), ...c.task } as Obj;
+		const raw = { ...blankTask(), ...fromType(run, c.task), ...c.task } as Obj;
+		delete raw.type;
 		const { id, warnings } = saveTaskForm(run, null, resolveTask(run, raw, null));
 		if (c.key) run.made.tasks.set(c.key, id);
 		run.touched.tasks.add(id);
@@ -785,6 +804,7 @@ export function runSetup(actor: Actor, input: SetupInput) {
 	const exec = () => {
 		const start = describe(actor);
 		const viewsBefore = getViews(actor.accountId);
+		const accountBefore = accountOf(actor.accountId);
 		const run = new Run(actor, today);
 		/** As things are before: read now, cut to what the changes touch once they are known. */
 		const settingsBefore = new Map(listHabits(actor.accountId, { archived: true }).map((h) => [h.id, settingsOf(actor.accountId, h.id, actor.scopes.has('notes'))]));
@@ -797,12 +817,15 @@ export function runSetup(actor: Actor, input: SetupInput) {
 				throw e;
 			}
 		});
+		// The account's own things (settings, measures, Stats, Areas…): only the parts that changed.
+		const account = accountDiff(accountBefore, accountOf(actor.accountId));
 		const before = {
 			habits: start.habits.filter((h) => run.touched.habits.has(h.id)).map(({ totals: _t, ...h }) => (void _t, { ...h, settings: settingsBefore.get(h.id) ?? {} })),
 			tasks: start.tasks.filter((t) => run.touched.tasks.has(t.id)),
-			...(run.touched.views ? { views: viewsOf(viewsBefore) } : {})
+			...(run.touched.views ? { views: viewsOf(viewsBefore) } : {}),
+			...(account ? { account: account.before } : {})
 		};
-		const after = { ...slice(describe(actor), run.touched, actor), ...(run.touched.views ? { views: viewsOf(getViews(actor.accountId)) } : {}) };
+		const after = { ...slice(describe(actor), run.touched, actor), ...(run.touched.views ? { views: viewsOf(getViews(actor.accountId)) } : {}), ...(account ? { account: account.after } : {}) };
 		return { run, changes, before, after, check: checkOf(actor.accountId, input.changes, before) };
 	};
 
@@ -882,6 +905,10 @@ export function undoSetup(actor: Actor, id: string) {
 					if (JSON.stringify(getViews(actor.accountId)) === JSON.stringify(u.after)) changeViews(actor.accountId, { op: 'restore', views: u.before });
 					else kept.push('the views changed again since, so they stay as they are now');
 					break;
+				default: {
+					const why = undoAccount(actor, u, today);
+					if (why) kept.push(why);
+				}
 			}
 		}
 		db.update(undoSnapshot).set({ data: { ...b, undone: true } }).where(eq(undoSnapshot.id, id)).run();
@@ -910,12 +937,16 @@ function namesFor(accountId: string, taskIds: string[]) {
  */
 export function readSetup(actor: Actor, input: { ref: string; as?: 'form' | 'template' }) {
 	requireScope(actor, 'read');
-	const m = input.ref.trim().match(/^(habit|task|template|templates|views)(?::(.*))?$/i);
-	if (!m) throw invalid('ref is habit:<id or name>, task:<id or name>, template:<slug or id>, templates, or views.');
+	const m = input.ref.trim().match(/^(habit|task|template|templates|views|settings|stats)(?::(.*))?$/i);
+	if (!m) throw invalid('ref is habit:<id or name>, task:<id or name>, template:<slug or id>, templates, views, settings, or stats.');
 	const kind = m[1].toLowerCase();
 	const what = (m[2] ?? '').trim();
 	const accountId = actor.accountId;
 	switch (kind) {
+		case 'settings':
+			return readAccount(accountId);
+		case 'stats':
+			return readStats(actor);
 		case 'views':
 			return {
 				views: viewsOf(getViews(accountId)),

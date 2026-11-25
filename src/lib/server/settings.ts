@@ -139,3 +139,9 @@ export function getViews(accountId: string): ViewSettings {
 export function saveViews(accountId: string, views: ViewSettings) {
 	saveSettings(accountId, { views });
 }
+
+/** Offer a habit as a home screen shortcut, or stop. The menu holds four: the oldest goes. */
+export function setPinned(accountId: string, habitId: string, pinned: boolean) {
+	const rest = getSettings(accountId).pinned.filter((x) => x !== habitId);
+	saveSettings(accountId, { pinned: pinned ? [...rest, habitId].slice(-4) : rest });
+}

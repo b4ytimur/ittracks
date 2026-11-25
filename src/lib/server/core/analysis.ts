@@ -69,8 +69,8 @@ export function analysisOptions() {
 	};
 }
 
-/** Turn a request into a Stats card, resolving names to ids. */
-function cardOf(actor: Actor, P: Prepared, spec: SeriesSpec): StatCard {
+/** Turn a request into a Stats card, resolving names to ids. Setup makes Stats cards with it too. */
+export function cardOf(actor: Actor, P: Prepared, spec: SeriesSpec): StatCard {
 	const source = spec.source ?? 'outcomes';
 	const measure = spec.measure ?? DEFAULT_MEASURE[source];
 	const allowed = PER_LOG_FOR[source] as string[];

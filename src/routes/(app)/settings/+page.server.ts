@@ -3,22 +3,22 @@
 import { fail } from '@sveltejs/kit';
 import { hash, verify } from '@node-rs/argon2';
 import { and, asc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
-import { randomUUID } from 'node:crypto';
 import { checkViews } from '$lib/rules/views';
 import { db } from '$lib/server/db';
-import { account, habit, metric, pause, slot, tag, task, taskTag, variant } from '$lib/server/db/schema';
+import { account, habit, metric, slot, tag, task, taskTag, variant } from '$lib/server/db/schema';
 import { ActionError, ALL_SCOPES, appActor, SCOPES, type Scope } from '$lib/server/core/actor';
 import { importReplace, keepTimeZone, readExport } from '$lib/server/core/export';
 import { createKey, listKeys, revokeKey } from '$lib/server/core/tokens';
 import { publicKey, sendToAccount, subscriptionCount } from '$lib/server/push';
 import { listHabits } from '$lib/server/repo/habits';
 import { usedRanges } from '$lib/server/repo/ranges';
-import { renameTag } from '$lib/server/repo/tags';
+import { addTag, moveTag, removeTag, renameTag } from '$lib/server/repo/tags';
+import { addPause, pausesOf, removePause } from '$lib/server/pauses';
 import { listVacations } from '$lib/server/repo/vacations';
 import { getGroupings, getKinds, getPacks, getSettings, getViews } from '$lib/server/settings';
 import { getStats, seedFields } from '$lib/server/stats';
 import { suggestions } from '$lib/stats/seed';
-import { repaused, userToday } from '$lib/server/today';
+import { userToday } from '$lib/server/today';
 import { ownTypes } from '$lib/server/settings-patch';
 import { PLAIN_TASK_TYPES } from '$lib/task-types';
 import { unitWord } from '$lib/units';
@@ -122,7 +122,6 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 	};
 };
 
-const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
 
 /** Plenty for years of logs; the server's BODY_SIZE_LIMIT has to allow it too. */
 const MAX_IMPORT = 50 * 1024 * 1024;
@@ -148,37 +147,20 @@ export const actions: Actions = {
 	/** A vacation pauses every habit for a date range. */
 	vacation: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
-		const start = String(f.get('start') ?? '');
-		const end = String(f.get('end') ?? '');
-		if (!isDate(start) || !isDate(end) || end < start) return fail(400, { error: 'Pick a start and an end date, the end not before the start.' });
-		const id = randomUUID();
-		db.insert(pause)
-			.values({ id, accountId: locals.account!.id, habitId: null, start, end, note: String(f.get('note') ?? '').slice(0, 120) || null })
-			.run();
-		// A vacation over past days takes back the misses counted for them.
-		repaused(locals.account!.id, null, start, end, userToday(locals.account!.id, cookies.get('tz')));
-		return { id };
+		const r = addPause(locals.account!.id, null, String(f.get('start') ?? ''), String(f.get('end') ?? ''), String(f.get('note') ?? ''), userToday(locals.account!.id, cookies.get('tz')));
+		return 'error' in r ? fail(400, r) : r;
 	},
 	unvacation: async ({ request, locals, cookies }) => {
 		const id = String((await request.formData()).get('id') ?? '');
-		const where = and(eq(pause.id, id), eq(pause.accountId, locals.account!.id));
-		const p = db.select().from(pause).where(where).get();
-		if (!p || p.habitId) return fail(404, { error: 'That vacation is already gone.' });
-		db.delete(pause).where(where).run();
-		repaused(locals.account!.id, null, p.start, p.end, userToday(locals.account!.id, cookies.get('tz')));
+		const p = pausesOf(locals.account!.id, null).find((x) => x.id === id);
+		if (!p) return fail(404, { error: 'That vacation is already gone.' });
+		removePause(locals.account!.id, id, userToday(locals.account!.id, cookies.get('tz')));
 	},
 	/** A member for a grouping: a tag no Task has yet. */
 	addTag: async ({ request, locals }) => {
 		const f = await request.formData();
-		const name = String(f.get('name') ?? '').trim().slice(0, 40);
-		const grouping = String(f.get('grouping') ?? '');
-		const accountId = locals.account!.id;
-		if (!name) return fail(400, { error: 'Give it a name.' });
-		if (!getGroupings(accountId).some((g) => g.id === grouping)) return fail(404, { error: 'That grouping is gone.' });
-		if (db.select({ name: tag.name }).from(tag).where(eq(tag.accountId, accountId)).all().some((t) => t.name.toLowerCase() === name.toLowerCase())) return fail(400, { error: `${name} is already in a grouping.` });
-		const id = randomUUID();
-		db.insert(tag).values({ id, accountId, name, grouping }).run();
-		return { id };
+		const r = addTag(locals.account!.id, String(f.get('name') ?? ''), String(f.get('grouping') ?? ''));
+		return 'error' in r ? fail(r.status, { error: r.error }) : { id: r.id };
 	},
 	renameTag: async ({ request, locals }) => {
 		const f = await request.formData();
@@ -188,21 +170,13 @@ export const actions: Actions = {
 	/** Put a member in another grouping. Its Tasks keep their level. */
 	moveTag: async ({ request, locals }) => {
 		const f = await request.formData();
-		const grouping = String(f.get('grouping') ?? '') || null;
-		if (grouping && !getGroupings(locals.account!.id).some((g) => g.id === grouping)) return fail(404, { error: 'That grouping is gone.' });
-		const where = and(eq(tag.id, String(f.get('id') ?? '')), eq(tag.accountId, locals.account!.id));
-		const t = db.select().from(tag).where(where).get();
-		if (!t) return fail(404, { error: 'That one is gone.' });
-		db.update(tag).set({ grouping }).where(where).run();
-		return { was: t.grouping ?? '' };
+		const r = moveTag(locals.account!.id, String(f.get('id') ?? ''), String(f.get('grouping') ?? '') || null);
+		return 'error' in r ? fail(r.status, { error: r.error }) : { was: r.was ?? '' };
 	},
 	/** Only one no Task has. */
 	removeTag: async ({ request, locals }) => {
-		const id = String((await request.formData()).get('id') ?? '');
-		const where = and(eq(tag.id, id), eq(tag.accountId, locals.account!.id));
-		if (!db.select().from(tag).where(where).get()) return fail(404, { error: 'That one is gone.' });
-		if (db.select().from(taskTag).where(eq(taskTag.tagId, id)).get()) return fail(400, { error: 'A Task has it, so it stays.' });
-		db.delete(tag).where(where).run();
+		const r = removeTag(locals.account!.id, String((await request.formData()).get('id') ?? ''));
+		if ('error' in r) return fail(r.status, { error: r.error });
 	},
 	testReminder: async ({ locals }) => {
 		const sent = await sendToAccount(locals.account!.id, { title: 'ittracks', body: 'Reminders work on this device.', url: '/settings#reminders' });

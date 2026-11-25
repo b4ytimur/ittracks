@@ -6,6 +6,10 @@ import { habitForm, taskForm } from '$lib/forms';
 import { templateFile } from '$lib/template';
 import { metricTypes } from '$lib/metric-types';
 import { viewChange } from '../views';
+import { settingsFields } from '../settings-patch';
+import { statsChange } from '../stats-change';
+import { customMeasure, statCard } from '$lib/stats/model';
+import { taskTypeSchema } from '$lib/task-types';
 
 const schema = (s: z.ZodTypeAny) => {
 	const { $schema: _s, ...rest } = z.toJSONSchema(s, { io: 'input', unrepresentable: 'any' }) as Record<string, unknown>;
@@ -27,6 +31,14 @@ const OVERVIEW = {
 		Program: 'A habit with a phases schedule (a 4-week ramp-up, then maintain), often with habits inside. It travels as a template.',
 		Template: 'A portable JSON file of one habit, the habits inside it and the Tasks they use, with local keys instead of ids. The Gallery has ready-made ones; any habit can be kept as one (save_template).',
 		Area: 'A life area a habit or Task belongs to (Health, Learning). Named; a new name is added.',
+		Measure: 'A formula over the fields you log, such as [Weight] * [Reps] or [Distance] / [Time] * 60 (Settings → Measures). Stats cards count logs by it, and a Task\'s records can list it.',
+		Stats: 'The Stats page: boards of cards. A card is one number or chart (what it reads, how one log becomes a number, how a bucket combines, the range and the look). Each habit also has a Stats tab of cards, and can show one number on Today.',
+		Grouping: 'Groupings hold tags (members, such as chest or legs in Muscle groups) with levels that say how much (high, medium, low). A Task carries tags at a level.',
+		'Task type': 'What a new Task can start from: its fields, whether a timer runs between rows, and what a row is called. add_task takes type: its name.',
+		'Starter pack': 'Copies units, groupings, measures and Task types in (gym, running, study…).',
+		Identity: 'A sentence a habit votes for, such as "I am a runner".',
+		Pause: 'Days a habit rests (not due, never a miss). A vacation pauses every habit.',
+		Collection: 'A named group of Library Tasks: hand-picked, or a saved filter (tags, Area, text).',
 		View: 'What a page (Today, Habits, Library, History) shows and in what order: a filter, sort and grouping, saved under a name. Each page is on one view; Default is a view too. The layout (Today sections, lines on a card, widgets) and hidden features apply app-wide.'
 	},
 	workflow: [
@@ -45,10 +57,22 @@ const OVERVIEW = {
 		archive: '{ habit or task, archived: false to bring it back }. Archiving keeps every log.',
 		save_template: '{ habit, name?, description? }: keep it, with the habits inside it and its Tasks, in My templates in the Gallery.',
 		view: '{ change: one view change }: a saved view (filter, sort, grouping, Today layout) on Today, Habits, Library or History, which view a page is on or opens with, the Today and Habits layout, hidden features, the start page, or a view template. Topic "views"; setup_read ref "views" shows them and every option.',
+		settings: '{ set: { only the settings that change }, renames?, unitRenames? }: day start, parts of the day, logging past days, the day note, new habits, units, groupings, Task types. A list is replaced whole. Topic "account".',
+		measure: '{ set: { name, formula, unit, per, combine } } adds one; { measure: "<name>", set } changes it; { measure, delete: true } deletes it (or turns it off while cards count by it). Topic "stats".',
+		stats: '{ change: one Stats change }: boards, cards on a board or a habit\'s Stats tab, the number on Today. Topic "stats".',
+		area: '{ area: "<name>", set: { name, color, icon } } adds or changes one; delete: true; or { order: [names] }.',
+		identity: '{ identity: "<sentence>" } adds one; with statement: rewords it; delete: true; or { order }.',
+		tag: '{ tag, grouping } adds a tag to a grouping or moves it; name renames it; delete: true removes one no Task has.',
+		pause: '{ habit?, from, to, note } pauses a habit, or every habit (a vacation) without habit; remove: true ends the pause that covers from.',
+		delete: '{ habit or task }: deleted for good a day later (setup_undo works only until then). Prefer archive, which keeps every log.',
+		pin: '{ habit, pinned }: a home screen shortcut (four at most).',
+		pack: '{ pack, remove? }: copy a starter pack in, or take it out.',
+		collection: '{ collection?, set: { name, parent, tasks | filter }, delete? }: a Library Collection.',
+		remove_template: '{ template }: take a template out of My templates.',
 		key: 'add_habit, add_task and add_template take key: your own name for what they make, so a later change in the same request can use it (a Slot\'s taskId, a parentId).'
 	},
 	refs: 'In add_habit, edit_habit, add_task and edit_task, ids can be written as short keys ("A", "push") for new things, and Tasks, fields, habits, Areas and Variants can be named instead of using ids. A key on one change (key: "press") lets a later change in the same request use what it made. Everything in one request applies together or not at all.',
-	topics: { habit: 'The habit form', task: 'The Task form', schedule: 'Every schedule kind with examples', template: 'The template file', views: 'View changes', examples: 'Worked requests for common goals' }
+	topics: { habit: 'The habit form', task: 'The Task form', schedule: 'Every schedule kind with examples', template: 'The template file', views: 'View changes', account: 'Settings, Areas, identities, tags, pauses, packs, Collections, deleting', stats: 'Measures, Stats boards and cards', examples: 'Worked requests for common goals' }
 };
 
 const SCHEDULES = {
@@ -152,6 +176,27 @@ export const EXAMPLES = [
 		note: 'A habit with more than one Variant needs variantId. The past keeps its old plan unless scheduleApplies is "past".'
 	},
 	{
+		goal: 'A measure for running speed in km/h from the Distance and Time of each run.',
+		changes: [{ op: 'measure', set: { name: 'Speed', formula: '[Distance] / [Time] * 60', per: 'log', combine: 'avg', unit: 'km/h' } }],
+		note: 'Field names go in square brackets. per: set works it out on each set and combines (sum, max, avg); per: log once per log.'
+	},
+	{
+		goal: 'A Running board on Stats with kilometres per week, and this week\'s kilometres on Today.',
+		changes: [
+			{ op: 'stats', change: { op: 'board.add', name: 'Running' } },
+			{ op: 'stats', change: { op: 'card.save', where: { board: 'Running' }, card: { title: 'Km per week', source: 'field', fields: ['Distance'], combine: 'sum', bucket: 'week', chart: 'bars', range: '12m' } } },
+			{ op: 'stats', change: { op: 'headline', habit: 'Running', card: { title: 'Km this week', source: 'field', fields: ['Distance'], combine: 'sum', range: 'week' } } }
+		],
+		note: 'A card takes the fields series takes (source, fields, task, measure, combine, bucket, split, habits, tags) plus title, chart, size, range, goal, previous and rolling.'
+	},
+	{
+		goal: 'The day starts at 4 in the morning, with a morning and an evening part of the day, and a week off over the holidays.',
+		changes: [
+			{ op: 'settings', set: { dayStart: '04:00', ranges: [{ name: 'Morning', start: '06:00', end: '10:00' }, { name: 'Evening', start: '18:00', end: '22:00' }] } },
+			{ op: 'pause', from: '2026-12-24', to: '2026-12-31', note: 'Holidays' }
+		]
+	},
+	{
 		goal: 'Add a choice of what kind of run (Easy, Tempo, Long) to the Run Task, which logs Distance and Time.',
 		changes: [
 			{
@@ -183,6 +228,28 @@ const TOPICS = {
 		about: 'One view change per setup change ({ op: "view", change }). save makes a named view on a page (state: filter, sort, group, and layout for Today; fields left out are blank) and puts the page on it; update changes a view (by name or id; "default" is the page default); select puts a page on a view; delete removes one; open sets what a page opens with ("last", "default" or a view); patch changes the layout (today, habits, history, hidden features, startPage), only the keys sent; template switches the view template (keep: true keeps your own changes). Areas, a habit and an identity in state may be named. setup_read ref "views" lists the views now and every allowed sort, group and layout value.',
 		example: { op: 'view', change: { op: 'save', page: 'today', name: 'Gym days', state: { areas: ['Fitness'], sort: 'cue', group: 'part' } } },
 		schema: schema(viewChange)
+	}),
+	account: () => ({
+		about: 'Changes to the account rather than to one habit or Task. setup_read ref "settings" shows them all now, in the shapes these take. settings: set holds only the keys that change and is checked like the Settings page (a list is replaced whole, so send every unit kind, grouping or type it keeps); renames moves habits from a part of the day to its new name ({ "old": "new" }); unitRenames carries fields written in a unit to its new name. Task types (taskTypes) are your own types; the plain ones are always there.',
+		changes: OVERVIEW.changes,
+		examples: [
+			{ op: 'settings', set: { pastDays: 3, dayNote: true } },
+			{ op: 'area', area: 'Health', set: { color: '#16a34a', icon: '💪' } },
+			{ op: 'identity', identity: 'I am a runner' },
+			{ op: 'tag', tag: 'glutes', grouping: 'Muscle groups' },
+			{ op: 'pause', habit: 'Running', from: '2026-12-01', to: '2026-12-07', note: 'Sick' },
+			{ op: 'collection', set: { name: 'Leg day', tasks: ['Squat', 'Lunge'] } },
+			{ op: 'add_task', task: { name: 'Deadlift', type: 'Strength' } }
+		],
+		settings: schema(settingsFields),
+		taskType: schema(taskTypeSchema)
+	}),
+	stats: () => ({
+		about: 'Stats changes, one per setup change ({ op: "stats", change }). Boards and cards may be named instead of ids; habits by name. board.add { name, template? } (setup_read ref "stats" lists templates); board.patch { board, name?, range?, filter? }; board.delete / board.move { board, dir: -1 or 1 }; card.save { where: { board } or { habit } (a habit\'s Stats tab), card, index? }: a card with an id it has replaces it; card.delete { where, card }; card.order { where, ids }; habit.reset { habit }: its tab back to automatic cards; headline { habit, card or null }: the number on Today; open { value: "last" or a board }. A card takes the fields series takes (source, fields, task, measure, combine, bucket, split, habits, tags; a measure may be named) plus title, chart, size, range ("page" follows the board), goal, goalMax, previous, rolling (0, 7, 30), running, stacked, top; or the stored card shape (cardSchema). Measures are their own change ({ op: "measure" }). analysis_options lists sources, measures, combines, buckets and splits.',
+		examples: EXAMPLES.filter((e) => e.changes.some((c) => c.op === 'stats' || c.op === 'measure')),
+		measureSchema: schema(customMeasure),
+		cardSchema: schema(statCard),
+		changeSchema: schema(statsChange)
 	}),
 	examples: () => ({ examples: EXAMPLES })
 };

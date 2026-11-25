@@ -48,3 +48,11 @@ export function getSavedTemplate(accountId: string, id: string): SavedTemplate |
 export function deleteSavedTemplate(accountId: string, id: string): boolean {
 	return db.delete(savedTemplate).where(and(eq(savedTemplate.id, id), eq(savedTemplate.accountId, accountId))).run().changes > 0;
 }
+
+/** The row as stored, to put back after deleting it. */
+export const savedTemplateRow = (accountId: string, id: string) =>
+	db.select().from(savedTemplate).where(and(eq(savedTemplate.id, id), eq(savedTemplate.accountId, accountId))).get() ?? null;
+
+export function restoreSavedTemplate(accountId: string, row: typeof savedTemplate.$inferSelect) {
+	db.insert(savedTemplate).values({ ...row, accountId, createdAt: new Date(row.createdAt) }).onConflictDoNothing().run();
+}

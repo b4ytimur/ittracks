@@ -2,7 +2,7 @@
 import { error, json } from '@sveltejs/kit';
 import { habitPatch, patchHabit } from '$lib/server/habit-patch';
 import { ownedHabit } from '$lib/server/owned';
-import { getSettings, saveSettings } from '$lib/server/settings';
+import { setPinned } from '$lib/server/settings';
 import { userToday } from '$lib/server/today';
 import type { RequestHandler } from './$types';
 
@@ -12,10 +12,7 @@ export const PATCH: RequestHandler = async ({ request, locals, params, cookies }
 	if (!p.success) error(400, 'Not a change to a habit');
 	if (p.data.pinned !== undefined) {
 		if (!ownedHabit(locals.account.id, params.id)) error(404);
-		const s = getSettings(locals.account.id);
-		const rest = s.pinned.filter((x) => x !== params.id);
-		// The menu holds four.
-		saveSettings(locals.account.id, { pinned: p.data.pinned ? [...rest, params.id].slice(-4) : rest });
+		setPinned(locals.account.id, params.id, p.data.pinned);
 		return json({ ok: true });
 	}
 	const r = patchHabit(locals.account.id, params.id, p.data, userToday(locals.account.id, cookies.get('tz')));

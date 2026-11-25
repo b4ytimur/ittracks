@@ -1,9 +1,12 @@
+// Tags, the members of a grouping: adding, moving and removing one, used by Settings and setup.
 // Renaming a tag (a member of a grouping). Tasks point at it; auto-fill rules, smart Collections, saved
 // views and Stats filters know it by name, so they are renamed with it. Refused when the new name is
 // taken or still named by one of those, since the way back would not be exact then.
+import { randomUUID } from 'node:crypto';
 import { and, eq, isNotNull } from 'drizzle-orm';
 import { db } from '../db';
-import { collection, habit, settings, slot, tag, variant } from '../db/schema';
+import { collection, habit, settings, slot, tag, taskTag, variant } from '../db/schema';
+import { getGroupings } from '../settings';
 import type { FillRule } from '$lib/engine/fill';
 
 type Json = unknown;
@@ -55,3 +58,38 @@ export function renameTag(accountId: string, id: string, value: string): { was: 
 		return { was: from, name };
 	});
 }
+
+type Refusal = { error: string; status: 400 | 404 };
+const mineTag = (accountId: string, id: string) => and(eq(tag.id, id), eq(tag.accountId, accountId));
+
+/** A member for a grouping: a tag no Task has yet. */
+export function addTag(accountId: string, value: string, grouping: string): { id: string } | Refusal {
+	const name = value.trim().slice(0, 40);
+	if (!name) return { error: 'Give it a name.', status: 400 };
+	if (!getGroupings(accountId).some((g) => g.id === grouping)) return { error: 'That grouping is gone.', status: 404 };
+	if (db.select({ name: tag.name }).from(tag).where(eq(tag.accountId, accountId)).all().some((t) => low(t.name) === low(name))) return { error: `${name} is already in a grouping.`, status: 400 };
+	const id = randomUUID();
+	db.insert(tag).values({ id, accountId, name, grouping }).run();
+	return { id };
+}
+
+/** Put a member in another grouping (null: in none). Its Tasks keep their level. */
+export function moveTag(accountId: string, id: string, grouping: string | null): { was: string | null } | Refusal {
+	if (grouping && !getGroupings(accountId).some((g) => g.id === grouping)) return { error: 'That grouping is gone.', status: 404 };
+	const t = db.select().from(tag).where(mineTag(accountId, id)).get();
+	if (!t) return { error: 'That one is gone.', status: 404 };
+	db.update(tag).set({ grouping }).where(mineTag(accountId, id)).run();
+	return { was: t.grouping };
+}
+
+/** Remove a member no Task has. */
+export function removeTag(accountId: string, id: string): { removed: typeof tag.$inferSelect } | Refusal {
+	const t = db.select().from(tag).where(mineTag(accountId, id)).get();
+	if (!t) return { error: 'That one is gone.', status: 404 };
+	if (db.select().from(taskTag).where(eq(taskTag.tagId, id)).get()) return { error: 'A Task has it, so it stays.', status: 400 };
+	db.delete(tag).where(mineTag(accountId, id)).run();
+	return { removed: t };
+}
+
+/** Every tag with its grouping. */
+export const listTags = (accountId: string) => db.select().from(tag).where(eq(tag.accountId, accountId)).all();

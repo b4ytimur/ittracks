@@ -112,3 +112,13 @@ export function deleteCollection(accountId: string, id: string) {
 		tx.delete(collection).where(and(eq(collection.id, id), eq(collection.accountId, accountId))).run();
 	});
 }
+
+/** Put a deleted Collection back with its id, its hand-picked Tasks that are still there, and the Collections that were inside it. */
+export function restoreCollection(accountId: string, c: CollectionRow, children: string[]) {
+	db.transaction((tx) => {
+		tx.insert(collection).values({ id: c.id, accountId, name: c.name, parentId: c.parentId, filter: c.filter }).onConflictDoNothing().run();
+		const own = c.taskIds.length ? tx.select({ id: task.id }).from(task).where(and(eq(task.accountId, accountId), inArray(task.id, c.taskIds))).all() : [];
+		for (const t of own) tx.insert(collectionTask).values({ collectionId: c.id, taskId: t.id }).onConflictDoNothing().run();
+		if (children.length) tx.update(collection).set({ parentId: c.id }).where(and(eq(collection.accountId, accountId), inArray(collection.id, children), isNull(collection.parentId))).run();
+	});
+}

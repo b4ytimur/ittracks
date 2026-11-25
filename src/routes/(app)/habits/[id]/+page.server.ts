@@ -20,10 +20,11 @@ import { identityFor, listIdentities } from '$lib/server/repo/identities';
 import { listTagNames, listTasks, saveTask } from '$lib/server/repo/tasks';
 import { listAreas } from '$lib/server/repo/areas';
 import { getNewLines, getViews, getSettings, getTaskTypes, getUnits, saveSettings } from '$lib/server/settings';
-import { repaused, userToday } from '$lib/server/today';
+import { userToday } from '$lib/server/today';
 import { ownedHabit } from '$lib/server/owned';
 import { publicKey } from '$lib/server/push';
 import { trash } from '$lib/server/trash';
+import { addPause, removePause } from '$lib/server/pauses';
 import { saveHabitChecked } from '$lib/server/core/save';
 import { archiveHabit, unarchiveHabit } from '$lib/server/habit-actions';
 import { defaultStep, metricsFromType, PLAIN_TASK_TYPES } from '$lib/task-types';
@@ -210,7 +211,6 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 	};
 };
 
-const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
 
 export const actions: Actions = {
 	save: async ({ request, locals, params, cookies }) => {
@@ -283,23 +283,12 @@ export const actions: Actions = {
 		const f = await request.formData();
 		const h = ownedHabit(locals.account!.id, params.id);
 		if (!h) error(404);
-		const start = String(f.get('start') ?? '');
-		const end = String(f.get('end') ?? '');
-		if (!isDate(start) || !isDate(end) || end < start) return fail(400, { pauseError: 'Pick a start and an end date.' });
-		db.insert(pause)
-			.values({ id: randomUUID(), accountId: locals.account!.id, habitId: h.id, start, end, note: String(f.get('note') ?? '').slice(0, 120) || null })
-			.run();
-		// A pause over past days takes back the misses counted for them.
-		repaused(locals.account!.id, h.id, start, end, userToday(locals.account!.id, cookies.get('tz')));
+		const r = addPause(locals.account!.id, h.id, String(f.get('start') ?? ''), String(f.get('end') ?? ''), String(f.get('note') ?? ''), userToday(locals.account!.id, cookies.get('tz')));
+		if ('error' in r) return fail(400, { pauseError: 'Pick a start and an end date.' });
 		return { paused: true };
 	},
 	unpause: async ({ request, locals, cookies }) => {
-		const id = String((await request.formData()).get('id') ?? '');
-		const where = and(eq(pause.id, id), eq(pause.accountId, locals.account!.id));
-		const p = db.select().from(pause).where(where).get();
-		if (!p) return;
-		db.delete(pause).where(where).run();
-		repaused(locals.account!.id, p.habitId, p.start, p.end, userToday(locals.account!.id, cookies.get('tz')));
+		removePause(locals.account!.id, String((await request.formData()).get('id') ?? ''), userToday(locals.account!.id, cookies.get('tz')));
 	},
 	archive: ({ locals, params, cookies }) => {
 		archiveHabit(locals.account!.id, params.id, userToday(locals.account!.id, cookies.get('tz')));
