@@ -285,7 +285,7 @@
 	{:else if id === 'assistants'}
 		<ol class="meta steps">
 			<li>Download <a href="/ittracks-mcp.mjs" download>ittracks-mcp.mjs</a>. It needs Node.js 18 or newer and nothing else.</li>
-			<li>Make a key for it under <button type="button" class="link" onclick={() => go('keys')}>Keys</button> (Read, plus Log if it may log for you).</li>
+			<li>Make a key for it under <button type="button" class="link" onclick={() => go('keys')}>Keys</button> (Read, plus Log if it may log for you, and Edit if it may set up and change habits with you).</li>
 			<li>Claude Desktop: Settings → Developer → Edit Config, and add: <Copy lines text={mcpConfig} label="the Claude Desktop config" /></li>
 			<li>Claude Code: <Copy text="claude mcp add ittracks -e ITTRACKS_URL={data.origin} -e ITTRACKS_KEY={keyText} -- node /path/to/ittracks-mcp.mjs" label="the Claude Code command" /></li>
 		</ol>

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ittracks MCP server: lets an AI assistant (Claude Desktop, Claude Code, Cursor, and other
-// MCP clients) read, analyse and log your habits on your own ittracks server, with a key.
+// MCP clients) read, analyse, log and set up your habits on your own ittracks server, with a key.
 //
 // No install: Node 18 or newer is all it needs. Download it from your server
 // (https://<your server>/ittracks-mcp.mjs) or use static/ittracks-mcp.mjs from the repo.
@@ -12,12 +12,12 @@
 // It speaks MCP over stdio: one JSON-RPC message per line. Licensed AGPL-3.0, like ittracks.
 import { createInterface } from 'node:readline';
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const BASE = (process.env.ITTRACKS_URL || 'http://localhost:3000').replace(/\/+$/, '');
 const KEY = process.env.ITTRACKS_KEY || process.env.ITTRACKS_TOKEN || '';
 const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 
-const INSTRUCTIONS = `ittracks is the user's own habit tracker. Use these tools to answer questions about their habits and logs, to analyse them, and to log things when they ask.
+const INSTRUCTIONS = `ittracks is the user's own habit tracker. Use these tools to answer questions about their habits and logs, to analyse them, to log things when they ask, and to set up habits with them.
 
 How to work with it:
 1. Call describe first: it lists habits, Tasks, fields (with ids, types and units) and the date range of the data.
@@ -31,9 +31,22 @@ How to work with it:
 3. Cite what an answer rests on with the refs the tools return (log:<id>, slip:<id>, day:<date>, habit:<id>); record opens any of them. Say which date range you looked at.
 4. Be honest about uncertainty. Lead with effect sizes and confidence intervals, not just p-values; report n; pass on the caveats each tool returns (small samples, skew, days that follow each other, before/after is not an experiment). Correlation is not causation. Running many tests finds some p < 0.05 by chance (about 1 in 20), so say how many you ran and treat a lone hit as a hint to watch, not a finding.
 5. Only log when the user asks. Logging tools change data; say what you logged and the progress they report.
-Notes and journal entries are only visible when the user's key has notes access.`;
+6. Setting things up ("I want to start running", "make my gym days A/B", "change Spanish to weekdays"): you advise, the user decides.
+   - Understand the goal and what limits it (time, days, experience, what failed before). Look at what exists (describe) and, where it helps, their own data (habit_summary, series).
+   - Recommend two or three concrete options: schedule, a small first target and a Minimum for bad days, a cue. Say why in a sentence each, and let the user pick or change them.
+   - Read setup_guide (overview first, then the topic you need) and draft the change. To change a habit or Task, setup_read it first.
+   - Call setup without apply: that is a preview and saves nothing. Tell the user in plain words what will exist (name, when it is due, Variants, targets, cue, levels) and any warnings. Never apply without their clear yes.
+   - On yes, call setup again with the same changes, apply: true and the check. Say what changed and that setup_undo can take it back for a day.
+   - Later, check in with today, habit_summary and events, and suggest adjustments the same way: preview first.
+Notes and journal entries are only visible when the user's key has notes access. Setting up needs a key with edit access.`;
 
 const PROMPTS = {
+	start_habit: {
+		description: 'Start a new habit (or a routine or program) together: a few questions, two or three suggested setups, then it is set up in ittracks after you agree.',
+		arguments: [{ name: 'goal', description: 'What you want to start, e.g. "learn Spanish" or "lift 3 times a week".', required: false }],
+		text: (a) =>
+			`${a.goal ? `I want to start: ${a.goal}.\n\n` : 'I want to start a new habit.\n\n'}Help me set it up in ittracks. First look at what I already track (describe). Ask me at most three short questions you need answered (time I have, which days, experience). Then suggest two or three setups that fit me, each with its schedule, a small first target and a Minimum for bad days, and a cue, and say which you would pick and why. When I choose, read setup_guide, preview the change with setup and describe it to me in plain words. Only apply it after I say yes.`
+	},
 	weekly_review: {
 		description: 'Review the last week (or another period): what went well, what slipped, patterns, and one or two concrete suggestions, with refs.',
 		arguments: [{ name: 'days', description: 'How many days to look back (default 7).', required: false }],

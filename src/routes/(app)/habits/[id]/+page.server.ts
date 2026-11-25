@@ -3,24 +3,19 @@ import {
 	defaultTriggers,
 	defaultLevels,
 	emptyCue,
-	firstError,
-	habitForm,
 	type HabitForm,
 	rowWords
 } from '$lib/forms';
 import { DEFAULT_STREAK_RULE } from '$lib/engine/streak';
 import {
-	checkHabitEdit,
 	checkHabitForm,
-	checkLinks,
 	copyHabitForm,
 	getHabitForm,
 	listHabits,
-	saveHabit,
 	variantForms,
 	variantsLogged
 } from '$lib/server/repo/habits';
-import { feelingsUsed, habitLogged, PastEditError } from '$lib/server/history';
+import { feelingsUsed, habitLogged } from '$lib/server/history';
 import { identityFor, listIdentities } from '$lib/server/repo/identities';
 import { listTagNames, listTasks, saveTask } from '$lib/server/repo/tasks';
 import { listAreas } from '$lib/server/repo/areas';
@@ -29,6 +24,7 @@ import { repaused, userToday } from '$lib/server/today';
 import { ownedHabit } from '$lib/server/owned';
 import { publicKey } from '$lib/server/push';
 import { trash } from '$lib/server/trash';
+import { saveHabitChecked } from '$lib/server/core/save';
 import { archiveHabit, unarchiveHabit } from '$lib/server/habit-actions';
 import { defaultStep, metricsFromType, PLAIN_TASK_TYPES } from '$lib/task-types';
 import { randomUUID } from 'node:crypto';
@@ -222,26 +218,14 @@ export const actions: Actions = {
 		} catch {
 			return fail(400, { error: 'Could not read the form.' });
 		}
-		const parsed = habitForm.safeParse(json);
-		if (!parsed.success) return fail(400, { error: firstError(parsed.error) });
 		const accountId = locals.account!.id;
-		const conflict = checkHabitForm(parsed.data).errors[0];
-		if (conflict) return fail(400, { error: conflict.reason });
-		const linkError = checkLinks(accountId, params.id === 'new' ? null : params.id, parsed.data);
-		if (linkError) return fail(400, { error: linkError });
 		// A schedule edit applies from today on unless the editor says past days too.
 		const applies = (json as { scheduleApplies?: unknown }).scheduleApplies === 'past' ? 'past' : 'today';
-		// History policies: switching build and break once logged is refused.
-		const refused = params.id === 'new' ? null : checkHabitEdit(accountId, params.id, parsed.data);
-		if (refused) return fail(400, { error: refused });
-		let id: string | null;
-		try {
-			id = saveHabit(accountId, params.id === 'new' ? null : params.id, parsed.data, userToday(accountId, cookies.get('tz')), { scheduleApplies: applies });
-		} catch (e) {
-			if (e instanceof PastEditError) return fail(400, { error: e.message });
-			throw e;
-		}
-		if (!id) error(404, 'Habit not found');
+		// The checks and the save are shared with setup (src/lib/server/core/save.ts).
+		const r = saveHabitChecked(accountId, params.id === 'new' ? null : params.id, json, userToday(accountId, cookies.get('tz')), applies);
+		if ('notFound' in r) error(404, 'Habit not found');
+		if ('error' in r) return fail(400, { error: r.error });
+		const { id, name } = r;
 		// Home screen shortcut, kept in Settings so the manifest can list it.
 		const pin = (json as { pinned?: unknown }).pinned;
 		if (typeof pin === 'boolean') {
@@ -249,7 +233,7 @@ export const actions: Actions = {
 			const rest = s.pinned.filter((x) => x !== id);
 			saveSettings(accountId, { pinned: pin ? [...rest, id].slice(-4) : rest });
 		}
-		redirect(303, params.id === 'new' ? `/habits?added=${encodeURIComponent(parsed.data.name)}` : '/habits');
+		redirect(303, params.id === 'new' ? `/habits?added=${encodeURIComponent(name)}` : '/habits');
 	},
 	/** Make a Task from inside the editor, from a Task type. Returns it so a Slot can use it. */
 	quickTask: async ({ request, locals }) => {

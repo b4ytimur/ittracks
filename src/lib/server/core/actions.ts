@@ -16,6 +16,8 @@ import { listEvents, EVENT_TYPES } from './events';
 import { BUCKETS, OVER_TIME, SOURCES, SPLITS } from '$lib/stats/model';
 import { BULK, BULK_NAMES, bulkInput } from '$lib/bulk/catalog';
 import { runBulk, undoBulk } from '../bulk';
+import { readSetup, runSetup, setupInput, undoSetup } from './setup';
+import { GUIDE_TOPICS, setupGuide } from './setup-guide';
 
 export const API_VERSION = 1;
 
@@ -401,6 +403,50 @@ export const ACTIONS: ActionDef[] = [
 		description: 'Put back everything one bulk change did, by its batch id. Only the latest bulk change not undone yet; anything changed again since is kept as it is.',
 		input: z.object({ batch: z.string().min(1).max(80).describe('The batch id bulk returned.') }),
 		run: (a, i) => undoBulk(a, i.batch)
+	}),
+	// ---------- set up ----------
+	def({
+		name: 'setup_guide',
+		version: 1,
+		kind: 'read',
+		scope: 'read',
+		title: 'How to set things up',
+		description:
+			'Read before setting something up. overview (default): the words (habit, Variant, Slot, Task, field, part, schedule, routine, program, template), how to propose before changing anything, and the changes setup takes. habit, task, template: the exact shape with its JSON Schema. schedule: every schedule kind with an example. views: view changes. examples: worked requests (language, gym A/B, quitting, a routine, editing).',
+		input: z.object({ topic: z.enum(GUIDE_TOPICS).optional() }),
+		run: (_a, i) => setupGuide(i.topic)
+	}),
+	def({
+		name: 'setup_read',
+		version: 1,
+		kind: 'read',
+		scope: 'read',
+		title: 'Read something to change',
+		description:
+			'What setup changes, in the shape it takes: habit:<id or name> (its form, with names for the ids in it; as "template" gives it as a template file to copy), task:<id or name> (its form), templates (the ready-made and saved templates, with their questions), template:<slug or id> (one of them), views (the views and layout, with every option).',
+		input: z.object({ ref: z.string().trim().min(3).max(240), as: z.enum(['form', 'template']).optional() }),
+		run: (a, i) => readSetup(a, i)
+	}),
+	def({
+		name: 'setup',
+		version: 1,
+		kind: 'write',
+		scope: 'edit',
+		title: 'Create or change habits, Tasks, templates and views',
+		description:
+			'Propose, then apply. changes is a list run in order: add_template (a template file, or from a ready-made one with answers: anything new with its own Tasks, Variants, schedule, habits inside, phases), add_habit, edit_habit (set: only the fields that change), add_task, edit_task, archive, save_template, view (saved views and layout). Without apply nothing is saved: it returns a preview (summary, warnings, each touched habit and Task before and after) and a check. Show the user the preview and only after they agree call again with the same changes, apply: true and the check; it applies all or nothing and returns an undo id. Names and short keys work wherever the forms want ids. Read setup_guide first.',
+		input: setupInput,
+		run: (a, i) => runSetup(a, i)
+	}),
+	def({
+		name: 'setup_undo',
+		version: 1,
+		kind: 'write',
+		scope: 'edit',
+		title: 'Undo a setup change',
+		description: 'Put back everything one applied setup call changed, by the undo id it returned (kept for a day). Anything changed again since stays as it is, and is listed under kept.',
+		input: z.object({ undo: z.string().min(1).max(80) }),
+		run: (a, i) => undoSetup(a, i.undo)
 	}),
 	def({
 		name: 'write_log_note',

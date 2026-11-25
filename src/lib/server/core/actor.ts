@@ -8,7 +8,7 @@ export const SCOPES = {
 	log: 'Log, skip and undo, and add slips',
 	notes: 'Read and write notes and the journal',
 	export: 'Download a full export',
-	edit: 'Change habits and Tasks in bulk (Area, pause, reminders, units)'
+	edit: 'Create and change habits, Tasks and templates (setup and bulk changes)'
 } as const;
 export type Scope = keyof typeof SCOPES;
 export const ALL_SCOPES = Object.keys(SCOPES) as Scope[];

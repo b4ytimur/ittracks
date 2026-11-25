@@ -15,12 +15,12 @@ A key lets something other than the app use your account: a Shortcut, a quick-lo
    | **Log** | Log, skip and undo, and add slips |
    | **Notes** | Read and write notes and the journal |
    | **Export** | Download a full export |
-   | **Edit** | Change habits and Tasks in bulk (archive, Area, pause, reminders, streak rule, units) |
+   | **Edit** | Create and change habits, Tasks, templates and views (an assistant's setup, and bulk changes) |
 
 3. Under **For**, choose **Every habit, now and later** or **Only some habits**. A key limited to some habits can't download an export.
 4. **Make the key**, and copy it now. It is shown only once; the server keeps only its hash. Treat it like a password.
 
-For a Shortcut, Read and Log are enough. For an AI assistant, Read lets it analyse; add Log if it may log for you, and Notes only if it may read your notes and journal.
+For a Shortcut, Read and Log are enough. For an AI assistant, Read lets it analyse; add Log if it may log for you, Edit if it may set up and change habits with you, and Notes only if it may read your notes and journal.
 
 The key list shows when each key was made and last used. **Revoke** stops a key at once.
 
@@ -55,12 +55,12 @@ An app such as HTTP Shortcuts or Tasker can call the link from a home screen but
 
 ## AI assistants (MCP)
 
-Claude, Cursor and other assistants that support MCP can read your habits, run statistics on your server (trends, before/after tests, weekday patterns, correlations, unusual days, each with its sample size and caveats) and point to the logs their answers rest on. They log only when you ask.
+Claude, Cursor and other assistants that support MCP can read your habits, run statistics on your server (trends, before/after tests, weekday patterns, correlations, unusual days, each with its sample size and caveats) and point to the logs their answers rest on. They can also set up habits with you: you say what you want to start, they suggest a few ways to do it, and they make the one you pick. They log and change things only when you ask.
 
 ### Set it up
 
 1. Download `ittracks-mcp.mjs` from **Settings → AI assistants** (it is also at `https://<your server>/ittracks-mcp.mjs`, and in the repository at `static/ittracks-mcp.mjs`). It needs Node.js 18 or newer and nothing else.
-2. Make a key for it: **Read**, plus **Log** if it may log for you, **Notes** if it may search your notes, and **Edit** for bulk changes.
+2. Make a key for it: **Read**, plus **Log** if it may log for you, **Notes** if it may search your notes, and **Edit** if it may set up and change habits (setup and bulk changes need a key for every habit).
 3. Add it to your assistant, replacing `/path/to/` with where you saved the file, and using your server's address and key. The settings page fills both in for you.
 
 **Claude Desktop**: Settings → Developer → Edit Config, and add:
@@ -89,6 +89,8 @@ claude mcp add ittracks -e ITTRACKS_URL=http://localhost:3000 -e ITTRACKS_KEY=it
 
 `ITTRACKS_URL` must be reachable from the computer the assistant runs on: `http://localhost:3000` when the server runs on the same machine.
 
+Claude on the web and on phones, and ChatGPT, can only reach a server on the internet over HTTPS with sign-in (a remote MCP server). ittracks doesn't offer that yet, so use Claude Desktop, Claude Code or another assistant that runs on your computer.
+
 ### What it can do
 
 The tools come from your server, so the file never needs updating, and a key only sees the tools it may use.
@@ -97,7 +99,16 @@ The tools come from your server, so the file never needs updating, and a key onl
 - **Analyse**: `habit_summary`, `series` and `correlate` do the maths on the server; `stats_describe`, `stats_trend`, `stats_compare` and `stats_groups` run real statistics (confidence intervals, trends with a change point, t-tests, Mann-Whitney, Fisher's exact test, Kruskal-Wallis and ANOVA, effect sizes), each with n, a plain reading and caveats. Answers carry refs (`log:<id>`, `day:<date>`…) the assistant can cite and open.
 - **Log** (needs Log): `log_done`, `log_value`, `log_task`, `log_skip`, `log_undo`, `log_slip`, `remove_slip`, `log_craving`, and `bulk` / `bulk_undo` ([Bulk editing](bulk-editing.md)).
 - **Notes** (needs Notes): `search_notes`, `write_day_note`, `write_log_note`.
+- **Set up** (needs Edit): `setup_guide`, `setup_read`, `setup` and `setup_undo`. See below.
 - `events` reads the event log.
+
+### Set things up by talking
+
+Tell the assistant what you want ("I want to start learning Spanish", "make my gym days A and B with a rest day between", "move my evening habits into one routine"). It asks what it needs, suggests two or three ways to do it, and once you pick one it shows you exactly what it will make before anything is saved. Nothing changes until you say yes.
+
+What it can make or change is everything the editors can: habits and the habits inside them (groups, routines), Variants and schedules (fixed days, N times a week, every N days, rotations with rest days, weekly cycles, phases for a program), Tasks with their fields, steps and Tasks inside them, choice options, targets and levels, cues, reminders, break-habit plans, templates (from the Gallery, from scratch, or kept from one of your habits) and views. Everything goes through the same checks as the editors, so it can't save a habit you couldn't save by hand.
+
+A change made this way can be undone for a day: ask the assistant to undo it. Every change also shows in the event log as coming from the assistant. In Claude Desktop, the **start_habit** prompt starts this conversation for you.
 
 What the assistant reads is sent to its provider, so pick the key's access with that in mind. Try asking it for a weekly review, whether your sleep affects your training, or whether a new routine made a difference.
 
