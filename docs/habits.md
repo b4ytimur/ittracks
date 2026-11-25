@@ -43,7 +43,7 @@ Each Variant holds **Slots**, one per thing you log:
 For each Slot you can set:
 
 - **Target sets**, when the Task logs something per set. For a Task that has Tasks inside it, this reads **Rounds**: everything inside is logged once per round.
-- A **Target** for each number field (weight, reps, minutes…). With Levels on, also a **Minimum** and a **Stretch**.
+- A **Target** for each number field (weight, reps, minutes…). With Levels on, also a **Minimum** and a **Stretch**. A field where [less is better](tasks.md#fields-metrics) is marked "at most": its target is the most a done day has.
 
 A habit with no Slots has nothing to fill in: you just tick it off.
 

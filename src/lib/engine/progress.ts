@@ -10,6 +10,8 @@ export interface ProgressMetric {
 	unit: string | null;
 	repeats: boolean;
 	step: number | null;
+	/** Less is better: its target is a most, not a least (a taper, cigarettes). */
+	better?: 'more' | 'less' | null;
 }
 
 /** One place in a log (see engine/parts.ts): a Slot's Task, or a Task inside it. */
@@ -31,7 +33,7 @@ export interface ProgressEntry {
 
 export type Progress =
 	/** One number to reach, such as glasses of water or minutes read. */
-	| { kind: 'amount'; value: number; target: number; unit: string; name: string; taskId: string; metricId: string; type: string; step: number | null }
+	| { kind: 'amount'; value: number; target: number; unit: string; name: string; taskId: string; metricId: string; type: string; step: number | null; less: boolean }
 	/** Several things to do, each one a step: a Task logged, or a step or a Yes or no Task ticked. */
 	| { kind: 'steps'; done: number; total: number };
 
@@ -78,7 +80,8 @@ export function progressOf(slots: ProgressSlot[], entries: ProgressEntry[], stat
 			taskId: amount.slot.taskId!,
 			metricId: amount.metric.id,
 			type: amount.metric.type,
-			step: amount.metric.step
+			step: amount.metric.step,
+			less: amount.metric.better === 'less'
 		};
 	}
 	const { at } = place(slots, entries);
@@ -98,19 +101,26 @@ export function progressOf(slots: ProgressSlot[], entries: ProgressEntry[], stat
 
 const fmt = (n: number) => String(Math.round(n * 100) / 100);
 
-/** "3 of 6 glasses", "2 of 4 steps". */
+/** "3 of 6 glasses", "2 of 4 steps"; "4 of at most 5 cigarettes" where less is better. */
 export function progressText(p: Progress): string {
 	if (p.kind === 'steps') return `${p.done} of ${p.total} steps`;
-	return `${fmt(p.value)} of ${fmt(p.target)}${p.unit ? ` ${p.unit}` : ''}`;
+	return `${fmt(p.value)} of ${p.less ? 'at most ' : ''}${fmt(p.target)}${p.unit ? ` ${p.unit}` : ''}`;
 }
 
-/** Whether a log fell short: worth showing next to "Done". */
+/** A value meets its target: at least it, or at most it where less is better. */
+export const meets = (value: number, target: number, less: boolean) => (less ? value <= target : value >= target);
+
+/** Whether a log fell short (or went over a most): worth showing next to "Done". */
 export const isPartial = (p: Progress | null | undefined): boolean =>
-	!!p && (p.kind === 'steps' ? p.done < p.total : p.value < p.target);
+	!!p && (p.kind === 'steps' ? p.done < p.total : !meets(p.value, p.target, p.less));
+
+/** A Minimum that asks less than the Target: lower, or higher where less is better. */
+export const easierThan = (minimum: number, target: number, less: boolean) => (less ? minimum > target : minimum < target);
 
 /**
  * How a log counts for its day under the habit's rule:
- * - `full`: it reached the target (every step done), or there is nothing to measure it by.
+ * - `full`: it reached the target (every step done), or there is nothing to measure it by. Where
+ *   less is better, at or under the target is full, the Minimum sits above it.
  * - `counts`: it fell short, but reached the Minimum (any log, when the habit has no Minimum),
  *   and the habit lets that count.
  * - `short`: it doesn't count: below the Minimum, or the habit counts only the full target.
@@ -122,5 +132,7 @@ export function verdict(atTarget: Progress | null, atMinimum: Progress | null | 
 	if (!atTarget || !isPartial(atTarget)) return 'full';
 	if (!minimumCounts) return 'short';
 	if (atMinimum) return isPartial(atMinimum) ? 'short' : 'counts';
+	// Over a most with no Minimum to fall back on doesn't count: only some of a least does.
+	if (atTarget.kind === 'amount' && atTarget.less) return 'short';
 	return (atTarget.kind === 'steps' ? atTarget.done : atTarget.value) > 0 ? 'counts' : 'short';
 }

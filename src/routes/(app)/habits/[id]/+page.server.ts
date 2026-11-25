@@ -41,15 +41,15 @@ function numericMetrics(accountId: string, taskIds: string[]) {
 	const units = getUnits(accountId);
 	if (!taskIds.length) return {};
 	const rows = db
-		.select({ id: metric.id, taskId: metric.taskId, name: metric.name, unit: metric.unit, type: metric.type, step: metric.step })
+		.select({ id: metric.id, taskId: metric.taskId, name: metric.name, unit: metric.unit, type: metric.type, step: metric.step, better: metric.better })
 		.from(metric)
 		.where(and(inArray(metric.taskId, taskIds), eq(metric.archived, false)))
 		.orderBy(asc(metric.sortOrder))
 		.all()
 		.filter((m) => m.type === 'number' || m.type === 'count' || m.type === 'duration');
-	const out: Record<string, { id: string; name: string; unit: string; step: number }[]> = {};
+	const out: Record<string, { id: string; name: string; unit: string; step: number; less?: boolean }[]> = {};
 	for (const m of rows)
-		(out[m.taskId] ??= []).push({ id: m.id, name: m.name, unit: m.unit || (m.type === 'duration' ? 'min' : ''), step: m.step ?? defaultStep(m.type, m.unit, units) });
+		(out[m.taskId] ??= []).push({ id: m.id, name: m.name, unit: m.unit || (m.type === 'duration' ? 'min' : ''), step: m.step ?? defaultStep(m.type, m.unit, units), less: m.better === 'less' });
 	return out;
 }
 

@@ -382,7 +382,7 @@
 		const res = await fetch('?/quickTask', { method: 'POST', body, headers: { 'x-sveltekit-action': 'true' } });
 		const r = deserialize(await res.text());
 		if (r.type === 'success' && r.data?.newTask) {
-			const t = r.data.newTask as { id: string; name: string; repeats: boolean; metrics: { id: string; name: string; unit: string; step: number }[] };
+			const t = r.data.newTask as { id: string; name: string; repeats: boolean; metrics: { id: string; name: string; unit: string; step: number; less?: boolean }[] };
 			tasks = [...tasks, { id: t.id, name: t.name }].sort((a, b) => a.name.localeCompare(b.name));
 			metricsByTask = { ...metricsByTask, [t.id]: t.metrics };
 			if (t.repeats) repeating = new Set([...repeating, t.id]);
@@ -938,7 +938,7 @@
 							<tbody>
 								{#each metricsByTask[s.taskId] as m (m.id)}
 									<tr>
-										<td>{m.name}{m.unit ? ` (${m.unit})` : ''}</td>
+										<td>{m.name}{m.unit ? ` (${m.unit})` : ''}{m.less ? ', at most' : ''}</td>
 										{#if h.levels.enabled}
 											<td><input type="number" step="any" inputmode="decimal" value={s.minTargets[m.id] ?? ''}
 												oninput={(e) => setTarget(s.minTargets, m.id, e.currentTarget.value)} aria-label="{m.name} minimum" /></td>
@@ -953,6 +953,9 @@
 								{/each}
 							</tbody>
 						</table>
+						{#if metricsByTask[s.taskId].some((m) => m.less)}
+							<p class="meta muted">Less is better for a field marked “at most”: a day at or under its target is done.{h.levels.enabled ? ' Its Minimum is the most that still counts, its Stretch the least.' : ''}</p>
+						{/if}
 					{/if}
 									</div>
 								{/if}

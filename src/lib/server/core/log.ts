@@ -227,14 +227,14 @@ function clearOne(actor: Actor, habitId: string, schedule: ScheduleForm, date: s
 	if (occ) emit(actor, 'occurrence.cleared', { habitId: occ.habitId, date: occ.date, data: { occurrenceId: occ.id } });
 }
 
-/** +1 (or −1) toward a habit's one target, from Today. Reaching the target finishes it. */
+/** +1 (or −1) toward a habit's one target, from Today. Reaching the target finishes it; going over a most reopens it. */
 export function plusOcc(actor: Actor, occ: OccRow, by: 1 | -1) {
 	const r = plusOne(occ.id, by);
 	if (!r) return null;
 	emit(actor, 'value.logged', { habitId: occ.habitId, date: occ.date, data: { occurrenceId: occ.id, value: by, total: r.value, how: 'plus' } });
 	if (r.done && by > 0 && occ.status !== 'done')
 		emit(actor, 'occurrence.done', { habitId: occ.habitId, date: occ.date, data: { occurrenceId: occ.id, level: occ.level ?? null, how: 'plus' } });
-	if (!r.done && by < 0 && occ.status === 'done')
+	if (!r.done && (by < 0 || r.less) && occ.status === 'done')
 		emit(actor, 'occurrence.reopened', { habitId: occ.habitId, date: occ.date, data: { occurrenceId: occ.id, cleared: false } });
 	return r;
 }
@@ -381,7 +381,8 @@ function reached(occId: string): boolean {
 	if (missingRequired(occId).length) return false;
 	const p = progressForIds([occId]).get(occId);
 	if (!p) return true;
-	return p.kind === 'amount' ? p.value >= p.target : p.done >= p.total;
+	// A most (less is better) isn't reached before the day ends: it is judged then, or when finished.
+	return p.kind === 'amount' ? !p.less && p.value >= p.target : p.done >= p.total;
 }
 
 /**

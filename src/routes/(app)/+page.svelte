@@ -194,10 +194,10 @@
 			onQueued: () => showToast(`Counted for ${name}. It will sync when you're back online.`),
 			after: (result) => {
 				if (result.type !== 'success') return;
-				const p = result.data?.plus as { value: number; target: number; unit: string; done: boolean } | undefined;
+				const p = result.data?.plus as { value: number; target: number; unit: string; done: boolean; less?: boolean } | undefined;
 				if (!p) return;
 				const n = (x: number) => String(Math.round(x * 100) / 100);
-				showToast(`${name}: ${n(p.value)} of ${n(p.target)}${p.unit ? ` ${p.unit}` : ''}${p.done ? '. Done!' : '.'}`, undoWith('/?/plus', { occurrence: occurrenceId, by: '-1' }));
+				showToast(`${name}: ${n(p.value)} of ${p.less ? 'at most ' : ''}${n(p.target)}${p.unit ? ` ${p.unit}` : ''}${p.done ? '. Done!' : '.'}`, undoWith('/?/plus', { occurrence: occurrenceId, by: '-1' }));
 				const item = data.build.find((b) => b.occurrence?.id === occurrenceId);
 				if (item) void keepFocus(nameOf(item.habitId));
 			}

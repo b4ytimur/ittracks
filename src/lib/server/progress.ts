@@ -7,7 +7,7 @@ import { entry, habit, metric, occurrence, slot, task, type SlotGoals } from './
 import { getUnits } from './settings';
 import { positionsFor } from './positions';
 import { slotOfPath } from '$lib/engine/parts';
-import { amountTarget, loggedValue, progressOf, verdict, type Progress, type ProgressMetric, type ProgressSlot, type Verdict } from '$lib/engine/progress';
+import { amountTarget, easierThan, loggedValue, meets, progressOf, verdict, type Progress, type ProgressMetric, type ProgressSlot, type Verdict } from '$lib/engine/progress';
 import { defaultStep } from '$lib/task-types';
 import { STARTER, type UnitTable } from '$lib/units';
 import type { Level } from '$lib/engine/streak';
@@ -46,7 +46,7 @@ function slotsFor(occs: OccRow[], level?: (o: OccRow) => Level | null): Map<stri
 	const taskIds = [...new Set([...positions.values()].flat().map((p) => p.taskId))];
 	const metrics = taskIds.length
 		? db
-				.select({ id: metric.id, taskId: metric.taskId, name: metric.name, type: metric.type, unit: metric.unit, repeats: metric.repeats, step: metric.step })
+				.select({ id: metric.id, taskId: metric.taskId, name: metric.name, type: metric.type, unit: metric.unit, repeats: metric.repeats, step: metric.step, better: metric.better })
 				.from(metric)
 				// A log is measured by the fields it asks for: archived ones are kept for History only.
 				.where(and(inArray(metric.taskId, taskIds), eq(metric.archived, false)))
@@ -156,7 +156,7 @@ export function verdictsFor(ids: string[]): Map<string, Verdict> {
 		const t = progressOf(atTarget.get(o.id) ?? [], mine, 'due');
 		// The habit has a Minimum when Levels are on and it sets a lower number to reach.
 		const m = h?.levels?.enabled ? progressOf(atMinimum.get(o.id) ?? [], mine, 'due') : null;
-		const hasMinimum = !!m && !!t && m.kind === 'amount' && t.kind === 'amount' && m.target < t.target;
+		const hasMinimum = !!m && !!t && m.kind === 'amount' && t.kind === 'amount' && easierThan(m.target, t.target, t.less);
 		out.set(o.id, verdict(t, hasMinimum ? m : undefined, h?.minimumCounts ?? true));
 	}
 	return out;
@@ -215,9 +215,11 @@ export function stepsOf(metricIds: string[], q: Pick<typeof db, 'select'> = db):
 /**
  * +1 from Today, for a habit with one number to reach: add one step to the value logged so
  * far (or take one away with `by: -1`). Reaching the target finishes the log; dropping
- * below it on a log that +1 finished puts it back to due. Other saved values are kept.
+ * below it on a log that +1 finished puts it back to due. Where less is better the day stays
+ * open (it is judged when it ends), and going over the most puts a finished log back to due.
+ * Other saved values are kept.
  */
-export function plusOne(occurrenceId: string, by: 1 | -1 = 1): { value: number; target: number; unit: string; done: boolean } | null {
+export function plusOne(occurrenceId: string, by: 1 | -1 = 1): { value: number; target: number; unit: string; done: boolean; less: boolean } | null {
 	const o = db.select().from(occurrence).where(eq(occurrence.id, occurrenceId)).get();
 	if (!o) return null;
 	const slots = slotsFor([o]).get(o.id) ?? [];
@@ -235,7 +237,9 @@ export function plusOne(occurrenceId: string, by: 1 | -1 = 1): { value: number; 
 	const before = loggedValue(mine, taskId, m.id);
 	const step = plusStep(m, getUnits(db.select({ a: habit.accountId }).from(habit).where(eq(habit.id, o.habitId)).get()!.a));
 	const value = Math.max(0, Math.round((before + by * step) * 1000) / 1000);
-	const done = value >= amount.target;
+	const less = m.better === 'less';
+	const met = meets(value, amount.target, less);
+	const done = less ? o.status === 'done' && met : met;
 	db.transaction((tx) => {
 		const summary = mine.find((e) => e.taskId === taskId && e.values._summary);
 		if (summary) tx.update(entry).set({ values: { ...summary.values, [m.id]: value }, path }).where(eq(entry.id, summary.id)).run();
@@ -244,10 +248,10 @@ export function plusOne(occurrenceId: string, by: 1 | -1 = 1): { value: number; 
 				.values({ id: randomUUID(), occurrenceId: o.id, taskId, path, values: { [m.id]: value, _summary: true }, sortOrder: mine.length })
 				.run();
 		if (done && o.status !== 'done') tx.update(occurrence).set({ status: 'done', finishedAt: new Date() }).where(eq(occurrence.id, o.id)).run();
-		if (!done && o.status === 'done' && by < 0) tx.update(occurrence).set({ status: 'due', finishedAt: null }).where(eq(occurrence.id, o.id)).run();
+		if (!done && o.status === 'done' && (by < 0 || less)) tx.update(occurrence).set({ status: 'due', finishedAt: null }).where(eq(occurrence.id, o.id)).run();
 	});
 	const unit = m.unit || (m.type === 'duration' ? 'min' : m.name.toLowerCase());
-	return { value, target: amount.target, unit, done };
+	return { value, target: amount.target, unit, done, less };
 }
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];

@@ -74,7 +74,7 @@ A Task that logs rows calls one of them a **set**, several **sets**, and the clo
 Under a field's **When logging**:
 
 - **Written after a ×** says how a row reads: "60 kg × 8". A field without it stands beside the others: "80 bpm · 5 min".
-- **Less is better** colours a change the other way in Stats, and makes the lowest number the record (a time, body weight).
+- **Less is better** colours a change the other way in Stats, and makes the lowest number the record (a time, body weight). In a habit its target is a most ("at most 5 cigarettes"): a day at or under it is done, over it is not, and a day with nothing logged is still missed. With levels, the Minimum is the most that still counts and the Stretch the least. Today's +1 leaves the day open while you count; going over the most opens a finished day again.
 
 ## Groupings and levels
 
