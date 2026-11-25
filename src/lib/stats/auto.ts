@@ -2,7 +2,7 @@
 // Auto cards come from the type of each field a habit or Task logs; board templates pick
 // the habits and Tasks that fit them from what the account already has.
 import { makeCard, MAX_CARDS, newId, type Board, type StatCard, type StatCardInput } from './model';
-import { measuresOf } from './catalog';
+import { measuresOf } from './catalog-of';
 import { compile, fieldsOf, FormulaError } from './formula';
 import { fits, groupsOf, type DsHabit, type DsMetric, type DsTask, type Prepared } from './engine';
 

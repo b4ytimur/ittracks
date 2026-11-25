@@ -11,7 +11,8 @@ import { computeCard, describeLog, prepare, singleRows, type CardResult, type Ct
 import { readStats, statsSettings, type Board, type StatCard, type StatsSettings } from '$lib/stats/model';
 import { startingBoards } from '$lib/stats/auto';
 import { withSeeds, type SeedField } from '$lib/stats/seed';
-import { catalogOf, statCtx, type Catalog } from '$lib/stats/catalog';
+import { statCtx, type Catalog } from '$lib/stats/catalog';
+import { catalogOf } from '$lib/stats/catalog-of';
 import { checkCard } from '$lib/rules/stats';
 import { DEFAULT_STREAK_RULE } from '$lib/engine/streak';
 import { logicalDate } from '$lib/engine/day';

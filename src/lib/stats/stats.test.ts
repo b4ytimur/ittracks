@@ -17,7 +17,8 @@ import {
 } from './engine';
 import { emptyStats, makeCard, readStats, type StatCardInput } from './model';
 import { BOARD_TEMPLATES, boardTemplate, galleryCards, habitCards, headlineOptions, startingBoards, suggestedCards, taskCards, type BoardTemplateId } from './auto';
-import { catalogOf, perLogChoices, statCtx } from './catalog';
+import { perLogChoices, statCtx } from './catalog';
+import { catalogOf } from './catalog-of';
 import { checkCard, checkStatsSettings } from '../rules/stats';
 
 const TODAY = '2026-11-21'; // a Saturday; the week started Monday 2026-11-16
