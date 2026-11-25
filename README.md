@@ -65,11 +65,13 @@ SvelteKit (TypeScript), SQLite through Drizzle ORM, Vitest. It ships as one Dock
 ## Develop
 
 ```sh
-npm install
-npm run dev        # http://localhost:5173
+make up            # install, migrate, start; prints http://localhost:5173 once it answers
+make seed          # add the example data (below) to the database
 npm test           # schedule, fill and streak rules
 npm run check      # type check
 ```
+
+`make up` and `make seed` take `PORT`, `HOST` and `DATABASE_PATH` (default `./data/ittracks.db`), e.g. `make up PORT=5180 DATABASE_PATH=./data/try.db`. On a database with no account yet, `make seed` makes one first: `demo` / `demo1234`, or `SEED_USER` and `SEED_PASSWORD`. Without make: `npm install`, then `npm run dev`.
 
 After changing `src/lib/server/db/schema.ts`, run `npm run db:generate` to create a migration. Migrations run automatically on startup.
 
@@ -94,7 +96,7 @@ docker compose exec ittracks node scripts/seed-demo.mjs --today "$(date +%F)"  #
 docker compose restart
 ```
 
-It only adds rows, never changes what you made, and refuses to run twice. On a server nobody has set up yet, add `--create-user name:password` to make the account too. Restart the app afterwards so it picks up the new rows. Outside Docker, run `node scripts/seed-demo.mjs`.
+It only adds rows, never changes what you made, and refuses to run twice. On a server nobody has set up yet, add `--create-user name:password` to make the account too. Restart the container afterwards so it picks up the new rows. Outside Docker, run `make seed`.
 
 ## Templates
 

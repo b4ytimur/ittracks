@@ -5,8 +5,10 @@
 //                              [--create-user name:password]
 //
 // In Docker:  docker compose exec ittracks node scripts/seed-demo.mjs
-// The app must have started once (to create the tables). Restart it afterwards.
-// --create-user makes a new account first, for a demo server nobody has set up yet.
+// Outside Docker, `make seed` runs the migrations and then this script.
+// The database's tables must exist: start the app once, or run the migrations.
+// --create-user makes the account first when the server has none yet, as the first-run page
+// does. On a server that already has its account, the data goes there and this is ignored.
 //
 // It only adds rows. It never changes or deletes anything that is already there,
 // and it stops if the example Habits already exist. Tags with the same name are reused.
@@ -39,23 +41,23 @@ const weekday = (d) => (new Date(d + "T00:00:00Z").getUTCDay() + 6) % 7; // 0 = 
 const at = (d, hour) =>
   Math.floor(Date.parse(`${d}T${String(hour).padStart(2, "0")}:00:00Z`) / 1000);
 
+// Choice options and slip feelings as the app stores them: each with an id, which logs and
+// slips point to.
+const options = (...names) => names.map((name) => ({ id: randomUUID(), name }));
+const idOf = (list, name) => list.find((o) => o.name === name).id;
+
 // Same random numbers every run, so the history looks the same each time.
 let seed = 42;
 const rand = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
 
 // ---------- account ----------
-if (args["create-user"]) {
+// A server has one account, so --create-user only makes one when there is none yet.
+if (args["create-user"] && !db.prepare("SELECT 1 FROM account").get()) {
   const [name, ...rest] = args["create-user"].split(":");
   const password = rest.join(":");
   if (!name || password.length < 8) {
     console.error(
       "--create-user needs name:password, with a password of at least 8 characters.",
-    );
-    process.exit(1);
-  }
-  if (db.prepare("SELECT 1 FROM account WHERE username = ?").get(name)) {
-    console.error(
-      `An account named "${name}" already exists. Nothing was added.`,
     );
     process.exit(1);
   }
@@ -68,6 +70,7 @@ if (args["create-user"]) {
     accountId,
     JSON.stringify({ weightUnit: "kg" }),
   );
+  console.log(`Made the account "${name}" with the password "${password}".`);
   args.user = name;
 }
 const accounts = db.prepare("SELECT id, username FROM account").all();
@@ -461,13 +464,14 @@ const seedAll = db.transaction(() => {
   }
 
   // ================= Spanish (checklist + timer) =================
+  const howItWent = options("Easy", "OK", "Hard");
   const spanish = makeTask({
     name: "Spanish practice",
     tags: { language: 3 },
     metrics: [
       { name: "Study time", type: "duration", unit: "min" },
       { name: "New words", type: "count" },
-      { name: "How it went", type: "choice", choices: ["Easy", "OK", "Hard"] },
+      { name: "How it went", type: "choice", choices: howItWent },
     ],
     subtasks: [
       "Duolingo lesson",
@@ -517,9 +521,10 @@ const seedAll = db.transaction(() => {
     addEntry(occ, spanish.id, {
       [spanish.m["Study time"]]: 15 + Math.round(rand() * 20),
       [spanish.m["New words"]]: 5 + Math.round(rand() * 12),
-      [spanish.m["How it went"]]: ["Easy", "OK", "OK", "Hard"][
-        Math.floor(rand() * 4)
-      ],
+      [spanish.m["How it went"]]: idOf(
+        howItWent,
+        ["Easy", "OK", "OK", "Hard"][Math.floor(rand() * 4)],
+      ),
       _summary: true,
     });
     spanish.subs.forEach((sub, j) => {
@@ -643,14 +648,11 @@ const seedAll = db.transaction(() => {
     JSON.stringify({ time, place, afterHabitId, afterText });
   const levels = (minimum, target, stretch) =>
     JSON.stringify({ enabled: true, minimum, target, stretch });
-  const triggers = JSON.stringify([
-    "Bored",
-    "Stressed",
-    "Tired",
-    "Social",
-    "After a meal",
-    "Coffee",
-  ]);
+  // Each break habit has its own list of feelings.
+  const feelings = () =>
+    options("Bored", "Stressed", "Tired", "Social", "After a meal", "Coffee");
+  const smokeFeelings = feelings();
+  const scrollFeelings = feelings();
 
   setHabit.run(
     cue("18:30", "the gym on my way home", null, "I leave work"),
@@ -697,7 +699,7 @@ const seedAll = db.transaction(() => {
       then: "do 10 push-ups and drink a glass of water",
       habitId: null,
     }),
-    triggers,
+    JSON.stringify(smokeFeelings),
     smoke,
   );
   setHabit.run(
@@ -710,7 +712,7 @@ const seedAll = db.transaction(() => {
       then: "read two pages of my book",
       habitId: null,
     }),
-    triggers,
+    JSON.stringify(scrollFeelings),
     scroll,
   );
 
@@ -778,7 +780,7 @@ const seedAll = db.transaction(() => {
   slipCtx.run(
     "23:30",
     "A friend's party",
-    "Social",
+    idOf(smokeFeelings, "Social"),
     "Friends",
     smoke,
     addDays(today, -41),
@@ -786,14 +788,28 @@ const seedAll = db.transaction(() => {
   slipCtx.run(
     "16:00",
     "Office balcony",
-    "Stressed",
+    idOf(smokeFeelings, "Stressed"),
     "Coworkers",
     smoke,
     addDays(today, -19),
   );
-  slipCtx.run("00:15", "Bed", "Tired", "Alone", scroll, addDays(today, -4));
+  slipCtx.run(
+    "00:15",
+    "Bed",
+    idOf(scrollFeelings, "Tired"),
+    "Alone",
+    scroll,
+    addDays(today, -4),
+  );
   q.slip.run(randomUUID(), scroll, addDays(today, -9), 1, null, now);
-  slipCtx.run("23:50", "Bed", "Bored", "Alone", scroll, addDays(today, -9));
+  slipCtx.run(
+    "23:50",
+    "Bed",
+    idOf(scrollFeelings, "Bored"),
+    "Alone",
+    scroll,
+    addDays(today, -9),
+  );
 
   // Cravings resisted with the if-then plan.
   const crave = db.prepare(
@@ -975,7 +991,7 @@ const seedAll = db.transaction(() => {
       then: "have a glass of sparkling water",
       habitId: null,
     }),
-    JSON.stringify(["Tired", "Afternoon slump", "Meeting", "Habit"]),
+    JSON.stringify(options("Tired", "Afternoon slump", "Meeting", "Habit")),
     coffee,
   );
   setP2.run(
