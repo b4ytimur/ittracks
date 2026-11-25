@@ -3,6 +3,7 @@
 	import { untrack } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import SaidLine from '$lib/detail/SaidLine.svelte';
+	import InlineText from '$lib/ui/InlineText.svelte';
 	import { groupingsProblem, type Grouping, type GroupingLevel } from '$lib/groupings';
 	import { runAction, showToast, undoWith } from '$lib/toast.svelte';
 
@@ -99,6 +100,13 @@
 		showToast(`Removed ${t.name}.`, undoWith('/settings?/addTag', { name: t.name, grouping: g.id }));
 		await invalidateAll();
 	}
+	async function renameMember(t: (typeof tags)[number], name: string) {
+		const r = await runAction<{ was: string; name: string }>('/settings?/renameTag', { id: t.id, name });
+		if (!r.ok) return void (problem = r.error ?? 'Not renamed. Are you online?');
+		problem = '';
+		showToast(`Renamed ${r.data!.was} to ${r.data!.name}, also in rules and filters.`, undoWith('/settings?/renameTag', { id: t.id, name: r.data!.was }));
+		await invalidateAll();
+	}
 	async function moveMember(t: (typeof tags)[number], to: string) {
 		const r = await runAction<{ was: string }>('/settings?/moveTag', { id: t.id, grouping: to });
 		if (!r.ok) return void (problem = r.error ?? 'Not moved. Are you online?');
@@ -120,7 +128,7 @@
 					<span class="label">Members</span>
 					{#each membersOf(g) as t (t.id)}
 						<div class="act-row">
-							<span class="status-text">{t.name} <span class="muted meta">· {t.levels.length ? tasks(t.levels.length) : 'no Task yet'}</span></span>
+							<span class="status-text"><InlineText editing value={t.name} label="Name of {g.one || 'the member'}" maxlength={40} onsave={(v) => renameMember(t, v)} /> <span class="muted meta">· {t.levels.length ? tasks(t.levels.length) : 'no Task yet'}</span></span>
 							{#if groupings.length > 1}
 								<label class="vh" for="gm-{t.id}">Grouping of {t.name}</label>
 								<select id="gm-{t.id}" class="move" value={g.id} onchange={(e) => moveMember(t, e.currentTarget.value)}>{#each groupings as x (x.id)}<option value={x.id}>{x.name}</option>{/each}</select>
@@ -155,6 +163,16 @@
 <div><button type="button" class="hit" onclick={addGrouping}>+ Grouping</button></div>
 
 <style>
+	/* A member's name and its count share a line: the rule is as wide as the name. */
+	.status-text {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0 var(--space-tight);
+	}
+	.status-text > :global(button.inline-text)::after {
+		width: 0;
+	}
 	p {
 		margin: 0;
 	}
