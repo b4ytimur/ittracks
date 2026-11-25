@@ -135,7 +135,7 @@
 		<span class="muted small-text">Variants in this rotation</span>
 		<div class="chips" role="group" aria-label="Variants in this rotation">
 			{#each variants as v (v.id)}
-				<button type="button" class="chip small" class:on={inRotation(v.id)} aria-pressed={inRotation(v.id)} onclick={() => toggleInRotation(v.id)}>{v.name}</button>
+				<button type="button" class="toggle" aria-pressed={inRotation(v.id)} onclick={() => toggleInRotation(v.id)}>{v.name}</button>
 			{/each}
 		</div>
 	{/if}
@@ -157,13 +157,13 @@
 		{/each}
 		<fieldset class="card">
 			<legend class="muted">If you miss a day</legend>
-			<label style="color: var(--text)"><input type="radio" bind:group={value.onMiss} value="wait" /> Wait: the Variant stays due until you do it</label>
-			<label style="color: var(--text)"><input type="radio" bind:group={value.onMiss} value="skip" /> Skip ahead to the next Variant</label>
+			<label style="color: var(--ink)"><input type="radio" bind:group={value.onMiss} value="wait" /> Wait: the Variant stays due until you do it</label>
+			<label style="color: var(--ink)"><input type="radio" bind:group={value.onMiss} value="skip" /> Skip ahead to the next Variant</label>
 		</fieldset>
 	{:else}
 		<div class="chips" role="group" aria-label="Training days">
 			{#each weekdayNames as day, d (day)}
-				<button type="button" class="chip small" class:on={value.weekdays.includes(d)} onclick={() => toggleWeekday(d)}>{day}</button>
+				<button type="button" class="toggle" aria-pressed={value.weekdays.includes(d)} onclick={() => toggleWeekday(d)}>{day}</button>
 			{/each}
 		</div>
 		<p class="muted">Variants take turns week by week, in the order listed above.</p>

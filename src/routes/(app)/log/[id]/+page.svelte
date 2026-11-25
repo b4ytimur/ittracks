@@ -978,7 +978,7 @@
 		/* In view wherever you type, without moving what you type in. */
 		position: sticky;
 		bottom: var(--tabbar-clear);
-		z-index: 4;
+		z-index: var(--z-heading);
 		border-color: var(--danger);
 	}
 	.elsewhere p {

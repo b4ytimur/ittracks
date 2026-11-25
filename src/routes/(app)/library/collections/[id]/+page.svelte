@@ -55,8 +55,8 @@
 	{/if}
 
 	<fieldset class="card">
-		<label style="color: var(--text)"><input type="radio" bind:group={smart} value={false} /> Hand-picked: you choose the Tasks</label>
-		<label style="color: var(--text)"><input type="radio" bind:group={smart} value={true} /> Smart: Tasks that match rules, kept up to date</label>
+		<label style="color: var(--ink)"><input type="radio" bind:group={smart} value={false} /> Hand-picked: you choose the Tasks</label>
+		<label style="color: var(--ink)"><input type="radio" bind:group={smart} value={true} /> Smart: Tasks that match rules, kept up to date</label>
 	</fieldset>
 
 	{#if smart}
@@ -64,7 +64,7 @@
 			<span class="muted small-text">Has every one of these tags</span>
 			<div class="chips">
 				{#each data.tags as t (t)}
-					<button type="button" class="chip" class:on={filterTags.includes(t)} onclick={() => (filterTags = toggle(filterTags, t))}>{t}</button>
+					<button type="button" class="toggle" aria-pressed={filterTags.includes(t)} onclick={() => (filterTags = toggle(filterTags, t))}>{t}</button>
 				{/each}
 				{#if !data.tags.length}<span class="muted small-text">No tags yet.</span>{/if}
 			</div>
@@ -82,7 +82,7 @@
 		<input type="search" bind:value={search} placeholder="Find Tasks" aria-label="Find Tasks" />
 		<div class="picks">
 			{#each listed as t (t.id)}
-				<label style="color: var(--text)"><input type="checkbox" checked={picked.includes(t.id)} onchange={() => (picked = toggle(picked, t.id))} /> {t.name}</label>
+				<label style="color: var(--ink)"><input type="checkbox" checked={picked.includes(t.id)} onchange={() => (picked = toggle(picked, t.id))} /> {t.name}</label>
 			{/each}
 		</div>
 		<p class="muted small-text">{picked.length} picked</p>
@@ -99,16 +99,13 @@
 </form>
 
 <style>
-	.small-text {
-		font-size: 0.85rem;
-	}
 	fieldset {
-		border: 1px solid var(--border);
+		border: 1px solid var(--line);
 	}
 	.picks {
 		max-height: 50vh;
 		overflow: auto;
-		border: 1px solid var(--border);
+		border: 1px solid var(--line);
 		border-radius: 8px;
 		padding: 0.5rem;
 	}

@@ -511,8 +511,8 @@
 	}
 	/* Block layout: a framed item with a title bar. */
 	.block.editing > li {
-		border: 1px dashed var(--border);
-		border-radius: var(--radius);
+		border: 1px dashed var(--line);
+		border-radius: var(--radius-card);
 		padding: 0.35rem 0.5rem 0.5rem;
 		background: var(--bg, transparent);
 	}
@@ -526,7 +526,7 @@
 		min-width: 0;
 		font-size: 0.85rem;
 		font-weight: 600;
-		color: var(--muted);
+		color: var(--ink-muted);
 	}
 	.block.editing > li > .body:not(:empty) {
 		margin-top: 0.4rem;

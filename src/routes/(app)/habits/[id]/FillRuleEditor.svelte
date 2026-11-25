@@ -51,7 +51,7 @@
 			<strong>Must have</strong>
 			<div class="chips">
 				{#each Object.entries(rule.must) as [t, lvl] (t)}
-					<button type="button" class="chip small on" onclick={() => remove(rule.must, t)} title="Remove"
+					<button type="button" class="toggle" onclick={() => remove(rule.must, t)} aria-label="Remove {t}"
 						>{t} {strongest(t, lvl) ? name(t, lvl) : `at least ${name(t, lvl)}`} ✕</button
 					>
 				{/each}
@@ -72,7 +72,7 @@
 			<strong>Must not have</strong>
 			<div class="chips">
 				{#each Object.entries(rule.mustNot) as [t, lvl] (t)}
-					<button type="button" class="chip small" onclick={() => remove(rule.mustNot, t)} title="Remove"
+					<button type="button" class="toggle" onclick={() => remove(rule.mustNot, t)} aria-label="Remove {t}"
 						>{t} {lvl === 0 ? 'not at all' : `at most ${name(t, lvl)}`} ✕</button
 					>
 				{/each}
@@ -94,7 +94,7 @@
 			<strong>Prefer</strong>
 			<div class="chips">
 				{#each rule.prefer as t, i (t)}
-					<button type="button" class="chip small" onclick={() => rule.prefer.splice(i, 1)} title="Remove"
+					<button type="button" class="toggle" onclick={() => rule.prefer.splice(i, 1)} aria-label="Remove {t}"
 						>{t} ✕</button
 					>
 				{/each}

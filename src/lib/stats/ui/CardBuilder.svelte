@@ -216,7 +216,7 @@
 			<legend>What it reads</legend>
 			<div class="chips">
 				{#each Object.entries(SOURCES) as [k, label] (k)}
-					<button type="button" class="chip" class:on={c.what.source === k} aria-pressed={c.what.source === k} onclick={() => setSource(k as StatCard['what']['source'])}>{label}</button>
+					<button type="button" class="toggle" aria-pressed={c.what.source === k} onclick={() => setSource(k as StatCard['what']['source'])}>{label}</button>
 				{/each}
 			</div>
 			{#if c.what.source === 'field'}
@@ -239,7 +239,7 @@
 								<div class="muted small">{g.t.name}</div>
 								<div class="chips">
 									{#each g.ms as m (m.id)}
-										<button type="button" class="chip" class:on={c.what.metrics.includes(m.id)} aria-pressed={c.what.metrics.includes(m.id)} onclick={() => toggleMetric(m.id)}>
+										<button type="button" class="toggle" aria-pressed={c.what.metrics.includes(m.id)} onclick={() => toggleMetric(m.id)}>
 											{m.name}{m.unit ? ` (${m.unit})` : ''}{m.repeats ? ' · per set' : ''}
 										</button>
 									{/each}
@@ -267,7 +267,7 @@
 				<select value={c.perLog} onchange={(e) => setPerLog((e.currentTarget as HTMLSelectElement).value)}>
 					{#each choices as p (p)}
 						{@const bad = optionIssue('perLog', p)}
-						<option value={p} disabled={!!bad} title={bad ?? ''}>{perLogLabel(p, measures)}{bad ? ' (not available)' : ''}</option>
+						<option value={p} disabled={!!bad}>{perLogLabel(p, measures)}{bad ? ' (not available)' : ''}</option>
 					{/each}
 				</select>
 			</label>
@@ -285,9 +285,8 @@
 		<fieldset>
 			<legend>Card type</legend>
 			<div class="chips">
-				{#each Object.entries(CHARTS) as [k, label] (k)}
-					{@const bad = chartIssue(k as StatCard['look']['chart'])}
-					<button type="button" class="chip" class:on={c.look.chart === k} aria-pressed={c.look.chart === k} disabled={!!bad && c.look.chart !== k} title={bad ?? ''} onclick={() => setChart(k as StatCard['look']['chart'])}>{label}</button>
+				{#each Object.entries(CHARTS).filter(([k]) => c.look.chart === k || !chartIssue(k as StatCard['look']['chart'])) as [k, label] (k)}
+					<button type="button" class="toggle" aria-pressed={c.look.chart === k} onclick={() => setChart(k as StatCard['look']['chart'])}>{label}</button>
 				{/each}
 			</div>
 		</fieldset>
@@ -299,7 +298,7 @@
 					<select bind:value={c.bucket}>
 						{#each Object.entries(BUCKETS) as [k, label] (k)}
 							{@const bad = optionIssue('bucket', k, ['bucket', 'look.chart'])}
-							<option value={k} disabled={!!bad && c.bucket !== k} title={bad ?? ''}>{label}</option>
+							<option value={k} disabled={!!bad && c.bucket !== k}>{label}</option>
 						{/each}
 					</select>
 				</label>
@@ -309,7 +308,7 @@
 				<select bind:value={() => (c.split === 'tag' && c.grouping ? `tag:${c.grouping}` : c.split), (v) => ((c.split = v.split(':')[0] as typeof c.split), (c.grouping = v.startsWith('tag:') ? v.slice(4) : undefined))}>
 					{#each SPLITS_BY_SOURCE[c.what.source] as k (k)}
 						{@const bad = optionIssue('split', k, ['split', 'look.chart', 'look.stacked'])}
-						<option value={k} disabled={!!bad && c.split !== k} title={bad ?? ''}>{k !== 'tag' ? SPLITS[k as keyof typeof SPLITS] : catalog.groupings.length > 1 ? 'Every grouping' : (catalog.groupings[0]?.name ?? SPLITS.tag)}</option>
+						<option value={k} disabled={!!bad && c.split !== k}>{k !== 'tag' ? SPLITS[k as keyof typeof SPLITS] : catalog.groupings.length > 1 ? 'Every grouping' : (catalog.groupings[0]?.name ?? SPLITS.tag)}</option>
 						{#if k === 'tag' && catalog.groupings.length > 1}{#each catalog.groupings as g (g.id)}<option value="tag:{g.id}" disabled={!!bad && c.split !== k}>{g.name}</option>{/each}{/if}
 					{/each}
 				</select>
@@ -346,7 +345,7 @@
 					<div class="muted small">Habits</div>
 					<div class="chips">
 						{#each habits as h (h.id)}
-							<button type="button" class="chip" class:on={c.filter.habits.includes(h.id)} aria-pressed={c.filter.habits.includes(h.id)} onclick={() => (c.filter.habits = toggle(c.filter.habits, h.id))}>{h.name}{h.archived ? ' (archived)' : ''}</button>
+							<button type="button" class="toggle" aria-pressed={c.filter.habits.includes(h.id)} onclick={() => (c.filter.habits = toggle(c.filter.habits, h.id))}>{h.name}{h.archived ? ' (archived)' : ''}</button>
 						{/each}
 					</div>
 				</div>
@@ -355,7 +354,7 @@
 						<div class="muted small">Tags</div>
 						<div class="chips">
 							{#each catalog.tags as t (t)}
-								<button type="button" class="chip" class:on={c.filter.tags.includes(t)} aria-pressed={c.filter.tags.includes(t)} onclick={() => (c.filter.tags = toggle(c.filter.tags, t))}>{t}</button>
+								<button type="button" class="toggle" aria-pressed={c.filter.tags.includes(t)} onclick={() => (c.filter.tags = toggle(c.filter.tags, t))}>{t}</button>
 							{/each}
 						</div>
 					</div>
@@ -365,7 +364,7 @@
 						<div class="muted small">Areas</div>
 						<div class="chips">
 							{#each catalog.areas as a (a.id)}
-								<button type="button" class="chip" class:on={c.filter.areas.includes(a.id)} aria-pressed={c.filter.areas.includes(a.id)} onclick={() => (c.filter.areas = toggle(c.filter.areas, a.id))}>{a.icon} {a.name}</button>
+								<button type="button" class="toggle" aria-pressed={c.filter.areas.includes(a.id)} onclick={() => (c.filter.areas = toggle(c.filter.areas, a.id))}>{a.icon} {a.name}</button>
 							{/each}
 						</div>
 					</div>
@@ -409,21 +408,24 @@
 					</label>
 				</div>
 				{#if c.what.source === 'field'}
-					<label class="inline" title={why('compare.goalFromTargets') ?? ''}>
+					<label class="inline">
 						<input type="checkbox" bind:checked={c.compare.goalFromTargets} disabled={!!why('compare.goalFromTargets')} /> Take the goal from the targets
 					</label>
+					{#if why('compare.goalFromTargets')}<p class="muted small">{why('compare.goalFromTargets')}</p>{/if}
 				{/if}
-				<label class="inline" class:off={!!why('compare.running')} title={why('compare.running') ?? ''}>
+				<label class="inline" class:off={!!why('compare.running')}>
 					<input type="checkbox" bind:checked={c.compare.running} disabled={!!why('compare.running')} /> Running total
 				</label>
+				{#if why('compare.running')}<p class="muted small">{why('compare.running')}</p>{/if}
 				<label>
 					Rolling average
-					<select bind:value={c.compare.rolling} disabled={!!why('compare.rolling')} title={why('compare.rolling') ?? ''}>
+					<select bind:value={c.compare.rolling} disabled={!!why('compare.rolling')}>
 						<option value={0}>None</option>
 						<option value={7}>7 days</option>
 						<option value={30}>30 days</option>
 					</select>
 				</label>
+				{#if why('compare.rolling')}<p class="muted small">{why('compare.rolling')}</p>{/if}
 				{#if why('compare.rolling') && c.look.chart !== 'tile'}<p class="muted small">{why('compare.rolling')}</p>{/if}
 			</div>
 		</details>
@@ -444,7 +446,7 @@
 					</label>
 				</div>
 				{#if c.look.chart === 'bars'}
-					<label class="inline" title={why('look.stacked') ?? optionIssue('look.stacked', true) ?? ''}>
+					<label class="inline">
 						<input type="checkbox" bind:checked={c.look.stacked} disabled={!c.look.stacked && !!optionIssue('look.stacked', true)} /> Stack the series
 					</label>
 					{#if !c.look.stacked && optionIssue('look.stacked', true)}<p class="muted small">{optionIssue('look.stacked', true)}</p>{/if}
@@ -500,19 +502,9 @@
 	}
 	legend {
 		font-size: 0.9rem;
-		color: var(--muted);
+		color: var(--ink-muted);
 		padding: 0;
 		margin-bottom: 0.1rem;
-	}
-	.chip {
-		background: var(--surface);
-		cursor: pointer;
-		font-size: 0.85rem;
-		padding: 0.25rem 0.65rem;
-	}
-	.chip:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
 	}
 	.grid2 {
 		display: grid;
@@ -523,10 +515,10 @@
 		display: flex;
 		align-items: center;
 		gap: 0.2rem;
-		color: var(--text);
+		color: var(--ink);
 	}
 	.inline.off {
-		color: var(--muted);
+		color: var(--ink-muted);
 	}
 	.mode {
 		margin: 0.5rem 0 0.25rem;

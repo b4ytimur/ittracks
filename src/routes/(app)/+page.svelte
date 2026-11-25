@@ -535,7 +535,7 @@
 	<section class="ob-sec" aria-label="Or start from">
 		<p class="meta muted">Or start from</p>
 		<div class="chips">
-			{#each PACKS.filter((p) => !data.packs.includes(p.id)) as p (p.id)}<button type="button" class="toggle" title={p.brings} onclick={() => packIn(p.id, p.name)}>{p.name}</button>{/each}
+			{#each PACKS.filter((p) => !data.packs.includes(p.id)) as p (p.id)}<button type="button" class="toggle" onclick={() => packIn(p.id, p.name)}>{p.name}</button>{/each}
 		</div>
 		<div class="l-cluster"><a class="button hit" href="/gallery">Gallery</a><a class="button hit" href="/habits/import">Add a file</a><a class="quiet hit" href="/habits/new">Step by step</a></div>
 	</section>
@@ -751,7 +751,7 @@
 				</select>
 			</label>
 		</div>
-		<label style="color: var(--text)"
+		<label style="color: var(--ink)"
 			><input
 				type="checkbox"
 				checked={views.today.timeAware}
@@ -1069,7 +1069,7 @@
 		border-radius: 6px;
 	}
 	.week a.day:hover {
-		background: var(--border);
+		background: var(--line);
 	}
 	.nudge {
 		align-items: center;
@@ -1116,7 +1116,7 @@
 	.check .box {
 		width: 1.2rem;
 		height: 1.2rem;
-		border: 1px solid var(--border);
+		border: 1px solid var(--line);
 		border-radius: 4px;
 		display: inline-grid;
 		place-items: center;
@@ -1124,7 +1124,7 @@
 		color: var(--accent);
 	}
 	.check.done {
-		color: var(--muted);
+		color: var(--ink-muted);
 		text-decoration: line-through;
 	}
 </style>

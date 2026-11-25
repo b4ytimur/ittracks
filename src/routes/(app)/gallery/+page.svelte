@@ -104,6 +104,6 @@
 	/* The row opens the template; its Add stays above that. */
 	.card.link .verb {
 		position: relative;
-		z-index: 1;
+		z-index: var(--z-raised);
 	}
 </style>

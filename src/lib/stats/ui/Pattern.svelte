@@ -41,7 +41,7 @@
 		table-layout: fixed;
 	}
 	th {
-		color: var(--muted);
+		color: var(--ink-muted);
 		font-weight: 500;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -55,7 +55,7 @@
 		height: 26px;
 		border-radius: 3px;
 		text-align: center;
-		background: var(--grid);
+		background: var(--chart-grid);
 		font-variant-numeric: tabular-nums;
 	}
 	td.s1 { background: var(--seq-1); }

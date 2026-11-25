@@ -58,7 +58,7 @@
 	th,
 	td {
 		padding: 0.25rem 0.4rem;
-		border-bottom: 1px solid var(--grid);
+		border-bottom: 1px solid var(--chart-grid);
 		text-align: right;
 		white-space: nowrap;
 	}
@@ -67,7 +67,7 @@
 		font-weight: 500;
 	}
 	thead th {
-		color: var(--muted);
+		color: var(--ink-muted);
 		font-weight: 500;
 	}
 </style>

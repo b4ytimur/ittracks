@@ -14,7 +14,7 @@
 <style>
 	.md {
 		overflow-wrap: anywhere;
-		color: var(--text);
+		color: var(--ink);
 	}
 	.md.small {
 		font-size: 0.9rem;
@@ -48,21 +48,21 @@
 		padding-left: 1.3rem;
 	}
 	.md :global(blockquote) {
-		border-left: 3px solid var(--border);
+		border-left: 3px solid var(--line);
 		padding-left: 0.6rem;
-		color: var(--muted);
+		color: var(--ink-muted);
 	}
 	.md :global(code) {
 		font-size: 0.85em;
-		background: var(--bg);
-		border: 1px solid var(--border);
+		background: var(--surface-page);
+		border: 1px solid var(--line);
 		border-radius: 4px;
 		padding: 0 0.2rem;
 	}
 	.md :global(pre) {
 		overflow-x: auto;
-		background: var(--bg);
-		border: 1px solid var(--border);
+		background: var(--surface-page);
+		border: 1px solid var(--line);
 		border-radius: 6px;
 		padding: 0.5rem;
 	}
@@ -77,12 +77,12 @@
 	}
 	.md :global(th),
 	.md :global(td) {
-		border: 1px solid var(--border);
+		border: 1px solid var(--line);
 		padding: 0.2rem 0.4rem;
 		text-align: left;
 	}
 	.md :global(hr) {
 		border: none;
-		border-top: 1px solid var(--border);
+		border-top: 1px solid var(--line);
 	}
 </style>

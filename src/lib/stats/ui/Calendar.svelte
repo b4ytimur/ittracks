@@ -75,12 +75,12 @@
 		display: block;
 	}
 	.axis {
-		fill: var(--muted);
+		fill: var(--ink-muted);
 		font-size: 10px;
 	}
 	.c {
-		fill: var(--grid);
-		background: var(--grid);
+		fill: var(--chart-grid);
+		background: var(--chart-grid);
 		cursor: pointer;
 	}
 	.c.s1 { fill: var(--seq-1); background: var(--seq-1); }
@@ -97,10 +97,10 @@
 	}
 	.c.future {
 		fill: transparent;
-		stroke: var(--grid);
+		stroke: var(--chart-grid);
 	}
 	.c:hover {
-		stroke: var(--text);
+		stroke: var(--ink);
 		stroke-width: 1;
 	}
 	.key {
@@ -125,8 +125,8 @@
 	.tip {
 		position: absolute;
 		pointer-events: none;
-		background: var(--surface);
-		border: 1px solid var(--border);
+		background: var(--surface-raised);
+		border: 1px solid var(--line);
 		border-radius: var(--radius-control);
 		padding: 0.35rem 0.5rem;
 		font-size: 0.8rem;

@@ -67,9 +67,9 @@
 		<label for={id} class="lbl">{label}</label>
 		<div class="tools" role="toolbar" aria-label="{label}: formatting">
 			{#if !preview}
-				<button type="button" class="tool" title="Bold" aria-label="Bold" onclick={() => wrap('**', '**', 'bold')}><b>B</b></button>
-				<button type="button" class="tool" title="List" aria-label="List" onclick={list}>•</button>
-				<button type="button" class="tool" title="Link" aria-label="Link" onclick={() => wrap('[', '](https://)', 'link')}>🔗</button>
+				<button type="button" class="tool" aria-label="Bold" onclick={() => wrap('**', '**', 'bold')}><b>B</b></button>
+				<button type="button" class="tool" aria-label="List" onclick={list}>•</button>
+				<button type="button" class="tool" aria-label="Link" onclick={() => wrap('[', '](https://)', 'link')}>🔗</button>
 			{/if}
 			<button type="button" class="tool switch" aria-pressed={preview} onclick={() => (preview = !preview)}>{preview ? 'Write' : 'Preview'}</button>
 		</div>
@@ -120,9 +120,9 @@
 		margin-top: 0.25rem;
 		min-height: 3.2rem;
 		padding: 0.5rem 0.6rem;
-		border: 1px dashed var(--border);
+		border: 1px dashed var(--line);
 		border-radius: 8px;
-		background: var(--surface);
+		background: var(--surface-raised);
 	}
 	.hint {
 		font-size: 0.8rem;

@@ -266,16 +266,16 @@
 		cursor: pointer;
 		list-style: none;
 		padding: 0.45rem 0.8rem;
-		border: 1px solid var(--border);
+		border: 1px solid var(--line);
 		border-radius: 8px;
-		background: var(--surface);
+		background: var(--surface-raised);
 	}
 	.filter summary::-webkit-details-marker {
 		display: none;
 	}
 	.filter .pop {
 		position: absolute;
-		z-index: 6;
+		z-index: var(--z-popover);
 		top: 2.6rem;
 		left: 0;
 		width: min(22rem, calc(100vw - 2rem));

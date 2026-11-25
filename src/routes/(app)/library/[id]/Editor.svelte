@@ -397,7 +397,7 @@
 {/snippet}
 {#snippet restPart()}
 	<div class="row">
-		<label class="grow" style="color: var(--text)"
+		<label class="grow" style="color: var(--ink)"
 			><input type="checkbox" bind:checked={t.restTimerEnabled} disabled={!!restBlock && !t.restTimerEnabled} /> Start a countdown after each {t.rowOne}</label
 		>
 		{#if restBlock}<p class="muted small-text" style="margin: 0">{restBlock.reason}. Mark a field "Log per {t.rowOne}" first.</p>{/if}
@@ -444,7 +444,7 @@
 				<label class="grow">Name <input bind:value={m.name} placeholder="Weight" required /></label>
 				<label class="grow"
 					>Type
-					<select bind:value={m.type} title={typeLocked(m) ?? undefined}>
+					<select bind:value={m.type}>
 						{#each metricTypes as type (type)}<option value={type} disabled={!typeOk(m, type)}>{typeLabels[type]}</option>{/each}
 					</select>
 				</label>
@@ -462,11 +462,11 @@
 				<fieldset class="card past">
 					<legend class="muted">Values {m.name || 'this field'} already has, in {u.from || 'no unit'}</legend>
 					{#if u.change.kind === 'convertible'}
-						<label style="color: var(--text)"
+						<label style="color: var(--ink)"
 							><input type="radio" name="unit-{m.id}" checked={u.choice === 'convert'} onchange={() => (unitChoices[m.id] = 'convert')} /> Convert them: 100 {u.from} becomes {sample(u.change.factor)} {u.to}</label
 						>
 					{/if}
-					<label style="color: var(--text)"
+					<label style="color: var(--ink)"
 						><input type="radio" name="unit-{m.id}" checked={u.choice === 'relabel'} onchange={() => (unitChoices[m.id] = 'relabel')} /> Keep the numbers: they were already in {u.to || 'no unit'}</label
 					>
 					<p class="muted small-text" style="margin: 0.25rem 0 0">
@@ -497,14 +497,14 @@
 					{/snippet}
 				</OptionList>
 				{#if m.choices.length >= 2}
-					<label style="color: var(--text)"
+					<label style="color: var(--ink)"
 						><input type="checkbox" checked={scored(m)} onchange={(e) => toggleScores(m, e.currentTarget.checked)} /> Give each option a number, so Stats can chart it (mood 5 to 1)</label
 					>
 					{#if scored(m) && isLogged(m.id)}<p class="muted small-text" style="margin: 0">A changed number counts from today on: past days keep the numbers they had.</p>{/if}
 				{/if}
 			{/if}
 			{#if m.type === 'text'}
-				<label style="color: var(--text)"
+				<label style="color: var(--ink)"
 					><input type="checkbox" bind:checked={m.long} disabled={!!longBlock(m) && !m.long} /> Several lines (Markdown), for a journal entry or a reflection</label
 				>
 				{#if longBlock(m) && !m.long}<p class="muted small-text" style="margin: 0">{longBlock(m)?.reason}.</p>{/if}
@@ -545,8 +545,8 @@
 				<summary class="small-text">When logging</summary>
 				{#if isNumeric(m)}
 					<div class="row">
-						{#if m.repeats}<label class="grow" style="color: var(--text)"><input type="checkbox" bind:checked={m.times} /> Written after a ×, as in 60 kg × 8</label>{/if}
-						<label class="grow" style="color: var(--text)"><input type="checkbox" checked={m.better === 'less'} onchange={(e) => (m.better = e.currentTarget.checked ? 'less' : null)} /> Less is better</label>
+						{#if m.repeats}<label class="grow" style="color: var(--ink)"><input type="checkbox" bind:checked={m.times} /> Written after a ×, as in 60 kg × 8</label>{/if}
+						<label class="grow" style="color: var(--ink)"><input type="checkbox" checked={m.better === 'less'} onchange={(e) => (m.better = e.currentTarget.checked ? 'less' : null)} /> Less is better</label>
 					</div>
 				{/if}
 				<div class="row">
@@ -570,16 +570,16 @@
 						</label>
 					{/if}
 				</div>
-				<label style="color: var(--text)"
+				<label style="color: var(--ink)"
 					><input type="checkbox" bind:checked={m.required} onchange={() => m.required && (m.quick = true)} /> Required before Finish</label
 				>
-				<label style="color: var(--text)"
+				<label style="color: var(--ink)"
 					><input type="checkbox" bind:checked={m.quick} disabled={m.required} /> Show on quick logs</label
 				>
 				{#if m.required}<p class="muted small-text" style="margin: 0">{quickBlock({ ...m, quick: false })?.reason}.</p>{/if}
 			</details>
 			<div class="row">
-				<label class="grow" style="color: var(--text)" title={repeatsLocked(m) ?? repeatsBlock(m)?.reason}
+				<label class="grow" style="color: var(--ink)"
 					><input type="checkbox" bind:checked={m.repeats} disabled={!!repeatsLocked(m) || (!!repeatsBlock(m) && !m.repeats)} /> Log per {t.rowOne}</label
 				>
 			</div>

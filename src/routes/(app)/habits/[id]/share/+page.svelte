@@ -237,7 +237,7 @@
 		display: flex;
 		gap: 0.5rem;
 		align-items: flex-start;
-		color: var(--text);
+		color: var(--ink);
 	}
 	.opt input {
 		margin-top: 0.2rem;
@@ -246,14 +246,11 @@
 		margin-left: 1.6rem;
 	}
 	.number {
-		border: 1px solid var(--border);
+		border: 1px solid var(--line);
 	}
 	.issues {
 		margin: 0;
 		padding-left: 1.2rem;
-	}
-	.small-text {
-		font-size: 0.85rem;
 	}
 	.inside {
 		margin: 0.2rem 0 0;

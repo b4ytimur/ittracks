@@ -71,7 +71,7 @@
 	.strip i {
 		height: 10px;
 		border-radius: 2px;
-		background: var(--grid);
+		background: var(--chart-grid);
 	}
 	.strip i.done,
 	.strip i.clean {
@@ -90,12 +90,12 @@
 		box-shadow: inset 0 0 0 var(--chosen-width) var(--danger);
 	}
 	.strip i.skipped {
-		background: var(--muted);
+		background: var(--ink-muted);
 	}
 	.strip i.future,
 	.strip i.rest,
 	.strip i.due {
-		background: var(--grid);
+		background: var(--chart-grid);
 	}
 	.small {
 		font-size: 0.75rem;

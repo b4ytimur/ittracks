@@ -27,7 +27,7 @@
 		justify-content: space-between;
 		gap: 0.75rem;
 		padding: 0.3rem 0;
-		border-bottom: 1px solid var(--grid);
+		border-bottom: 1px solid var(--chart-grid);
 	}
 	li:last-child {
 		border-bottom: none;
