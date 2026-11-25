@@ -27,6 +27,8 @@ export const EVENT_TYPES = {
 	'data.imported': { v: 1, about: 'A full export was restored into this account. data: counts' },
 	'bulk.applied': { v: 1, about: 'A bulk change ran (src/lib/bulk/catalog.ts). Events it wrote carry the same batch. data: batch, action, count, ids' },
 	'bulk.undone': { v: 1, about: 'A bulk change was undone. data: batch, action, restored, kept' },
+	'setup.applied': { v: 1, about: 'Habits, Tasks or templates were created or changed through setup. data: undo, summary, habits, tasks' },
+	'setup.undone': { v: 1, about: 'A setup change was undone. data: undo, summary, kept' },
 	'metric.unit_changed': {
 		v: 1,
 		about: "A field's unit changed after it had values. Converted: its past values (and targets) were multiplied by factor; otherwise they kept their numbers. data: taskId, metricId, from, to, converted, factor"
