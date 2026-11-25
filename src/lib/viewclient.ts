@@ -26,11 +26,23 @@ export async function saveLayout(body: Record<string, unknown>, rollback: () => 
 	return r;
 }
 
-const timers = new Map<Page, ReturnType<typeof setTimeout>>();
+const timers = new Map<string, { at: ReturnType<typeof setTimeout>; send: () => Promise<unknown> }>();
 
-/** Remember a page's filter and sort, a moment after the last change. */
-export function rememberLast(page: Page, state: ViewState) {
-	clearTimeout(timers.get(page));
+/**
+ * Save a change to a view's filter, sort and grouping, a moment after the last change: the view named,
+ * else the one the page is on. Each view waits on its own, so switching views never drops a change.
+ */
+export function saveView(page: Page, state: ViewState, view?: string) {
+	const key = `${page}:${view ?? ''}`;
+	clearTimeout(timers.get(key)?.at);
 	const snapshot = JSON.parse(JSON.stringify(state));
-	timers.set(page, setTimeout(() => viewOp({ op: 'last', page, state: snapshot }), 600));
+	const send = () => (timers.delete(key), viewOp({ op: 'update', page, view, state: snapshot }));
+	timers.set(key, { at: setTimeout(send, 600), send });
+}
+
+/** Send the changes still waiting now, before something that replaces the views. */
+export function flushViews() {
+	const waiting = [...timers.values()];
+	for (const t of waiting) clearTimeout(t.at);
+	return Promise.all(waiting.map((t) => t.send()));
 }

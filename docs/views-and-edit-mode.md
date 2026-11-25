@@ -27,8 +27,10 @@ Today, Habits, Library and History share one filter bar: Areas, build or break, 
 
 - Sorts include **Time of day**, **My order**, **Name**, **Streak at risk first**, **Consistency**, **Newest first**, **Most logged** and **Last logged**.
 - Grouping includes **Area**, **Part of day**, **Identity** and **Build / break**.
-- **Save as view** names the current filter ("Morning"). Saved views show as buttons next to **Default**; delete one with its ×.
-- Under **More options**: open the page with **What I used last**, **The page default** or a saved view; **Make this the default**; **Reset to default**. The Habits page also sets the **Lines on each habit** here (schedule, when, Area, consistency, last done).
+- Each page has views: **Default** and the ones you make. The page is always on exactly one of them, shown with a ✓. Press another to switch.
+- **+ New view** (the dashed button after the views) makes one: type its name and press Enter. It starts as a copy of the view you were on, and **Customize** opens on it.
+- **Customize** changes the view you are on, and says which: "Changes save to Morning". Every change is saved to that view as you make it, including the search and filters on the page itself and a drag that switches the sort to **My order**. **Delete view** removes it and puts the page back on **Default**.
+- Under **More options**: open the page with **The view I was on last**, **Default** or one of your views. The Habits page also sets the **Lines on each habit** here (schedule, when, Area, consistency, last done).
 
 ## Edit mode
 
