@@ -43,7 +43,7 @@ export const cardRules = defineRules<StatCard, StatCtx>({
 	perLog: [
 		// R10 and the measures each source offers
 		check((f) => !isCustom(f.perLog) && !PER_LOG_FOR[src(f)].includes(f.perLog as never), "That measure doesn't fit what this card reads"),
-		check((f) => isCustom(f.perLog) && src(f) !== 'task', 'Your own measures work on Task cards'),
+		check((f) => isCustom(f.perLog) && src(f) !== 'task', 'Measures work on Task cards'),
 		// R1
 		check((f, c) => src(f) === 'field' && fieldTypes(c).includes('checkbox') && f.perLog !== 'ticked', 'Checkbox fields can be counted, not added up'),
 		check((f, c) => src(f) === 'field' && fieldTypes(c).includes('choice') && f.perLog !== 'option' && !(f.perLog === 'score' && c.scored), 'Choice fields can be counted per option, not added up'),
@@ -52,12 +52,11 @@ export const cardRules = defineRules<StatCard, StatCtx>({
 		check((f, c) => src(f) === 'field' && fieldTypes(c).includes('text') && f.perLog !== 'present', 'Text fields can be counted, not added up'),
 		check((f, c) => src(f) === 'field' && ['sum', 'best', 'avg', 'sets'].includes(f.perLog) && !c.repeats && fieldTypes(c).every((t) => NUMERIC.includes(t)) && fieldTypes(c).length > 0, 'This field is logged once per log, not per set: use "The value"'),
 		// R7
-		check((f, c) => src(f) === 'task' && (f.perLog === 'volume' || f.perLog === 'e1rm') && !c.weightReps, 'Volume and e1RM need a Task with a weight field and a reps field, logged per set'),
-		check((f, c) => src(f) === 'task' && f.perLog === 'pace' && !c.pace, 'Pace needs a Task with a time field and a distance field'),
+		check((f, c) => src(f) === 'task' && isCustom(f.perLog) && !c.measureProblem && !c.measureFits, 'No Task here has the fields this measure reads'),
 		check((f, c) => (f.perLog === 'pctTarget' || (f.perLog === 'targetMet' && src(f) === 'task')) && !c.targets, 'No targets are set for this Task, so there is nothing to compare with', 'warn'),
 		check((f, c) => f.perLog === 'targetMet' && src(f) === 'outcomes' && !c.buildHabits, 'Target met only applies to building habits', 'warn'),
 		// R15
-		check((f, c) => isCustom(f.perLog) && !!c.measureProblem, 'The measure this card uses has a problem: fix it under Your measures')
+		check((f, c) => isCustom(f.perLog) && !!c.measureProblem, 'The measure this card uses has a problem: fix it under Measures in Settings')
 	],
 	overTime: [
 		check((f) => (f.perLog === 'option' || f.perLog === 'present') && !ADDS_UP.includes(f.overTime), 'Options and filled-in fields can only be counted')
@@ -140,11 +139,9 @@ export const statsSettingsRules = defineRules<StatsSettings>({
 	'muscle.low': independent,
 	'muscle.medium': independent,
 	'muscle.high': independent,
-	e1rm: [
-		check((s) => !!formulaProblem(s.e1rm), "The e1RM formula can't be worked out"),
-		check((s) => !/\[\s*weight\s*\]/i.test(s.e1rm) || !/\[\s*reps\s*\]/i.test(s.e1rm), 'The e1RM formula needs [Weight] and [Reps]')
-	],
+	e1rm: independent,
 	e1rmMaxReps: independent,
+	seeded: independent,
 	offered: independent
 });
 

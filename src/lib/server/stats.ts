@@ -10,6 +10,7 @@ import { listIdentities } from './repo/identities';
 import { computeCard, describeLog, prepare, singleRows, type CardResult, type Ctx, type Dataset, type DsPart, type Prepared } from '$lib/stats/engine';
 import { readStats, statsSettings, type Board, type StatCard, type StatsSettings } from '$lib/stats/model';
 import { startingBoards } from '$lib/stats/auto';
+import { withSeeds, type SeedField } from '$lib/stats/seed';
 import { catalogOf, statCtx, type Catalog } from '$lib/stats/catalog';
 import { checkCard } from '$lib/rules/stats';
 import { DEFAULT_STREAK_RULE } from '$lib/engine/streak';
@@ -67,6 +68,7 @@ export function loadDataset(accountId: string, tz?: string): Dataset {
 		weightUnit: units.shown('weight'),
 		units,
 		groups: getGroups(accountId),
+		measures: getStats(accountId).measures,
 		ranges: s.ranges ?? [],
 		areas,
 		habits: habits.map((h) => ({
@@ -149,8 +151,22 @@ function sameDay(at: Date, date: string, zone: string | undefined, dayStart = '0
 	return logicalDate(d, timeIn(zone, at), dayStart) === date;
 }
 
+/** The account's fields, for the measures it starts from. */
+export const seedFields = (accountId: string): SeedField[] =>
+	db
+		.select({ taskId: metric.taskId, name: metric.name, type: metric.type, unit: metric.unit, repeats: metric.repeats })
+		.from(metric)
+		.innerJoin(task, eq(metric.taskId, task.id))
+		.where(eq(task.accountId, accountId))
+		.orderBy(asc(metric.sortOrder))
+		.all();
+
+/** Stats as stored. Before measures were data, the ones that were written in code come first. */
 export function getStats(accountId: string): StatsSettings {
-	return readStats(getSettings(accountId).stats);
+	const s = readStats(getSettings(accountId).stats);
+	if (s.seeded) return s;
+	const fields = seedFields(accountId);
+	return { ...s, seeded: true, measures: withSeeds(s.measures, fields, s) };
 }
 
 export function saveStats(accountId: string, stats: StatsSettings) {
@@ -175,7 +191,7 @@ export function ctxFor(today: string, s: StatsSettings, board?: Pick<Board, 'ran
 		today,
 		boardRange: board?.range ?? '30d',
 		boardFilter: board?.filter ?? { areas: [], tags: [], habit: null, identity: null, direction: 'all' },
-		settings: { muscle: s.muscle, e1rm: s.e1rm, e1rmMaxReps: s.e1rmMaxReps, measures: s.measures }
+		settings: { muscle: s.muscle, measures: s.measures }
 	};
 }
 

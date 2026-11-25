@@ -8,6 +8,7 @@ import { db } from '../db';
 import { area, dayNote, entry, habit, metric, occurrence, slip, slot, tag, task, taskPart, taskTag, variant } from '../db/schema';
 import { parsePath } from '$lib/engine/parts';
 import { getGroups, getSettings, getUnits } from '../settings';
+import { perLogOf } from '$lib/stats/model';
 import { getStats, loadDataset } from '../stats';
 import { ensureToday, settleAll, userToday } from '../today';
 import { prepare, describeLog, type Dataset, type Prepared } from '$lib/stats/engine';
@@ -246,7 +247,7 @@ export function describe(actor: Actor) {
 				}))
 		})),
 		areas: areas.map((a) => a.name),
-		customMeasures: getStats(actor.accountId).measures.map((m) => ({ id: `custom:${m.id}`, name: m.name, formula: m.formula, unit: m.unit }))
+		customMeasures: getStats(actor.accountId).measures.map((m) => ({ id: perLogOf(m), name: m.name, formula: m.formula, unit: m.unit }))
 	};
 }
 

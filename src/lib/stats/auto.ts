@@ -2,7 +2,9 @@
 // Auto cards come from the type of each field a habit or Task logs; board templates pick
 // the habits and Tasks that fit them from what the account already has.
 import { makeCard, MAX_CARDS, newId, type Board, type StatCard, type StatCardInput } from './model';
-import { groupsOf, type DsHabit, type DsMetric, type DsTask, type Prepared } from './engine';
+import { measuresOf } from './catalog';
+import { compile, fieldsOf, FormulaError } from './formula';
+import { fits, groupsOf, type DsHabit, type DsMetric, type DsTask, type Prepared } from './engine';
 
 type In = Omit<StatCardInput, 'id'>;
 const card = (c: In): StatCard => makeCard(c);
@@ -56,14 +58,20 @@ const hasTargets = (P: Prepared, habitId: string) =>
 			)
 		);
 
-const isStrength = (P: Prepared, t: DsTask) => {
-	const r = P.roles.get(t.id);
-	return !!r?.weight && !!r.reps;
-};
-const isCardio = (P: Prepared, t: DsTask) => {
-	const r = P.roles.get(t.id);
-	return !!r?.distance && !!r.time;
-};
+/** Does a Task have what these measures read? */
+const has = (P: Prepared, t: DsTask, ...ids: string[]) =>
+	ids.every((id) => {
+		const m = measuresOf(P).find((x) => x.id === id && !x.off);
+		return !!m && fits(m, P.metricsByTask.get(t.id) ?? []);
+	});
+const isStrength = (P: Prepared, t: DsTask) => has(P, t, 'volume', 'e1rm');
+const isCardio = (P: Prepared, t: DsTask) => has(P, t, 'pace');
+/** The number a pace is over. */
+function paceField(P: Prepared, t: DsTask): DsMetric | undefined {
+	const f = compile(measuresOf(P).find((x) => x.id === 'pace')?.formula ?? '');
+	const names = f instanceof FormulaError ? [] : fieldsOf(f).map((x) => x.toLowerCase());
+	return (P.metricsByTask.get(t.id) ?? []).find((m) => m.type === 'number' && names.includes(m.name.trim().toLowerCase()));
+}
 
 /** Cards for one Task's fields, scoped by `filter`. */
 export function taskCards(P: Prepared, t: DsTask, opts: { habitId?: string } = {}): StatCard[] {
@@ -84,9 +92,9 @@ function taskCardsOf(P: Prepared, t: DsTask, opts: { habitId?: string }): StatCa
 		return out;
 	}
 	if (isCardio(P, t)) {
-		const r = P.roles.get(t.id)!;
+		const over = paceField(P, t);
+		if (over) out.push(card({ title: `${t.name}: ${over.name.toLowerCase()} per week`, what: { source: 'field', metrics: [over.id] }, perLog: 'value', overTime: 'sum', bucket: 'week', range: '90d', filter, look: { chart: 'bars', size: 'wide' } }));
 		out.push(
-			card({ title: `${t.name}: ${r.distance!.name.toLowerCase()} per week`, what: { source: 'field', metrics: [r.distance!.id] }, perLog: 'value', overTime: 'sum', bucket: 'week', range: '90d', filter, look: { chart: 'bars', size: 'wide' } }),
 			card({ title: `${t.name}: pace`, what: { source: 'task', taskId: t.id }, perLog: 'pace', overTime: 'avg', bucket: 'session', range: '90d', filter, look: { chart: 'line', size: 'wide' } })
 		);
 	}
@@ -311,7 +319,7 @@ export function boardTemplate(id: BoardTemplateId, P: Prepared): Board {
 	}
 	// health
 	const vitals = P.ds.metrics
-		.filter((m) => m.type === 'number' && !m.repeats && !P.roles.get(m.taskId)?.distance)
+		.filter((m) => m.type === 'number' && !m.repeats && !(P.tasks.get(m.taskId) && isCardio(P, P.tasks.get(m.taskId)!)))
 		.map((m) => ({ m, n: (P.logsByTask.get(m.taskId) ?? []).length }))
 		.sort((a, c) => c.n - a.n)
 		.slice(0, 6);

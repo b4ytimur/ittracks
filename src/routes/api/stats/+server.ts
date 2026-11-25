@@ -8,7 +8,7 @@ import { computeCard, drill, unitOf, type Prepared } from '$lib/stats/engine';
 import { statCtx, type Catalog } from '$lib/stats/catalog';
 import { BOARD_TEMPLATES, boardTemplate, habitCards, type BoardTemplateId } from '$lib/stats/auto';
 import { manualOrder } from '$lib/views';
-import { board, boardFilter, customMeasure, MAX_BOARDS, MAX_CARDS, newId, rangeValue, SHARE_MEASURES, statCard, statsSettings, type StatCard, type StatsSettings } from '$lib/stats/model';
+import { cardsUsing, board, boardFilter, customMeasure, MAX_BOARDS, MAX_CARDS, newId, rangeValue, SHARE_MEASURES, statCard, statsSettings, type StatCard, type StatsSettings } from '$lib/stats/model';
 import type { RequestHandler } from './$types';
 
 const id = z.string().max(64);
@@ -31,11 +31,6 @@ const body = z.discriminatedUnion('op', [
 	z.object({ op: z.literal('open'), value: id }),
 	z.object({ op: z.literal('last'), id }),
 	z.object({ op: z.literal('headline'), habit: id, card: statCard.nullable() }),
-	z.object({
-		op: z.literal('settings'),
-		e1rm: z.string().max(300).optional(),
-		e1rmMaxReps: z.number().int().min(1).max(30).optional()
-	}),
 	z.object({ op: z.literal('measure.save'), measure: customMeasure }),
 	z.object({ op: z.literal('measure.delete'), id }),
 	z.object({ op: z.literal('preview'), card: statCard, ctx: ctxIn }),
@@ -101,6 +96,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 	const P: Prepared | null = needsData ? statsContext(accountId, tz).P : null;
 	let s = P ? boardsOf(accountId, P) : getStats(accountId);
 	let added: string | undefined;
+	let used = 0;
 
 	/** The cards at `w`, and a setter that writes them back. */
 	const cardsAt = (w: z.infer<typeof where>): [StatCard[], (cards: StatCard[]) => void] => {
@@ -212,9 +208,6 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 			s = { ...s, headlines: b.card ? { ...kept, [b.habit]: cleanCard(asTile(forHabit(b.card, b.habit)), catalogFor(accountId, P!), s, hidden) } : kept };
 			break;
 		}
-		case 'settings':
-			s = { ...s, e1rm: b.e1rm ?? s.e1rm, e1rmMaxReps: b.e1rmMaxReps ?? s.e1rmMaxReps };
-			break;
 		case 'measure.save': {
 			const m = b.measure;
 			const i = s.measures.findIndex((x) => x.id === m.id);
@@ -223,7 +216,9 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 			break;
 		}
 		case 'measure.delete':
-			s = { ...s, measures: s.measures.filter((x) => x.id !== b.id) };
+			// Cards that count by it keep it; unused, it goes.
+			used = cardsUsing(s, b);
+			s = { ...s, measures: used ? s.measures.map((x) => (x.id === b.id ? { ...x, off: true } : x)) : s.measures.filter((x) => x.id !== b.id) };
 			break;
 	}
 
@@ -235,5 +230,5 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 	const block = issues.find((i) => i.severity === 'block');
 	if (block) error(400, block.reason);
 	saveStats(accountId, next);
-	return json({ ok: true, id: added, warnings: issues.map((i) => i.reason) });
+	return json({ ok: true, id: added, used, warnings: issues.map((i) => i.reason) });
 };

@@ -1,5 +1,6 @@
 // Stats cards the second swarm test found wrong. A small dataset of its own, so the
 // numbers below can be checked by hand.
+import { seedMeasures } from './seed';
 import { describe, expect, it } from 'vitest';
 import { computeCard, prepare, unitOf, type Ctx, type Dataset, type DsHabit } from './engine';
 import { duration } from './format';
@@ -92,7 +93,7 @@ const ctx: Ctx = (() => {
 		today: TODAY,
 		boardRange: '30d',
 		boardFilter: { areas: [], tags: [], habit: null, identity: null, direction: 'all' },
-		settings: { muscle: s.muscle, e1rm: s.e1rm, e1rmMaxReps: s.e1rmMaxReps, measures: [] }
+		settings: { muscle: s.muscle, measures: seedMeasures(dataset().metrics) }
 	};
 })();
 

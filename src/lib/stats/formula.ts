@@ -14,7 +14,13 @@ export const FUNCTIONS = {
 	max: 'Largest of the values',
 	round: 'Round, optionally to N decimals: round(x, 1)',
 	abs: 'Without the sign',
-	sqrt: 'Square root'
+	sqrt: 'Square root',
+	first: 'The first of these fields the Task has: first([Weight], [Load])',
+	above: 'Only when it is above: above([Weight], 0)',
+	atleast: 'Only when it is at least: atleast([Reps], 1)',
+	upto: 'Only up to: upto([Reps], 12)',
+	minutes: 'A time in minutes, whatever it was logged in',
+	sets: 'How many sets were logged: sets()'
 } as const;
 type Fn = keyof typeof FUNCTIONS;
 
@@ -57,7 +63,7 @@ function tokenize(src: string): Tok[] {
 
 /** Parse a formula, or throw a FormulaError that says what is wrong in plain words. */
 export function parse(src: string): Node {
-	if (src.length > 300) throw new FormulaError('The formula is too long');
+	if (src.length > 1000) throw new FormulaError('The formula is too long');
 	const toks = tokenize(src);
 	let p = 0;
 	const peek = () => toks[p];
@@ -131,6 +137,10 @@ export function parse(src: string): Node {
 			if ((fn === 'abs' || fn === 'sqrt') && args.length !== 1) throw new FormulaError(`${fn}() takes one value`);
 			if (fn === 'round' && (args.length < 1 || args.length > 2)) throw new FormulaError('round() takes a value and optionally the decimals');
 			if ((fn === 'min' || fn === 'max') && args.length < 1) throw new FormulaError(`${fn}() needs at least one value`);
+			if ((fn === 'above' || fn === 'atleast' || fn === 'upto') && args.length !== 2) throw new FormulaError(`${fn}() takes a value and a limit`);
+			if (fn === 'first' && (!args.length || args.some((a) => a.k !== 'field'))) throw new FormulaError('first() takes field names, like first([Weight], [Load])');
+			if (fn === 'minutes' && args.length !== 1) throw new FormulaError('minutes() takes one time field');
+			if (fn === 'sets' && args.length) throw new FormulaError('sets() takes nothing');
 			return { k: 'call', fn, args };
 		}
 		if (t.v === '(') {
@@ -166,14 +176,29 @@ export function fieldsOf(node: Node): string[] {
 	return [...out];
 }
 
+/** Does the formula count sets? */
+export const countsSets = (node: Node): boolean => (node.k === 'call' ? node.fn === 'sets' || node.args.some(countsSets) : node.k === 'bin' ? countsSets(node.a) || countsSets(node.b) : node.k === 'neg' && countsSets(node.a));
+
+/** Whether a Task has the fields a formula reads. */
+export function canRead(node: Node, has: (name: string) => boolean): boolean {
+	if (node.k === 'field') return has(node.name);
+	if (node.k === 'neg') return canRead(node.a, has);
+	if (node.k === 'bin') return canRead(node.a, has) && canRead(node.b, has);
+	if (node.k === 'call') return node.fn === 'first' ? node.args.some((a) => canRead(a, has)) : node.args.every((a) => canRead(a, has));
+	return true;
+}
+
+/** A field's value: null when it is empty, undefined when the Task has no such field. `minutes` asks for a time in minutes. */
+export type Lookup = (name: string, minutes: boolean) => number | null | undefined;
+
 /** Work a formula out. A missing field or a division by zero gives null, never a made-up 0. */
-export function evaluate(node: Node, field: (name: string) => number | null): number | null {
-	const ev = (n: Node): number | null => {
+export function evaluate(node: Node, field: Lookup, sets: number | null = null): number | null {
+	const ev = (n: Node, minutes = false): number | null => {
 		switch (n.k) {
 			case 'num':
 				return n.v;
 			case 'field':
-				return field(n.name);
+				return field(n.name, minutes) ?? null;
 			case 'neg': {
 				const a = ev(n.a);
 				return a === null ? null : -a;
@@ -190,12 +215,24 @@ export function evaluate(node: Node, field: (name: string) => number | null): nu
 				return Number.isFinite(r) ? r : null;
 			}
 			case 'call': {
-				const xs = n.args.map(ev);
+				if (n.fn === 'sets') return sets;
+				if (n.fn === 'first') {
+					for (const a of n.args) {
+						const v = a.k === 'field' ? field(a.name, minutes) : undefined;
+						if (v !== undefined) return v;
+					}
+					return null;
+				}
+				if (n.fn === 'minutes') return ev(n.args[0], true);
+				const xs = n.args.map((a) => ev(a));
 				if (xs.some((x) => x === null)) return null;
 				const v = xs as number[];
 				if (n.fn === 'min') return Math.min(...v);
 				if (n.fn === 'max') return Math.max(...v);
 				if (n.fn === 'abs') return Math.abs(v[0]);
+				if (n.fn === 'above') return v[0] > v[1] ? v[0] : null;
+				if (n.fn === 'atleast') return v[0] >= v[1] ? v[0] : null;
+				if (n.fn === 'upto') return v[0] <= v[1] ? v[0] : null;
 				if (n.fn === 'sqrt') return v[0] < 0 ? null : Math.sqrt(v[0]);
 				const d = Math.max(0, Math.min(6, Math.round(v[1] ?? 0)));
 				return Math.round(v[0] * 10 ** d) / 10 ** d;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { statCard, type StatCard } from './model';
 import type { Catalog } from './catalog';
+import { seedMeasures } from './seed';
 import { chartsOf, fit, pointOf, slotsOf, subjectOf, subjects, works, type Offer } from './sentence';
 import type { CardResult } from './engine';
 
@@ -10,8 +11,8 @@ const catalog: Catalog = {
 		{ id: 'smoke', name: 'Smoking', direction: 'break', archived: false, areaId: null, hasCost: false, logged: 0 }
 	],
 	tasks: [
-		{ id: 'bench', name: 'Bench press', areaId: null, tags: [], strength: true, cardio: false, targets: true, logged: 9 },
-		{ id: 'read', name: 'Read', areaId: null, tags: [], strength: false, cardio: false, targets: false, logged: 4 }
+		{ id: 'bench', name: 'Bench press', areaId: null, tags: [], measures: ['volume', 'e1rm', 'hardSets', 'heaviest'], targets: true, logged: 9 },
+		{ id: 'read', name: 'Read', areaId: null, tags: [], measures: [], targets: false, logged: 4 }
 	],
 	metrics: [
 		{ id: 'w', taskId: 'bench', name: 'Weight', type: 'number', unit: 'kg', repeats: true, targets: true },
@@ -23,14 +24,14 @@ const catalog: Catalog = {
 	groupings: [],
 	identities: []
 };
-const o: Offer = { catalog, measures: [], hidden: [] };
+const o: Offer = { catalog, measures: seedMeasures([{ taskId: 'bench', name: 'Weight', type: 'number', unit: 'kg', repeats: true }, { taskId: 'bench', name: 'Reps', type: 'count', unit: null, repeats: true }]), hidden: [] };
 const card = (p: object): StatCard => statCard.parse({ id: 'c', ...p });
 const volume = card({ what: { source: 'task', taskId: 'bench' }, perLog: 'volume', look: { chart: 'bars' }, bucket: 'week' });
 
 describe('a card as a sentence', () => {
 	it('offers what the subject logs', () => {
 		const m = (c: StatCard) => slotsOf(c, o).find((s) => s.key === 'measure')!.options.map((x) => x.label);
-		expect(m(volume)).toEqual(expect.arrayContaining(['Volume', 'Estimated 1RM, best set', 'Hard sets']));
+		expect(m(volume)).toEqual(expect.arrayContaining(['Volume', 'Estimated 1RM', 'Hard sets']));
 		expect(m(volume)).not.toContain('Pace');
 		expect(m(card({ what: { source: 'field', metrics: ['p'] }, perLog: 'value' }))).toEqual(['The value']);
 	});

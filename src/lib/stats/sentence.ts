@@ -2,7 +2,7 @@
 // another. The stored card gains nothing; a card this returns is always one the engine takes.
 import { checkCard } from '$lib/rules/stats';
 import { cardFields, perLogChoices, statCtx, type Catalog } from './catalog';
-import { BUCKETS, CHARTS, PER_LOG, RANGES, SHARE_MEASURES, customId, isCustom, rangeLabel, type Chart, type CustomMeasure, type StatCard } from './model';
+import { BUCKETS, CHARTS, PER_LOG, RANGES, SHARE_MEASURES, isCustom, measureOf, rangeLabel, type Chart, type CustomMeasure, type StatCard } from './model';
 import type { CardResult } from './engine';
 import { value } from './format';
 
@@ -19,21 +19,21 @@ export type SlotKey = 'subject' | 'measure' | 'bucket' | 'range';
 
 const short = (s: string) => s.replace(/ \(.*\)$/, '');
 export const measureLabel = (perLog: string, measures: CustomMeasure[]) =>
-	isCustom(perLog) ? (measures.find((m) => m.id === customId(perLog))?.name ?? 'A measure') : short(PER_LOG[perLog as keyof typeof PER_LOG] ?? perLog);
+	isCustom(perLog) ? (measureOf(perLog, measures)?.name ?? 'A measure') : short(PER_LOG[perLog as keyof typeof PER_LOG] ?? perLog);
 
 const issues = (c: StatCard, o: Offer) => checkCard(c, statCtx(c, o.catalog, { hidden: o.hidden, measures: o.measures })).filter((i) => i.severity === 'block');
 export const works = (c: StatCard, o: Offer) => issues(c, o).length === 0;
 
 const defaultOver = (perLog: string, c: StatCard, o: Offer): StatCard['overTime'] =>
-	SHARE_MEASURES.includes(perLog) || perLog === 'pace' || perLog === 'pctTarget'
+	measureOf(perLog, o.measures)?.over ?? (SHARE_MEASURES.includes(perLog) || perLog === 'pctTarget'
 		? 'avg'
-		: ['e1rm', 'best'].includes(perLog)
+		: perLog === 'best'
 			? 'max'
 			: perLog === 'option' || perLog === 'present'
 				? 'count'
 				: perLog === 'value' && cardFields(c, o.catalog)[0]?.type === 'number'
 					? 'avg'
-					: 'sum';
+					: 'sum');
 
 // ---------- what a word offers ----------
 

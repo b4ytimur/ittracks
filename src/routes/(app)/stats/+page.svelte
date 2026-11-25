@@ -222,7 +222,7 @@
 
 		<p class="muted small foot">
 			<a href="/stats/export?all=1" download>Download every log as CSV</a> ·
-			<a href="/settings#measures">Your measures and stats settings</a>
+			<a href="/settings#measures">Your measures</a>
 		</p>
 	{/if}
 </div>

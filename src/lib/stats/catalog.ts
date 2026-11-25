@@ -1,19 +1,23 @@
 // What the card builder needs to know about an account, without the logs themselves:
 // habits, Tasks, fields and tags. Built on the server, sent to the page, and used for the
 // builder's pickers and for the context the stats rules read.
-import { groupsOf, type Prepared } from './engine';
-import { ADDS_UP, PER_LOG_FOR, isCustom, customId, type CustomMeasure, type Source, type StatCard } from './model';
+import { fits, groupsOf, type Prepared } from './engine';
+import { seedMeasures } from './seed';
+import { ADDS_UP, PER_LOG_FOR, isCustom, measureOf, perLogOf, type CustomMeasure, type Source, type StatCard } from './model';
 import { formulaProblem } from './formula';
 
 export interface Catalog {
 	habits: { id: string; name: string; direction: 'build' | 'break'; archived: boolean; areaId: string | null; hasCost: boolean; logged: number }[];
-	tasks: { id: string; name: string; areaId: string | null; tags: string[]; strength: boolean; cardio: boolean; targets: boolean; logged: number }[];
+	tasks: { id: string; name: string; areaId: string | null; tags: string[]; /** The measures it has the fields for, by id. */ measures: string[]; targets: boolean; logged: number }[];
 	metrics: { id: string; taskId: string; name: string; type: string; unit: string | null; repeats: boolean; targets: boolean; scored?: boolean }[];
 	tags: string[];
 	groupings: { id: string; name: string; one: string }[];
 	areas: { id: string; name: string; icon: string; color: string }[];
 	identities: { id: string; name: string }[];
 }
+
+/** The account's measures as the cards it gets by itself see them. */
+export const measuresOf = (P: Prepared): CustomMeasure[] => P.ds.measures ?? seedMeasures(P.ds.metrics);
 
 export function catalogOf(P: Prepared, extra: { areas: Catalog['areas']; identities: Catalog['identities'] }): Catalog {
 	const targeted = new Set(P.ds.slots.flatMap((s) => Object.keys(s.targets ?? {})));
@@ -31,14 +35,12 @@ export function catalogOf(P: Prepared, extra: { areas: Catalog['areas']; identit
 		tasks: P.ds.tasks
 			.filter((t) => !t.parentTaskId)
 			.map((t) => {
-				const r = P.roles.get(t.id);
 				return {
 					id: t.id,
 					name: t.name,
 					areaId: t.areaId,
 					tags: t.tags.map((x) => x.name),
-					strength: !!r?.weight && !!r.reps,
-					cardio: !!r?.distance && !!r.time,
+					measures: measuresOf(P).filter((m) => fits(m, P.metricsByTask.get(t.id) ?? [])).map((m) => m.id),
 					targets: taskTargets.has(t.id),
 					logged: (P.logsByTask.get(t.id) ?? []).length
 				};
@@ -70,10 +72,8 @@ export interface StatCtx {
 	scored: boolean;
 	/** The fields read have units that can't be added together. */
 	mixedUnits: boolean;
-	/** Some Task in scope has a weight and a reps field. */
-	weightReps: boolean;
-	/** Some Task in scope has a time and a distance field. */
-	pace: boolean;
+	/** A Task here has the fields the card's measure reads. */
+	measureFits: boolean;
 	/** The field (or Task) read has Slot targets. */
 	targets: boolean;
 	buildHabits: boolean;
@@ -93,8 +93,7 @@ export const emptyCtx = (): StatCtx => ({
 	repeats: false,
 	scored: false,
 	mixedUnits: false,
-	weightReps: true,
-	pace: true,
+	measureFits: true,
 	targets: true,
 	buildHabits: true,
 	breakHabits: true,
@@ -137,15 +136,14 @@ export function statCtx(card: StatCard, c: Catalog, opts: { hidden?: string[]; m
 			: c.tasks;
 	const dims = new Set(fields.map((m) => unitDim(m.unit)));
 	const types = [...new Set(fields.map((m) => m.type))];
-	const m = isCustom(card.perLog) ? (opts.measures ?? []).find((x) => x.id === customId(card.perLog)) : null;
+	const m = measureOf(card.perLog, opts.measures ?? []);
 	const named = [...card.filter.habits.map((id) => c.habits.find((h) => h.id === id)), card.what.taskId ? c.tasks.find((t) => t.id === card.what.taskId) : undefined];
 	return {
 		fieldTypes: types,
 		repeats: fields.length > 0 && fields.every((f) => f.repeats),
 		scored: fields.length > 0 && fields.every((f) => f.scored),
 		mixedUnits: dims.size > 1 || types.length > 1,
-		weightReps: tasks.some((t) => t.strength),
-		pace: tasks.some((t) => t.cardio),
+		measureFits: !m || tasks.some((t) => t.measures.includes(m.id)),
 		targets: card.what.source === 'field' ? fields.some((f) => f.targets) : tasks.some((t) => t.targets),
 		buildHabits: habits.some((h) => h.direction === 'build'),
 		breakHabits: habits.some((h) => h.direction === 'break'),
@@ -167,7 +165,7 @@ export function perLogChoices(card: StatCard, c: Catalog, measures: CustomMeasur
 		if (t === 'text') return ['present'];
 		return fields.length && fields.every((f) => f.repeats) ? ['sum', 'best', 'avg', 'sets'] : ['value'];
 	}
-	if (src === 'task') return [...PER_LOG_FOR.task, ...measures.map((m) => `custom:${m.id}`)];
+	if (src === 'task') return [...measures.filter((m) => !m.off || perLogOf(m) === card.perLog).map(perLogOf), ...PER_LOG_FOR.task];
 	return PER_LOG_FOR[src];
 }
 
@@ -190,7 +188,7 @@ export function autoTitle(card: StatCard, c: Catalog, measures: CustomMeasure[])
 				: fs.map((f) => f.name).join(', ') || 'Fields';
 	} else if (src === 'task') {
 		const t = card.what.taskId ? c.tasks.find((x) => x.id === card.what.taskId)?.name : null;
-		const m = isCustom(card.perLog) ? (measures.find((x) => x.id === customId(card.perLog))?.name ?? 'Measure') : ({ volume: 'Volume', e1rm: 'Estimated 1RM', hardSets: 'Hard sets', sets: 'Sets', pace: 'Pace', pctTarget: '% of target', targetMet: 'Target met' } as Record<string, string>)[card.perLog] ?? 'Tasks';
+		const m = isCustom(card.perLog) ? (measureOf(card.perLog, measures)?.name ?? 'Measure') : ({ sets: 'Sets', pctTarget: '% of target', targetMet: 'Target met' } as Record<string, string>)[card.perLog] ?? 'Tasks';
 		subject = t ? `${t}: ${m.toLowerCase()}` : m;
 	} else {
 		subject = (

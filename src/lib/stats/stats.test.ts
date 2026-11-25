@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { seedMeasures } from './seed';
 import { compile, evaluate, fieldsOf, formulaProblem, parse } from './formula';
 import {
 	autoBucket,
@@ -124,7 +125,7 @@ const ctxOf = (over: Partial<Ctx> = {}): Ctx => {
 		today: TODAY,
 		boardRange: '30d',
 		boardFilter: { areas: [], tags: [], habit: null, identity: null, direction: 'all' },
-		settings: { muscle: s.muscle, e1rm: s.e1rm, e1rmMaxReps: s.e1rmMaxReps, measures: [] },
+		settings: { muscle: s.muscle, measures: seedMeasures(dataset().metrics) },
 		...over
 	};
 };
@@ -254,9 +255,10 @@ describe('Tasks', () => {
 		const card = { what: { source: 'task' as const, taskId: 'bench' }, perLog: 'e1rm', overTime: 'max' as const };
 		expect(run(card).total).toBeCloseTo(107.67, 2);
 		const s = ctxOf();
-		const brzycki = run(card, undefined, { ...s, settings: { ...s.settings, e1rm: '[Weight] * 36 / (37 - [Reps])' } });
+		const s0 = emptyStats();
+		const brzycki = run(card, undefined, { ...s, settings: { ...s.settings, measures: seedMeasures(dataset().metrics, { e1rm: '[Weight] * 36 / (37 - [Reps])', e1rmMaxReps: 12 }) } });
 		expect(brzycki.total).toBeCloseTo(105.52, 2);
-		const capped = run(card, undefined, { ...s, settings: { ...s.settings, e1rmMaxReps: 5 } });
+		const capped = run(card, undefined, { ...s, settings: { ...s.settings, measures: seedMeasures(dataset().metrics, { e1rm: s0.e1rm, e1rmMaxReps: 5 }) } });
 		expect(capped.total).toBeNull();
 	});
 
@@ -394,7 +396,7 @@ describe('breaking habits', () => {
 describe('auto cards and templates', () => {
 	const P = prepare(dataset());
 	const catalog = catalogOf(P, { areas: [{ id: 'a1', name: 'Fitness', icon: '', color: '' }], identities: [] });
-	const blocks = (c: ReturnType<typeof makeCard>) => checkCard(c, statCtx(c, catalog)).filter((i) => i.severity === 'block');
+	const blocks = (c: ReturnType<typeof makeCard>) => checkCard(c, statCtx(c, catalog, { measures: seedMeasures(P.ds.metrics) })).filter((i) => i.severity === 'block');
 
 	it('builds a gym habit tab with e1RM, volume and records', () => {
 		const titles = habitCards(P, P.habits.get('gym')!).map((c) => c.title);
@@ -437,7 +439,7 @@ describe('stats rules', () => {
 	const catalog = catalogOf(P, { areas: [], identities: [] });
 	const issues = (c: Omit<StatCardInput, 'id'>) => {
 		const card = makeCard(c);
-		return checkCard(card, statCtx(card, catalog)).map((i) => `${i.path}: ${i.reason}`);
+		return checkCard(card, statCtx(card, catalog, { measures: seedMeasures(P.ds.metrics) })).map((i) => `${i.path}: ${i.reason}`);
 	};
 
 	it('refuses to stack averages or keep a running total of one', () => {
@@ -455,14 +457,14 @@ describe('stats rules', () => {
 		expect(issues({ what: { source: 'outcomes' }, perLog: 'done', split: 'habit', look: { chart: 'tile' } }).join()).toMatch(/A number tile and a calendar show one value/);
 	});
 
-	it('needs weight and reps for volume', () => {
-		expect(issues({ what: { source: 'task', taskId: 'runT' }, perLog: 'volume' }).join()).toMatch(/Volume and e1RM need/);
+	it('needs the fields a measure reads', () => {
+		expect(issues({ what: { source: 'task', taskId: 'runT' }, perLog: 'volume' }).join()).toMatch(/No Task here has the fields/);
 		expect(issues({ what: { source: 'task', taskId: 'bench' }, perLog: 'volume', overTime: 'sum' })).toEqual([]);
 	});
 
-	it('flags a deleted measure and a broken e1RM formula', () => {
-		expect(issues({ what: { source: 'task', taskId: 'bench' }, perLog: 'custom:gone' }).join()).toMatch(/fix it under Your measures/);
-		expect(checkStatsSettings({ ...emptyStats(), e1rm: '[Weight] * 2' }).map((i) => i.reason)).toContain('The e1RM formula needs [Weight] and [Reps]');
+	it('flags a deleted measure', () => {
+		expect(issues({ what: { source: 'task', taskId: 'bench' }, perLog: 'custom:gone' }).join()).toMatch(/fix it under Measures in Settings/);
+		expect(checkCard(makeCard({ what: { source: 'task', taskId: 'bench' }, perLog: 'volume' }), statCtx(makeCard({ what: { source: 'task', taskId: 'bench' }, perLog: 'volume' }), catalog, { measures: [] })).map((i) => i.reason).join()).toMatch(/fix it under Measures in Settings/);
 		expect(checkStatsSettings(emptyStats())).toEqual([]);
 	});
 });
