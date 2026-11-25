@@ -4,7 +4,9 @@ Every number, count and duration field can have a unit. Type any word: "kg", "pa
 
 Kinds and units are yours. **Settings → Units** lists them, and all of it can be changed, added to or deleted.
 
-## The units an account starts with
+## Units you can have
+
+A new account has Time. The others come with [starter packs](packs.md) (Gym brings Weight, Running brings Distance), or you make your own. An account from before there were packs has all three.
 
 | Kind | Units | Also accepted |
 | --- | --- | --- |

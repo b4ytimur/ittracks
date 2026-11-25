@@ -1,7 +1,9 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import { and, eq, isNull } from 'drizzle-orm';
-import { galleryItem } from '$lib/gallery';
-import { getUnits } from '$lib/server/settings';
+import { galleryItem, PACK_OF } from '$lib/gallery';
+import { packById } from '$lib/packs';
+import { takePack, undoPack } from '$lib/server/packs';
+import { getPacks, getUnits } from '$lib/server/settings';
 import { userToday } from '$lib/server/today';
 import { addTemplate, addedPath, readAddForm } from '$lib/server/repo/templates';
 import { deleteSavedTemplate, getSavedTemplate } from '$lib/server/repo/saved-templates';
@@ -20,6 +22,9 @@ function find(accountId: string, slug: string): { template: TemplateFile; mine: 
 	return saved ? { template: saved.template, mine: true } : null;
 }
 
+/** The pack a ready-made template brings, unless the account has it. */
+const packFor = (accountId: string, slug: string) => (PACK_OF[slug] && !getPacks(accountId).includes(PACK_OF[slug]) ? packById(PACK_OF[slug]) : undefined);
+
 export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 	const accountId = locals.account!.id;
 	const item = find(accountId, params.slug);
@@ -29,6 +34,9 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		slug: params.slug,
 		template: item.template,
 		mine: item.mine,
+		/** The pack that comes with it, when it isn't there yet. */
+		pack: packFor(accountId, params.slug)?.name ?? null,
+		brings: packFor(accountId, params.slug)?.brings ?? null,
 		saved: url.searchParams.has('saved'),
 		libraryNames: names(
 			db.select({ name: task.name }).from(task).where(and(eq(task.accountId, accountId), isNull(task.parentTaskId), eq(task.archived, false))).all()
@@ -42,11 +50,17 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 export const actions: Actions = {
 	add: async ({ request, locals, params, cookies }) => {
 		const accountId = locals.account!.id;
+		const pack = packFor(accountId, params.slug);
+		// First, so its Tasks find their units and tags; taken out again when the habit isn't added.
+		const taken = pack ? takePack(accountId, pack.id) : null;
 		const item = find(accountId, params.slug);
 		if (!item) error(404, 'Template not found');
 		const add = readAddForm(await request.formData(), item.template);
 		const r = addTemplate(accountId, add.tpl, { today: userToday(accountId, cookies.get('tz')), ...add });
-		if ('error' in r) return fail(400, { error: r.error });
+		if ('error' in r) {
+			if (taken && 'undo' in taken) undoPack(accountId, taken.undo);
+			return fail(400, { error: r.error });
+		}
 		redirect(303, addedPath(r, add.tpl.view));
 	},
 	/** Take a template you saved out of your Gallery. The habits added from it stay. */

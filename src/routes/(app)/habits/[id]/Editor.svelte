@@ -365,7 +365,7 @@
 	// ----- New Task without leaving the editor -----
 	let newTaskFor = $state<string | null>(null);
 	let newTaskName = $state('');
-	let newTaskType = $state('strength');
+	let newTaskType = $state(untrack(() => data.types[0]?.key ?? 'count'));
 	let newTaskError = $state('');
 	async function createTask(s: Slot) {
 		newTaskError = '';

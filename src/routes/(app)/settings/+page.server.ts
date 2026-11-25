@@ -14,10 +14,12 @@ import { publicKey, sendToAccount, subscriptionCount } from '$lib/server/push';
 import { listHabits } from '$lib/server/repo/habits';
 import { usedRanges } from '$lib/server/repo/ranges';
 import { listVacations } from '$lib/server/repo/vacations';
-import { getGroupings, getKinds, getSettings, getViews } from '$lib/server/settings';
+import { getGroupings, getKinds, getPacks, getSettings, getViews } from '$lib/server/settings';
 import { getStats, seedFields } from '$lib/server/stats';
 import { suggestions } from '$lib/stats/seed';
 import { repaused, userToday } from '$lib/server/today';
+import { ownTypes } from '$lib/server/settings-patch';
+import { PLAIN_TASK_TYPES } from '$lib/task-types';
 import { unitWord } from '$lib/units';
 import { TEMPLATES } from '$lib/views';
 import type { Actions, PageServerLoad } from './$types';
@@ -87,7 +89,9 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 	return {
 		username: locals.account!.username,
 		today: userToday(accountId, cookies.get('tz')),
-		settings: { dayStart: dayStart ?? null, ranges, pastDays, nudgeYesterday, dayNote, guidedSetup, showAllSections, units: getKinds(accountId), groupings: getGroupings(accountId) },
+		settings: { dayStart: dayStart ?? null, ranges, pastDays, nudgeYesterday, dayNote, guidedSetup, showAllSections, units: getKinds(accountId), groupings: getGroupings(accountId), taskTypes: ownTypes(accountId) },
+		packs: getPacks(accountId),
+		plainTypes: PLAIN_TASK_TYPES,
 		tags: tagsWithUses(accountId),
 		usedUnits: usedUnits(accountId),
 		usedRanges: usedRanges(accountId),

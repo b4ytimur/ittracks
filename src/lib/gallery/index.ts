@@ -34,3 +34,17 @@ export function galleryItem(slug: string, units: UnitTable = STARTER): GalleryIt
 
 /** Category order on the gallery page; anything else comes after. */
 export const CATEGORY_ORDER = ['Gym', 'Cardio', 'Learning', 'Health', 'Mind', 'Routine', 'Break'];
+
+/** The starter pack a ready-made template is at home in: its units, groupings and measures come with it. */
+export const PACK_OF: Record<string, string> = {
+	'beginner-5x5': 'gym',
+	'full-body-3': 'gym',
+	'home-bodyweight': 'gym',
+	'push-pull-legs': 'gym',
+	'upper-lower-4': 'gym',
+	'running-3': 'running',
+	'daily-walk': 'running',
+	'instrument-practice': 'music',
+	reading: 'reading',
+	'language-daily': 'study'
+};

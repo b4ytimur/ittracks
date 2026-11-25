@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { starterGroupings } from '$lib/groupings';
+import { newAccountSettings } from './settings';
 import { eq } from 'drizzle-orm';
 import { hash, verify } from '@node-rs/argon2';
 import type { Cookies } from '@sveltejs/kit';
@@ -20,7 +20,7 @@ export async function createAccount(username: string, password: string) {
 		.values({ id, username, passwordHash: await hash(password) })
 		.run();
 	db.insert(settings)
-		.values({ accountId: id, data: { weightUnit: 'kg', groupings: starterGroupings() } })
+		.values({ accountId: id, data: newAccountSettings() })
 		.run();
 	return id;
 }

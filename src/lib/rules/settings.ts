@@ -61,6 +61,7 @@ export const settingsRules = defineRules<Settings, SettingsCtx>({
 	views: independent,
 	pinned: independent,
 	taskTypes: independent,
+	packs: independent,
 	areasSeeded: independent,
 	/** Stats boards, cards and measures have their own registry: rules/stats.ts. */
 	stats: independent,

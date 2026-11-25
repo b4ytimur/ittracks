@@ -1,5 +1,6 @@
 // Bulk changes against a real (in-memory) database: the catalog and its links to the rules,
 // each action's preview and apply, batch undo, and access.
+import { takePack } from '../packs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { and, eq } from 'drizzle-orm';
@@ -54,6 +55,7 @@ const reasons = (r: Answer) => Object.fromEntries(r.skipped.map((s) => [s.reason
 beforeAll(async () => {
 	migrate(db, { migrationsFolder: './drizzle' });
 	me = await createAccount('bulker', 'correct horse battery');
+	takePack(me, 'gym'); // kg and lb convert
 	saveSettings(me, { timeZone: 'UTC', dayStart: '00:00' });
 	today = userToday(me);
 	app = appActor(me);
