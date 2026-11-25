@@ -106,6 +106,10 @@ export const task = sqliteTable('task', {
 	parentTaskId: text('parent_task_id'),
 	restTimerEnabled: integer('rest_timer_enabled', { mode: 'boolean' }).notNull().default(false),
 	restTimerSeconds: integer('rest_timer_seconds').notNull().default(90),
+	/** Its own words: one row of it ("set"), several, and the clock between two. */
+	rowOne: text('row_one').notNull().default('set'),
+	rowMany: text('row_many').notNull().default('sets'),
+	betweenName: text('between_name').notNull().default('Rest'),
 	sortOrder: integer('sort_order').notNull().default(0),
 	createdAt: createdAt(),
 	areaId: text('area_id').references(() => area.id, { onDelete: 'set null' }),
@@ -159,6 +163,10 @@ export const metric = sqliteTable('metric', {
 	sortOrder: integer('sort_order').notNull().default(0),
 	/** Where a new log's value comes from: last time, the target, or blank. */
 	prefill: text('prefill', { enum: ['last', 'target', 'blank'] }).notNull().default('last'),
+	/** In a row it is written after a ×: "60 kg × 8". */
+	times: integer('times', { mode: 'boolean' }).notNull().default(false),
+	/** Which way is better, for the tone of a change. Null: more. */
+	better: text('better', { enum: ['more', 'less'] }),
 	/** Plus and minus step on the log screen; null uses the type's default. */
 	step: real('step'),
 	/** A required field must be filled before Finish. */

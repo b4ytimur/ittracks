@@ -40,7 +40,7 @@ export const TEMPLATE_FORMAT = 'ittracks-template';
  * Variants (the follow schedule's `map`, routine Variant key -> the habit's own key).
  * Older files still import; the new fields take their defaults.
  */
-export const TEMPLATE_VERSION = 9;
+export const TEMPLATE_VERSION = 10;
 
 const key = z.string().min(1).max(64);
 
@@ -51,6 +51,10 @@ const templateTask = z.object({
 	notes: z.string().max(NOTE_MAX).default(''),
 	restTimerEnabled: z.boolean().default(false),
 	restTimerSeconds: z.number().int().min(5).max(3600).default(90),
+	// Version 10: its own words, and how a row reads.
+	rowOne: z.string().trim().min(1).max(20).default('set'),
+	rowMany: z.string().trim().min(1).max(20).default('sets'),
+	betweenName: z.string().trim().min(1).max(20).default('Rest'),
 	tags: z.array(z.object({ name: z.string().min(1).max(40), level: z.number().int().min(1).max(99) })).default([]),
 	/** Version 5: the Task's Area, matched by name on import (falls back to the habit's). */
 	area: z.string().max(40).nullable().default(null),
@@ -62,6 +66,9 @@ const templateTask = z.object({
 				type: z.enum(metricTypes),
 				unit: z.string().max(20).default(''),
 				repeats: z.boolean().default(false),
+				/** Left out before version 10: a Task with several numbers per row keeps its ×. */
+				times: z.boolean().optional(),
+				better: z.enum(['more', 'less']).nullable().default(null),
 				choices: z.array(z.string().max(40)).default([]),
 				prefill: z.enum(['last', 'target', 'blank']).optional(),
 				step: z.number().positive().max(10000).nullable().default(null),
@@ -216,7 +223,7 @@ export type TemplateChild = z.infer<typeof templateChild>;
 
 export const templateFile = z.object({
 	format: z.literal(TEMPLATE_FORMAT),
-	version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6), z.literal(7), z.literal(8), z.literal(9)]),
+	version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6), z.literal(7), z.literal(8), z.literal(9), z.literal(10)]),
 	name: z.string().min(1).max(120),
 	/** Version 4: a view template this habit works well with (e.g. "gym"). Only ever offered, never applied by itself. */
 	view: z.string().max(32).nullable().default(null),
@@ -394,6 +401,9 @@ export function toTemplate(
 			notes: share.noHowTo ? '' : t.notes,
 			restTimerEnabled: t.restTimerEnabled,
 			restTimerSeconds: t.restTimerSeconds,
+			rowOne: t.rowOne,
+			rowMany: t.rowMany,
+			betweenName: t.betweenName,
 			tags: t.tags,
 			area: areaName(t.areaId),
 			metrics: t.metrics.map((m) => ({
@@ -402,6 +412,8 @@ export function toTemplate(
 				type: m.type,
 				unit: m.unit,
 				repeats: m.repeats,
+				times: m.times,
+				better: m.better,
 				// Options travel as words, and their numbers by word.
 				choices: m.choices.map((o) => o.name),
 				prefill: m.prefill,
@@ -469,6 +481,7 @@ export function fromTemplate(
 	const taskIds = new Map(tpl.tasks.map((t) => [t.key, newId()]));
 	const metricIds = new Map<string, string>();
 	const tasks = tpl.tasks.map((t) => {
+		const rowNumbers = t.metrics.filter((m) => m.repeats && ['number', 'count', 'duration'].includes(m.type));
 		const metrics = t.metrics.map((m) => {
 			const id = newId();
 			metricIds.set(m.key, id);
@@ -479,6 +492,8 @@ export function fromTemplate(
 				type: m.type,
 				unit: m.unit,
 				repeats: m.repeats,
+				times: m.times ?? rowNumbers.indexOf(m) > 0,
+				better: m.better,
 				choices,
 				prefill: m.prefill ?? (m.type === 'text' || m.type === 'checkbox' ? ('blank' as const) : ('last' as const)),
 				step: m.step,
@@ -498,6 +513,9 @@ export function fromTemplate(
 				notes: t.notes,
 				restTimerEnabled: t.restTimerEnabled,
 				restTimerSeconds: t.restTimerSeconds,
+				rowOne: t.rowOne,
+				rowMany: t.rowMany,
+				betweenName: t.betweenName,
 				tags: t.tags,
 				metrics,
 				parts: [] as TaskForm['parts'],

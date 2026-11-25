@@ -69,11 +69,11 @@
 <div class="band" class:tucked={tucked && !rest.now} class:clocked={rest.now && !band.select} data-mode={band.select ? 'select' : 'use'}>
 	<p class="vh" role="status">{said}</p>
 	{#if rest.now && !band.select}
-		<div class="clock" role="group" aria-label="Rest">
-			<a class="echo-text" href={rest.now.href}><span class="num" role="timer">{restText(rest.now.end, at)}</span>{rest.now.label ? ` · ${rest.now.label}` : ''}</a>
+		<div class="clock" role="group" aria-label={rest.now.name ?? 'Rest'}>
+			<a class="echo-text" href={rest.now.href}><span class="num" role="timer">{restText(rest.now.end, at, rest.now.name)}</span>{rest.now.label ? ` · ${rest.now.label}` : ''}</a>
 			<span class="echo-acts">
-				<button type="button" class="small echo-act" aria-label="15 s more rest" onclick={() => moreRest(15)}>+15 s</button>
-				<button type="button" class="small echo-act" aria-label="Skip the rest" onclick={endRest}>Skip</button>
+				<button type="button" class="small echo-act" aria-label="15 s more: {rest.now.name ?? 'Rest'}" onclick={() => moreRest(15)}>+15 s</button>
+				<button type="button" class="small echo-act" aria-label="Skip: {rest.now.name ?? 'Rest'}" onclick={endRest}>Skip</button>
 			</span>
 		</div>
 	{/if}

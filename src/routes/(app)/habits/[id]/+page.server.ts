@@ -5,7 +5,8 @@ import {
 	emptyCue,
 	firstError,
 	habitForm,
-	type HabitForm
+	type HabitForm,
+	rowWords
 } from '$lib/forms';
 import { DEFAULT_STREAK_RULE } from '$lib/engine/streak';
 import {
@@ -256,6 +257,8 @@ export const actions: Actions = {
 			notes: '',
 			restTimerEnabled: type.restTimerEnabled,
 			restTimerSeconds: 90,
+			...rowWords(),
+			...type.words,
 			tags: [],
 			metrics,
 			parts: [],

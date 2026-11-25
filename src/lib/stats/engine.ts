@@ -6,8 +6,8 @@ import { daysSinceSlip, longestRun, streak, type Level, type Mark, type StreakRu
 import { chainCells } from '../engine/chain';
 import { withinOn, withinStreak, usedIn, limitOn, type Limit } from '../engine/limit';
 import { canRead, compile, countsSets, evaluate, FormulaError, type Lookup } from './formula';
-import { rolesOf, type Roles } from './seed';
 import { excerpt } from '../markdown';
+import { inReadingOrder, joinRow } from '../rowtext';
 import { groupTable, readGroupings, type GroupTable } from '../groupings';
 import { effectiveUnit, STARTER, TIME_BASE, withShownUnits, type UnitTable } from '../units';
 import { parentPath, parsePath, withoutRounds } from '../engine/parts';
@@ -61,6 +61,10 @@ export interface DsMetric {
 	type: string;
 	unit: string | null;
 	repeats: boolean;
+	/** In a row it is written after a ×. */
+	times?: boolean;
+	/** Which way is better; more when left out. */
+	better?: 'more' | 'less' | null;
 	/** Choice fields: the options. Logs store an option's id. */
 	choices: ChoiceOption[] | null;
 	/** Choice fields: a number per option id, for averages (J5). */
@@ -187,8 +191,6 @@ export interface Prepared {
 	occsByHabit: Map<string, DsOcc[]>;
 	logs: Log[];
 	logsByTask: Map<string, Log[]>;
-	/** A weight and reps, for the words of a log (describeLog). */
-	roles: Map<string, Roles<DsMetric>>;
 	/** The parts inside each Task (archived ones left out). */
 	partsOf: Map<string, DsPart[]>;
 	/** First date anything was logged. */
@@ -349,7 +351,6 @@ export function prepare(ds: Dataset): Prepared {
 	}
 	for (const [l, byRound] of roundRows) l.rounds = [...byRound.values()];
 	const logs = [...logsByKey.values()].sort((a, b) => a.occ.date.localeCompare(b.occ.date));
-	const roles = new Map([...metricsByTask.entries()].map(([k, ms]) => [k, rolesOf(ms)]));
 	const dates = [
 		...ds.occurrences.filter((o) => o.status !== 'due').map((o) => o.date),
 		...ds.slips.map((s) => s.date),
@@ -368,7 +369,6 @@ export function prepare(ds: Dataset): Prepared {
 		occsByHabit,
 		logs,
 		logsByTask: group(logs, (l) => l.task.id),
-		roles,
 		partsOf,
 		earliest: dates[0] ?? addDays(ds.today, -29)
 	};
@@ -1152,6 +1152,13 @@ function sessionBuckets(points: Point[]): { buckets: BucketInfo[]; groups: Point
 }
 
 /** Work out a card. */
+/** Is less better: the measure says so, or every field it reads does. */
+function lessIsBetter(card: StatCard, P: Prepared, ctx: Ctx): boolean {
+	if (card.what.source !== 'field') return measureOf(card.perLog, ctx.settings.measures)?.better === 'less';
+	const ms = fieldsFor(card, P, ctx).metrics;
+	return ms.length > 0 && ms.every((m) => m.better === 'less');
+}
+
 export function computeCard(card: StatCard, P: Prepared, ctx: Ctx): CardResult {
 	const rangeKey = card.range === 'page' ? ctx.boardRange : card.range;
 	const range = resolveRange(rangeKey, ctx.today, P.earliest);
@@ -1167,7 +1174,7 @@ export function computeCard(card: StatCard, P: Prepared, ctx: Ctx): CardResult {
 		range,
 		unit,
 		kind,
-		...(measureOf(card.perLog, ctx.settings.measures)?.better === 'less' ? { better: 'less' as const } : {}),
+		...(lessIsBetter(card, P, ctx) ? { better: 'less' as const } : {}),
 		empty: points.length === 0,
 		notes,
 		total: null,
@@ -1449,8 +1456,8 @@ function bestLog(perLog: string, less: boolean, logs: Log[], P: Prepared, ctx: C
 
 function recordsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range, points: Point[], unit: string, kind: ValueKind): NonNullable<CardResult['records']> {
 	const out: NonNullable<CardResult['records']> = [];
-	// "Lowest" cards, and measures where less is better, count the smallest number as the best.
-	const lower = card.overTime === 'min' || measureOf(card.perLog, ctx.settings.measures)?.better === 'less';
+	// "Lowest" cards, and what is better when it is less, count the smallest number as the best.
+	const lower = card.overTime === 'min' || lessIsBetter(card, P, ctx);
 	const best = (ps: Point[]) =>
 		ps.reduce<Point | null>((a, p) => (!a || (lower ? p.value < a.value : p.value > a.value) ? p : a), null);
 	const byPeriod = (ps: Point[], b: 'day' | 'week') => {
@@ -1515,19 +1522,20 @@ export function describeLog(l: Log, P: Prepared): string {
 		return `${v}${m.unit ? ` ${m.unit}` : ''}`;
 	};
 	const parts: string[] = [];
-	const r = P.roles.get(l.task.id);
-	if (r?.weight && r.reps && rep.length === 2) {
+	const [first, second] = inReadingOrder(rep);
+	if (rep.length === 2 && second.times && second.type === 'count') {
+		// "80 kg × 6, 6, 6": the count alone while what it counts stays the same.
 		const groups: { w: string; reps: string[] }[] = [];
 		for (const s of l.sets) {
-			const w = fmt(r.weight, s[r.weight.id]) ?? '–';
-			const n = filled(s[r.reps.id]) ? String(s[r.reps.id]) : '–';
+			const w = fmt(first, s[first.id]) ?? '–';
+			const n = filled(s[second.id]) ? String(s[second.id]) : '–';
 			const last = groups.at(-1);
 			if (last && last.w === w) last.reps.push(n);
 			else groups.push({ w, reps: [n] });
 		}
 		if (groups.length) parts.push(groups.map((g) => `${g.w} × ${g.reps.join(', ')}`).join(' · '));
 	} else if (rep.length) {
-		const sets = l.sets.map((s) => rep.map((m) => fmt(m, s[m.id])).filter(Boolean).join(' × ')).filter(Boolean);
+		const sets = l.sets.map((s) => joinRow(rep.map((m) => ({ text: fmt(m, s[m.id]) ?? '', times: m.times })))).filter(Boolean);
 		if (sets.length) parts.push(sets.join(', '));
 	}
 	const singles = single.map((m) => fmt(m, l.single[m.id])).filter(Boolean);

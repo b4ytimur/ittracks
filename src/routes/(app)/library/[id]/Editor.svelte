@@ -13,7 +13,7 @@
 	import { dismiss, showToast } from '$lib/toast.svelte';
 	import { enhance } from '$app/forms';
 	import { deleteHere } from '$lib/undelete';
-	import { noteDefaults, type MetricForm, type TaskForm } from '$lib/forms';
+	import { noteDefaults, rowWords, type MetricForm, type TaskForm } from '$lib/forms';
 	import NoteBox from '$lib/NoteBox.svelte';
 	import OptionList from '$lib/OptionList.svelte';
 	import { defaultStep, metricsFromType, type TaskType } from '$lib/task-types';
@@ -146,6 +146,7 @@
 		typeKey = type.key;
 		t.metrics = metricsFromType(type, units());
 		t.restTimerEnabled = type.restTimerEnabled;
+		Object.assign(t, rowWords(), type.words);
 	}
 
 	let typeName = $state('');
@@ -153,7 +154,8 @@
 		JSON.stringify({
 			name: typeName,
 			restTimerEnabled: t.restTimerEnabled,
-			metrics: t.metrics.map((m) => ({ name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, step: m.step }))
+			words: { rowOne: t.rowOne, rowMany: t.rowMany, betweenName: t.betweenName },
+			metrics: t.metrics.map((m) => ({ name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, step: m.step, ...(m.times ? { times: true } : {}), ...(m.better === 'less' ? { better: 'less' } : {}) }))
 		})
 	);
 
@@ -170,6 +172,7 @@
 		fields: { label: 'What you log', fields: ['metrics'] },
 		parts: { label: 'Inside this Task', fields: ['parts'] },
 		rest: { label: 'Rest', fields: ['restTimerEnabled', 'restTimerSeconds'] },
+		words: { label: 'Its words', fields: ['rowOne', 'rowMany', 'betweenName'] },
 		notes: { label: 'How to', fields: ['notes'] },
 		tags: { label: 'Tags', fields: ['tags'] },
 		area: { label: 'Area', fields: ['areaId'] },
@@ -287,12 +290,13 @@
 	}
 
 	const metricWords = (m: MetricForm) =>
-		`${m.name || 'A field'}: ${typeLabels[m.type].replace(/ \(.*/, '').toLowerCase()}${m.unit ? ` in ${m.unit}` : ''}${m.repeats ? ', each set' : ''}`;
+		`${m.name || 'A field'}: ${typeLabels[m.type].replace(/ \(.*/, '').toLowerCase()}${m.unit ? ` in ${m.unit}` : ''}${m.repeats ? `, each ${t.rowOne}` : ''}`;
 	const say = (f: TaskForm): Record<string, string> => ({
 		name: f.name,
 		fields: f.metrics.length ? W.sentence(f.metrics.map(metricWords).join('. ')) : 'Nothing to fill in: you tick it off.',
 		parts: W.listWords(f.parts.map((p) => (p.kind === 'step' ? p.name : (choiceOf(p.taskId)?.name ?? 'A Task'))), 'Nothing inside it.'),
-		rest: f.restTimerEnabled ? `${f.restTimerSeconds % 60 ? `${f.restTimerSeconds} s` : `${f.restTimerSeconds / 60} min`} between sets.` : 'Off.',
+		rest: f.restTimerEnabled ? `${f.restTimerSeconds % 60 ? `${f.restTimerSeconds} s` : `${f.restTimerSeconds / 60} min`} between ${f.rowMany}.` : 'Off.',
+		words: `One ${f.rowOne}, several ${f.rowMany}. ${f.betweenName} between them.`,
 		notes: W.noteWords(f.notes),
 		tags: W.listWords(f.tags.map((g) => `${g.name} ${groups().levelName(g.name, g.level)}`)),
 		area: data.areas.find((a) => a.id === f.areaId)?.name ?? 'None.',
@@ -333,7 +337,7 @@
 {#snippet line(id: string, b: Snippet, lead = false)}
 	<SaidLine
 		{id}
-		label={LINES[id].label}
+		label={id === 'rest' ? t.betweenName : LINES[id].label}
 		words={now[id] || 'Nothing yet.'}
 		{lead}
 		bind:open={() => !!opened[id], (v) => (opened[id] = v)}
@@ -394,9 +398,9 @@
 {#snippet restPart()}
 	<div class="row">
 		<label class="grow" style="color: var(--text)"
-			><input type="checkbox" bind:checked={t.restTimerEnabled} disabled={!!restBlock && !t.restTimerEnabled} /> Start a rest countdown after each set</label
+			><input type="checkbox" bind:checked={t.restTimerEnabled} disabled={!!restBlock && !t.restTimerEnabled} /> Start a countdown after each {t.rowOne}</label
 		>
-		{#if restBlock}<p class="muted small-text" style="margin: 0">{restBlock.reason}. Mark a metric "Log per set" first.</p>{/if}
+		{#if restBlock}<p class="muted small-text" style="margin: 0">{restBlock.reason}. Mark a field "Log per {t.rowOne}" first.</p>{/if}
 		{#if t.restTimerEnabled}
 			<label style="width: 8rem"
 				>Seconds <input type="number" min="5" max="3600" bind:value={t.restTimerSeconds} /></label
@@ -405,8 +409,16 @@
 	</div>
 
 {/snippet}
+{#snippet wordsPart()}
+	<p class="meta">What this Task calls one row of what you log, and the clock between two.</p>
+	<div class="row">
+		<label class="grow">One <input bind:value={t.rowOne} maxlength="20" placeholder="set" /></label>
+		<label class="grow">Several <input bind:value={t.rowMany} maxlength="20" placeholder="sets" /></label>
+		<label class="grow">The clock <input bind:value={t.betweenName} maxlength="20" placeholder="Rest" /></label>
+	</div>
+{/snippet}
 {#snippet fieldsPart()}
-	<p class="meta">The values you fill in. One marked "per set" is logged again for every set.</p>
+	<p class="meta">The values you fill in. One marked "per {t.rowOne}" is logged again for every {t.rowOne}.</p>
 	<EditableList
 		items={t.metrics}
 		key={(m) => m.id}
@@ -531,6 +543,12 @@
 			{/if}
 			<details class="log-settings">
 				<summary class="small-text">When logging</summary>
+				{#if isNumeric(m)}
+					<div class="row">
+						{#if m.repeats}<label class="grow" style="color: var(--text)"><input type="checkbox" bind:checked={m.times} /> Written after a ×, as in 60 kg × 8</label>{/if}
+						<label class="grow" style="color: var(--text)"><input type="checkbox" checked={m.better === 'less'} onchange={(e) => (m.better = e.currentTarget.checked ? 'less' : null)} /> Less is better</label>
+					</div>
+				{/if}
 				<div class="row">
 					{#if m.type === 'checkbox' || (m.type === 'text' && m.long)}
 						<p class="muted small-text grow" style="margin: 0">{prefillBlock({ ...m, prefill: 'last' })?.reason}.</p>
@@ -562,10 +580,10 @@
 			</details>
 			<div class="row">
 				<label class="grow" style="color: var(--text)" title={repeatsLocked(m) ?? repeatsBlock(m)?.reason}
-					><input type="checkbox" bind:checked={m.repeats} disabled={!!repeatsLocked(m) || (!!repeatsBlock(m) && !m.repeats)} /> Log per set</label
+					><input type="checkbox" bind:checked={m.repeats} disabled={!!repeatsLocked(m) || (!!repeatsBlock(m) && !m.repeats)} /> Log per {t.rowOne}</label
 				>
 			</div>
-			{#if repeatsLocked(m)}<p class="muted small-text" style="margin: 0">Has logged values, so “Log per set” is fixed.</p>{/if}
+			{#if repeatsLocked(m)}<p class="muted small-text" style="margin: 0">Has logged values, so “Log per {t.rowOne}” is fixed.</p>{/if}
 					</div>
 				{/if}
 				{#if unitEdit(m) && !openFields[m.id]}<p class="meta field-words">Its unit changes: open it to say what happens to what is logged.</p>{/if}
@@ -707,6 +725,7 @@
 	<GroupHeading title="What you log" />
 	<div class="card su-lines">
 		{@render line('fields', fieldsPart)}
+		{#if t.metrics.some((m) => m.repeats) || t.parts.some((p) => p.kind === 'task')}{@render line('words', wordsPart)}{/if}
 		{#if shows.rest}{@render line('rest', restPart)}{/if}
 		{#if shows.parts}{@render line('parts', partsPart)}{/if}
 	</div>

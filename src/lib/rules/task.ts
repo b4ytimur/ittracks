@@ -55,7 +55,9 @@ export const metricRules = defineRules<MetricForm>({
 		// N3: never last time's journal entry copied into today's.
 		onlyWhen((m) => m.prefill === 'blank' || !isLongText(m), "A field with several lines starts blank or with its starter text, never with last time's text", 'blank')
 	],
-	required: independent
+	required: independent,
+	times: [onlyWhen((m) => m.repeats && isNumericType(m.type), 'Only a number in a row is written after a ×', false)],
+	better: [onlyWhen((m) => isNumericType(m.type), 'Only a number can be better or worse', null)]
 });
 
 export const taskRules = defineRules<TaskForm>({
@@ -70,7 +72,10 @@ export const taskRules = defineRules<TaskForm>({
 	collectionIds: independent,
 	// M4: a rest between sets needs sets.
 	restTimerEnabled: [onlyWhen((t) => t.metrics.some((m) => m.repeats), 'A rest timer needs a field logged per set', false)],
-	restTimerSeconds: independent
+	restTimerSeconds: independent,
+	rowOne: independent,
+	rowMany: independent,
+	betweenName: independent
 });
 
 /** Numbers only for options the Choice still has, by id: a renamed option keeps its number. */
@@ -119,6 +124,8 @@ export const metricPast = definePolicies<MetricForm>({
 	prefill: display(),
 	step: display(),
 	required: display(),
+	times: display('Past logs are read the same way'),
+	better: display(),
 	quick: display(),
 	long: display('Past text stays as it was written'),
 	starter: display(),
@@ -136,7 +143,10 @@ export const taskPast = definePolicies<TaskForm>({
 	areaId: display(),
 	collectionIds: display(),
 	restTimerEnabled: display(),
-	restTimerSeconds: display()
+	restTimerSeconds: display(),
+	rowOne: display(),
+	rowMany: display(),
+	betweenName: display()
 });
 
 /** What has data logged against it: Metric ids with a value, part ids with anything logged under them, Choice option ids picked. */

@@ -5,7 +5,7 @@
 	import { onMount, tick, untrack } from 'svelte';
 	import Timer from './Timer.svelte';
 	import Place from '$lib/log/Place.svelte';
-	import { cursor, follow, rowText, type Cursor, type Field, type RowState } from '$lib/log/run';
+	import { cap, cursor, follow, rowText, type Cursor, type Field, type RowState } from '$lib/log/run';
 	import EditChrome from '$lib/ui/EditChrome.svelte';
 	import MenuButton, { type Way } from '$lib/ui/MenuButton.svelte';
 	import NumberField from '$lib/ui/NumberField.svelte';
@@ -450,6 +450,11 @@
 	const setsLeft = $derived(runPlaces.some((p) => p.sets.some((x) => !x.done)));
 	const setsDone = $derived(runPlaces.reduce((n, p) => n + p.sets.filter((x) => x.done).length, 0));
 	const setsAll = $derived(runPlaces.reduce((n, p) => n + p.sets.length, 0));
+	/** The Tasks' own word for their rows, when they share one. */
+	const shared = (words: string[], or: string) => (new Set(words).size === 1 ? words[0] : or);
+	const rowTasks = $derived(data.items.flatMap((it) => (inRows(it) && it.task ? [it.task] : [])));
+	const oneWord = $derived(shared(rowTasks.map((t) => t.rowOne), 'row'));
+	const allWords = $derived(shared(rowTasks.map((t) => t.rowMany), 'rows'));
 
 	function show(key: string) {
 		tick().then(() => document.querySelector(`[data-place="${CSS.escape(key)}"] .lg-open`)?.scrollIntoView({ block: 'nearest' }));
@@ -482,10 +487,10 @@
 		// The last one stays open, so nothing that ends the log ever comes under the thumb.
 		if (!next) at = { key, set };
 		const to = next ? data.items.find((x) => placeKey(x) === next.key) : undefined;
-		const nextName = to ? `${next!.key === key ? '' : `${to.task?.name}, `}set ${next!.set + 1}` : '';
-		if (it.task?.restTimerEnabled && next && !data.past && stage === 'run') startRest(it.task.restTimerSeconds, `set ${next.set + 1} of ${to?.task?.name}`, `/log/${data.occurrence.id}`);
+		const nextName = to ? `${next!.key === key ? '' : `${to.task?.name}, `}${to.task?.rowOne} ${next!.set + 1}` : '';
+		if (it.task?.restTimerEnabled && next && !data.past && stage === 'run') startRest(it.task.restTimerSeconds, `${to?.task?.rowOne} ${next.set + 1} of ${to?.task?.name}`, `/log/${data.occurrence.id}`, it.task.betweenName);
 		else endRest();
-		said = `Logged set ${set + 1}.${next ? ` Next: ${nextName}, ${rowText(metricsOf(to!), places[next.key].sets[next.set].values)}.` : ' All sets are done.'}`;
+		said = `Logged ${it.task?.rowOne} ${set + 1}.${next ? ` Next: ${nextName}, ${rowText(metricsOf(to!), places[next.key].sets[next.set].values)}.` : ` All ${allWords} are done.`}`;
 		if (next && next.key !== key) {
 			here = next.key;
 			show(next.key);
@@ -498,13 +503,13 @@
 		if (on) {
 			places[key].sets = follow(log[i].sets, baseOf(i)?.sets ?? [], set, metricsOf(data.items[i]));
 			const t = data.items[i].task;
-			if (t?.restTimerEnabled && stage === 'run' && !data.past) startRest(t.restTimerSeconds, t.name, `/log/${data.occurrence.id}`);
+			if (t?.restTimerEnabled && stage === 'run' && !data.past) startRest(t.restTimerSeconds, t.name, `/log/${data.occurrence.id}`, t.betweenName);
 		} else {
 			endRest();
 			here = key;
 			at = { key, set };
 		}
-		said = `Set ${set + 1} ${on ? 'done' : 'not done'}.`;
+		said = `${cap(data.items[i].task?.rowOne ?? 'row')} ${set + 1} ${on ? 'done' : 'not done'}.`;
 	}
 	/** Changing a number never logs it. */
 	function setValue(i: number, set: number, id: string, v: unknown) {
@@ -522,7 +527,7 @@
 	function removeSet(i: number) {
 		const gone = log[i].sets.pop();
 		at = null;
-		if (gone) showToast(`Removed set ${log[i].sets.length + 1} of ${data.items[i].task?.name}, for this log.`, () => void log[i]?.sets.push(gone));
+		if (gone) showToast(`Removed ${data.items[i].task?.rowOne} ${log[i].sets.length + 1} of ${data.items[i].task?.name}, for this log.`, () => void log[i]?.sets.push(gone));
 	}
 	function tickAll() {
 		for (const [i, it] of data.items.entries()) {
@@ -646,8 +651,8 @@
 			const v = targetAt(it, m.id);
 			return v === undefined ? [] : [`${v} ${m.unit ?? m.name.toLowerCase()}`];
 		});
-		const rest = t.restTimerEnabled ? `rest ${t.restTimerSeconds % 60 ? `${t.restTimerSeconds} s` : `${t.restTimerSeconds / 60} min`}` : '';
-		return [`${n} ${n === 1 ? 'set' : 'sets'}`, ...targets, rest].filter(Boolean).join(' · ');
+		const rest = t.restTimerEnabled ? `${t.betweenName.toLowerCase()} ${t.restTimerSeconds % 60 ? `${t.restTimerSeconds} s` : `${t.restTimerSeconds / 60} min`}` : '';
+		return [`${n} ${n === 1 ? t.rowOne : t.rowMany}`, ...targets, rest].filter(Boolean).join(' · ');
 	};
 	const foldedAt = (i: number) => {
 		const it = data.items[i];
@@ -675,7 +680,7 @@
 			data.variantName,
 			data.past && isOpen ? `for ${dateLabel}` : dateLabel,
 			data.occurrence.status !== 'due' ? data.occurrence.status : null,
-			setsAll ? `${setsDone} of ${setsAll} sets done` : null,
+			setsAll ? `${setsDone} of ${setsAll} ${allWords} done` : null,
 			data.past && isOpen
 				? 'Kept on this device, not counted until you finish'
 				: { idle: correcting ? 'Saves as you change it' : null, saving: 'Saving…', saved: 'Saved', local: 'Saved on this device', refused: 'Not saved' }[saveState]
@@ -814,6 +819,7 @@
 				{#if t && inRows(it) && !quickMode}
 					<Place
 						name={t.name}
+						words={{ one: t.rowOne, many: t.rowMany }}
 						fields={repeatingOf(it).map((m) => ({ ...m, step: stepOf(m) }))}
 						sets={log[i].sets}
 						base={baseOf(i)?.sets ?? []}
@@ -855,13 +861,13 @@
 							{#if quickMode && inRows(it)}
 								{#each log[i].sets as x, k (k)}
 									<div class="lg-once">
-										<span class="label">Set {k + 1}</span>
+										<span class="label">{cap(t.rowOne)} {k + 1}</span>
 										<div class="lg-fields">
 											{#each repeatingOf(it) as m (m.id)}
 												{#if isNumeric(m)}
 													<div class="field">
 														<span class="label">{m.name}{m.unit ? ` (${m.unit})` : ''}</span>
-														<NumberField value={x.values[m.id] as number | null} step={stepOf(m)} unit={m.unit ?? ''} label="{m.name} for {t.name}, set {k + 1}" onchange={(v) => (x.values[m.id] = v)} />
+														<NumberField value={x.values[m.id] as number | null} step={stepOf(m)} unit={m.unit ?? ''} label="{m.name} for {t.name}, {t.rowOne} {k + 1}" onchange={(v) => (x.values[m.id] = v)} />
 													</div>
 												{:else if m.type === 'choice'}
 													<label class="field"><span class="label">{m.name}</span>
@@ -910,7 +916,7 @@
 {/if}
 	{#if stage === 'run' && unticked}
 		<div class="notice" data-tone={setsDone ? 'warn' : undefined}>
-			<span class="notice-text">{!setsDone ? 'No set is ticked yet, so Finish would save none.' : unticked === 1 ? '1 planned set isn’t ticked, so it won’t be saved.' : `${unticked} planned sets aren’t ticked, so they won’t be saved.`}</span>
+			<span class="notice-text">{!setsDone ? `No ${oneWord} is ticked yet, so Finish would save none.` : unticked === 1 ? `1 planned ${oneWord} isn’t ticked, so it won’t be saved.` : `${unticked} planned ${allWords} aren’t ticked, so they won’t be saved.`}</span>
 			<span class="notice-acts"><button type="button" class="quiet hit" onclick={tickAll}>Tick {unticked === 1 ? 'it' : `all ${unticked}`}</button></span>
 		</div>
 	{/if}

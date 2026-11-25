@@ -42,12 +42,17 @@ export interface LogTask {
 		name: string;
 		restTimerEnabled: boolean;
 		restTimerSeconds: number;
+		/** Its own words: one row, several, the clock between two. */
+		rowOne: string;
+		rowMany: string;
+		betweenName: string;
 		metrics: {
 			id: string;
 			name: string;
 			type: string;
 			unit: string | null;
 			repeats: boolean;
+			times: boolean;
 			/** A Choice's options: the value is the option's id. */
 			choices: { id: string; name: string }[] | null;
 			prefill: 'last' | 'target' | 'blank';
@@ -78,6 +83,9 @@ function loadTask(id: string, kept: Set<string>) {
 		name: t.name,
 		restTimerEnabled: t.restTimerEnabled,
 		restTimerSeconds: t.restTimerSeconds,
+		rowOne: t.rowOne,
+		rowMany: t.rowMany,
+		betweenName: t.betweenName,
 		notes: t.notes ?? '',
 		metrics: db
 			.select()
@@ -86,12 +94,13 @@ function loadTask(id: string, kept: Set<string>) {
 			.orderBy(asc(metric.sortOrder))
 			.all()
 			.filter((m) => !m.archived || kept.has(m.id))
-			.map(({ id, name, type, unit, repeats, choices, prefill, step, required, quick, long, starter, prompts, promptOrder }) => ({
+			.map(({ id, name, type, unit, repeats, times, choices, prefill, step, required, quick, long, starter, prompts, promptOrder }) => ({
 				id,
 				name,
 				type,
 				unit,
 				repeats,
+				times,
 				// Options a new log offers, and archived ones this log picked, so it reads and saves as is.
 				choices: choices ? choices.filter((o) => !o.archived || kept.has(o.id)).map((o) => ({ id: o.id, name: o.name })) : null,
 				prefill,

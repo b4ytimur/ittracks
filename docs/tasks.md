@@ -67,6 +67,15 @@ Drag ⠿ to reorder fields, or use the arrow keys on it.
 
 Tick **Start a rest countdown after each set** and set the **Seconds**. It needs a field logged per set.
 
+## A Task's own words
+
+A Task that logs rows calls one of them a **set**, several **sets**, and the clock between two **Rest**. Change these on its page under **Its words**: "lap", "laps", "Breathe". The log, the clock, its page and the messages use them.
+
+Under a field's **When logging**:
+
+- **Written after a ×** says how a row reads: "60 kg × 8". A field without it stands beside the others: "80 bpm · 5 min".
+- **Less is better** colours a change the other way in Stats, and makes the lowest number the record (a time, body weight).
+
 ## Groupings and levels
 
 **Settings → Groupings** holds what your tags are members of. An account starts with one; you can rename it, and add others ("Skills", "Rooms").

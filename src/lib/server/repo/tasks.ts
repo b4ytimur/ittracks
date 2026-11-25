@@ -86,6 +86,9 @@ export function getTaskForm(accountId: string, id: string): TaskForm | null {
 		notes: t.notes ?? '',
 		restTimerEnabled: t.restTimerEnabled,
 		restTimerSeconds: t.restTimerSeconds,
+		rowOne: t.rowOne,
+		rowMany: t.rowMany,
+		betweenName: t.betweenName,
 		tags: listTasks(accountId, { archived: true }).find((x) => x.id === id)?.tags ?? [],
 		metrics: db
 			.select()
@@ -99,6 +102,8 @@ export function getTaskForm(accountId: string, id: string): TaskForm | null {
 				type: m.type,
 				unit: m.unit ?? '',
 				repeats: m.repeats,
+				times: m.times,
+				better: m.better,
 				// Archived options stay with past logs; the editor offers the rest.
 				choices: activeOptions(m.choices).map(({ id, name }) => ({ id, name })),
 				prefill: m.prefill,
@@ -254,6 +259,9 @@ export function saveTask(
 					notes: f.notes || null,
 					restTimerEnabled: f.restTimerEnabled,
 					restTimerSeconds: f.restTimerSeconds,
+					rowOne: f.rowOne,
+					rowMany: f.rowMany,
+					betweenName: f.betweenName,
 					areaId: f.areaId
 				})
 				.where(eq(task.id, id))
@@ -267,6 +275,9 @@ export function saveTask(
 					notes: f.notes || null,
 					restTimerEnabled: f.restTimerEnabled,
 					restTimerSeconds: f.restTimerSeconds,
+					rowOne: f.rowOne,
+					rowMany: f.rowMany,
+					betweenName: f.betweenName,
 					areaId: f.areaId
 				})
 				.run();
@@ -352,6 +363,8 @@ export function saveTask(
 				type: m.type,
 				unit: m.unit || null,
 				repeats: m.repeats,
+				times: m.times,
+				better: m.better,
 				choices,
 				sortOrder: i,
 				prefill: m.prefill,

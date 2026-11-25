@@ -127,6 +127,13 @@
       "when": 1795574181921,
       "tag": "0017_tag_grouping",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1795575709139,
+      "tag": "0018_own_words",
+      "breakpoints": true
     }
   ]
 }
