@@ -17,15 +17,20 @@
 	// (`onoutdent`, in a nested list) takes it out to just after the row holding the list, by a
 	// drag left past the list's edge or the left arrow.
 	import { tick, type Snippet } from 'svelte';
-	import { applyMove, dropPosition, gridDrop, rangeKeys, type Move, type Position, type RowContext } from './list';
+	import { flip } from 'svelte/animate';
+	import { prefersReducedMotion } from 'svelte/motion';
+	import { applyMove, dropPosition, gridDrop, rangeKeys, withDescendants, type Mode, type Move, type Position, type RowContext } from './list';
 
 	let {
 		items,
 		key,
 		label,
-		editing = false,
-		selecting = false,
+		mode: wanted,
+		editing: wantsEdit = false,
+		selecting: wantsSelect = false,
 		selected,
+		selectScope = 'item',
+		childKeys,
 		canDrop,
 		onmove,
 		onoutdent,
@@ -34,6 +39,11 @@
 		onadd,
 		addLabel = 'Add',
 		row,
+		rowCard = false,
+		href,
+		holder,
+		actions,
+		density = 'regular',
 		title,
 		children,
 		empty,
@@ -48,10 +58,16 @@
 		key: (item: T) => string;
 		/** The item's name for screen readers ("Move Gym", "Select Gym"). Defaults to the key. */
 		label?: (item: T) => string;
+		/** One of three, so edit and select are never both on. Without it, `editing` and `selecting` say which (select wins). */
+		mode?: Mode;
 		editing?: boolean;
 		selecting?: boolean;
 		/** Ticked keys, owned by the page. Pass a SvelteSet so rows update when it changes. */
 		selected?: Set<string>;
+		/** Ticking a row ticks what is inside it too ("unit"; needs `childKeys`), or the row alone ("item"). */
+		selectScope?: 'unit' | 'item' | ((item: T) => 'unit' | 'item');
+		/** The keys inside a row, for "unit". */
+		childKeys?: (key: string) => string[];
 		/** Whether a move is allowed. Without it, rows can go before and after each other, never inside. */
 		canDrop?: (move: Move) => boolean;
 		/** A row was moved. `order` is this list's keys afterwards (without the key, for a move inside a row). */
@@ -66,6 +82,15 @@
 		onadd?: () => void;
 		addLabel?: string;
 		row: Snippet<[T, RowContext]>;
+		/** The list draws the card: the handle and the verb sit inside it, and `row` renders its content only. */
+		rowCard?: boolean;
+		/** With `rowCard`, in use: the whole card follows the link on `a.name` in the row. */
+		href?: (item: T) => string | undefined;
+		/** With `rowCard`: this row holds others, so it and its `children` draw as one unit. */
+		holder?: (item: T) => boolean;
+		/** With `rowCard`, in use: what stands at the end of the row. */
+		actions?: Snippet<[T, RowContext]>;
+		density?: 'regular' | 'compact';
 		/** With layout "block": the title in the bar above the row, beside the handle and remove button. */
 		title?: Snippet<[T, RowContext]>;
 		/**
@@ -92,6 +117,11 @@
 		ariaLabel?: string;
 		class?: string;
 	} = $props();
+
+	const mode = $derived<Mode>(wanted ?? (wantsSelect ? 'select' : wantsEdit ? 'edit' : 'use'));
+	const editing = $derived(mode === 'edit');
+	const selecting = $derived(mode === 'select');
+	const scopeOf = (item: T) => (typeof selectScope === 'function' ? selectScope(item) : selectScope);
 
 	const nameOf = (item: T) => label?.(item) ?? key(item);
 	const removeOf = (item: T) => (typeof removeLabel === 'function' ? removeLabel(item) : removeLabel);
@@ -128,8 +158,9 @@
 	/** Moving a row can take the focus off its handle, or the row to another list: put it back. */
 	async function focusHandle(k: string) {
 		await tick();
-		const sel = `li[data-key="${CSS.escape(k)}"] > .head > .handle`;
-		(list?.querySelector<HTMLElement>(`:scope > ${sel}`) ?? document.querySelector<HTMLElement>(sel))?.focus();
+		const li = `li[data-key="${CSS.escape(k)}"]`;
+		const find = (from: string) => document.querySelector<HTMLElement>(`${from}${li} > .head > .handle, ${from}${li} > .card > .slot > .handle`);
+		(find(`#${uid} > `) ?? find(''))?.focus();
 	}
 
 	// ----- Dragging -----
@@ -199,7 +230,7 @@
 			// The first row whose bottom is below the pointer; past the last row means after it.
 			const r = others.find((x) => x.getBoundingClientRect().bottom > d.y) ?? others[others.length - 1];
 			// Where on the row is worked out on its own line, not on what sits under it.
-			const head = (layout === 'block' ? r : (r.querySelector(':scope > .head') ?? r)).getBoundingClientRect();
+			const head = (layout === 'block' ? r : (r.querySelector(':scope > .head, :scope > .card') ?? r)).getBoundingClientRect();
 			const target = r.dataset.key!;
 			const nest = allowed({ key: d.key, target, position: 'inside' });
 			pos = d.y < head.top ? 'before' : d.y > head.bottom ? 'after' : dropPosition(d.y, head, nest);
@@ -270,8 +301,11 @@
 		const on = !selected.has(k);
 		const ks = range && anchor ? rangeKeys(keys, anchor, k) : [k];
 		for (const x of ks.length ? ks : [k]) {
-			if (on) selected.add(x);
-			else selected.delete(x);
+			const item = items[keys.indexOf(x)];
+			for (const y of item && childKeys && scopeOf(item) === 'unit' ? withDescendants(x, childKeys) : [x]) {
+				if (on) selected.add(y);
+				else selected.delete(y);
+			}
 		}
 		anchor = k;
 	}
@@ -281,8 +315,8 @@
 		if (!selecting) return;
 		const t = e.target as HTMLElement;
 		// A click in a list nested inside this row belongs to that list.
-		if (t.closest('li[data-row]') !== e.currentTarget || !t.closest('.head')) return;
-		if (t.closest('input.pick')) return;
+		if (t.closest('li[data-row]') !== e.currentTarget || !t.closest('.head, .card')) return;
+		if (t.closest('.pick, .pick-hit')) return;
 		e.preventDefault();
 		e.stopPropagation();
 		toggle(k, e.shiftKey);
@@ -296,12 +330,14 @@
 />
 
 <ul
-	class="list elist {klass}"
+	id={uid}
+	class="elist {klass}"
+	data-mode={mode}
+	data-density={density}
 	class:grid={axis === 'grid'}
 	class:block={layout === 'block'}
 	class:editing
 	class:selecting
-	class:drop-out={drag?.out}
 	bind:this={list}
 	aria-label={ariaLabel}
 >
@@ -309,48 +345,67 @@
 		{@const k = key(item)}
 		{@const on = !!selected?.has(k)}
 		{@const dragging = drag?.key === k}
-		{@const ctx = { index, editing, selecting, selected: on, dragging }}
+		{@const ctx = { index, mode, editing, selecting, selected: on, dragging }}
 		<li
 			data-row
 			data-key={k}
 			class:dragging
 			class:picked={selecting && on}
 			class:drop-before={drag?.over === k && drag.pos === 'before'}
-			class:drop-after={drag?.over === k && drag.pos === 'after'}
-			class:drop-inside={drag?.over === k && drag.pos === 'inside'}
+			class:drop-after={(drag?.over === k && drag.pos !== 'before') || (drag?.out && index === items.length - 1)}
+			class:drop-target={drag?.over === k && drag.pos === 'inside'}
+			class:holder={rowCard && holder?.(item)}
+			data-select-scope={rowCard && holder?.(item) ? scopeOf(item) : null}
 			class={itemClass?.(item)}
-			style:transform={dragging ? `translate(${drag?.dx ?? 0}px, ${drag?.dy ?? 0}px)` : null}
+			style:--drop-depth={drag?.out ? -1 : drag?.pos === 'inside' ? 1 : null}
+			style:--drag-x={dragging ? `${drag?.dx ?? 0}px` : null}
+			style:--drag-y={dragging ? `${drag?.dy ?? 0}px` : null}
 			onclickcapture={(e) => rowClick(e, k)}
+			animate:flip={{ duration: axis === 'grid' || prefersReducedMotion.current ? 0 : 200 }}
 		>
-			{#if layout !== 'block' || editing || selecting}
+			{#snippet pick()}
+				<input
+					type="checkbox"
+					class="pick"
+					checked={on}
+					aria-label="Select {nameOf(item)}"
+					onclick={(e) => {
+						e.stopPropagation();
+						toggle(k, e.shiftKey);
+					}}
+				/>
+			{/snippet}
+			{#snippet grip()}
+				<button
+					type="button"
+					class="handle"
+					aria-label="Move {nameOf(item)}"
+					aria-describedby="{uid}-hint"
+					onpointerdown={(e) => start(e, k)}
+					onpointermove={follow}
+					onpointerup={end}
+					onpointercancel={cancel}
+					onlostpointercapture={end}
+					onkeydown={(e) => keydown(e, k)}><span aria-hidden="true">⠿</span></button
+				>
+			{/snippet}
+			{#if rowCard && layout !== 'block'}
+			<div class="card" class:link={mode === 'use' && !!href?.(item)}>
+				<div class="slot">
+					{#if selecting && selected}<label class="pick-hit hit">{@render pick()}</label>
+					{:else if editing && onmove}{@render grip()}{/if}
+				</div>
+				<div class="content">{@render row(item, ctx)}</div>
+				{#if editing && onremove}
+					<button type="button" class="quiet verb hit" aria-label="{removeOf(item)} {nameOf(item)}" onclick={() => onremove(item)}>{removeOf(item)}</button>
+				{:else if mode === 'use' && actions}
+					<div class="verb">{@render actions(item, ctx)}</div>
+				{/if}
+			</div>
+			{:else if layout !== 'block' || editing || selecting}
 			<div class="head">
-				{#if selecting && selected}
-					<input
-						type="checkbox"
-						class="pick"
-						checked={on}
-						aria-label="Select {nameOf(item)}"
-						onclick={(e) => {
-							e.stopPropagation();
-							toggle(k, e.shiftKey);
-						}}
-					/>
-				{/if}
-				{#if editing && onmove}
-					<button
-						type="button"
-						class="handle"
-						aria-label="Move {nameOf(item)}"
-						aria-describedby="{uid}-hint"
-						title="Drag to move"
-						onpointerdown={(e) => start(e, k)}
-						onpointermove={follow}
-						onpointerup={end}
-						onpointercancel={cancel}
-						onlostpointercapture={end}
-						onkeydown={(e) => keydown(e, k)}><span aria-hidden="true">⠿</span></button
-					>
-				{/if}
+				{#if selecting && selected}{@render pick()}{/if}
+				{#if editing && onmove}{@render grip()}{/if}
 				{#if layout === 'block'}
 					<div class="title">{@render title?.(item, ctx)}</div>
 				{:else}
@@ -368,7 +423,11 @@
 					{@render row(item, ctx)}
 				</div>
 			{/if}
-			{#if children}{@render children(item, ctx)}{/if}
+			{#if children}
+				{#if rowCard}
+					{#if holder?.(item)}<div class="shelf">{@render children(item, ctx)}</div>{/if}
+				{:else}{@render children(item, ctx)}{/if}
+			{/if}
 		</li>
 	{:else}
 		{#if empty}<li class="empty">{@render empty()}</li>{/if}
@@ -387,15 +446,6 @@
 {/if}
 
 <style>
-	:global(html.el-dragging),
-	:global(html.el-dragging *) {
-		user-select: none;
-		-webkit-user-select: none;
-		cursor: grabbing;
-	}
-	.elist > li {
-		position: relative;
-	}
 	.head {
 		display: flex;
 		align-items: center;
@@ -405,81 +455,12 @@
 		flex: 1;
 		min-width: 0;
 	}
-	.handle {
-		flex: none;
-		align-self: stretch;
-		touch-action: none;
-		user-select: none;
-		cursor: grab;
-		border: none;
-		background: none;
-		color: var(--muted);
-		padding: 0 0.3rem;
-		font-size: 1.15rem;
-		line-height: 1;
-	}
-	.dragging {
-		z-index: 2;
-	}
-	.dragging .handle {
-		cursor: grabbing;
+	.head > .handle {
+		margin-inline-start: 0;
 	}
 	.dragging > .head > .body {
-		box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
-		border-radius: var(--radius);
-	}
-	.drop-before::before,
-	.drop-after::after {
-		content: '';
-		position: absolute;
-		left: 0;
-		right: 0;
-		height: 3px;
-		border-radius: 2px;
-		background: var(--accent);
-		pointer-events: none;
-	}
-	.drop-before::before {
-		top: -0.32rem;
-	}
-	.drop-after::after {
-		bottom: -0.32rem;
-	}
-	/* In a grid the line stands at the side of the cell the card lands on. */
-	.grid > .drop-before::before,
-	.grid > .drop-after::after {
-		top: 0;
-		bottom: 0;
-		width: 3px;
-		height: auto;
-		right: auto;
-	}
-	.grid > .drop-before::before {
-		left: -0.45rem;
-	}
-	.grid > .drop-after::after {
-		left: auto;
-		right: -0.45rem;
-	}
-	/* Outdent: the line stands under the whole nested list, out at the level of the row holding it. */
-	.elist.drop-out {
-		position: relative;
-	}
-	.elist.drop-out::after {
-		content: '';
-		position: absolute;
-		left: calc(-1 * var(--outdent, 1.25rem));
-		right: 0;
-		bottom: -0.32rem;
-		height: 3px;
-		border-radius: 2px;
-		background: var(--accent);
-		pointer-events: none;
-	}
-	.drop-inside > .head > .body {
-		outline: 2px dashed var(--accent);
-		outline-offset: 2px;
-		border-radius: var(--radius);
+		box-shadow: var(--shadow-lifted);
+		border-radius: var(--radius-card);
 	}
 	/* Block layout: a framed item with a title bar. */
 	.block.editing > li {
@@ -504,21 +485,14 @@
 		margin-top: 0.4rem;
 	}
 	.block > li.dragging {
-		box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
-		background: var(--surface);
-	}
-	.pick {
-		flex: none;
-		width: 1.15rem;
-		height: 1.15rem;
-		margin: 0;
+		box-shadow: var(--shadow-lifted);
+		background: var(--surface-lifted);
 	}
 	.selecting > li {
 		cursor: pointer;
 	}
 	.picked > .head > .body > :global(.card) {
-		border-color: var(--accent);
-		box-shadow: inset 0 0 0 1px var(--accent);
+		box-shadow: var(--chosen-shadow);
 	}
 	.remove {
 		flex: none;

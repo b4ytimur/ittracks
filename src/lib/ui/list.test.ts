@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyMove, dropPosition, gridDrop, mergeOrder, moveBy, moveKey, rangeKeys, reorderFrom, selectionState } from './list';
+import { applyMove, dropPosition, gridDrop, mergeOrder, moveBy, moveKey, rangeKeys, reorderFrom, selectionState, withDescendants } from './list';
 
 const keys = ['a', 'b', 'c', 'd'];
 
@@ -124,5 +124,13 @@ describe('gridDrop', () => {
 		expect(gridDrop(200, 50, cells, 400)?.key).toMatch(/a|b/);
 		expect(gridDrop(200, 500, cells, 400)).toEqual({ key: 'c', position: 'after' });
 		expect(gridDrop(0, 0, [], 400)).toBeNull();
+	});
+});
+
+describe('withDescendants', () => {
+	it('gives a holder with everything inside it, depth first', () => {
+		const inside: Record<string, string[]> = { week: ['gym', 'evening'], evening: ['read'] };
+		expect(withDescendants('week', (k) => inside[k] ?? [])).toEqual(['week', 'gym', 'evening', 'read']);
+		expect(withDescendants('gym', (k) => inside[k] ?? [])).toEqual(['gym']);
 	});
 });
