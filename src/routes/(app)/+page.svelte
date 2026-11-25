@@ -15,6 +15,12 @@
 	import { invalidateAll } from '$app/navigation';
 	import { addDays } from '$lib/engine/dates';
 	import DayNote from '$lib/DayNote.svelte';
+	import { HINTS, hintNow, type HintId } from '$lib/hints';
+	import { PACKS } from '$lib/packs';
+	import Box from '$lib/say/Box.svelte';
+	import { saveSetting } from '$lib/settings/save';
+	import { defaultStep } from '$lib/task-types';
+	import { units } from '$lib/units-here';
 	import EditableList from '$lib/ui/EditableList.svelte';
 	import EditChrome from '$lib/ui/EditChrome.svelte';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
@@ -179,13 +185,35 @@
 			}
 		};
 	const stepLabel = (p: { type: string; unit: string; step: number | null }) => {
-		const step = p.step ?? (p.type === 'duration' ? 5 : p.unit === 'kg' ? 2.5 : p.unit === 'lb' || p.unit === 'lbs' ? 5 : 1);
+		const step = p.step ?? defaultStep(p.type, p.unit, units());
 		return `+${step}${p.type === 'duration' || (p.type === 'number' && p.unit) ? ` ${p.unit}` : ''}`;
 	};
 
-	// The one-time day question.
-	let dayStart = $state('04:00');
-	let ranges = $state(untrack(() => data.suggestedRanges.map((r) => ({ ...r }))));
+	// Asked the first time it matters: does a log after midnight still count for yesterday?
+	let problem = $state('');
+	async function startDay(at: string) {
+		problem = await saveSetting({ dayStart: at }, () => ({ dayStart: null }), at === '00:00' ? 'The day starts at midnight.' : `The day starts at ${at}.`);
+	}
+	// A pack from the line under the box.
+	async function packIn(id: string, name: string) {
+		const r = await fetch('/api/packs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op: 'take', id }) }).catch(() => null);
+		const d = await r?.json().catch(() => ({}));
+		if (!r?.ok) return void showError(d?.error ?? 'Not added. Are you online?');
+		showToast(`${name} is yours now: its units, measures and Task types.`, async () => (await fetch('/api/packs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ op: 'undo', undo: d.undo }) }).catch(() => null))?.ok ?? false);
+		await invalidateAll();
+	}
+	// A hint stands once, and goes for good when its thing is done.
+	const anyDone = $derived(data.build.some((b) => b.occurrence?.status === 'done'));
+	const hint = $derived(hintNow(data.hints, data.build.some((b) => b.occurrence?.status === 'due') ? ['done'] : []));
+	let retired = $state<string[]>([]);
+	function retire(id: HintId) {
+		if (retired.includes(id)) return;
+		retired = [...retired, id];
+		void fetch('/api/settings', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ set: { hints: [...data.hints, id] }, was: { hints: data.hints } }) }).catch(() => null);
+	}
+	$effect(() => {
+		if (anyDone && !data.hints.includes('done')) untrack(() => retire('done'));
+	});
 
 	// ----- Views: filter, sort, group and layout, all saved per user -----
 	let views = $state(untrack(() => data.views));
@@ -352,6 +380,7 @@
 
 	// "Yesterday wasn't logged": hidden on this device until the next day, once dismissed.
 	const yesterday = $derived(addDays(data.today, -1));
+	const yesterdayName = $derived(new Date(`${yesterday}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' }));
 	let nudgeHiddenFor = $state<string | null>(null);
 	onMount(() => {
 		try {
@@ -465,39 +494,10 @@
 </EditChrome>
 
 {#if data.askDay}
-	<form method="POST" action="?/day" class="card stack day-ask" use:enhance>
-		<strong>When does your day start?</strong>
-		<p class="muted small-text" style="margin: 0.25rem 0 0">
-			Anything you log before this time counts for the day before, so a late night doesn't break a streak.
-		</p>
-		<label style="width: 8rem">Day starts at <input type="time" name="dayStart" bind:value={dayStart} required /></label>
-		<div>
-			<span class="muted small-text">Parts of your day (optional). Habits can be set for a part instead of a time.</span>
-			{#each ranges as r, i (i)}
-				<div class="range">
-					<input class="grow" name="rangeName" bind:value={r.name} aria-label="Name" />
-					<input type="time" name="rangeStart" bind:value={r.start} aria-label="{r.name} starts" />
-					<input type="time" name="rangeEnd" bind:value={r.end} aria-label="{r.name} ends" />
-					<button type="button" class="small" onclick={() => ranges.splice(i, 1)} aria-label="Remove {r.name}">×</button>
-				</div>
-			{/each}
-			<button type="button" class="small" onclick={() => ranges.push({ name: '', start: '12:00', end: '13:00' })}>+ part</button>
-		</div>
-		<fieldset class="stack">
-			<legend><strong>How much do you want to see?</strong></legend>
-			<span class="muted small-text">Pick a starting layout. Every part of it can be changed later.</span>
-			{#each data.templates as t (t.id)}
-				<label class="tpl" style="color: var(--text)"
-					><input type="radio" name="template" value={t.id} checked={t.id === data.suggestedTemplate} />
-					<span><strong>{t.name}</strong>{t.id === data.suggestedTemplate ? ' (suggested)' : ''}<br /><span class="muted small-text">{t.blurb}</span></span></label
-				>
-			{/each}
-		</fieldset>
-		<div class="row">
-			<button class="primary">Save</button>
-			<span class="muted small-text grow">You can change this any time in Settings.</span>
-		</div>
-	</form>
+	<div class="notice" role="note">
+		<span class="notice-text">It is past midnight. Is it still {yesterdayName} for you? What you log now counts for that day then.{#if problem} <span class="error">{problem}</span>{/if}</span>
+		<span class="notice-acts"><button type="button" class="hit" onclick={() => startDay('04:00')}>Yes, until 04:00</button><button type="button" class="quiet hit" onclick={() => startDay('00:00')}>No, days start at midnight</button></span>
+	</div>
 {/if}
 
 {#if data.unlogged.length && nudgeHiddenFor !== yesterday}
@@ -513,8 +513,14 @@
 {/if}
 
 {#if !data.build.length && !data.resting.length && !data.breaking.length && !data.paused.length}
-	<EmptyState text="Nothing here yet." />
-	<div class="l-cluster"><a class="button primary" href="/habits/new">New habit</a><a class="button" href="/gallery">Gallery</a></div>
+	<Box hint="Write it as you would say it: what, how much, how often. Anything you can count or do." />
+	<section class="ob-sec" aria-label="Or start from">
+		<p class="meta muted">Or start from</p>
+		<div class="chips">
+			{#each PACKS.filter((p) => !data.packs.includes(p.id)) as p (p.id)}<button type="button" class="toggle" title={p.brings} onclick={() => packIn(p.id, p.name)}>{p.name}</button>{/each}
+		</div>
+		<div class="l-cluster"><a class="button hit" href="/gallery">Gallery</a><a class="button hit" href="/habits/import">Add a file</a><a class="quiet hit" href="/habits/new">Step by step</a></div>
+	</section>
 {:else}
 	<ViewBar
 		page="today"
@@ -527,6 +533,9 @@
 	>
 		{@render layoutOptions()}
 	</ViewBar>
+	{#if hint && !retired.includes(hint) && mode === 'use'}
+		<div class="ob-hint" role="note"><span class="meta">{HINTS[hint]}</span><button type="button" class="quiet hit" onclick={() => hint && retire(hint)}>Got it</button></div>
+	{/if}
 
 	{#if editing}
 		<EditableList
@@ -643,6 +652,10 @@
 	{@render breakingSection()}
 	{@render timeLine()}
 	{@render laterLines(true)}
+{/if}
+
+{#if data.habitCount > 0 && data.habitCount < 3 && mode === 'use'}
+	<section class="ob-sec" aria-label="Another habit"><Box question="What else do you want to track?" /></section>
 {/if}
 
 {#snippet laterLines(resting: boolean)}
@@ -1048,15 +1061,6 @@
 	.week .full span:last-child {
 		color: var(--accent);
 	}
-	.tpl {
-		display: flex;
-		gap: 0.5rem;
-		align-items: flex-start;
-	}
-	fieldset {
-		border: 1px solid var(--border);
-		border-radius: 6px;
-	}
 	:global(.elist > li.stacked) {
 		margin-inline-start: var(--space-indent);
 	}
@@ -1104,13 +1108,5 @@
 	.check.done {
 		color: var(--muted);
 		text-decoration: line-through;
-	}
-	.day-ask {
-		margin-bottom: 1rem;
-		border-color: var(--accent);
-	}
-	.range {
-		margin-top: 0.35rem;
-		align-items: center;
 	}
 </style>

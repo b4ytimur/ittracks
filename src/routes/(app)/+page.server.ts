@@ -1,17 +1,17 @@
 import { keepGoals, stepsOf } from '$lib/server/progress';
 import { error, fail, redirect } from '@sveltejs/kit';
-import { checkSettings } from '$lib/rules/settings';
 import { and, eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { entry, habit, occurrence, prepTick, slot, variant } from '$lib/server/db/schema';
 import { createOccurrence, loadPrep, loadToday, timeIn, userToday } from '$lib/server/today';
 import { raise } from '$lib/engine/progression';
 import { addDays } from '$lib/engine/dates';
-import { getSettings, getViews, saveSettings } from '$lib/server/settings';
-import { DEFAULT_TEMPLATE_NEW, PAGE_PATH, TEMPLATES, fromTemplate, isHidden, templateById } from '$lib/views';
+import { getPacks, getSettings, getViews, saveSettings } from '$lib/server/settings';
+import { startHabit, unstart } from '$lib/server/start';
+import { listHabits } from '$lib/server/repo/habits';
+import { PAGE_PATH, isHidden } from '$lib/views';
 import { getDayNote } from '$lib/server/journal';
 import { listAreas } from '$lib/server/repo/areas';
-import { DEFAULT_RANGES, duplicateRange, readRanges } from '$lib/engine/day';
 import type { Level } from '$lib/engine/streak';
 import { ownedHabit, ownedOccurrence } from '$lib/server/owned';
 import { headlineTexts } from '$lib/server/stats';
@@ -60,11 +60,11 @@ export const load: PageServerLoad = ({ locals, cookies, url, request }) => {
 		// The Log screen sends you back here after Finish, so the reward can show.
 		finished: url.searchParams.get('finished'),
 		prep: loadPrep(accountId, today),
-		// Asked once: when the day starts, and its named parts.
-		askDay: settings.dayStart === undefined,
-		suggestedRanges: DEFAULT_RANGES,
-		templates: TEMPLATES.map((t) => ({ id: t.id, name: t.name, blurb: t.blurb })),
-		suggestedTemplate: DEFAULT_TEMPLATE_NEW,
+		// Asked the first time it matters: after midnight, before most days start, with something to log.
+		askDay: settings.dayStart === undefined && timeIn(tz || settings.timeZone) < LATE && listHabits(accountId).length > 0,
+		packs: getPacks(accountId),
+		habitCount: listHabits(accountId).length,
+		hints: settings.hints ?? [],
 		views,
 		ranges: settings.ranges,
 		areas: listAreas(accountId),
@@ -73,7 +73,8 @@ export const load: PageServerLoad = ({ locals, cookies, url, request }) => {
 	};
 };
 
-const time = /^([01]\d|2[0-3]):[0-5]\d$/;
+/** Before this, "today" may still be yesterday for someone. */
+const LATE = '05:00';
 
 const field = (f: FormData, k: string) => String(f.get(k) ?? '');
 const levelOf = (f: FormData): Level | null => {
@@ -191,20 +192,22 @@ export const actions: Actions = {
 		if (!o) error(404);
 		reopenOcc(actorOf(locals, cookies), o.occ, field(f, 'clear') === '1');
 	},
-	/** Answer the one-time question: when does your day start, and what are its parts? */
-	day: async ({ request, locals }) => {
+	/** A habit from the sentence it was said in. */
+	start: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
-		const dayStart = field(f, 'dayStart');
-		if (!time.test(dayStart)) return fail(400, { error: 'Pick a time like 04:00.' });
-		const twice = duplicateRange(f);
-		if (twice) return fail(400, { error: `Two parts of the day are called “${twice}”. Give each its own name.` });
-		const ranges = readRanges(f);
-		const s = getSettings(locals.account!.id);
-		const conflict = checkSettings({ ...s, dayStart, ranges })[0];
-		if (conflict) return fail(400, { error: conflict.reason });
-		// First run: the user also picked how much to see. Existing views are never replaced here.
-		const tpl = templateById(field(f, 'template'));
-		saveSettings(locals.account!.id, { dayStart, ranges, ...(tpl && !s.views ? { views: fromTemplate(tpl.id) } : {}) });
+		let said: unknown;
+		try {
+			said = JSON.parse(field(f, 'said'));
+		} catch {
+			return fail(400, { error: 'Say what you want to track.' });
+		}
+		const r = startHabit(locals.account!.id, said, userToday(locals.account!.id, cookies.get('tz')));
+		return 'error' in r ? fail(400, { error: r.error }) : { started: r };
+	},
+	unstart: async ({ request, locals, cookies }) => {
+		const f = await request.formData();
+		const ok = unstart(locals.account!.id, field(f, 'habit'), field(f, 'task') || null, userToday(locals.account!.id, cookies.get('tz')));
+		return ok ? undefined : fail(404, { error: 'It is already gone.' });
 	},
 	/** Start a rotation's next Variant today, ahead of its rest days. */
 	early: async ({ request, locals, cookies }) => {

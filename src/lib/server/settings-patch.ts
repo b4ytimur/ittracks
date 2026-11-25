@@ -27,7 +27,8 @@ const fields = z
 		showAllSections: z.boolean(),
 		units: unitKinds,
 		groupings: groupingList,
-		taskTypes: z.array(taskTypeSchema).max(60)
+		taskTypes: z.array(taskTypeSchema).max(60),
+		hints: z.array(z.string().max(40)).max(50)
 	})
 	.partial()
 	.strict();
@@ -65,6 +66,7 @@ export function patchSettings(accountId: string, body: unknown): SettingsResult 
 	const p = parsed.data;
 	// Units and groupings are read as the account has them, also before any were stored.
 	const cur: Settings = { ...getSettings(accountId), units: getKinds(accountId), groupings: getGroupings(accountId), taskTypes: ownTypes(accountId) };
+	cur.hints ??= [];
 	const keys = Object.keys(p.set) as (keyof SettingsSet)[];
 	if (!keys.length) return { error: 'Nothing to change' };
 	const moved = keys.filter((k) => ordered(cur[k]) !== ordered(p.was[k]) && ordered(cur[k]) !== ordered(p.set[k]));

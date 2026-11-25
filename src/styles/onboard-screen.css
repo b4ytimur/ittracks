@@ -1,0 +1,20 @@
+/* OnboardScreen: the first run, the Gallery, a template and import (P.38, OB.1–OB.8). Owns .ob-*: the box, a habit's sentence and its
+   slots, a hint, the sign-in region. Rows are ListRow, filters FilterBar, fields Field. Tokens only. From the Onboarding prototype. */
+.ob-box { margin-block: var(--space-group); display: grid; gap: var(--space-inline); }
+.ob-read { margin-block: var(--space-inline); }
+.ob-said { overflow-wrap: anywhere; }
+.ob-slot, .ob-said > span { display: inline-block; }
+.ob-slot { /* a slot of the sentence, as a Stats card's (ST.1): 24px of target in the line's own height */
+	--slot-pad: max(0px, calc((var(--target-min) - 1lh) / 2)); padding: var(--slot-pad) 0; margin: calc(-1 * var(--slot-pad)) 0; min-block-size: 0;
+	border: 0; background: none; font: inherit; line-height: inherit; vertical-align: baseline; color: var(--ink); text-align: start; cursor: pointer;
+	text-decoration: underline dashed var(--line-control) 1px; text-underline-offset: 3px;
+}
+.ob-slot:is(:hover, [aria-expanded='true']) { text-decoration: underline solid var(--ink) 1px; }
+.ob-sec { margin-block-start: var(--space-section); display: grid; gap: var(--space-inline); }
+.ob-sec > .group-heading { margin-block: 0; }
+.ob-hint { display: flex; align-items: center; justify-content: space-between; gap: var(--space-inline); margin-block: var(--space-inline); padding: var(--space-inline) var(--space-group); border: 1px solid var(--line); border-radius: var(--radius-control); }
+.ob-sent { margin-block: var(--space-inline) var(--space-group); padding: var(--space-group); display: grid; gap: var(--space-inline); }
+.ob-add { margin-block-start: var(--space-section); }
+.ob-imp { --gap: var(--space-group); margin-block-start: var(--space-inline); }
+.ob-auth { max-inline-size: 24rem; margin-inline: auto; display: grid; gap: var(--space-group); padding-block: var(--space-section); }
+.ob-auth .card { padding: var(--space-group); display: grid; gap: var(--space-group); }

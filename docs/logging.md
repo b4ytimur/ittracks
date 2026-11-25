@@ -6,7 +6,9 @@ Most logging happens on **Today**. Anything you log can be changed or undone lat
 
 Today lists your habits in sections: **Due today**, **Breaking and limiting**, **Prepare for tomorrow**, **Paused** and **Not due today**. Above them can sit widgets: progress today, this week day by day (tap a day to open it), streaks at risk, and quit counters with money saved. What shows, and in what order, is up to you: see [Views and edit mode](views-and-edit-mode.md).
 
-The first time you open Today it asks when your day starts, your parts of the day, and how much you want to see. All of it can be changed later in Settings.
+On a new account Today asks one thing: **What do you want to track?** Write it as you would say it, in English or German: "read 10 pages every evening", "gym 3x a week", "stop smoking", "3 ducks every day". It reads back as a sentence: *Read · 10 pages · every day · in the evening*. Press a word to change it, then **Start tracking**; Undo takes all of it back. What it doesn't understand stays in the name. The box stays on Today until you have three habits.
+
+Below it are the [starter packs](packs.md), the Gallery, and **Add a file**. Nothing else is asked until it matters: the first time you open Today after midnight it asks whether that still counts as the day before (change it any time under **Settings → Day starts**), and a part of the day is made when a sentence first uses one.
 
 ### Logging a habit
 

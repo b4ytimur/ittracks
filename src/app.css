@@ -37,6 +37,7 @@
 @import './styles/status-row.css';
 @import './styles/password-field.css';
 @import './styles/file-picker.css';
+@import './styles/onboard-screen.css';
 
 /* The names from before the design system's tokens. Screens move off them one by one. */
 :root {
