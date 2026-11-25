@@ -14,7 +14,7 @@ Each habit inside keeps its own log, streak and Stats. The holder adds a streak 
 ## Put a habit inside another
 
 - In the habit's editor, pick the holder under **Inside**. The list shows **Groups** and **Routines** separately.
-- Or, on the Habits page, press **Edit** and drag the habit onto a group or routine. Drag it left to take it out. See [edit mode](views-and-edit-mode.md#edit-mode).
+- Or, on the Habits page, press **Edit** and drag the habit under a group or routine and sideways to the right to put it inside. Sideways to the left takes it out. See [edit mode](views-and-edit-mode.md#edit-mode).
 
 ## Groups
 

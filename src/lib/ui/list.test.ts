@@ -1,24 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { applyMove, dropPosition, gridDrop, mergeOrder, moveBy, moveKey, rangeKeys, reorderFrom, selectionState, withDescendants } from './list';
+import { applyMove, dropDepth, dropPosition, gridDrop, mergeOrder, moveBy, moveKey, rangeKeys, reorderFrom, selectionState, withDescendants } from './list';
 
 const keys = ['a', 'b', 'c', 'd'];
 
 describe('dropPosition', () => {
 	const rect = { top: 100, height: 40 };
-	it('splits a row in halves without nesting', () => {
-		expect(dropPosition(105, rect, false)).toBe('before');
-		expect(dropPosition(119, rect, false)).toBe('before');
-		expect(dropPosition(121, rect, false)).toBe('after');
-		expect(dropPosition(139, rect, false)).toBe('after');
-	});
-	it('keeps the middle half for "inside" with nesting', () => {
-		expect(dropPosition(105, rect, true)).toBe('before');
-		expect(dropPosition(120, rect, true)).toBe('inside');
-		expect(dropPosition(135, rect, true)).toBe('after');
+	it('splits a row in halves', () => {
+		expect([105, 119, 121, 139].map((y) => dropPosition(y, rect))).toEqual(['before', 'before', 'after', 'after']);
 	});
 	it('treats points past the edges as the nearest edge', () => {
-		expect(dropPosition(50, rect, true)).toBe('before');
-		expect(dropPosition(500, rect, true)).toBe('after');
+		expect([dropPosition(50, rect), dropPosition(500, rect)]).toEqual(['before', 'after']);
+	});
+});
+
+describe('dropDepth', () => {
+	it('snaps sideways travel to the nearest step', () => {
+		expect([0, 7, 9, 16, 40].map((dx) => dropDepth(dx, 16, -1, 1))).toEqual([0, 0, 1, 1, 1]);
+		expect([-7, -9, -16, -90].map((dx) => dropDepth(dx, 16, -1, 1))).toEqual([0, -1, -1, -1]);
+		// A finger needs more.
+		expect([15, 17].map((dx) => dropDepth(dx, 32, 0, 1))).toEqual([0, 1]);
+	});
+	it('keeps to what the gap offers', () => {
+		expect([dropDepth(60, 16, 0, 0), dropDepth(-60, 16, 0, 1)]).toEqual([0, 0]);
+	});
+	it('mirrors in right-to-left text', () => {
+		expect([dropDepth(-20, 16, -1, 1, true), dropDepth(20, 16, -1, 1, true)]).toEqual([1, -1]);
 	});
 });
 
