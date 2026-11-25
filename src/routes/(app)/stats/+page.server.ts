@@ -26,7 +26,7 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		hidden,
 		open: s.open,
 		suggested: suggestedCards(P),
-		gallery: galleryCards(),
+		gallery: galleryCards(P),
 		templates: Object.entries(BOARD_TEMPLATES).map(([id, t]) => ({ id, ...t })),
 		logged: P.logs.length + P.ds.occurrences.filter((o) => o.status !== 'due').length + P.ds.slips.length
 	};

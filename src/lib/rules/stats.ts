@@ -71,6 +71,7 @@ export const cardRules = defineRules<StatCard, StatCtx>({
 		// R11
 		check((f, c) => f.split === 'level' && c.hidden.includes('levels'), 'Levels are switched off, so every log counts as Target', 'warn')
 	],
+	grouping: [onlyWhen((f) => f.split === 'tag', 'Only when it is split by a grouping', undefined)],
 	'filter.habits': [check((f, c) => c.archived, 'Shows history only: what this card reads is archived', 'warn')],
 	'filter.tags': independent,
 	'filter.areas': independent,
@@ -135,9 +136,10 @@ export const statsSettingsRules = defineRules<StatsSettings>({
 		check((s) => s.measures.some((m) => !!formulaProblem(m.formula)), 'One of your measures has a formula that can\'t be worked out'),
 		check((s) => new Set(s.measures.map((m) => m.name.trim().toLowerCase())).size !== s.measures.length, 'Two measures have the same name')
 	],
+	/** Before groupings were data: what they start from. */
 	'muscle.low': independent,
 	'muscle.medium': independent,
-	'muscle.high': [check((s) => s.muscle.high < s.muscle.medium || s.muscle.medium < s.muscle.low, 'A high tag should count at least as much as a medium one, and medium as much as low', 'warn')],
+	'muscle.high': independent,
 	e1rm: [
 		check((s) => !!formulaProblem(s.e1rm), "The e1RM formula can't be worked out"),
 		check((s) => !/\[\s*weight\s*\]/i.test(s.e1rm) || !/\[\s*reps\s*\]/i.test(s.e1rm), 'The e1RM formula needs [Weight] and [Reps]')

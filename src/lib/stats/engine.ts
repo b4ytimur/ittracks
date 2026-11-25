@@ -7,6 +7,7 @@ import { chainCells } from '../engine/chain';
 import { withinOn, withinStreak, usedIn, limitOn, type Limit } from '../engine/limit';
 import { compile, evaluate, FormulaError } from './formula';
 import { excerpt } from '../markdown';
+import { groupTable, readGroupings, type GroupTable } from '../groupings';
 import { effectiveUnit, STARTER, TIME_BASE, type UnitTable } from '../units';
 import { parentPath, parsePath, withoutRounds } from '../engine/parts';
 import { optionName, scoresOn, type ChoiceOption, type EarlierScores, type Scores } from '../options';
@@ -49,7 +50,7 @@ export interface DsTask {
 	areaId: string | null;
 	parentTaskId: string | null;
 	archived: boolean;
-	/** level: 1 low, 2 medium, 3 high */
+	/** level: the id of a level of the tag's grouping */
 	tags: { name: string; level: number }[];
 }
 export interface DsMetric {
@@ -132,6 +133,8 @@ export interface Dataset {
 	today: ISODate;
 	/** The unit Weight is shown in. */
 	weightUnit: string;
+	/** The account's groupings; its tags with the weights set in Stats when left out. */
+	groups?: GroupTable;
 	/** The account's units; the starting ones when left out. */
 	units?: UnitTable;
 	ranges: { name: string; start: string; end: string }[];
@@ -389,6 +392,8 @@ export function prepare(ds: Dataset): Prepared {
 // ---------- units ----------
 // The table is the account's (src/lib/units.ts).
 const unitsOf = (P: Prepared): UnitTable => P.ds.units ?? STARTER;
+/** The account's groupings; a dataset without them has the one there was before they were data. */
+export const groupsOf = (P: Prepared, ctx?: Pick<Ctx, 'settings'>): GroupTable => P.ds.groups ?? groupTable(readGroupings(null, ctx?.settings.muscle));
 
 /** A field's unit: what it names, or minutes for a duration that names none (as the log screen shows it). */
 export const unitOfMetric = (m: Pick<DsMetric, 'unit' | 'type'>): string | null => effectiveUnit(m) || null;
@@ -641,9 +646,10 @@ function splitTags(card: StatCard, P: Prepared, ctx: Ctx, l: { habit: DsHabit; t
 		case 'tag': {
 			if (!l.task || !l.task.tags.length) return one('none', 'No tag', 1e9);
 			const weighted = ['hardSets', 'volume'].includes(card.perLog);
-			const wOf = (lv: number) => (lv >= 3 ? ctx.settings.muscle.high : lv === 2 ? ctx.settings.muscle.medium : ctx.settings.muscle.low);
+			const groups = groupsOf(P, ctx);
 			const tags = l.task.tags
-				.map((t) => ({ key: `t:${t.name.toLowerCase()}`, label: t.name, w: weighted ? wOf(t.level) : 1, order: 0 }))
+				.filter((t) => !card.grouping || groups.of(t.name).id === card.grouping)
+				.map((t) => ({ key: `t:${t.name.toLowerCase()}`, label: t.name, w: weighted ? groups.weight(t.name, t.level) : 1, order: 0 }))
 				.filter((t) => t.w > 0);
 			return tags.length ? tags : one('none', 'No tag', 1e9);
 		}

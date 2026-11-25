@@ -1,9 +1,10 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, isNotNull } from 'drizzle-orm';
 import { db } from './db';
-import { settings } from './db/schema';
+import { settings, tag } from './db/schema';
 import type { DayRange } from '$lib/engine/day';
 import type { PastDays } from '$lib/engine/backfill';
 import type { TaskType } from '$lib/task-types';
+import { DEFAULT_WEIGHTS, groupTable, readGroupings, type Grouping, type GroupTable, type Weights } from '$lib/groupings';
 import { readKinds, unitTable, type UnitKind, type UnitTable } from '$lib/units';
 import { readViews, type ViewSettings } from '$lib/views';
 
@@ -12,6 +13,8 @@ export interface Settings {
 	weightUnit: string;
 	/** Kinds of units and the units in them. Unset reads as the starting ones (src/lib/units.ts). */
 	units?: UnitKind[];
+	/** Groupings of tags. Unset reads as the one there was before they were stored (src/lib/groupings.ts). */
+	groupings?: Grouping[];
 	/** IANA zone from the browser, e.g. Europe/Berlin; used for reminders. */
 	timeZone?: string;
 	/** HH:MM when a new day begins. Unset until the user has been asked. */
@@ -74,6 +77,24 @@ export function getKinds(accountId: string): UnitKind[] {
 	return readKinds(s.units, s.weightUnit);
 }
 export const getUnits = (accountId: string): UnitTable => unitTable(getKinds(accountId));
+
+/** The account's groupings; before it changes them, its tags with the weights it had set in Stats. */
+export function getGroupings(accountId: string): Grouping[] {
+	const s = getSettings(accountId);
+	const w = (s.stats as { muscle?: Partial<Weights> } | undefined)?.muscle;
+	return readGroupings(s.groupings, { ...DEFAULT_WEIGHTS, ...w });
+}
+/** The grouping each tag was put in, by its lower-case name. */
+export const tagGroups = (accountId: string): Record<string, string> =>
+	Object.fromEntries(
+		db
+			.select({ name: tag.name, grouping: tag.grouping })
+			.from(tag)
+			.where(and(eq(tag.accountId, accountId), isNotNull(tag.grouping)))
+			.all()
+			.map((t) => [t.name.toLowerCase(), t.grouping!])
+	);
+export const getGroups = (accountId: string): GroupTable => groupTable(getGroupings(accountId), tagGroups(accountId));
 
 /** The user's views, with defaults filled in. */
 export function getViews(accountId: string): ViewSettings {

@@ -119,24 +119,34 @@ describe('fill rules', () => {
 		{ id: 'row', tags: { 'upper back': 3, triceps: 1 }, lastDone: null }
 	];
 
+	const rank = (_: string, level: number) => level;
+
+	it('compares levels by where they stand, not by their number', () => {
+		// Level 7 was added later and stands between 2 and 1.
+		const order = [0, 1, 3, 4, 0, 0, 0, 2];
+		const own = [{ id: 'a', tags: { triceps: 7 }, lastDone: null }];
+		expect(pickTask({ must: { triceps: 2 } }, own, (_, l) => order[l])).toBeNull();
+		expect(pickTask({ must: { triceps: 1 } }, own, (_, l) => order[l])).toBe('a');
+	});
+
 	it('applies must and must-not rules', () => {
-		const pick = pickTask({ must: { triceps: 2 }, mustNot: { chest: 1 } }, library, new Set(), () => 0);
+		const pick = pickTask({ must: { triceps: 2 }, mustNot: { chest: 1 } }, library, rank, new Set(), () => 0);
 		expect(['pushdown', 'skullcrusher']).toContain(pick);
 	});
 
 	it('prefers Tags, then the least recently done', () => {
-		expect(pickTask({ must: { triceps: 2 }, prefer: ['inner shoulders'] }, library)).toBe(
+		expect(pickTask({ must: { triceps: 2 }, prefer: ['inner shoulders'] }, library, rank)).toBe(
 			'skullcrusher'
 		);
-		expect(pickTask({ must: { triceps: 2 } }, library)).toBe('pushdown');
+		expect(pickTask({ must: { triceps: 2 } }, library, rank)).toBe('pushdown');
 	});
 
 	it('does not repeat a Task within one Occurrence', () => {
-		expect(pickTask({ must: { triceps: 2 } }, library, new Set(['pushdown']))).toBe('skullcrusher');
+		expect(pickTask({ must: { triceps: 2 } }, library, rank, new Set(['pushdown']))).toBe('skullcrusher');
 	});
 
 	it('returns null when nothing matches', () => {
-		expect(pickTask({ must: { calves: 1 } }, library)).toBeNull();
+		expect(pickTask({ must: { calves: 1 } }, library, rank)).toBeNull();
 	});
 });
 

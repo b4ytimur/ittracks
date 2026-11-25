@@ -1,7 +1,7 @@
 // What the card builder needs to know about an account, without the logs themselves:
 // habits, Tasks, fields and tags. Built on the server, sent to the page, and used for the
 // builder's pickers and for the context the stats rules read.
-import type { Prepared } from './engine';
+import { groupsOf, type Prepared } from './engine';
 import { ADDS_UP, PER_LOG_FOR, isCustom, customId, type CustomMeasure, type Source, type StatCard } from './model';
 import { formulaProblem } from './formula';
 
@@ -10,6 +10,7 @@ export interface Catalog {
 	tasks: { id: string; name: string; areaId: string | null; tags: string[]; strength: boolean; cardio: boolean; targets: boolean; logged: number }[];
 	metrics: { id: string; taskId: string; name: string; type: string; unit: string | null; repeats: boolean; targets: boolean; scored?: boolean }[];
 	tags: string[];
+	groupings: { id: string; name: string; one: string }[];
 	areas: { id: string; name: string; icon: string; color: string }[];
 	identities: { id: string; name: string }[];
 }
@@ -53,6 +54,7 @@ export function catalogOf(P: Prepared, extra: { areas: Catalog['areas']; identit
 			scored: m.type === 'choice' && !!m.scores && Object.keys(m.scores).length > 0
 		})),
 		tags: [...new Set(P.ds.tasks.flatMap((t) => t.tags.map((x) => x.name)))].sort((a, b) => a.localeCompare(b)),
+		groupings: groupsOf(P).groupings.map(({ id, name, one }) => ({ id, name, one })),
 		areas: extra.areas,
 		identities: extra.identities
 	};
@@ -204,7 +206,7 @@ export function autoTitle(card: StatCard, c: Catalog, measures: CustomMeasure[])
 	const parts = [over ? `${subject}, ${over}` : subject];
 	const bucket = ['bars', 'line'].includes(card.look.chart) ? BUCKET_WORD[card.bucket] : '';
 	if (bucket) parts.push(bucket);
-	if (card.split !== 'none') parts.push(`by ${({ tag: 'muscle group', part: 'part of the day', set: 'set number', option: 'option' } as Record<string, string>)[card.split] ?? card.split}`);
+	if (card.split !== 'none') parts.push(`by ${({ tag: (c.groupings.find((g) => g.id === card.grouping) ?? c.groupings[0])?.one ?? 'tag', part: 'part of the day', set: 'set number', option: 'option' } as Record<string, string>)[card.split] ?? card.split}`);
 	const t = parts.join(' ');
 	return t.length > 60 ? `${t.slice(0, 57)}…` : t;
 }

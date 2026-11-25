@@ -9,7 +9,7 @@ import { candidates, ensurePicks, lastEntries, recount, userToday } from '$lib/s
 import { finishAs } from '$lib/server/progress';
 import { PATH_RE, place, startsRound } from '$lib/engine/parts';
 import { partIdsIn, plannedSlots, positionsOf } from '$lib/server/positions';
-import { getSettings, getUnits } from '$lib/server/settings';
+import { getGroups, getSettings, getUnits } from '$lib/server/settings';
 import { recapFor } from '$lib/server/stats';
 import { planOfToday, replanToday, windowFor } from '$lib/server/backfill';
 import { NOTE_MAX, type ScheduleForm } from '$lib/forms';
@@ -337,7 +337,7 @@ export const actions: Actions = {
 			.map((x) => x.taskId)
 			.filter((x): x is string => !!x);
 		const used = new Set([...Object.values(picks), ...fixed]);
-		const next = pickTask(s.fillRule as FillRule, candidates(locals.account!.id), used);
+		const next = pickTask(s.fillRule as FillRule, candidates(locals.account!.id), getGroups(locals.account!.id).rank, used);
 		if (!next) return fail(400, { error: 'No other Task matches this slot.' });
 		picks[s.id] = next;
 		db.update(occurrence).set({ picks }).where(eq(occurrence.id, o.occ.id)).run();

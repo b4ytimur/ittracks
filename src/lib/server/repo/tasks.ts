@@ -302,8 +302,7 @@ export function saveTask(
 				.where(and(eq(tag.accountId, accountId), eq(tag.name, t.name)))
 				.get();
 			if (!tagRow) {
-				tagRow = { id: randomUUID(), accountId, name: t.name };
-				tx.insert(tag).values(tagRow).run();
+				tagRow = tx.insert(tag).values({ id: randomUUID(), accountId, name: t.name }).returning().get();
 			}
 			tx.insert(taskTag).values({ taskId, tagId: tagRow.id, level: t.level }).run();
 		}

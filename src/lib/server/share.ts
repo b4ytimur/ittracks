@@ -11,6 +11,7 @@ import { templateFile, toTemplate, type InsideHabit, type ShareDetails, type Tem
 import { scheduleDays, shareDetails, shareForm, type ShareCtx } from '$lib/share';
 import { checkShare, shareRules } from '$lib/rules/share';
 import { normalize } from '$lib/rules/core';
+import { getGroups } from './settings';
 import type { HabitForm, TaskForm } from '$lib/forms';
 import { isFollow, isGroup } from '$lib/engine/schedule';
 import { standaloneSchedule } from '$lib/engine/follow';
@@ -20,9 +21,10 @@ import { descendants, flatten } from '$lib/engine/tree';
 export function poolTaskIds(accountId: string, habit: HabitForm): string[] {
 	const rules = habit.variants.flatMap((v) => v.slots.flatMap((s) => (s.fillRule ? [s.fillRule as FillRule] : [])));
 	if (!rules.length) return [];
+	const { rank } = getGroups(accountId);
 	const fixed = new Set(habit.variants.flatMap((v) => v.slots.map((s) => s.taskId)));
 	return candidates(accountId)
-		.filter((c) => !fixed.has(c.id) && rules.some((r) => matches(r, c.tags)))
+		.filter((c) => !fixed.has(c.id) && rules.some((r) => matches(r, c.tags, rank)))
 		.map((c) => c.id);
 }
 

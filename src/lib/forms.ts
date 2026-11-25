@@ -35,7 +35,7 @@ export const taskForm = z.object({
 	notes: z.string().max(NOTE_MAX).default(''),
 	restTimerEnabled: z.boolean(),
 	restTimerSeconds: z.number().int().min(5).max(3600),
-	tags: z.array(z.object({ name: z.string().trim().min(1).max(40), level: z.number().int().min(1).max(3) })),
+	tags: z.array(z.object({ name: z.string().trim().min(1).max(40), level: z.number().int().min(1).max(99) })),
 	metrics: z.array(
 		z.object({
 			id,

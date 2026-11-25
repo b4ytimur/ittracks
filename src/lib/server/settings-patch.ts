@@ -5,11 +5,12 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { checkSettings, cleanSettings } from '$lib/rules/settings';
 import { firstError } from '$lib/forms';
+import { groupingList, groupingsProblem } from '$lib/groupings';
 import { kindsProblem, unitKinds, unitTable, unitWord } from '$lib/units';
 import { db } from './db';
 import { metric, task } from './db/schema';
 import { renameRanges } from './repo/ranges';
-import { getKinds, getSettings, saveSettings, type Settings } from './settings';
+import { getGroupings, getKinds, getSettings, saveSettings, type Settings } from './settings';
 
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Pick a time like 04:00');
 
@@ -23,7 +24,8 @@ const fields = z
 		dayNote: z.boolean(),
 		guidedSetup: z.boolean(),
 		showAllSections: z.boolean(),
-		units: unitKinds
+		units: unitKinds,
+		groupings: groupingList
 	})
 	.partial()
 	.strict();
@@ -56,15 +58,15 @@ export function patchSettings(accountId: string, body: unknown): SettingsResult 
 	const parsed = settingsPatch.safeParse(body);
 	if (!parsed.success) return { error: firstError(parsed.error) };
 	const p = parsed.data;
-	// Units are read as the account has them, also before any were stored.
-	const cur: Settings = { ...getSettings(accountId), units: getKinds(accountId) };
+	// Units and groupings are read as the account has them, also before any were stored.
+	const cur: Settings = { ...getSettings(accountId), units: getKinds(accountId), groupings: getGroupings(accountId) };
 	const keys = Object.keys(p.set) as (keyof SettingsSet)[];
 	if (!keys.length) return { error: 'Nothing to change' };
 	const moved = keys.filter((k) => ordered(cur[k]) !== ordered(p.was[k]) && ordered(cur[k]) !== ordered(p.set[k]));
 	if (moved.length) return { moved };
 	const twice = p.set.ranges?.find((r, i, all) => all.findIndex((x) => x.name.toLowerCase() === r.name.toLowerCase()) < i);
 	if (twice) return { error: `Two parts of the day are called “${twice.name}”. Give each its own name.` };
-	const wrong = p.set.units && kindsProblem(p.set.units);
+	const wrong = (p.set.units && kindsProblem(p.set.units)) || (p.set.groupings && groupingsProblem(p.set.groupings));
 	if (wrong) return { error: wrong };
 	const next = { ...cur, ...p.set, dayStart: ('dayStart' in p.set ? p.set.dayStart : cur.dayStart) ?? undefined } as Settings;
 	const block = checkSettings(next).find((i) => i.severity === 'block');

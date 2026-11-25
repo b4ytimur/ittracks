@@ -30,6 +30,6 @@ export const load: PageServerLoad = ({ locals, params, cookies }) => {
 			...suggestedCards(P).filter((g) => g.habitId === h.id),
 			...habitTasks(P, h.id).map((t) => ({ group: t.name, cards: taskCards(P, t, { habitId: h.id }) }))
 		],
-		gallery: galleryCards().map((g) => ({ ...g, cards: g.cards.map((c) => ({ ...c, filter: { ...c.filter, ...only } })) }))
+		gallery: galleryCards(P).map((g) => ({ ...g, cards: g.cards.map((c) => ({ ...c, filter: { ...c.filter, ...only } })) }))
 	};
 };

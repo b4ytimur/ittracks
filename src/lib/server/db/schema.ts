@@ -120,10 +120,12 @@ export const tag = sqliteTable('tag', {
 	accountId: text('account_id')
 		.notNull()
 		.references(() => account.id, { onDelete: 'cascade' }),
-	name: text('name').notNull()
+	name: text('name').notNull(),
+	/** The grouping it is a member of (settings.groupings); null is the first one. */
+	grouping: text('grouping')
 });
 
-/** level: 1 = low, 2 = medium, 3 = high. */
+/** level: the id of a level of the tag's grouping. */
 export const taskTag = sqliteTable(
 	'task_tag',
 	{

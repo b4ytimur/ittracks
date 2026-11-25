@@ -10,6 +10,7 @@
 	import { checkViews } from '$lib/rules/views';
 	import type { SettingsSet } from '$lib/server/settings-patch';
 	import Copy from '$lib/settings/Copy.svelte';
+	import Groupings from '$lib/settings/Groupings.svelte';
 	import Keys from '$lib/settings/Keys.svelte';
 	import { ELSEWHERE, FEATURE_HIDES, featureName, matches, settingGroups, type Line } from '$lib/settings/lines';
 	import LogOut from '$lib/settings/LogOut.svelte';
@@ -46,7 +47,6 @@
 			journalOff: views.hidden.includes('journal'),
 			measures: data.stats.measures,
 			e1rm: { name: preset, maxReps: data.stats.e1rmMaxReps },
-			muscle: data.stats.muscle,
 			startPage: PAGE_LABEL[views.startPage],
 			template: data.templates.find((t) => t.id === views.template)?.name ?? 'Custom',
 			own: ownChanges(views).length,
@@ -119,7 +119,7 @@
 		const why = await saveSetting(set, () => Object.fromEntries(Object.keys(set).map((k) => [k, data.settings[k as keyof typeof data.settings]])) as SettingsSet, said, renames, unitRenames);
 		if (why === NO_ANSWER) showError(why, () => save(line, set, said, renames, unitRenames));
 		// These keep what is being typed.
-		if (why && line !== 'parts' && line !== 'units') return void failed(line, why);
+		if (why && !['parts', 'units', 'groupings'].includes(line)) return void failed(line, why);
 		problem[line] = why;
 	}
 	async function view(line: string, body: Record<string, unknown>, back: Record<string, unknown>, said: string) {
@@ -156,10 +156,6 @@
 		const bad = formulaProblem(f) ?? (!/\[\s*weight\s*\]/i.test(f) || !/\[\s*reps\s*\]/i.test(f) ? 'Not saved. The formula needs [Weight] and [Reps].' : '');
 		if (bad) return void (problem.e1rm = bad);
 		if (f !== data.stats.e1rm) stat('e1rm', { e1rm: f }, { e1rm: data.stats.e1rm }, 'Changed the 1RM formula.');
-	}
-	function weight(level: 'high' | 'medium' | 'low', v: number) {
-		if (!(v >= 0 && v <= 1)) return void (problem.muscle = 'Not saved. A level counts between 0 and 1.');
-		if (v !== data.stats.muscle[level]) stat('muscle', { muscle: { [level]: v } }, { muscle: { [level]: data.stats.muscle[level] } }, `A ${level} tag counts ${v} now.`);
 	}
 
 	// ----- Other apps -----
@@ -270,11 +266,8 @@
 		</div>
 		<div class="field"><label class="label" for="e1rm-f">Formula</label><input id="e1rm-f" value={data.stats.e1rm} maxlength="300" spellcheck="false" autocomplete="off" onchange={(e) => formula(e.currentTarget.value.trim())} /></div>
 		<div class="field"><label class="label" for="e1rm-n">For sets of this many reps or fewer</label><input id="e1rm-n" class="short" type="number" min="1" max="30" value={data.stats.e1rmMaxReps} onchange={(e) => { const n = Number(e.currentTarget.value); if (Number.isInteger(n) && n >= 1 && n <= 30) stat('e1rm', { e1rmMaxReps: n }, { e1rmMaxReps: data.stats.e1rmMaxReps }, `1RM is worked out for sets of ${n} reps or fewer.`); else problem.e1rm = 'Not saved. Pick 1 to 30 reps.'; }} /></div>
-	{:else if id === 'muscle'}
-		<div class="levels">
-			{#each ['high', 'medium', 'low'] as const as l (l)}<div class="field"><label class="label" for="mw-{l}">{l[0].toUpperCase() + l.slice(1)}</label><input id="mw-{l}" type="number" min="0" max="1" step="0.05" value={data.stats.muscle[l]} onchange={(e) => weight(l, Number(e.currentTarget.value))} /></div>{/each}
-		</div>
-		{#if data.stats.muscle.high < data.stats.muscle.medium || data.stats.muscle.medium < data.stats.muscle.low}<p class="meta">A high tag usually counts at least as much as a medium one, and medium as much as low.</p>{/if}
+	{:else if id === 'groupings'}
+		<Groupings groupings={s.groupings} tags={data.tags} bind:problem={() => problem.groupings ?? '', (v) => (problem.groupings = v)} onsave={(groupings, said) => save('groupings', { groupings }, said)} />
 	{:else if id === 'startpage'}
 		<div class="chips" role="radiogroup" aria-label="Start page">
 			{#each PAGES as p (p)}<label class="toggle"><input type="radio" class="vh" name="startpage" checked={views.startPage === p} onchange={() => view('startpage', { startPage: p }, { startPage: views.startPage as Page }, `The app opens on ${PAGE_LABEL[p]}.`)} /><span data-reserve={PAGE_LABEL[p]}>{PAGE_LABEL[p]}</span></label>{/each}
@@ -342,11 +335,6 @@
 	}
 	.short {
 		width: 9rem;
-	}
-	.levels {
-		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: var(--space-inline);
 	}
 	.places,
 	.habits {

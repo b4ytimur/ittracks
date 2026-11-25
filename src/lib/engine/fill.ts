@@ -1,5 +1,5 @@
 // Fill rules: how an open Slot picks a Task from the Library by Tags.
-// Tag levels: low = 1, medium = 2, high = 3; a missing Tag counts as 0.
+// Levels compare by their rank in the Tag's grouping; a missing Tag counts as 0.
 
 export interface FillRule {
 	/** Tag name -> minimum level. */
@@ -17,12 +17,15 @@ export interface Candidate {
 	lastDone: string | null;
 }
 
+/** Where a level stands in its Tag's grouping (groupings.ts). */
+export type Rank = (tag: string, level: number) => number;
+
 /** Does a Task with these Tags pass a rule's must and must-not lists? */
-export function matches(rule: FillRule, tags: Record<string, number>): boolean {
-	const level = (tag: string) => tags[tag] ?? 0;
+export function matches(rule: FillRule, tags: Record<string, number>, rank: Rank): boolean {
+	const level = (tag: string) => rank(tag, tags[tag] ?? 0);
 	return (
-		Object.entries(rule.must ?? {}).every(([t, min]) => level(t) >= min) &&
-		Object.entries(rule.mustNot ?? {}).every(([t, max]) => level(t) <= max)
+		Object.entries(rule.must ?? {}).every(([t, min]) => level(t) >= rank(t, min)) &&
+		Object.entries(rule.mustNot ?? {}).every(([t, max]) => level(t) <= rank(t, max))
 	);
 }
 
@@ -36,12 +39,13 @@ export function matches(rule: FillRule, tags: Record<string, number>): boolean {
 export function pickTask(
 	rule: FillRule,
 	library: Candidate[],
+	rank: Rank,
 	alreadyPicked: Set<string> = new Set(),
 	random: () => number = Math.random
 ): string | null {
-	const level = (c: Candidate, tag: string) => c.tags[tag] ?? 0;
+	const level = (c: Candidate, tag: string) => rank(tag, c.tags[tag] ?? 0);
 
-	const pool = library.filter((c) => !alreadyPicked.has(c.id) && matches(rule, c.tags));
+	const pool = library.filter((c) => !alreadyPicked.has(c.id) && matches(rule, c.tags, rank));
 	if (pool.length === 0) return null;
 
 	const score = (c: Candidate) => (rule.prefer ?? []).reduce((s, t) => s + level(c, t), 0);

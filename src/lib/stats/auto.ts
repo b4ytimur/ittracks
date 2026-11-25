@@ -2,7 +2,7 @@
 // Auto cards come from the type of each field a habit or Task logs; board templates pick
 // the habits and Tasks that fit them from what the account already has.
 import { makeCard, MAX_CARDS, newId, type Board, type StatCard, type StatCardInput } from './model';
-import type { DsHabit, DsMetric, DsTask, Prepared } from './engine';
+import { groupsOf, type DsHabit, type DsMetric, type DsTask, type Prepared } from './engine';
 
 type In = Omit<StatCardInput, 'id'>;
 const card = (c: In): StatCard => makeCard(c);
@@ -170,7 +170,7 @@ function habitCardsOf(P: Prepared, h: DsHabit): StatCard[] {
 	if (lifts.length > 2) {
 		// A full workout: a few cards for the whole session instead of four per exercise.
 		if (lifts.some((t) => t.tags.length))
-			out.push(card({ title: 'Hard sets per muscle group this week', what: { source: 'task' }, perLog: 'hardSets', overTime: 'sum', bucket: 'all', split: 'tag', range: 'week', filter, compare: { goal: 10, goalMax: 20 }, look: { chart: 'bars', size: 'wide', top: 12 } }));
+			out.push(card({ title: `Hard sets per ${groupsOf(P).groupings[0].one} this week`, what: { source: 'task' }, perLog: 'hardSets', overTime: 'sum', bucket: 'all', split: 'tag', range: 'week', filter, compare: { goal: 10, goalMax: 20 }, look: { chart: 'bars', size: 'wide', top: 12 } }));
 		out.push(
 			card({ title: 'Volume per week', what: { source: 'task' }, perLog: 'volume', overTime: 'sum', bucket: 'week', range: '90d', filter, look: { chart: 'bars', size: 'wide' } }),
 			card({ title: 'Best estimated 1RM per exercise', what: { source: 'task' }, perLog: 'e1rm', overTime: 'max', split: 'task', range: '90d', filter, look: { chart: 'table', size: 'full', top: 20 } })
@@ -268,7 +268,7 @@ export function boardTemplate(id: BoardTemplateId, P: Prepared): Board {
 		const gymHabits = build.filter((h) => habitTasks(P, h.id).some((t) => isStrength(P, t))).map((h) => h.id);
 		const cards = [
 			card({ title: 'Sessions per week', what: { source: 'outcomes' }, perLog: 'done', overTime: 'sum', bucket: 'week', range: '90d', filter: { habits: gymHabits }, look: { chart: 'bars', size: 'wide' } }),
-			card({ title: 'Hard sets per muscle group this week', what: { source: 'task' }, perLog: 'hardSets', overTime: 'sum', bucket: 'all', split: 'tag', range: 'week', compare: { goal: 10, goalMax: 20 }, look: { chart: 'bars', size: 'wide', top: 12 } }),
+			card({ title: `Hard sets per ${groupsOf(P).groupings[0].one} this week`, what: { source: 'task' }, perLog: 'hardSets', overTime: 'sum', bucket: 'all', split: 'tag', range: 'week', compare: { goal: 10, goalMax: 20 }, look: { chart: 'bars', size: 'wide', top: 12 } }),
 			card({ title: 'Volume per week', what: { source: 'task' }, perLog: 'volume', overTime: 'sum', bucket: 'week', range: '90d', look: { chart: 'bars', size: 'wide' } })
 		];
 		for (const x of lifts.slice(0, 3))
@@ -343,7 +343,7 @@ export function suggestedCards(P: Prepared): { group: string; habitId: string; c
 }
 
 /** Named presets for the card gallery: common questions that need no setup. */
-export function galleryCards(): { group: string; cards: StatCard[] }[] {
+export function galleryCards(P: Prepared): { group: string; cards: StatCard[] }[] {
 	return [
 		{
 			group: 'Habits',
@@ -362,7 +362,7 @@ export function galleryCards(): { group: string; cards: StatCard[] }[] {
 		{
 			group: 'Gym',
 			cards: [
-				card({ title: 'Hard sets per muscle group', what: { source: 'task' }, perLog: 'hardSets', overTime: 'sum', bucket: 'all', split: 'tag', range: 'week', compare: { goal: 10, goalMax: 20 }, look: { chart: 'bars', size: 'wide', top: 12 } }),
+				card({ title: `Hard sets per ${groupsOf(P).groupings[0].one}`, what: { source: 'task' }, perLog: 'hardSets', overTime: 'sum', bucket: 'all', split: 'tag', range: 'week', compare: { goal: 10, goalMax: 20 }, look: { chart: 'bars', size: 'wide', top: 12 } }),
 				card({ title: 'Weekly volume', what: { source: 'task' }, perLog: 'volume', overTime: 'sum', bucket: 'week', range: '90d', look: { chart: 'bars', size: 'wide' } }),
 				card({ title: 'Volume per exercise', what: { source: 'task' }, perLog: 'volume', overTime: 'sum', split: 'task', look: { chart: 'table', size: 'wide' } })
 			]

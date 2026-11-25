@@ -3,6 +3,7 @@
 import { PAST_DAYS_CHOICES } from '$lib/engine/backfill';
 import type { DayRange } from '$lib/engine/day';
 import type { PastDays } from '$lib/engine/backfill';
+import type { Grouping } from '$lib/groupings';
 import { TIME, type UnitKind } from '$lib/units';
 import { FEATURES, type FeatureKey } from '$lib/views';
 
@@ -21,7 +22,7 @@ export interface Now {
 	units: UnitKind[];
 	measures: { name: string }[];
 	e1rm: { name: string; maxReps: number };
-	muscle: { high: number; medium: number; low: number };
+	groupings: Grouping[];
 	startPage: string;
 	template: string;
 	own: number;
@@ -97,7 +98,7 @@ export function settingGroups(s: Now): Group[] {
 				{ id: 'units', label: 'Units', words: `${names(s.units.filter((k) => !k.off).map((k) => (k.id === TIME ? k.name : `${k.name} in ${k.shown}`)), 6)}.`, says: 'Every number you log can have a unit, and it can be any word. Units of one kind convert into each other; a word that is in no kind never does.', also: `kinds convert step ${s.units.flatMap((k) => k.units.flatMap((x) => [x.name, ...x.also])).join(' ')}` },
 				{ id: 'measures', label: 'Your measures', words: s.measures.length ? `${names(s.measures.map((m) => m.name))}.` : 'None of your own yet.', says: 'A measure is a formula over the fields you log, such as [Weight] * [Reps] or [Distance] / [Time] * 60. A Stats card can count logs by it.', also: 'formula stats tonnage pace volume' },
 				{ id: 'e1rm', label: 'Estimated 1RM', words: `${s.e1rm.name}, for sets of ${count(s.e1rm.maxReps, 'rep')} or fewer.`, says: 'How the best single lift is worked out from a set’s weight and reps.', also: 'formula stats max epley brzycki' },
-				{ id: 'muscle', label: 'Muscle groups', words: `High ${s.muscle.high}, medium ${s.muscle.medium}, low ${s.muscle.low}.`, says: 'When hard sets or volume are split by tag, a set counts toward each of its Task’s tags by the tag’s level. 1 is a full set, 0.5 half, 0 not at all.', also: 'tags levels stats sets weight' }
+				{ id: 'groupings', label: 'Groupings', words: `${names(s.groupings.map((g) => g.name))}.`, says: 'A grouping has members, the tags a Task carries, and levels that say how much. Splitting a Stats card by one counts a log toward each of its Task’s members by the level’s weight: 1 in full, 0.5 half, 0 not at all. Auto-filled slots compare levels by their order.', also: `tags levels stats muscle groups ${s.groupings.flatMap((g) => [g.one, ...g.levels.map((l) => l.name)]).join(' ')}` }
 			]
 		},
 		{
