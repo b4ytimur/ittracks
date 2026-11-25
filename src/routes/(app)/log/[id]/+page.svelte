@@ -961,7 +961,7 @@
 		padding: 0.75rem 1rem;
 		border-radius: var(--radius);
 		background: var(--accent);
-		color: var(--accent-text);
+		color: var(--on-accent);
 		font-weight: 600;
 		font-variant-numeric: tabular-nums;
 	}

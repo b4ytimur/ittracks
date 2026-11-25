@@ -8,7 +8,6 @@
 	--text: var(--ink);
 	--muted: var(--ink-muted);
 	--border: var(--line);
-	--accent-text: var(--on-accent);
 	--radius: var(--radius-card);
 	--grid: var(--chart-grid);
 }
