@@ -129,10 +129,13 @@
 		const r = await op({ op: 'card.delete', where: at, id: card.id });
 		if (r) showToast(`Removed “${title}”`, async () => !!(await op({ op: 'card.save', where: at, card, index })));
 	}
-	async function reorder(order: string[]) {
+	async function reorder(order: string[], said: string) {
 		const before = shown;
+		const ids = before.map((x) => x.card.id);
+		const at = where;
 		shown = order.map((id) => shown.find((x) => x.card.id === id)!);
-		if (!(await op({ op: 'card.order', where, ids: order }))) shown = before;
+		if (await op({ op: 'card.order', where: at, ids: order })) showToast(said, async () => !!(await op({ op: 'card.order', where: at, ids })));
+		else shown = before;
 	}
 	/** Change a card at once; the band has its Undo. */
 	async function change(item: Item, card: StatCard, said: string) {
@@ -182,7 +185,7 @@
 		itemClass={(item) => item.card.look.size}
 		mode={editing && !readonly ? 'edit' : 'use'}
 		ariaLabel="Cards"
-		onmove={(_, order) => reorder(order)}
+		onmove={(_, order, text) => (void reorder(order, text), true)}
 	>
 		{#snippet row(item, ctx)}
 			{@const title = titleOf(item.card)}

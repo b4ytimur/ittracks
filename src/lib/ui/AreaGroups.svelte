@@ -68,12 +68,12 @@
 		if (r?.existed) showToast(`There is an Area called ${name} already.`);
 		else if (r) showToast(`Added ${name}.`, undo({ op: 'delete', id: r.id }));
 	}
-	async function move(keys: string[]) {
+	async function move(keys: string[], said: string) {
 		const before = areas.map((a) => a.id);
 		order = keys;
 		const r = await call({ op: 'move', order: keys.filter((k) => areaOf(k)) });
 		order = null;
-		if (r) showToast('Areas reordered.', undo({ op: 'move', order: before }));
+		if (r) showToast(said, undo({ op: 'move', order: before }));
 	}
 </script>
 
@@ -91,7 +91,7 @@
 		layout="bare"
 		ariaLabel="Areas"
 		canDrop={(m) => m.position !== 'inside' && !!areaOf(m.key) && (!!areaOf(m.target) || m.position === 'before')}
-		onmove={(_, keys) => move(keys)}
+		onmove={(_, keys, text) => (void move(keys, text), true)}
 	>
 		{#snippet row(g, ctx)}
 			{@const a = areaOf(g.key)}

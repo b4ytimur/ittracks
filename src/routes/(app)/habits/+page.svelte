@@ -70,22 +70,27 @@
 	 * A list of siblings was reordered. It goes into the one shared order in the places those
 	 * habits held. Dragging in another sort starts from what you see, then switches to My order.
 	 */
-	function reorder(part: string[]) {
+	function reorder(part: string[], said: string) {
 		const order = reorderFrom(mine(habits).map((h) => h.id), shown.map((h) => h.id), part, view.sort === 'manual');
 		const before = { today: views.today, sort: view.sort };
 		views.today = { ...views.today, order };
-		saveLayout(
-			{ op: 'patch', today: { order } },
-			() => {
-				views.today = before.today;
-				view.sort = before.sort;
-			},
-			() => reorder(part)
-		);
 		if (view.sort !== 'manual') {
 			view.sort = 'manual';
-			showToast('Sorted by My order, shared with Today.');
+			said += ' Sorted by My order, shared with Today.';
 		}
+		const back = () => {
+			views.today = { ...views.today, order: before.today.order };
+			view.sort = before.sort;
+		};
+		void saveLayout({ op: 'patch', today: { order } }, back, () => void reorder(part, said)).then(
+			(ok) =>
+				ok &&
+				showToast(said, async () => {
+					back();
+					return !!(await viewOp({ op: 'patch', today: { order: before.today.order } }));
+				})
+		);
+		return true;
 	}
 
 	const byId = (id: string) => habits.find((h) => h.id === id);
@@ -284,7 +289,7 @@
 		itemClass={(h) => (struck.has(h.id) ? 'struck' : '')}
 		ariaLabel={name}
 		{canDrop}
-		onmove={(m, order) => (m.position === 'inside' ? indent(m.key, m.target) : reorder(order))}
+		onmove={(m, order, text) => (m.position === 'inside' ? (indent(m.key, m.target), true) : reorder(order, text))}
 		onoutdent={holder ? (k) => outdent(k, holder) : undefined}
 		onremove={archive}
 		removeLabel={(h) => (h.archived ? 'Unarchive' : 'Archive')}
