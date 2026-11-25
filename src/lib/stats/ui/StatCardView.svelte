@@ -49,7 +49,7 @@
 			<div class="muted sub">{sub}</div>
 		</div>
 		{#if !editing}
-			<details class="menu" bind:this={menu}>
+			<details class="card-menu" bind:this={menu}>
 				<summary aria-label="More for {title}">⋯</summary>
 				<div class="pop">
 					{#if onedit}<button type="button" onclick={() => (close(), onedit?.())}>Edit card</button>{/if}
@@ -105,11 +105,11 @@
 	.sub {
 		font-size: 0.75rem;
 	}
-	.menu {
+	.card-menu {
 		position: relative;
 		flex: none;
 	}
-	.menu summary {
+	.card-menu summary {
 		list-style: none;
 		cursor: pointer;
 		padding: 0 0.4rem;
@@ -118,10 +118,10 @@
 		font-size: 1.1rem;
 		line-height: 1.2;
 	}
-	.menu summary::-webkit-details-marker {
+	.card-menu summary::-webkit-details-marker {
 		display: none;
 	}
-	.menu[open] summary {
+	.card-menu[open] summary {
 		background: var(--grid);
 	}
 	.pop {

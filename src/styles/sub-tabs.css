@@ -1,0 +1,41 @@
+/* SubTabs: the secondary row of tabs under a title or a heading: screens or boards (links), or panels on this screen (a
+   tablist). Owns .subtabs (the row, its line and the one act that adds a tab) and .subtabs-row (the tabs, scrolling
+   sideways in States' .scroll-x). One tab, its bar, its states and its 44px touch height are Tab's.
+   Markup:
+     <div class="subtabs">
+       <nav class="subtabs-row scroll-x" aria-label="Boards">           links: a URL each
+         <a class="tab label" href="?board=b2" data-reserve="Strength" aria-current="page">Strength</a> …
+       </nav>
+       <button type="button" class="quiet hit">+ Board</button>         only an act that adds a tab
+     </div>
+     <div class="subtabs">
+       <div class="subtabs-row scroll-x" role="tablist" aria-labelledby="add-t">
+         <button type="button" class="tab label" role="tab" id="add-1" aria-controls="add-p" aria-selected="true" tabindex="0" data-reserve="Gallery">Gallery</button> …
+       </div>
+     </div>
+     <div role="tabpanel" id="add-p" aria-labelledby="add-1" [tabindex="0"]>…</div>     right after its row
+   Pitch: 32 + 1; 44 + 1 under a coarse pointer. */
+
+/* ---------- The row: the line runs the column's width, under the tabs and the act ---------- */
+.subtabs { display: flex; align-items: center; gap: var(--space-inline); border-block-end: 1px solid var(--line); }
+.subtabs > :not(.subtabs-row) { flex: none; } /* the act keeps its place at the end while the tabs scroll */
+/* 8px under the title line (3 + 1 of its own and 4 here), as the view chips' row; under the tabs, chips are 8 away. */
+:is(.titlebar, .titlebar + .title-actions) + .subtabs { margin-block-start: var(--space-tight); }
+.subtabs + .viewbar { margin-block-start: var(--space-inline); }
+.subtabs + [role='tabpanel'] { padding-block-start: var(--space-group); } /* one unit: row and panel */
+
+/* ---------- The tabs: the first label on the column, all on one line, scrolling when they run out of room ---------- */
+/* No tabindex and no role on the scroller: its tabs take focus. scroll-padding keeps 24px of a neighbour beside a tab that
+   is scrolled into view, so there is a cut tab to say there is more. Script: on focusin the tab scrolls into view
+   (inline: 'nearest', block: 'nearest'), because a half-cut tab that takes focus isn't scrolled by every browser. */
+.subtabs-row {
+	flex: 0 1 auto; min-inline-size: 0; max-inline-size: none; display: flex;
+	margin-inline-start: calc(-1 * var(--space-inline)); /* the tab's own padding; its focus ring stays inside the scroller */
+	scroll-padding-inline: var(--space-section); scrollbar-width: thin;
+}
+.subtabs-row > .tab { flex: none; justify-items: start; } /* a label never breaks, and starts where its bar does: on the column, and still there at 600 */
+/* A row opens on its current tab, before any script; elsewhere the same call on mount does it (README). */
+.subtabs-row > .tab:is([aria-current='page'], [aria-selected='true']) { scroll-initial-target: nearest; }
+
+/* ---------- Forced colours: the line is a plain edge; the current bar is Tab's Highlight ---------- */
+@media (forced-colors: active) { .subtabs { border-block-end-color: CanvasText; } }
