@@ -17,7 +17,7 @@
 		color: var(--ink);
 	}
 	.md.small {
-		font-size: 0.9rem;
+		font-size: var(--font-size-label);
 	}
 	.md :global(> :first-child) {
 		margin-top: 0;
@@ -37,11 +37,11 @@
 	.md :global(h2),
 	.md :global(h3),
 	.md :global(h4) {
-		font-size: 1rem;
+		font-size: var(--font-size-body);
 		margin: 0.6rem 0 0.25rem;
 	}
 	.md :global(h1) {
-		font-size: 1.1rem;
+		font-size: var(--font-size-section-title);
 	}
 	.md :global(ul),
 	.md :global(ol) {

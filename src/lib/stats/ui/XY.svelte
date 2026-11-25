@@ -309,7 +309,7 @@
 		gap: 0.25rem 0.8rem;
 		padding: 0;
 		margin: 0 0 0.4rem;
-		font-size: 0.8rem;
+		font-size: var(--font-size-chip);
 		color: var(--ink-muted);
 	}
 	.legend i {
@@ -334,7 +334,7 @@
 		border: 1px solid var(--line);
 		border-radius: var(--radius-control);
 		padding: 0.4rem 0.55rem;
-		font-size: 0.8rem;
+		font-size: var(--font-size-chip);
 		box-shadow: var(--shadow-tooltip);
 		z-index: var(--z-raised);
 	}
@@ -368,7 +368,7 @@
 		background: none;
 		padding: 0.2rem 0;
 		text-align: left;
-		font-size: 0.85rem;
+		font-size: var(--font-size-meta);
 	}
 	@media (hover: hover) {
 		.hrow:hover .htrack {
@@ -415,7 +415,7 @@
 		text-align: right;
 	}
 	.note {
-		font-size: 0.8rem;
+		font-size: var(--font-size-chip);
 		margin: 0.3rem 0 0;
 	}
 </style>

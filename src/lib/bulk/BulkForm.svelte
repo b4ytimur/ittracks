@@ -73,7 +73,7 @@
 	.hint {
 		grid-column: 1 / -1;
 		margin: 0;
-		font-size: 0.85rem;
+		font-size: var(--font-size-meta);
 	}
 	@media (max-width: 480px) {
 		.fields {

@@ -107,8 +107,9 @@
 	}
 	.tool {
 		padding: 0.1rem 0.5rem;
-		font-size: 0.8rem;
+		font-size: var(--font-size-chip);
 		min-width: 2rem;
+		min-height: 2rem;
 	}
 	.switch {
 		color: var(--accent);
@@ -127,7 +128,7 @@
 		background: var(--surface-raised);
 	}
 	.hint {
-		font-size: 0.8rem;
+		font-size: var(--font-size-chip);
 		margin: 0.2rem 0 0;
 	}
 </style>

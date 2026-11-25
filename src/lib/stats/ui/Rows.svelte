@@ -37,7 +37,7 @@
 	table {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: 0.85rem;
+		font-size: var(--font-size-meta);
 		font-variant-numeric: tabular-nums;
 	}
 	th,

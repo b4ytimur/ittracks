@@ -40,10 +40,14 @@
 	});
 
 	let y = 0;
+	let resting: ReturnType<typeof setTimeout>;
 	function scroll() {
 		const now = window.scrollY;
+		// Back once the page rests, so an Undo is never further away than that.
+		clearTimeout(resting);
+		resting = setTimeout(() => (tucked = false), 900);
 		if (Math.abs(now - y) < 8) return;
-		tucked = now > y && now > 96 && now + window.innerHeight < document.documentElement.scrollHeight - 8;
+		tucked = now > y && now > 24 && now + window.innerHeight < document.documentElement.scrollHeight - 8;
 		y = now;
 	}
 

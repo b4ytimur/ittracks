@@ -51,7 +51,7 @@
 		overflow-wrap: anywhere;
 	}
 	.small {
-		font-size: 0.8rem;
+		font-size: var(--font-size-chip);
 	}
 	.delta {
 		color: var(--ink);

@@ -49,7 +49,7 @@
 		list-style: none;
 		padding: 0;
 		margin: 0;
-		font-size: 0.85rem;
+		font-size: var(--font-size-meta);
 	}
 	button {
 		display: grid;

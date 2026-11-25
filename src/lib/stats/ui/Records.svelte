@@ -20,7 +20,7 @@
 		list-style: none;
 		padding: 0;
 		margin: 0;
-		font-size: 0.9rem;
+		font-size: var(--font-size-label);
 	}
 	li {
 		display: flex;

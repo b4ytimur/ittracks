@@ -535,7 +535,7 @@
 	}
 	.preview h3 {
 		margin: 0;
-		font-size: 0.95rem;
+		font-size: var(--font-size-card-title);
 	}
 	.preview > div:nth-child(2) {
 		margin-bottom: 0.6rem;
@@ -550,7 +550,7 @@
 		margin: 0;
 	}
 	legend {
-		font-size: 0.9rem;
+		font-size: var(--font-size-label);
 		color: var(--ink-muted);
 		padding: 0;
 		margin-bottom: 0.1rem;
@@ -584,18 +584,18 @@
 	details summary {
 		cursor: pointer;
 		color: var(--accent);
-		font-size: 0.9rem;
+		font-size: var(--font-size-label);
 	}
 	.inner {
 		margin-top: 0.6rem;
 	}
 	.small {
-		font-size: 0.8rem;
+		font-size: var(--font-size-chip);
 	}
 	.issues {
 		margin: 0;
 		padding-left: 1.1rem;
-		font-size: 0.85rem;
+		font-size: var(--font-size-meta);
 	}
 	.actions {
 		margin-top: 0.5rem;

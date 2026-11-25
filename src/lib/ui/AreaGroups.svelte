@@ -136,7 +136,8 @@
 	.dot {
 		padding: 0;
 		min-width: var(--target-min);
-		margin-inline-end: var(--space-tight);
+		/* Clear of the grip, which is wider than its slot: each keeps 24px of its own. */
+		margin-inline: calc(var(--target-min) - var(--handle-slot) + 2px) var(--space-tight);
 	}
 	.colors {
 		display: flex;
