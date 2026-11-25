@@ -6,13 +6,10 @@
 	--surface: var(--surface-raised);
 	--text: var(--ink);
 	--muted: var(--ink-muted);
-	--border: #e7e5e4;
+	--border: var(--line);
 	--accent-text: var(--on-accent);
 	--radius: var(--radius-card);
 	--grid: var(--chart-grid);
-}
-@media (prefers-color-scheme: dark) {
-	:root { --border: #292524; }
 }
 * { box-sizing: border-box; }
 body {
@@ -71,7 +68,7 @@ button.small { padding: 0.25rem 0.6rem; font-size: 0.85rem; }
 .stack > * + * { margin-top: 0.75rem; }
 .row { display: flex; gap: 0.5rem; align-items: end; flex-wrap: wrap; }
 .row > .grow { flex: 1; min-width: 8rem; }
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.9rem; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); padding: var(--space-group); }
 .card + .card { margin-top: 0.6rem; }
 .list { list-style: none; padding: 0; margin: 0; }
 .list li + li { margin-top: 0.5rem; }
