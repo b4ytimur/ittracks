@@ -233,14 +233,7 @@
 			<input bind:value={c.title} maxlength="60" placeholder={title} />
 		</label>
 
-		<fieldset>
-			<legend>What it reads</legend>
-			<div class="chips">
-				{#each Object.entries(SOURCES) as [k, label] (k)}
-					<button type="button" class="toggle" aria-pressed={c.what.source === k} onclick={() => setSource(k as StatCard['what']['source'])}>{label}</button>
-				{/each}
-			</div>
-			{#if c.what.source === 'field'}
+		{#snippet pickFields()}
 				<div class="row mode">
 					<label class="inline"><input type="radio" checked={!rollup} onchange={() => setRollup(false)} /> Pick fields</label>
 					<label class="inline"><input type="radio" checked={rollup} onchange={() => setRollup(true)} /> Every field called…</label>
@@ -271,6 +264,26 @@
 						{/each}
 					</div>
 				{/if}
+		{/snippet}
+
+		{#if live}
+			<p class="meta muted">What it counts, what it is about, its range and how it is drawn are in the card's sentence and its ⋯.</p>
+			{#if c.what.source === 'field'}
+				<details open={rollup || c.what.metrics.length > 1}>
+					<summary>Several fields</summary>
+					<div class="stack inner">{@render pickFields()}</div>
+				</details>
+			{/if}
+		{:else}
+		<fieldset>
+			<legend>What it reads</legend>
+			<div class="chips">
+				{#each Object.entries(SOURCES) as [k, label] (k)}
+					<button type="button" class="toggle" aria-pressed={c.what.source === k} onclick={() => setSource(k as StatCard['what']['source'])}>{label}</button>
+				{/each}
+			</div>
+			{#if c.what.source === 'field'}
+				{@render pickFields()}
 			{:else if c.what.source === 'task'}
 				<label>
 					Task
@@ -281,9 +294,10 @@
 				</label>
 			{/if}
 		</fieldset>
+		{/if}
 
 		<div class="grid2">
-			<label>
+			{#if !live}<label>
 				Each log counts as
 				<select value={c.perLog} onchange={(e) => setPerLog((e.currentTarget as HTMLSelectElement).value)}>
 					{#each choices as p (p)}
@@ -291,7 +305,7 @@
 						<option value={p} disabled={!!bad}>{perLogLabel(p, measures)}{bad ? ' (not available)' : ''}</option>
 					{/each}
 				</select>
-			</label>
+			</label>{/if}
 			<label>
 				Over time, take the
 				<select bind:value={c.overTime}>
@@ -303,6 +317,7 @@
 			</label>
 		</div>
 
+		{#if !live}
 		<fieldset>
 			<legend>Card type</legend>
 			<div class="chips">
@@ -311,9 +326,10 @@
 				{/each}
 			</div>
 		</fieldset>
+		{/if}
 
 		<div class="grid2">
-			{#if usesBucket}
+			{#if usesBucket && !(live && ['bars', 'line'].includes(c.look.chart))}
 				<label>
 					{c.look.chart === 'tile' ? 'Trend in steps of' : c.look.chart === 'goal' ? 'Goal per' : 'One bar or point per'}
 					<select bind:value={c.bucket}>
@@ -336,6 +352,9 @@
 			</label>
 		</div>
 
+		{#if live}
+			<label class="since">Since a date, in place of a range <input type="date" value={since} onchange={(e) => ((since = e.currentTarget.value), (c.range = since ? `since:${since}` : 'page'))} /></label>
+		{:else}
 		<div class="grid2">
 			<label>
 				Range
@@ -358,6 +377,7 @@
 				</label>
 			{/if}
 		</div>
+		{/if}
 
 		<details>
 			<summary>Only some habits, tags or Areas{c.filter.habits.length + c.filter.tags.length + c.filter.areas.length ? ` (${c.filter.habits.length + c.filter.tags.length + c.filter.areas.length})` : ''}</summary>
@@ -405,7 +425,6 @@
 							step="any"
 							value={c.compare.goal ?? ''}
 							disabled={!!why('compare.goal')}
-							title={why('compare.goal') ?? ''}
 							oninput={(e) => {
 								const v = (e.currentTarget as HTMLInputElement).value;
 								c.compare.goal = v === '' ? null : Number(v);
@@ -420,7 +439,6 @@
 							step="any"
 							value={c.compare.goalMax ?? ''}
 							disabled={!!why('compare.goalMax')}
-							title={why('compare.goalMax') ?? ''}
 							oninput={(e) => {
 								const v = (e.currentTarget as HTMLInputElement).value;
 								c.compare.goalMax = v === '' ? null : Number(v);
@@ -428,6 +446,7 @@
 						/>
 					</label>
 				</div>
+				{#each [...new Set([why('compare.goal'), c.compare.goal === null ? null : why('compare.goalMax')])].filter(Boolean) as reason (reason)}<p class="muted small">{reason}</p>{/each}
 				{#if c.what.source === 'field'}
 					<label class="inline">
 						<input type="checkbox" bind:checked={c.compare.goalFromTargets} disabled={!!why('compare.goalFromTargets')} /> Take the goal from the targets
@@ -447,7 +466,6 @@
 					</select>
 				</label>
 				{#if why('compare.rolling')}<p class="muted small">{why('compare.rolling')}</p>{/if}
-				{#if why('compare.rolling') && c.look.chart !== 'tile'}<p class="muted small">{why('compare.rolling')}</p>{/if}
 			</div>
 		</details>
 
@@ -455,12 +473,12 @@
 			<summary>Look</summary>
 			<div class="stack inner">
 				<div class="grid2">
-					<label>
+					{#if !live}<label>
 						Size
 						<select bind:value={c.look.size}>
 							{#each Object.entries(SIZES) as [k, label] (k)}<option value={k}>{label}</option>{/each}
 						</select>
-					</label>
+					</label>{/if}
 					<label>
 						{c.look.chart === 'sessions' ? 'Sessions shown' : 'Series shown before the rest become Other'}
 						<input type="number" min="1" max="20" bind:value={c.look.top} />
@@ -496,8 +514,13 @@
 </div>
 
 <style>
+	.since > input {
+		width: auto;
+	}
 	.builder {
 		display: grid;
+		/* A wide chart scrolls in its box; it never widens the form. */
+		grid-template-columns: minmax(0, 1fr);
 		gap: 1rem;
 	}
 	@media (min-width: 900px) {
