@@ -1,0 +1,164 @@
+/* The log screen: LogScreen (the page), PlaceBlock (a Task's place), LogRow (a closed row, the ledger line, a station, a step),
+   OpenRow (the one open row), TimerControl (the clock under the act) and LevelPicker. One fragment, class prefix .lg-.
+   NumberField's large size (L7) and the act's size (L19) are here until NumberField and ActionsBar take them. */
+.lg-page, .lg-place { --lg-lead: 1.75rem; }
+
+/* ---------- A button that is a line of words: no box of its own ---------- */
+.lg-bare { border: 0; border-radius: var(--radius-mark); background: none; padding: 0; font: inherit; color: inherit; text-align: start; justify-content: flex-start; }
+.lg-bare:focus-visible { outline-offset: calc(-1 * var(--focus-width)); }
+
+/* ---------- Page ---------- */
+.lg-page { --gap: var(--space-group); margin-top: var(--space-inline); }
+.lg-end { --gap: var(--space-section); margin-top: calc(var(--space-page) - var(--space-group)); }
+.lg-level { display: grid; gap: var(--space-inline); }
+.lg-level > p { color: var(--ink-muted); }
+.lg-finish { inline-size: 100%; }
+.lg-finish, .lg-wide { flex: 1 0 100%; }
+.lg-finish { min-height: var(--target-act); }
+.lg-wide { min-height: var(--target-touch); }
+
+/* ---------- A place: the head. Folded, the head is the fold and the whole head its target ---------- */
+.elist > .lg-folded > .lg-head { min-height: calc(var(--target-touch) - 2px); padding-block: calc(var(--space-tight) - 1px); align-items: center; }
+.lg-fold-h { flex: 1 1 100%; }
+.lg-folds > .lg-head > .content > .lg-fold-h { padding-inline-start: var(--handle-slot); } /* the chevron's 16px; in Edit the grip's slot has them, so no name moves and no line rewraps */
+.lg-places[data-mode='edit'] > .lg-folds > .lg-head > .content > .lg-fold-h { padding-inline-start: 0; }
+.lg-fold { display: grid; grid-template-columns: var(--space-inline) minmax(0, 1fr); column-gap: var(--space-inline); align-items: start; inline-size: calc(100% + var(--handle-slot)); margin-inline-start: calc(-1 * var(--handle-slot)); font-weight: inherit; }
+.lg-fold::after, .lg-press::after, .lg-tick-label::after { content: ''; position: absolute; inset: 0; }
+.lg-folded .lg-fold::after, .lg-folded .lg-tick-label::after { inset: -1px; } /* the holder's outline too: 44, not 42 */
+.lg-fold-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-inline); min-width: 0; overflow-wrap: anywhere; }
+.lg-fold-words { font-weight: 400; color: var(--ink-muted); }
+.lg-tick-label { cursor: pointer; }
+.lg-more { min-inline-size: var(--target-min); padding: 0; margin-inline-end: calc(-1 * var(--space-tight)); border-color: transparent; background: none; color: var(--ink-muted); }
+.lg-more[aria-expanded='true'] { color: var(--ink); }
+@media (hover: hover) { .lg-more:hover { color: var(--ink); border-color: transparent; } }
+
+/* Up next first: a heading between the Tasks, an item of the one list. 16 + the list's 8 above, 8 under it */
+.lg-heading { margin-block-start: var(--space-group); }
+.lg-heading > h2 { font-weight: 600; }
+/* The count tag follows the name (All open) */
+.lg-head > .content > .tags { align-self: center; }
+
+/* ---------- The ledger: one 44px line, first on the shelf ---------- */
+.lg-ledger {
+	display: flex; align-items: center; min-height: var(--target-touch); padding-inline-end: var(--space-group);
+	border-bottom: 1px solid var(--line-inset); color: var(--ink);
+}
+/* the chevron stands on the shelf's 16px column; its 44px box ends where the words (and every row's values) start */
+.lg-ledger-fold { flex: none; inline-size: var(--target-touch); min-height: calc(var(--target-touch) - 1px); padding-inline-start: var(--space-group); justify-content: start; }
+.lg-ledger-words { flex: 1 1 0; min-width: 0; display: flex; align-items: center; min-height: calc(var(--target-touch) - 1px); overflow-wrap: anywhere; }
+.lg-ledger-plain { padding-inline-start: var(--space-group); } /* nothing above: no chevron, no column kept for one */
+.lg-ledger > .tick { margin-inline-start: var(--space-inline); }
+
+/* ---------- The open row: one node per open place ---------- */
+.lg-slot { container: lg-slot / inline-size; }
+.lg-open { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-group); padding: calc(var(--space-inline) + var(--space-tight)) var(--space-group) var(--space-group); color: var(--ink); }
+.lg-open-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 var(--space-inline); margin-block-end: calc(-1 * var(--space-inline)); }
+.lg-open-head > .name { font-weight: 600; }
+.lg-fields { display: grid; gap: var(--space-group); grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr)); align-items: start; }
+.lg-fields > .lg-span, .lg-fields > .field:last-child:nth-child(odd), .lg-fields > .field:nth-child(odd):has(+ .lg-span) { grid-column: 1 / -1; }
+.lg-stacked { grid-template-columns: minmax(0, 1fr); }
+/* Last time under each number: two lines kept, "Last 60" and the difference, so a change never moves the act */
+.lg-two { min-block-size: 2lh; }
+.lg-two > span { display: block; }
+.lg-open .value-caption { color: var(--ink); }
+
+/* NumberField, size large (brief L7): value 56 and figure-lg; − and + share its line from 15rem, under it they take the second */
+.lg-num { max-inline-size: none; }
+.stepper > .lg-value { min-height: var(--target-act); padding-inline: var(--space-tight); font-size: min(var(--font-size-figure-lg), 28cqi); line-height: 2.5rem; font-weight: 600; } /* 28cqi: "102.5" and "12:48" still fit a 320px screen at 200% text */
+.stepper > .lg-long { font-size: min(var(--font-size-figure-lg), 20cqi); } /* 1:02:48 */
+.stepper > .lg-value::placeholder { font-size: var(--font-size-body); font-weight: 400; }
+.stepper > .lg-step { inline-size: var(--target-act); min-height: var(--target-act); font-size: var(--glyph-lg); touch-action: manipulation; }
+@container stepper (width < 15rem) {
+	.lg-num > .lg-value { grid-area: 1 / 1 / auto / -1; }
+	.lg-num > .lg-step { grid-row: 2; inline-size: calc((100cqi - var(--space-group)) / 2); min-height: var(--target-touch); }
+	.lg-num > .lg-step:last-of-type { grid-column: 3; }
+}
+/* Stacked row: one number per line, − and + at the edges, figure (25.6px) */
+.lg-stacked .lg-num > .lg-value { min-height: var(--target-touch); font-size: var(--font-size-figure); line-height: 2rem; }
+.lg-stacked .lg-num > .lg-step { min-height: var(--target-touch); }
+.lg-regular .lg-num { max-inline-size: none; }
+.lg-regular .lg-num > .lg-value { min-height: var(--target-touch); font-size: var(--font-size-body); line-height: 1.5rem; font-weight: 400; }
+.lg-regular .lg-num > .lg-step { inline-size: var(--target-touch); min-height: var(--target-touch); }
+/* a running clock stands in the value's box */
+.lg-face-box { display: grid; place-items: center; border: 1px solid var(--line-control); border-radius: var(--radius-control); background: var(--surface-raised); text-align: center; }
+.lg-clock-on > .lg-step { visibility: hidden; }
+
+.lg-offer { min-height: var(--target-min); margin-block-start: calc(-1 * var(--space-inline)); margin-inline: calc(-1 * var(--space-tight)); } /* kept while the switch is on, so the act never moves */
+
+.lg-act { inline-size: 100%; min-height: var(--target-act); padding: var(--space-tight) var(--space-group); display: grid; justify-items: center; align-content: center; gap: 0; text-align: center; overflow-wrap: anywhere; touch-action: manipulation; }
+
+/* ---------- The clock, under the act: the face takes no press ---------- */
+.lg-clock { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-inline); margin-block-start: calc(-1 * var(--space-inline)); }
+.lg-clock-face { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-inline); }
+.lg-face { font-size: var(--font-size-figure-lg); line-height: 2.5rem; font-weight: 600; min-inline-size: 4.5ch; }
+.lg-clock-acts { flex: 1 0 100%; display: grid; gap: var(--space-inline); grid-template-columns: repeat(auto-fit, minmax(max(3.75rem, 40%), 1fr)); }
+.lg-clock-acts > button { min-height: var(--target-touch); padding-inline: var(--space-tight); font-size: var(--font-size-label); line-height: 1.25rem; }
+.lg-clock > p.meta { flex: 1 0 100%; }
+.lg-clock-above { margin-block: 0; }
+
+@container lg-slot (min-width: 18.5rem) { .lg-clock-acts { grid-template-columns: repeat(auto-fit, minmax(3.75rem, 1fr)); } } /* four in a line; under it 2 by 2 */
+@container lg-slot (min-width: 34rem) {
+	.lg-open:has(> .lg-fields ~ .lg-act) { grid-template-columns: minmax(0, 1fr) 10rem; }
+	.lg-open-head, .lg-clock, .lg-offer, .lg-stations, .lg-settings, .lg-open > .lg-clock-acts { grid-column: 1 / -1; }
+	.lg-open > .lg-act { align-self: center; }
+	.lg-clock-acts { flex: 1 1 0; }
+}
+
+/* ---------- Closed rows, stations, steps ---------- */
+.lg-press { flex: 1 1 100%; display: grid; grid-template-columns: var(--lg-lead) minmax(0, 1fr); align-items: baseline; gap: 0; min-height: var(--target-min); }
+.lg-press-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-inline); min-width: 0; overflow-wrap: anywhere; }
+.lg-station { grid-template-columns: minmax(0, 1fr); }
+.lg-val { flex: 1 1 6rem; min-width: 0; }
+.lg-line { flex: none; max-inline-size: 100%; }
+.lg-stations { margin-inline: calc(-1 * var(--space-group)); }
+.lg-station-name { flex: 1 1 8rem; min-width: 0; }
+.lg-station-fields { padding: 0 var(--space-group) var(--space-group); }
+.lg-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-group); min-height: var(--target-touch); padding-inline: calc(var(--space-group) - var(--space-tight)); border-top: 1px solid var(--line-inset); }
+.lg-once { padding: var(--space-group); border-top: 1px solid var(--line-inset); display: grid; gap: var(--space-group); }
+.lg-below { border-top: 1px solid var(--line-inset); }
+.lg-above { border-bottom: 1px solid var(--line-inset); }
+.lg-gap-fix { justify-self: start; margin-block-start: var(--space-inline); min-height: var(--target-touch); }
+.lg-pick { display: grid; }
+.lg-pick > * { grid-area: 1 / 1; min-width: 0; }
+.lg-pick[data-mode='edit'] > .chips { visibility: hidden; }
+.lg-read { font-size: var(--font-size-body); padding-block: var(--space-tight); }
+
+/* ---------- Motion ---------- */
+@media (prefers-reduced-motion: no-preference) {
+	.elist > :is(.lg-row, .lg-place) > .card > .content { transition: margin-inline-end var(--duration-settle) var(--ease-settle); } /* with the slot's own slide */
+	.lg-fold-h { transition: padding-inline-start var(--duration-settle) var(--ease-settle); }
+	.lg-words { animation: lg-in var(--duration-quick) var(--ease-standard); }
+}
+@media (prefers-reduced-motion: reduce) { .lg-words { animation: lg-in var(--duration-quick) linear; } }
+@keyframes lg-in { 0% { opacity: 0; } }
+
+/* ---------- Edit: the same boxes as text, acts hidden in place ---------- */
+[data-mode='edit'] :is(.lg-act, .lg-clock-acts, .lg-more, .lg-foot > button, .lg-gap-fix) { visibility: hidden; }
+.elist[data-mode='edit'] > :is(.lg-row, .lg-place:not(.lg-folds)) > .card > .content { margin-inline-end: calc(var(--space-inline) - var(--handle-slot)); } /* the grip's 16px come from the hidden ⋯ or tick, so no line rewraps */
+[data-mode='edit'] .lg-face-box { border-color: transparent; background: none; }
+
+/* ---------- Forced colours ---------- */
+@media (forced-colors: active) {
+	.lg-open { outline: var(--chosen-width) solid Highlight; outline-offset: calc(-1 * var(--chosen-width)); }
+	.lg-more { border-color: transparent; }
+}
+
+/* ---------- Edit, tier 1: a ruled number or name hugs its words and keeps the line's own height (F.6, L9) ---------- */
+.lg-place .meta-line button.inline-text, .lg-fold-text button.inline-text {
+	display: inline-block; inline-size: auto; min-height: 0; padding: 0; margin: 0; line-height: inherit; border: 0;
+	text-decoration: underline dashed var(--line-control) 1px; text-underline-offset: 3px;
+}
+.lg-place .meta-line button.inline-text::after, .lg-fold-text button.inline-text::after { width: 0; display: none; }
+.lg-place .meta-line .lg-bare { display: inline-block; min-height: 0; line-height: inherit; vertical-align: baseline; }
+/* sets in an exercise are one drag list in Edit: the rows' own lines stay where the Use lists drew them */
+.lg-sets > li[hidden] { display: none; }
+.lg-sets > .lg-after, .lg-sets > .lg-before { position: relative; }
+.lg-sets > .lg-after { margin-block-start: 1px; } .lg-sets > .lg-after::before { content: ''; position: absolute; inset: -1px 0 auto; border-block-start: 1px solid var(--line-inset); }
+.lg-sets > .lg-before { margin-block-end: 1px; } .lg-sets > .lg-before::after { content: ''; position: absolute; inset: auto 0 -1px; border-block-end: 1px solid var(--line-inset); }
+.lg-set-li { list-style: none; }
+.lg-open-grip { display: inline-flex; align-self: center; inline-size: var(--handle-slot); }
+.lg-open-grip > .handle { inline-size: var(--target-min); margin-inline-start: -4px; }
+.lg-open-grip + .name { margin-inline-end: auto; }
+.lg-open-grip { margin-inline-start: calc(-1 * var(--space-tight)); }
+.lg-sets .lg-press::after { content: none; } /* in Edit nothing but the grip is pressed, so it isn't covered */
+.lg-sets > .lg-row > .card > .slot { position: relative; z-index: 1; }

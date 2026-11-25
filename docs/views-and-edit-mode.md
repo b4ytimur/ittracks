@@ -32,27 +32,30 @@ Today, Habits, Library and History share one filter bar: Areas, build or break, 
 
 ## Edit mode
 
-Pages edit in place. Press **Edit** (**Customize** on Stats) and the same page shows handles and controls; press it again to finish. Drag the ⠿ handle with a mouse, finger or pen, or focus it and use the arrow keys.
+Pages edit in place. The switch at the top of a page (**Use**, **Edit**, and **Select** where there is something to change together) turns the same list into one you can edit; Esc goes back to Use. Drag the ⠿ handle with a mouse, finger or pen, or focus it and use the arrow keys. A layout change that can't be saved goes back, and the line above the tabs offers **Retry**.
 
 ### Today
 
 - Drag widgets, sections and habits into your order. Habit order is **My order**, shared with the Habits page.
 - **Hide** or **Show** each widget (progress, week strip, streaks at risk, quit counters) and each section.
-- **Done items**: **Stay where they are**, **Move to the bottom**, **Fold into a "Done" line** or **Hide them**.
-- **Headline number** for all habits, or a different one per habit.
-- **Only show what fits the current part of the day**. Today then says "Showing what fits Morning" with **Show all**.
-- **Lines on each habit**: when and where, headline number, Minimum / Stretch buttons, reframe line, paired reward, reward jar, raise targets suggestion, identity votes.
+- **Layout**: **Outline**, **Up next first**, **Area blocks** or **One list**. It belongs to the view, so each saved view has its own. **Reset layout** puts back the template's, with Undo.
+- Sections and groups fold, and stay folded.
+- Under **Customize → More options**: what happens to done items, the **Headline number** (a habit can have its own, in Edit), **Only show what fits the current part of the day**, and the **Lines on each habit**.
 
 ### Habits
 
 - Drag to reorder (this is **My order**, shared with Today).
 - Tap a name to rename it.
-- **Archive** or **Unarchive**.
+- **Archive** strikes a habit where it stands; **Unarchive** takes that back. When you leave Edit it goes, and the line above the tabs has the Undo.
 - Drop a habit on a group or routine to put it inside; drag it left to take it out. With the keyboard, the right arrow puts a habit inside the one above and the left arrow takes it out. See [Groups and routines](groups-and-routines.md).
 
 ### Library
 
 Tap a Task's name to rename it, and **Archive** Tasks in place. Archived Tasks keep their logs and leave the pickers.
+
+### Areas
+
+Group Habits or the Library by Area, then choose **Edit**: drag an Area's heading to reorder, tap its name to rename it, press its dot for its colour and icon, **Delete** it (with Undo; nothing in it is deleted), or add one at the end.
 
 ### Stats
 
@@ -71,4 +74,3 @@ Tap a Task's name to rename it, and **Archive** Tasks in place. Archived Tasks k
 - **Day starts at** (default 04:00): logs before this time count for the day before.
 - **Parts of your day**: named ranges such as Morning 05:00–11:00. They can't overlap. Habits can use a part instead of a time, and Today can group by them or show only what fits now. Removing a part a habit uses leaves that habit without a time or reminder until you pick another.
 
-**Settings → Areas** manages your Areas (icon, name, colour). Deleting an Area never deletes the habits and Tasks in it.

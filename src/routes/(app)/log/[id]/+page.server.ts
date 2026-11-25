@@ -302,7 +302,7 @@ export const actions: Actions = {
 		const ev = { habitId: o.habit.id, date: o.occ.date };
 		if (p.finish && status === 'done' && o.occ.status !== 'done')
 			emit(actor, 'occurrence.done', { ...ev, data: { occurrenceId: o.occ.id, level: p.level === 'target' ? null : p.level, how: 'log', entries: p.entries.length } });
-		else if (o.occ.status === 'done' && !p.stay) emit(actor, 'log.saved', { ...ev, data: { occurrenceId: o.occ.id, entries: p.entries.length } });
+		else if (o.occ.status === 'done' && (!p.stay || p.finish)) emit(actor, 'log.saved', { ...ev, data: { occurrenceId: o.occ.id, entries: p.entries.length } });
 		// A past log can change what is due today (a weekly target met, a rotation moved on).
 		if (past && schedule) {
 			replanToday(locals.account!.id, o.habit.id, schedule, today, plan);

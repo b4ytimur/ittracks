@@ -3,6 +3,7 @@
 	// connection. Nothing in it goes away on a timer; it tucks under the bar while you scroll down.
 	import { invalidateAll } from '$app/navigation';
 	import { canUndo, type Entry } from '$lib/echo';
+	import { endRest, forgotten, moreRest, rest, restText } from '$lib/rest.svelte';
 	import { band, dismiss, showError } from '$lib/toast.svelte';
 
 	let { status = '' }: { status?: string } = $props();
@@ -18,6 +19,24 @@
 			tucked = false;
 		}
 		if (band.entries.length < 2) open = false;
+	});
+
+	// The rest clock. It ticks only while there is one, and is silent: it buzzes once when it ends.
+	let at = $state(Date.now());
+	$effect(() => {
+		const r = rest.now;
+		if (!r) return;
+		at = Date.now();
+		let buzzed = at >= r.end;
+		const t = setInterval(() => {
+			at = Date.now();
+			if (!buzzed && at >= r.end) {
+				buzzed = true;
+				navigator.vibrate?.(300);
+			}
+			if (forgotten(r, at)) endRest();
+		}, 250);
+		return () => clearInterval(t);
 	});
 
 	let y = 0;
@@ -47,8 +66,17 @@
 	{:else if canUndo(e)}<button type="button" class="small echo-act" aria-label="Undo: {e.text}" onclick={() => act(e)}>Undo</button>{/if}
 {/snippet}
 
-<div class="band" class:tucked data-mode={band.select ? 'select' : 'use'}>
+<div class="band" class:tucked={tucked && !rest.now} class:clocked={rest.now && !band.select} data-mode={band.select ? 'select' : 'use'}>
 	<p class="vh" role="status">{said}</p>
+	{#if rest.now && !band.select}
+		<div class="clock" role="group" aria-label="Rest">
+			<a class="echo-text" href={rest.now.href}><span class="num" role="timer">{restText(rest.now.end, at)}</span>{rest.now.label ? ` · ${rest.now.label}` : ''}</a>
+			<span class="echo-acts">
+				<button type="button" class="small echo-act" aria-label="15 s more rest" onclick={() => moreRest(15)}>+15 s</button>
+				<button type="button" class="small echo-act" aria-label="Skip the rest" onclick={endRest}>Skip</button>
+			</span>
+		</div>
+	{/if}
 	{#if band.select}
 		{@render band.select()}
 	{:else if first || status}
@@ -72,3 +100,34 @@
 		{/each}
 	</ol>
 </div>
+
+<style>
+	.clocked {
+		flex-wrap: wrap;
+		min-height: var(--band-height);
+		border-top: 1px solid var(--line);
+	}
+	.clock,
+	.clocked > :global(.echo) {
+		flex: 1 0 100%;
+	}
+	.clock {
+		display: flex;
+		align-items: center;
+		gap: var(--space-inline);
+		min-height: calc(var(--band-height) - 1px);
+		padding-block: calc(var(--space-tight) - 1px) var(--space-tight);
+	}
+	.clock a {
+		flex: 1 1 8em;
+		min-width: 0;
+		color: inherit;
+		text-decoration: none;
+		overflow-wrap: break-word;
+	}
+	@media (pointer: coarse) {
+		.clock {
+			min-height: calc(var(--target-touch) - 1px);
+		}
+	}
+</style>

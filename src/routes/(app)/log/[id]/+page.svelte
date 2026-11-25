@@ -4,12 +4,17 @@
 	import { page } from '$app/state';
 	import { onMount, tick, untrack } from 'svelte';
 	import Timer from './Timer.svelte';
-	import Stepper from './Stepper.svelte';
+	import Place from '$lib/log/Place.svelte';
+	import { cursor, follow, rowText, type Cursor, type Field, type RowState } from '$lib/log/run';
+	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import MenuButton, { type Way } from '$lib/ui/MenuButton.svelte';
+	import NumberField from '$lib/ui/NumberField.svelte';
+	import { endRest, startRest } from '$lib/rest.svelte';
 	import { defaultStep } from '$lib/task-types';
 	import { enqueue, isOffline, save } from '$lib/outbox.svelte';
-	import { postAction, showToast } from '$lib/toast.svelte';
+	import { postAction, showToast, undoWith } from '$lib/toast.svelte';
 	import { differs, revOf, type LogContent } from '$lib/logrev';
-	import { fromDraft, placeKey } from '$lib/logplaces';
+	import { fromDraft, placeKey } from '$lib/log/places';
 	import NoteBox from '$lib/NoteBox.svelte';
 	import Markdown from '$lib/Markdown.svelte';
 	import { starterFor, untouched } from '$lib/journal';
@@ -20,7 +25,7 @@
 	type Values = Record<string, unknown>;
 	/** One place in the log: a Slot's Task, or a Task inside it (see engine/parts.ts). */
 	interface ItemState {
-		sets: { done: boolean; values: Values }[];
+		sets: RowState[];
 		summary: Values;
 		/** The tick of a Yes or no Task, or of a step (no fields and nothing inside). */
 		tick?: boolean;
@@ -37,6 +42,9 @@
 	const quickMode = $derived(page.url.searchParams.has('quick'));
 	/** Not finished yet: due today, or a past day that was missed, skipped or never logged. */
 	const isOpen = $derived(data.occurrence.status !== 'done' && data.canLog);
+	/** A finished log: it can always be corrected, and saves as you do. */
+	const correcting = $derived(data.occurrence.status === 'done');
+	const stage = $derived<'run' | 'correct' | 'read'>(isOpen ? 'run' : correcting ? 'correct' : 'read');
 
 	/**
 	 * Where a field's starting value comes from, per its log setting. A tick box always
@@ -132,14 +140,15 @@
 	/** What is being logged, by place. A place that goes keeps its values here, in case it comes back. */
 	const places = $state<Record<string, ItemState>>(untrack(() => Object.fromEntries(data.items.map((it) => [placeKey(it), initial(it)]))));
 	/** The prefill, to show which values differ from it. */
-	let base = $state.raw<Record<string, ItemState>>(untrack(() => structuredClone($state.snapshot(places))));
+	const startOf = (it: Item): ItemState => (data.occurrence.status === 'done' ? initial(it) : { ...initial(it), sets: planned(it).sets });
+	let base = $state.raw<Record<string, ItemState>>(untrack(() => Object.fromEntries(data.items.map((it) => [placeKey(it), startOf(it)]))));
 	// A place that comes into the log (a swap, a reroll, a part added) starts as the log does.
 	$effect.pre(() => {
 		const fresh = data.items.filter((it) => untrack(() => !places[placeKey(it)]));
 		untrack(() => {
 			for (const it of fresh) {
 				const s = initial(it);
-				base = { ...base, [placeKey(it)]: structuredClone(s) };
+				base = { ...base, [placeKey(it)]: startOf(it) };
 				places[placeKey(it)] = s;
 			}
 		});
@@ -155,18 +164,6 @@
 	const targetAt = (it: (typeof data.items)[number], id: string) =>
 		(level === 'minimum' ? it.minTargets[id] : level === 'stretch' ? it.stretchTargets[id] : undefined) ??
 		it.targets[id];
-	let restEnd = $state<number | null>(null);
-	let now = $state(Date.now());
-
-	$effect(() => {
-		const t = setInterval(() => (now = Date.now()), 500);
-		return () => clearInterval(t);
-	});
-	const restLeft = $derived(restEnd ? Math.max(0, Math.ceil((restEnd - now) / 1000)) : null);
-	$effect(() => {
-		if (restLeft === 0) navigator.vibrate?.(300);
-	});
-
 	// ----- Autosave: every change is kept on this device at once, and on the server shortly after -----
 	let saveTimer: ReturnType<typeof setTimeout> | undefined;
 	let saveState = $state<'idle' | 'saving' | 'saved' | 'local' | 'refused'>('idle');
@@ -184,7 +181,9 @@
 	onMount(() => {
 		// Restore work that never reached the server (a reload while offline, a crash).
 		const d = readDraft();
-		if (d && !d.synced && data.occurrence.status !== 'done') {
+		// Also what is planned and not logged yet, such as a weight carried to the sets still to do,
+		// as long as the server's log is still the one this draft grew from.
+		if (d && data.occurrence.status !== 'done' && (!d.synced || d.bases?.includes(data.rev))) {
 			Object.assign(places, fromDraft(d.log, data.items));
 			notes = d.notes;
 			level = d.level;
@@ -202,10 +201,11 @@
 			return;
 		}
 		untrack(() => {
-			if (!isOpen) return;
-			writeDraft(false);
+			if (!isOpen && !correcting) return;
+			// A finished log saves as it is corrected; there is nothing to finish, so no draft of it.
+			if (isOpen) writeDraft(false);
 			// A past day is saved on Finish only, so leaving it half done doesn't leave a partial log.
-			if (data.past) return;
+			if (data.past && isOpen) return;
 			clearTimeout(saveTimer);
 			saveTimer = setTimeout(autosave, 1500);
 		});
@@ -231,7 +231,14 @@
 		saveTimer = undefined;
 		const sent = snapshot;
 		saveState = 'saving';
-		const body = payload(false, true);
+		// Correcting: what counts is worked out again, so it is finished again with what it holds now.
+		const gaps = correcting ? missing() : [];
+		if (gaps.length) {
+			saveState = 'refused';
+			refusedWhy = `Fill in ${gaps.join(', ')}.`;
+			return { kind: 'refused' as const, why: refusedWhy };
+		}
+		const body = payload(correcting, true);
 		const mine = sending(body);
 		const a = await save(saveUrl(), [['payload', body]], data.habitName);
 		// The server holds exactly this now; what was sent after it may be there next.
@@ -242,7 +249,8 @@
 		if (a.kind === 'refused' && a.stale) changedElsewhere(a.stale, 'autosave');
 		// Changed while it was being sent: the next save, already on its way, says how that went.
 		if (snapshot !== sent) return a;
-		if (a.kind === 'saved') writeDraft(true);
+		if (a.kind === 'saved' && isOpen) writeDraft(true);
+		if (a.kind === 'saved' && correcting) offerUndo();
 		refusedWhy = a.kind === 'refused' ? a.why : '';
 		saveState = a.kind === 'later' ? 'local' : a.kind;
 		return a;
@@ -252,7 +260,7 @@
 	function sending(body: string): string {
 		const rev = revOf(JSON.parse(body) as LogContent);
 		bases = [...bases.filter((b) => b !== rev), rev].slice(-20);
-		writeDraft(false);
+		if (isOpen) writeDraft(false);
 		return rev;
 	}
 
@@ -271,7 +279,6 @@
 		bases = [rev];
 		theirs = null;
 		if (from === 'finish') {
-			untickedAnswered = true;
 			await tick(); // the form holds the payload
 			finishForm?.requestSubmit();
 		} else await autosave();
@@ -404,33 +411,9 @@
 			return `${it.task?.name ?? 'Task'}${round ? ` (round ${round})` : ''}`;
 		});
 	}
-	/** Finish was pressed with unticked sets or places with only suggested values: ask whether they were done. */
-	let askUnticked = $state(0);
-	let askSuggested = $state<string[]>([]);
-	const asking = $derived(askUnticked > 0 || askSuggested.length > 0);
-	const askText = $derived.by(() => {
-		const sets = askUnticked === 1 ? '1 planned set isn’t ticked' : `${askUnticked} planned sets aren’t ticked`;
-		const names = askSuggested.length > 4 ? `${askSuggested.slice(0, 4).join(', ')} and ${askSuggested.length - 4} more` : askSuggested.join(', ');
-		const places = `${names} still ${askSuggested.length === 1 ? 'shows' : 'show'} last time’s values or targets, with nothing logged`;
-		const one = askUnticked + askSuggested.length === 1;
-		const parts = [askUnticked ? sets : '', askSuggested.length ? places : ''].filter(Boolean);
-		return `${parts.join(', and ')}. Did you do ${one ? 'it' : 'them'}?`;
-	});
 	let finishForm = $state<HTMLFormElement>();
-	let untickedAnswered = false;
-	async function finishWith(tickAll: boolean) {
-		if (tickAll)
-			data.items.forEach((it, i) => {
-				const ids = it.task?.metrics.filter((m) => m.repeats).map((m) => m.id) ?? [];
-				for (const set of log[i].sets) if (ids.some((id) => !empty(set.values[id]))) set.done = true;
-			});
-		suggestionsConfirmed = tickAll;
-		untickedAnswered = true;
-		askUnticked = 0;
-		askSuggested = [];
-		await tick();
-		finishForm?.requestSubmit();
-	}
+	const unticked = $derived(untickedSets());
+	const suggested = $derived(suggestionsConfirmed ? [] : suggestedPlaces());
 	/** Required fields that are still empty, by name. */
 	function missing(): string[] {
 		const out: string[] = [];
@@ -449,32 +432,151 @@
 		return out;
 	}
 
-	function setDone(i: number, j: number, done: boolean) {
-		log[i].sets[j].done = done;
-		const t = data.items[i].task;
-		if (done && t?.restTimerEnabled) restEnd = Date.now() + t.restTimerSeconds * 1000;
-	}
+	// ----- Running the log: one open row; Done is the only thing that logs a set -----
 
-	/** Changing a set's value marks it done: you did that set. */
-	function setValue(i: number, j: number, metricId: string, v: unknown) {
-		const set = log[i].sets[j];
-		set.values[metricId] = v;
-		if (!set.done) set.done = true;
-	}
+	let at = $state<Cursor | null>(null);
+	/** The place you are in. */
+	let here = $state<string | null>(null);
+	/** The row that was just logged, for a moment: one press logs one set. */
+	let logged = $state<Cursor | null>(null);
+	let said = $state('');
+	const LOGGED_MS = 1000;
 
-	function finishRemaining(i: number) {
-		for (const s of log[i].sets) s.done = true;
-	}
+	const repeatingOf = (it: Item) => shownMetrics(it.task?.metrics.filter((m) => m.repeats) ?? []);
+	const inRows = (it: Item) => repeatingOf(it).length > 0;
+	const runPlaces = $derived(data.items.flatMap((it, i) => (inRows(it) ? [{ key: placeKey(it), sets: log[i].sets }] : [])));
+	const row = $derived(stage === 'run' ? cursor(runPlaces, at, here) : at);
+	const setsLeft = $derived(runPlaces.some((p) => p.sets.some((x) => !x.done)));
+	const setsDone = $derived(runPlaces.reduce((n, p) => n + p.sets.filter((x) => x.done).length, 0));
+	const setsAll = $derived(runPlaces.reduce((n, p) => n + p.sets.length, 0));
 
+	function show(key: string) {
+		tick().then(() => document.querySelector(`[data-place="${CSS.escape(key)}"] .lg-open`)?.scrollIntoView({ block: 'nearest' }));
+	}
+	function openRow(i: number, set: number | null) {
+		const key = placeKey(data.items[i]);
+		here = key;
+		at = set === null ? null : { key, set };
+		if (set !== null) show(key);
+	}
+	function unfold(i: number) {
+		const left = log[i].sets.some((x) => !x.done) && stage === 'run';
+		openRow(i, left ? null : log[i].sets.length - 1);
+		show(placeKey(data.items[i]));
+	}
+	const metricsOf = (it: Item) => repeatingOf(it) as Field[];
+
+	function doneRow(i: number, set: number, keyboard: boolean) {
+		const it = data.items[i];
+		const key = placeKey(it);
+		log[i].sets[set].done = true;
+		places[key].sets = follow(log[i].sets, baseOf(i)?.sets ?? [], set, metricsOf(it));
+		logged = { key, set };
+		setTimeout(() => {
+			if (logged?.key === key && logged.set === set) logged = null;
+		}, LOGGED_MS);
+		at = null;
+		here = key;
+		const next = cursor(runPlaces, null, key);
+		// The last one stays open, so nothing that ends the log ever comes under the thumb.
+		if (!next) at = { key, set };
+		const to = next ? data.items.find((x) => placeKey(x) === next.key) : undefined;
+		const nextName = to ? `${next!.key === key ? '' : `${to.task?.name}, `}set ${next!.set + 1}` : '';
+		if (it.task?.restTimerEnabled && next && !data.past && stage === 'run') startRest(it.task.restTimerSeconds, `set ${next.set + 1} of ${to?.task?.name}`, `/log/${data.occurrence.id}`);
+		else endRest();
+		said = `Logged set ${set + 1}.${next ? ` Next: ${nextName}, ${rowText(metricsOf(to!), places[next.key].sets[next.set].values)}.` : ' All sets are done.'}`;
+		if (next && next.key !== key) {
+			here = next.key;
+			show(next.key);
+			if (keyboard) tick().then(() => document.querySelector<HTMLElement>(`[data-place="${CSS.escape(next.key)}"] .lg-act`)?.focus());
+		}
+	}
+	function tickRow(i: number, set: number, on: boolean) {
+		const key = placeKey(data.items[i]);
+		log[i].sets[set].done = on;
+		if (on) {
+			places[key].sets = follow(log[i].sets, baseOf(i)?.sets ?? [], set, metricsOf(data.items[i]));
+			const t = data.items[i].task;
+			if (t?.restTimerEnabled && stage === 'run' && !data.past) startRest(t.restTimerSeconds, t.name, `/log/${data.occurrence.id}`);
+		} else {
+			endRest();
+			here = key;
+			at = { key, set };
+		}
+		said = `Set ${set + 1} ${on ? 'done' : 'not done'}.`;
+	}
+	/** Changing a number never logs it. */
+	function setValue(i: number, set: number, id: string, v: unknown) {
+		const x = log[i].sets[set];
+		x.values[id] = v;
+		if (!x.own?.includes(id)) x.own = [...(x.own ?? []), id];
+		// Stepping the row keeps it open, also once it is the only one left.
+		if (stage === 'run') at = { key: placeKey(data.items[i]), set };
+		if (x.done) places[placeKey(data.items[i])].sets = follow(log[i].sets, baseOf(i)?.sets ?? [], set, metricsOf(data.items[i]));
+	}
 	function addSet(i: number) {
 		const last = log[i].sets.at(-1);
 		log[i].sets.push({ done: false, values: { ...(last?.values ?? {}) } });
 	}
+	function removeSet(i: number) {
+		const gone = log[i].sets.pop();
+		at = null;
+		if (gone) showToast(`Removed set ${log[i].sets.length + 1} of ${data.items[i].task?.name}, for this log.`, () => void log[i]?.sets.push(gone));
+	}
+	function tickAll() {
+		for (const [i, it] of data.items.entries()) {
+			const ids = it.task?.metrics.filter((m) => m.repeats).map((m) => m.id) ?? [];
+			for (const x of log[i].sets) if (ids.some((id) => !empty(x.values[id]))) x.done = true;
+		}
+		at = null;
+		endRest();
+	}
 
-	const changedSet = (i: number, j: number, id: string) =>
-		isOpen && baseOf(i)?.sets[j] !== undefined && (baseOf(i)!.sets[j].values[id] ?? null) !== (log[i].sets[j].values[id] ?? null);
-	const changedSummary = (i: number, id: string) =>
-		isOpen && (baseOf(i)?.summary[id] ?? null) !== (log[i].summary[id] ?? null);
+	// How the places stand: one open and the others a line each, or all open. Kept per habit on this device.
+	const LAYOUT = untrack(() => `log-layout:${data.habitId}`);
+	let layout = $state<'current' | 'all'>('current');
+	onMount(() => {
+		try {
+			if (localStorage.getItem(LAYOUT) === 'all') layout = 'all';
+		} catch {
+			/* storage blocked */
+		}
+	});
+	function setLayout(v: string) {
+		layout = v === 'all' ? 'all' : 'current';
+		try {
+			localStorage.setItem(LAYOUT, layout);
+		} catch {
+			/* storage blocked */
+		}
+	}
+
+	/** Correcting a finished log: one Undo per visit, back to what it was. It works from any page. */
+	const was = untrack(() => ({ payload: data.occurrence.status === 'done' ? payload(true, true) : '', log: structuredClone($state.snapshot(places)), notes: data.occurrence.notes, level: data.occurrence.level, rev: data.rev }));
+	let offered = false;
+	let mounted = true;
+	$effect(() => () => {
+		mounted = false;
+	});
+	function offerUndo() {
+		if (offered) return;
+		offered = true;
+		const { bases: _, ...rest } = JSON.parse(was.payload);
+		const undo = undoWith(`/log/${data.occurrence.id}?/save`, { payload: JSON.stringify(rest) });
+		showToast(`Changed the log of ${data.habitName}, ${dateLabel}.`, async () => {
+			if (mounted) dropAutosave();
+			if (!(await undo())) return false;
+			offered = false;
+			if (!mounted) return true;
+			Object.assign(places, structuredClone(was.log));
+			notes = was.notes;
+			level = was.level;
+			bases = [was.rev, revOf(JSON.parse(was.payload) as LogContent)];
+			primed = false;
+			return true;
+		});
+	}
+
 	/**
 	 * The value is still the prefill (last time or the target), not something logged now. It is
 	 * compared with the prefill itself, so an autosave and a reload don't turn it into time logged.
@@ -531,6 +633,56 @@
 		})
 	);
 
+	const LIST = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' });
+	const recapOf = (id: string, best = false) => {
+		const rc = data.recap[id];
+		return rc ? `Last time ${LIST.format(new Date(rc.date + 'T12:00:00'))} · ${rc.text}${best && rc.best ? ` · best ${rc.best}` : ''}` : stage === 'run' ? 'First time' : '';
+	};
+	const headOf = (it: Item, i: number) => {
+		const t = it.task!;
+		const n = log[i].sets.length;
+		const targets = repeatingOf(it).flatMap((m) => {
+			const v = targetAt(it, m.id);
+			return v === undefined ? [] : [`${v} ${m.unit ?? m.name.toLowerCase()}`];
+		});
+		const rest = t.restTimerEnabled ? `rest ${t.restTimerSeconds % 60 ? `${t.restTimerSeconds} s` : `${t.restTimerSeconds / 60} min`}` : '';
+		return [`${n} ${n === 1 ? 'set' : 'sets'}`, ...targets, rest].filter(Boolean).join(' · ');
+	};
+	const foldedAt = (i: number) => {
+		const it = data.items[i];
+		if (quickMode || layout === 'all' || !inRows(it)) return false;
+		return row ? row.key !== placeKey(it) : stage === 'correct' || runPlaces.length > 1;
+	};
+	let swapping = $state<string | null>(null);
+	let howTo = $state<string | null>(null);
+	let finishButton = $state<HTMLButtonElement>();
+	function goToFinish() {
+		finishButton?.scrollIntoView({ block: 'center' });
+		finishButton?.focus({ preventScroll: true });
+	}
+	function menuOf(it: Item): (Way | '-')[] {
+		const key = placeKey(it);
+		return [
+			...(it.task?.notes.trim() ? [{ label: howTo === key ? 'Hide how to' : 'How to', onselect: () => (howTo = howTo === key ? null : key) }] : []),
+			...(it.task ? [{ label: 'Last 7 times', href: `/library/${it.task.id}` }] : []),
+			...(stage === 'run' && it.depth === 0 ? [{ label: 'Swap…', onselect: () => (swapping = key) }] : []),
+			...(stage === 'run' && it.open ? [{ label: 'Pick another', action: '?/reroll', fields: { slot: it.slotId } }] : [])
+		];
+	}
+	const hint = $derived(
+		[
+			data.variantName,
+			data.past && isOpen ? `for ${dateLabel}` : dateLabel,
+			data.occurrence.status !== 'due' ? data.occurrence.status : null,
+			setsAll ? `${setsDone} of ${setsAll} sets done` : null,
+			data.past && isOpen
+				? 'Kept on this device, not counted until you finish'
+				: { idle: correcting ? 'Saves as you change it' : null, saving: 'Saving…', saved: 'Saved', local: 'Saved on this device', refused: 'Not saved' }[saveState]
+		]
+			.filter(Boolean)
+			.join(' · ')
+	);
+
 	const prevSummary = (i: number) => data.items[i].previous.find(isSummary) ?? {};
 	const num = (v: unknown) => (v === null || v === undefined || v === '' ? '' : String(v));
 	const stepOf = (m: Metric) => m.step ?? defaultStep(m.type, m.unit);
@@ -540,236 +692,210 @@
 </script>
 
 <svelte:head><title>{data.habitName} · ittracks</title></svelte:head>
+<svelte:window onkeydown={(e) => e.key === 'Enter' && (e.ctrlKey || e.metaKey) && stage === 'run' && finishForm?.requestSubmit()} />
 
-<header class="bar">
-	<div>
-		<h1>{quickMode ? `Quick log: ${data.habitName}` : data.habitName}</h1>
-		<div class="muted">
-			{[data.variantName, dateLabel, data.occurrence.status !== 'due' ? data.occurrence.status : null]
-				.filter(Boolean)
-				.join(' · ')}
-			{#if saveState === 'saving'}· saving…{:else if saveState === 'saved'}· saved{:else if saveState === 'local'}· saved on this device{:else if saveState === 'refused'}· <span class="error">not saved: {refusedWhy}</span>{/if}
+<EditChrome title={quickMode ? `Quick log: ${data.habitName}` : data.habitName} back={{ href: data.back, label: 'Back' }} modes={['use']} hints={{ use: hint }} />
+{#if saveState === 'refused' && !theirs}<p class="error" role="alert">Not saved: {refusedWhy}</p>{/if}
+<p class="vh" role="status">{said}</p>
+
+{#if stage === 'read'}
+	<div class="notice"><span class="notice-text">This day is further back than Settings allow logging, so it can only be looked at.</span><span class="notice-acts"><a class="quiet hit" href="/settings/past-days">Change it in Settings</a></span></div>
+{/if}
+
+<div class="l-cluster lg-top">
+	{#if data.levels && !quickMode}
+		<div class="lg-level" role="group" aria-label="Level">
+			<div class="chips">
+				{#each ['minimum', 'target', 'stretch'] as const as l (l)}
+					<button type="button" class="toggle" aria-pressed={level === l} disabled={stage === 'read'} onclick={() => (level = l)}>{levelNames[l]}</button>
+				{/each}
+			</div>
+			{#if data.levels[level]}<p class="meta">{data.levels[level]}</p>{/if}
 		</div>
-	</div>
-	<a href={data.back}>Back</a>
-</header>
+	{/if}
+	{#if runPlaces.length > 1 && !quickMode}
+		<label class="lg-layout meta">Layout <select value={layout} onchange={(e) => setLayout(e.currentTarget.value)}><option value="current">One open</option><option value="all">All open</option></select></label>
+	{/if}
+</div>
 
-{#if !data.canLog && data.occurrence.status !== 'done'}
-	<p class="card muted small-text">This day is further back than Settings allow logging, so it can only be looked at. <a href="/settings/past-days">Change it in Settings</a>.</p>
-{:else if data.past && isOpen}
-	<p class="muted small-text past">Logging a past day. It counts like a log on the day.</p>
-{/if}
-
-{#if canRepeat && !quickMode}
-	<div class="row repeat">
-		<button type="button" class:primary={!started} class="grow" onclick={sameAsLast}>{started ? 'Fill the rest as last time' : 'Same as last time'}</button>
-		<span class="muted small-text"
-			>{started
-				? 'Keeps what you logged here, copies the rest from your last log, and finishes.'
-				: data.past
-					? 'Copies your last log from before this day and finishes.'
-					: 'Copies your last log and finishes.'}</span
-		>
-	</div>
-{/if}
-
-{#if data.levels}
-	<fieldset class="card levels" aria-label="Level">
-		<div class="chips">
-			{#each ['minimum', 'target', 'stretch'] as const as l (l)}
-				<button type="button" class="chip" class:on={level === l} onclick={() => (level = l)}>{levelNames[l]}</button>
-			{/each}
+{#snippet onceFields(it: Item, i: number, metrics: Metric[])}
+	{#each metrics as m (m.id)}
+		{@const prev = prevSummary(i)[m.id]}
+		{@const unit = m.unit || (m.type === 'duration' ? 'min' : '')}
+		<div class="field">
+			{#if m.type === 'checkbox'}
+				<label class="check"><input type="checkbox" class="tick" disabled={stage === 'read'} checked={!!log[i].summary[m.id]} onchange={(e) => (log[i].summary[m.id] = e.currentTarget.checked)} /> {m.name}{m.required ? ', required' : ''}</label>
+			{:else if m.type === 'choice' && (m.choices?.length ?? 0) <= 7}
+				<span class="label">{m.name}{m.required ? ', required' : ''}</span>
+				<div class="chips" role="group" aria-label={m.name}>
+					{#each m.choices ?? [] as c (c.id)}
+						<button type="button" class="toggle" disabled={stage === 'read'} aria-pressed={log[i].summary[m.id] === c.id} onclick={() => (log[i].summary[m.id] = log[i].summary[m.id] === c.id ? null : c.id)}>{c.name}</button>
+					{/each}
+				</div>
+			{:else if m.type === 'choice'}
+				<label class="label" for="f-{i}-{m.id}">{m.name}{m.required ? ', required' : ''}</label>
+				<select id="f-{i}-{m.id}" disabled={stage === 'read'} value={num(log[i].summary[m.id])} onchange={(e) => (log[i].summary[m.id] = e.currentTarget.value)}>
+					<option value=""></option>
+					{#each m.choices ?? [] as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
+				</select>
+			{:else if m.type === 'text' && isLong(m) && stage === 'read'}
+				<span class="label">{m.name}</span><Markdown text={num(log[i].summary[m.id])} small />
+			{:else if m.type === 'text' && isLong(m)}
+				<NoteBox
+					label="{m.name}{m.required ? ', required' : ''}"
+					placeholder="Write here. Markdown works."
+					rows={6}
+					bind:value={() => num(log[i].summary[m.id]), (v) => (log[i].summary[m.id] = v)}
+				/>
+			{:else if m.type === 'text'}
+				<label class="label" for="f-{i}-{m.id}">{m.name}{m.required ? ', required' : ''}</label>
+				<input id="f-{i}-{m.id}" disabled={stage === 'read'} value={num(log[i].summary[m.id])} oninput={(e) => (log[i].summary[m.id] = e.currentTarget.value)} />
+			{:else if isNumeric(m)}
+				<span class="label">{m.name}{unit ? ` (${unit})` : ''}{m.required ? ', required' : ''}</span>
+				<NumberField
+					value={log[i].summary[m.id] as number | null}
+					step={stepOf(m)}
+					{unit}
+					label="{m.name} for {it.task?.name}"
+					disabled={stage === 'read'}
+					caption={[targetAt(it, m.id) !== undefined ? `${data.levels ? levelNames[level] : 'Target'} ${targetAt(it, m.id)}` : '', prev !== undefined && isOpen ? `last time ${prev}` : ''].filter(Boolean).join(' · ')}
+					onchange={(v) => (log[i].summary[m.id] = v)}
+				/>
+				{#if m.type === 'duration' && !quickMode && !data.past && stage === 'run'}
+					<Timer
+						bind:value={() => log[i].summary[m.id] as number | null, (v) => (log[i].summary[m.id] = v)}
+						replace={isPrefill(i, m.id)}
+						target={targetAt(it, m.id) ?? null}
+						storageKey="timer:{data.occurrence.id}:{m.id}"
+					/>
+				{/if}
+			{/if}
 		</div>
-		{#if data.levels[level]}<p class="muted small-text" style="margin: 0.4rem 0 0">{data.levels[level]}</p>{/if}
-	</fieldset>
-{/if}
+	{/each}
+{/snippet}
 
-{#each data.items as it, i (placeKey(it))}
+{#snippet extraOf(it: Item)}
 	{@const t = it.task}
-	{#if it.roundHead && !quickMode}
-		<h3 class="round" style:margin-left="{it.depth - 1}rem">{it.roundHead}</h3>
+	{#if swapping === placeKey(it)}
+		<form method="POST" action="?/swap" class="row lg-swap" use:enhance={() => async ({ update }) => { swapping = null; await update(); }}>
+			<input type="hidden" name="slot" value={it.slotId} />
+			<select class="grow" name="task" aria-label="Task to use instead of {t?.name ?? 'none'}">
+				{#each data.library as l (l.id)}<option value={l.id} selected={l.id === t?.id}>{l.name}</option>{/each}
+			</select>
+			<button class="small">Use</button>
+			<button type="button" class="small" onclick={() => (swapping = null)}>Cancel</button>
+		</form>
 	{/if}
-	{#if t && isYesNo(it) && it.depth > 0}
-		<!-- A step inside a Task: one tick box under it. -->
-		{#if !quickMode}
-			<label class="step" style:margin-left="{it.depth}rem"><input type="checkbox" class="tick" bind:checked={log[i].tick} /> {t.name}</label>
-		{/if}
-	{:else if !quickMode || (t && shownMetrics(t.metrics).length)}
-	<section class="card stack" class:nested={it.depth > 0} style:margin-left="{it.depth}rem">
-		<div class="row">
-			{#if it.depth > 0}
-				<h3 class="grow" style="margin: 0">{t?.name ?? 'No matching Task'}</h3>
-			{:else}
-				<h2 class="grow" style="margin: 0">{t?.name ?? 'No matching Task'}</h2>
-			{/if}
-			{#if it.open && !quickMode}
-				<form method="POST" action="?/reroll" use:enhance>
-					<input type="hidden" name="slot" value={it.slotId} />
-					<button class="small" title="Pick another Task">Reroll</button>
-				</form>
-			{/if}
-			{#if !quickMode && it.depth === 0}
-				<details class="swap">
-					<summary class="small-text">Swap</summary>
-					<form method="POST" action="?/swap" class="row" use:enhance>
-						<input type="hidden" name="slot" value={it.slotId} />
-						<select name="task" aria-label="Task to use">
-							{#each data.library as l (l.id)}<option value={l.id} selected={l.id === t?.id}>{l.name}</option>{/each}
-						</select>
-						<button class="small">Use</button>
-					</form>
-				</details>
-			{/if}
-		</div>
-		{#if it.open && !t}
-			<p class="muted">No Task in your Library matches this slot's rules. <a href="/library">Open the Library</a>.</p>
-		{/if}
-		{#if t && data.recap[t.id]}
-			{@const rc = data.recap[t.id]}
-			<p class="muted small-text recap">
-				Last time ({new Date(rc.date + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}): {rc.text}{rc.best ? ` · best ${rc.best}` : ''}{' · '}<a href="/library/{t.id}">History</a>
-			</p>
-		{/if}
-		{#if t?.notes.trim() && !quickMode}
-			<details class="howto">
-				<summary class="small-text">How to</summary>
-				<div class="howto-body"><Markdown text={t.notes} small /></div>
-			</details>
-		{/if}
+	{#if t && howTo === placeKey(it)}<div class="howto"><Markdown text={t.notes} small /></div>{/if}
+{/snippet}
 
-		{#if t}
-			{@const repeating = shownMetrics(t.metrics.filter((m) => m.repeats))}
-			{@const single = shownMetrics(t.metrics.filter((m) => !m.repeats))}
-
-			{#if repeating.length}
-				<table class="sets">
-					<thead>
-						<tr>
-							<th>Set</th>
-							{#each repeating as m (m.id)}<th>{m.name}{m.unit ? ` (${m.unit})` : ''}{m.required ? ' *' : ''}</th>{/each}
-							{#if !quickMode}<th>Done</th>{/if}
-						</tr>
-					</thead>
-					<tbody>
-						{#each log[i].sets as set, j (j)}
-							<tr class:done={set.done}>
-								<td>{j + 1}</td>
-								{#each repeating as m (m.id)}
-									<td>
-										{#if m.type === 'checkbox'}
-											<input type="checkbox" checked={!!set.values[m.id]} onchange={(e) => setValue(i, j, m.id, e.currentTarget.checked)} />
-										{:else if m.type === 'choice'}
-											<select value={num(set.values[m.id])} onchange={(e) => setValue(i, j, m.id, e.currentTarget.value)}>
-												<option value=""></option>
-												{#each m.choices ?? [] as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
-											</select>
-										{:else if m.type === 'text'}
-											<input value={num(set.values[m.id])} oninput={(e) => setValue(i, j, m.id, e.currentTarget.value)} />
-										{:else}
-											<Stepper compact value={set.values[m.id] as number | null} step={stepOf(m)} label="{m.name}, set {j + 1}"
-												changed={changedSet(i, j, m.id)} onchange={(v) => setValue(i, j, m.id, v)} />
-										{/if}
-									</td>
+<ul class="elist lg-page lg-places" data-mode="use" aria-label="What to log">
+	{#each data.items as it, i (placeKey(it))}
+		{@const t = it.task}
+		{@const key = placeKey(it)}
+		{@const single = t ? shownMetrics(t.metrics.filter((m) => !m.repeats)) : []}
+		{#if it.roundHead && !quickMode}<li class="lg-heading"><h2 class="card-title">{it.roundHead}</h2></li>{/if}
+		{#if t && isYesNo(it)}
+			{#if !quickMode}
+				<li class="row lg-row" class:done={log[i].tick} style:margin-inline-start="calc({it.depth} * var(--space-indent))">
+					<div class="card">
+						<span class="slot"></span>
+						<div class="content"><label class="lg-tick-label" for="tick-{i}">{t.name}</label>{@render extraOf(it)}</div>
+						<div class="verb">
+							<input id="tick-{i}" type="checkbox" class="tick hit" disabled={stage === 'read'} bind:checked={log[i].tick} aria-label="{t.name} done" />
+							{#if menuOf(it).length && stage === 'run'}<MenuButton class="lg-more hit" label="More for {t.name}" items={menuOf(it)} />{/if}
+						</div>
+					</div>
+				</li>
+			{/if}
+		{:else if !t || !quickMode || shownMetrics(t.metrics).length}
+			<li class="holder lg-place" class:lg-folded={foldedAt(i)} class:lg-folds={foldedAt(i)} class:done={inRows(it) && log[i].sets.length > 0 && log[i].sets.every((x) => x.done)} data-place={key} style:margin-inline-start="calc({it.depth} * var(--space-indent))">
+				{#if t && inRows(it) && !quickMode}
+					<Place
+						name={t.name}
+						fields={repeatingOf(it).map((m) => ({ ...m, step: stepOf(m) }))}
+						sets={log[i].sets}
+						base={baseOf(i)?.sets ?? []}
+						previous={it.previous.filter((v) => !isSummary(v))}
+						head={headOf(it, i)}
+						recap={recapOf(t.id)}
+						open={row?.key === key ? row.set : null}
+						folded={foldedAt(i)}
+						{stage}
+						toFinish={!setsLeft}
+						logged={logged?.key === key ? logged.set : null}
+						menu={menuOf(it)}
+						targetOf={(id) => targetAt(it, id)}
+						onopen={(k) => openRow(i, k)}
+						onunfold={() => unfold(i)}
+						ondone={(k, keyboard) => doneRow(i, k, keyboard)}
+						ontick={(k, on) => tickRow(i, k, on)}
+						onvalue={(k, id, v) => setValue(i, k, id, v)}
+						onadd={() => addSet(i)}
+						onremove={() => removeSet(i)}
+						onfinish={goToFinish}
+						once={single.length ? onceHere : undefined}
+						extra={extraHere}
+					/>
+					{#snippet onceHere()}{@render onceFields(it, i, single)}{/snippet}
+					{#snippet extraHere()}{@render extraOf(it)}{/snippet}
+				{:else}
+					<div class="card lg-head">
+						<span class="slot"></span>
+						<div class="content">
+							<h2 class="name">{t?.name ?? 'No matching Task'}</h2>
+							{#if !t}<p class="meta-line">Nothing in your <a href="/library">Library</a> matches this place's rules.</p>{:else if recapOf(t.id)}<p class="meta-line">{recapOf(t.id, true)}</p>{/if}
+							{@render extraOf(it)}
+						</div>
+						{#if menuOf(it).length && stage === 'run' && !quickMode}<div class="verb"><MenuButton class="lg-more hit" label="More for {t?.name ?? 'this place'}" items={menuOf(it)} /></div>{/if}
+					</div>
+					{#if t}
+						<div class="shelf lg-shelf">
+							{#if quickMode && inRows(it)}
+								{#each log[i].sets as x, k (k)}
+									<div class="lg-once">
+										<span class="label">Set {k + 1}</span>
+										<div class="lg-fields">
+											{#each repeatingOf(it) as m (m.id)}
+												{#if isNumeric(m)}
+													<div class="field">
+														<span class="label">{m.name}{m.unit ? ` (${m.unit})` : ''}</span>
+														<NumberField value={x.values[m.id] as number | null} step={stepOf(m)} unit={m.unit ?? ''} label="{m.name} for {t.name}, set {k + 1}" onchange={(v) => (x.values[m.id] = v)} />
+													</div>
+												{:else if m.type === 'choice'}
+													<label class="field"><span class="label">{m.name}</span>
+														<select value={num(x.values[m.id])} onchange={(e) => (x.values[m.id] = e.currentTarget.value)}><option value=""></option>{#each m.choices ?? [] as c (c.id)}<option value={c.id}>{c.name}</option>{/each}</select></label>
+												{:else if m.type === 'checkbox'}
+													<label class="check"><input type="checkbox" class="tick" checked={!!x.values[m.id]} onchange={(e) => (x.values[m.id] = e.currentTarget.checked)} /> {m.name}</label>
+												{:else}
+													<label class="field"><span class="label">{m.name}</span><input value={num(x.values[m.id])} oninput={(e) => (x.values[m.id] = e.currentTarget.value)} /></label>
+												{/if}
+											{/each}
+										</div>
+									</div>
 								{/each}
-								{#if !quickMode}
-									<td><input type="checkbox" class="tick" checked={set.done} onchange={(e) => setDone(i, j, e.currentTarget.checked)} aria-label="Set {j + 1} done" /></td>
-								{/if}
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-				<div class="row">
-					<button type="button" class="small" onclick={() => addSet(i)}>+ set</button>
-					{#if log[i].sets.length}
-						<button type="button" class="small" onclick={() => log[i].sets.pop()}>− set</button>
+							{/if}
+							{#if single.length}<div class="lg-once">{@render onceFields(it, i, single)}</div>{/if}
+						</div>
 					{/if}
-					{#if !quickMode && log[i].sets.some((x) => !x.done)}
-						<button type="button" class="small" onclick={() => finishRemaining(i)}>Finish remaining sets as planned</button>
-					{/if}
-					{#if it.sets}<span class="muted small-text">Target {it.sets} sets</span>{/if}
-				</div>
-			{/if}
-
-			{#each single as m (m.id)}
-				{@const prev = prevSummary(i)[m.id]}
-				<div>
-					{#if m.type === 'checkbox'}
-						<label style="color: var(--text)"
-							><input type="checkbox" class="tick" checked={!!log[i].summary[m.id]} onchange={(e) => (log[i].summary[m.id] = e.currentTarget.checked)} />
-							{m.name}{m.required ? ' *' : ''}</label
-						>
-					{:else if m.type === 'choice'}
-						<label>{m.name}{m.required ? ' *' : ''}
-							<select value={num(log[i].summary[m.id])} onchange={(e) => (log[i].summary[m.id] = e.currentTarget.value)}>
-								<option value=""></option>
-								{#each m.choices ?? [] as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
-							</select>
-						</label>
-					{:else if m.type === 'text' && isLong(m)}
-						<NoteBox
-							label="{m.name}{m.required ? ' *' : ''}"
-							placeholder="Write here. Markdown works."
-							rows={6}
-							bind:value={() => num(log[i].summary[m.id]), (v) => (log[i].summary[m.id] = v)}
-						/>
-					{:else if m.type === 'text'}
-						<label>{m.name}{m.required ? ' *' : ''} <input value={num(log[i].summary[m.id])} oninput={(e) => (log[i].summary[m.id] = e.currentTarget.value)} /></label>
-					{:else if isNumeric(m)}
-						<span class="field-label">
-							{m.name}{m.unit ? ` (${m.unit})` : m.type === 'duration' ? ' (min)' : ''}{m.required ? ' *' : ''}
-							{#if targetAt(it, m.id) !== undefined}<span class="small-text">· {data.levels ? levelNames[level].toLowerCase() : 'target'} {targetAt(it, m.id)}</span>{/if}
-							{#if prev !== undefined && isOpen}<span class="small-text">· last time {prev}</span>{/if}
-						</span>
-						<Stepper value={log[i].summary[m.id] as number | null} step={stepOf(m)} label={m.name}
-							changed={changedSummary(i, m.id)} onchange={(v) => (log[i].summary[m.id] = v)} />
-						{#if m.type === 'duration' && !quickMode && !data.past}
-							<Timer
-								bind:value={() => log[i].summary[m.id] as number | null, (v) => (log[i].summary[m.id] = v)}
-								replace={isPrefill(i, m.id)}
-								target={targetAt(it, m.id) ?? null}
-								storageKey="timer:{data.occurrence.id}:{m.id}"
-							/>
-						{/if}
-					{/if}
-				</div>
-			{/each}
-
-			{#if isYesNo(it) && !quickMode}
-				<label style="color: var(--text)"><input type="checkbox" class="tick" bind:checked={log[i].tick} aria-label="{t.name} done" /> Done</label>
-			{/if}
+				{/if}
+			</li>
 		{/if}
-	</section>
+	{/each}
+</ul>
+
+<div class="lg-end">
+	{#if data.items.length === 0}<p class="empty-first">Nothing to log here. Add Tasks to it in the habit's editor, or finish it as it is.</p>{/if}
+	{#if data.orphanNames.length && !quickMode}
+		<p class="notice"><span class="notice-text meta">This log also has values for {data.orphanNames.join(', ')}, which {data.orphanNames.length === 1 ? 'is' : 'are'} no longer in this habit. They are kept.</span></p>
 	{/if}
-{/each}
-
-{#if data.items.length === 0}
-	<p class="muted">This habit has nothing to log. Add Tasks to it in the Habit editor, or mark it done from Today.</p>
-{/if}
-{#if data.orphanNames.length && !quickMode}
-	<p class="muted small-text">This log also has values for {data.orphanNames.join(', ')}, which {data.orphanNames.length === 1 ? 'is' : 'are'} no longer in this habit. They are kept.</p>
-{/if}
-
-{#if quickMode}
-	<p class="muted small-text"><a href="/log/{data.occurrence.id}">Open the full log</a> to change anything else.</p>
-{:else}
-	<div style="margin-top: 1rem"><NoteBox bind:value={notes} label="Notes" rows={2} /></div>
-{/if}
-
-{#if problem}<p class="error">{problem}</p>{/if}
-{#if asking}
-	{@const one = askUnticked + askSuggested.length === 1}
-	<div class="card stack" role="alert">
-		<p style="margin: 0">{askText}</p>
-		<div class="row">
-			<button type="button" class="primary" onclick={() => finishWith(false)}
-				>{askSuggested.length ? 'No, save only what I logged' : 'No, save only the ticked sets'}</button
-			>
-			<button type="button" onclick={() => finishWith(true)}
-				>{askSuggested.length ? `Yes, keep ${one ? 'it' : 'them'} and finish` : `Yes, tick ${one ? 'it' : 'them all'} and finish`}</button
-			>
-		</div>
-	</div>
-{/if}
+	{#if quickMode}
+		<p class="meta"><a href="/log/{data.occurrence.id}">Open the full log</a> to change anything else.</p>
+	{:else}
+		{#if stage === 'read'}{#if notes}<Markdown text={notes} small />{/if}{:else}<NoteBox bind:value={notes} label="Note" rows={2} />{/if}
+	{/if}
+	{#if problem}<div class="notice" data-tone="error" role="alert"><span class="notice-text">{problem}</span></div>{/if}
+	{#if form?.error}<div class="notice" data-tone="error" role="alert"><span class="notice-text">{form.error}</span></div>{/if}
 {#if theirs}
 	<section class="card elsewhere" role="alert">
 		<p>
@@ -781,35 +907,33 @@
 		</div>
 	</section>
 {/if}
-{#if form?.error}<p class="error">{form.error}</p>{/if}
-{#if form?.saved}<p class="muted">Saved.</p>{/if}
-
-{#if data.canLog || data.occurrence.status === 'done'}
-<div class="actions">
+	{#if stage === 'run' && unticked}
+		<div class="notice" data-tone={setsDone ? 'warn' : undefined}>
+			<span class="notice-text">{!setsDone ? 'No set is ticked yet, so Finish would save none.' : unticked === 1 ? '1 planned set isn’t ticked, so it won’t be saved.' : `${unticked} planned sets aren’t ticked, so they won’t be saved.`}</span>
+			<span class="notice-acts"><button type="button" class="quiet hit" onclick={tickAll}>Tick {unticked === 1 ? 'it' : `all ${unticked}`}</button></span>
+		</div>
+	{/if}
+	{#if stage === 'run' && suggested.length}
+		<div class="notice" data-tone="warn">
+			<span class="notice-text">{suggested.length > 4 ? `${suggested.slice(0, 4).join(', ')} and ${suggested.length - 4} more` : suggested.join(', ')} still {suggested.length === 1 ? 'shows' : 'show'} last time’s values or targets. Nothing is logged there, so it won’t be saved.</span>
+			<span class="notice-acts"><button type="button" class="quiet hit" onclick={() => (suggestionsConfirmed = true)}>Keep {suggested.length === 1 ? 'it' : 'them'}</button></span>
+		</div>
+	{/if}
+	{#if stage === 'run'}
 	<form
 		method="POST"
 		action="?/save"
-		class="grow-form"
+		class="lg-form"
 		bind:this={finishForm}
 		use:enhance={({ cancel }) => {
 			problem = '';
-			// An answer to the unticked-sets question covers this one press of Finish only.
-			const answered = untickedAnswered;
-			untickedAnswered = false;
 			const gaps = missing();
 			if (gaps.length) {
-				problem = `Fill in: ${gaps.join(', ')}`;
+				problem = `Fill in ${gaps.join(', ')}.`;
 				cancel();
 				return;
 			}
-			const unticked = answered ? 0 : untickedSets();
-			const suggested = answered ? [] : suggestedPlaces();
-			if (unticked || suggested.length) {
-				askUnticked = unticked;
-				askSuggested = suggested;
-				cancel();
-				return;
-			}
+			endRest();
 			dropAutosave();
 			if (!navigator.onLine) {
 				cancel();
@@ -834,22 +958,13 @@
 		}}
 	>
 		<input type="hidden" name="payload" value={payload(true)} />
-		<button class="primary big">{data.occurrence.status === 'done' ? 'Save changes' : quickMode ? 'Save' : 'Finish'}</button>
+		<button class="lg-finish" class:primary={!setsLeft || quickMode} bind:this={finishButton}>{quickMode ? 'Save' : 'Finish'}</button>
 	</form>
+	{#if canRepeat && !quickMode}
+		<button type="button" class="lg-wide" onclick={sameAsLast}>{started ? 'Fill the rest as last time and finish' : 'Same as last time'}</button>
+	{/if}
+	{/if}
 </div>
-{/if}
-
-{#if restLeft !== null}
-	<div style="height: 4rem" aria-hidden="true"></div>
-	<div class="rest" role="status">
-		{#if restLeft > 0}
-			Rest {Math.floor(restLeft / 60)}:{String(restLeft % 60).padStart(2, '0')}
-		{:else}
-			Rest over, next set
-		{/if}
-		<button class="small" onclick={() => (restEnd = null)}>Dismiss</button>
-	</div>
-{/if}
 
 <style>
 	.elsewhere {
@@ -857,122 +972,42 @@
 		position: sticky;
 		bottom: var(--tabbar-clear);
 		z-index: 4;
-		margin-top: 0.75rem;
 		border-color: var(--danger);
 	}
 	.elsewhere p {
-		margin: 0 0 0.6rem;
+		margin: 0 0 var(--space-inline);
 	}
-	.past {
-		margin: -0.5rem 0 0.75rem;
+	p,
+	h2 {
+		margin: 0;
 	}
-	.nested {
-		border-left: 3px solid var(--border);
-	}
-	.round {
-		margin: 0.75rem 0 0.35rem;
-		font-size: 0.9rem;
-		color: var(--muted);
-		font-weight: 600;
-	}
-	label.step {
-		display: flex;
-		gap: 0.5rem;
-		align-items: center;
-		color: var(--text);
-		padding: 0.3rem 0 0.3rem 0.6rem;
-		margin-bottom: 0.25rem;
-		border-left: 3px solid var(--border);
-	}
-	.levels {
-		border: 1px solid var(--border);
-		margin-bottom: 0.75rem;
-	}
-	.repeat {
-		align-items: center;
-		margin-bottom: 0.75rem;
-	}
-	.field-label {
-		display: block;
-		font-size: 0.9rem;
-		color: var(--muted);
-	}
-	.grow-form {
-		flex: 1;
-	}
-	button.big {
-		width: 100%;
-		padding: 0.8rem;
-		font-size: 1.05rem;
-	}
-	input.tick {
-		width: 1.4rem;
-		height: 1.4rem;
-	}
-	.sets {
-		width: 100%;
-		border-collapse: collapse;
-	}
-	.sets th {
-		text-align: left;
-		font-size: 0.8rem;
-		color: var(--muted);
-		font-weight: 500;
-		padding: 0 0.25rem 0.25rem;
-	}
-	.sets td {
-		padding: 0.2rem 0.1rem;
-	}
-	.sets td:first-child {
-		color: var(--muted);
-		width: 1.2rem;
-	}
-	.sets tr.done :global(input[type='number']) {
-		border-color: var(--accent);
-	}
-	.recap {
-		margin: 0.15rem 0 0.6rem;
-	}
-	.small-text {
-		font-size: 0.85rem;
-	}
-	.howto {
-		margin: 0 0 0.6rem;
-	}
-	.howto summary {
-		cursor: pointer;
-		color: var(--accent);
-	}
-	.howto-body {
-		margin-top: 0.4rem;
-		padding: 0.5rem 0.6rem;
-		border-left: 3px solid var(--border);
-	}
-	.swap summary {
-		cursor: pointer;
-		color: var(--accent);
-	}
-	.swap[open] {
-		flex-basis: 100%;
-	}
-	.rest {
-		position: fixed;
-		left: 1rem;
-		right: 1rem;
-		bottom: 4.5rem;
-		max-width: 608px;
-		margin: 0 auto;
-		display: flex;
+	.lg-top {
 		justify-content: space-between;
-		align-items: center;
-		padding: 0.75rem 1rem;
-		border-radius: var(--radius);
-		background: var(--accent);
-		color: var(--on-accent);
-		font-weight: 600;
-		font-variant-numeric: tabular-nums;
+		align-items: start;
+		margin-block-end: var(--space-group);
 	}
-	.rest button {
-		color: var(--text);
+	.lg-layout {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-tight);
+		color: var(--ink-muted);
+	}
+	.lg-layout select {
+		width: auto;
+	}
+	.lg-end {
+		display: grid;
+		gap: var(--space-group);
+	}
+	.lg-form {
+		display: grid;
+	}
+	.lg-heading {
+		list-style: none;
+	}
+	.howto,
+	.lg-swap {
+		flex-basis: 100%;
+		margin-block-start: var(--space-inline);
 	}
 </style>

@@ -8,9 +8,9 @@ Today lists your habits in sections: **Due today**, **Breaking and limiting**, *
 
 The first time you open Today it asks when your day starts, your parts of the day, and how much you want to see. All of it can be changed later in Settings.
 
-### Buttons on a habit
+### Logging a habit
 
-Which buttons a habit shows depends on what it logs:
+Each habit that is due has one control: the usual way to log it on the button, and the others behind **⋯**. The habit that is up next stands out.
 
 | Button | Does |
 | --- | --- |
@@ -18,10 +18,12 @@ Which buttons a habit shows depends on what it logs:
 | **+1**, **+5 min**, **+2.5 kg**… | A habit with one number to reach (glasses of water, minutes read): counts one step toward the target. The step is the field's **+/− step** |
 | **Log** | Opens the log screen |
 | **Same as last** | Copies your last log and finishes it, with Undo |
-| **Or log Minimum / Stretch** | With Levels on: logs at that level |
-| **Skip** | Skips the day. A skip neither adds to nor breaks a streak |
 | **Resume** | A log you started and haven't finished |
-| **Undo** | Takes back a done or skip |
+| **⋯ → Minimum, Target, Stretch** | With Levels on: logs at that level |
+| **⋯ → Log details…** | Opens the log screen |
+| **⋯ → Skip today** | Skips the day. A skip neither adds to nor breaks a streak |
+
+A habit you finish keeps its place for a moment, with its reward and **Undo**; then it goes where finished habits go. The line above the tabs keeps the Undo of your last ten changes, also on other pages.
 
 A day logged short of its target reads like "Done · 5 of 6 glasses" or "Missed · 1 of 2 steps". Whether it counts is the habit's [short-day rule](streaks.md#a-day-that-falls-short).
 
@@ -30,19 +32,22 @@ A day logged short of its target reads like "Done · 5 of 6 glasses" or "Missed 
 **Log** opens every Task in the habit's Variant for that day.
 
 - Values start from last time, the target, or blank, as each field is set (see [fields](tasks.md#fields-metrics)). Each Task shows what you did last time and your best.
-- **Sets**: each row is one set with a **Done** tick. Changing a value ticks the set. Use **+ set** and **− set** to change the count, and **Finish remaining sets as planned** to close the rest at their planned values.
-- **How to** shows the Task's notes.
-- **Reroll** and **Swap** change the Task in an [auto-filled slot](tasks.md#auto-filled-slots).
+- **Sets**: one set is open at a time, with its numbers large. **Done set 2** logs it, and only that does: changing a number never logs a set. The next set takes its place under the same button.
+- A number that starts from last time, changed by hand on one set, moves the sets still to do by as much ("+2.5 kg, as set 1"). One that starts from its target, such as reps, never does.
+- The line above the open set says what you did; press it to go back and correct the last one, or untick it. **Add set** and **Remove set** change the count, for this log.
+- Other Tasks are one line each. Press one to do it now (a machine is taken); press it again later to go on. **Layout: All open** shows them all.
+- **⋯** on a Task: **How to** (its notes), **Last 7 times**, **Swap…**, and **Pick another** in an [auto-filled slot](tasks.md#auto-filled-slots).
 - With Levels on, pick the level you are logging at.
 - The note box takes Markdown.
-- **Finish** saves the log. Fields marked **Required before Finish** must be filled. If some sets aren't ticked, it asks whether to tick them all or save only the ticked ones.
-- Values that start from last time or the target are suggestions until you finish: saving as you go leaves them out. If you finish with some places still showing only those values while you logged others (rounds you stopped before), it asks whether you did them: **No, save only what I logged** or **Yes, keep them and finish**. Finishing without touching anything saves the whole log as planned.
+- **Finish** saves the log. Fields marked **Required before Finish** must be filled. A line above it says how many planned sets aren't ticked and so won't be saved, with **Tick all**.
+- Values that start from last time or the target are suggestions until you finish: saving as you go leaves them out. If some places still show only those values while you logged others (rounds you stopped before), a line says so, with **Keep them**. Finishing a log of values without touching anything saves it as planned.
+- A finished log saves as you correct it, with one **Undo** back to what it was. A past day that isn't finished is kept on your device until **Finish**.
 
 The log saves as you go. It also works offline: changes wait on the device and sync when the connection is back. They wait just the same when the server has a problem or you were signed out, and go once it answers. If the server refuses a change, a line at the top says why, with **Try again** and **Discard**; nothing is dropped by itself. If the same log was changed on another device in the meantime, nothing is saved over it: the log says what differs and you choose **Keep mine** or **Use the other one**. Choosing the other one leaves an **Undo** that brings yours back.
 
 ### Timers
 
-A duration field has a timer: **Stopwatch**, **Countdown** to the target, or a **Focus block** with **Work** and **Break** minutes and a number of **Rounds**. A Task with a [rest timer](tasks.md#rest-timer) starts a rest countdown after each set; **Dismiss** stops it.
+A duration field has a timer: **Stopwatch**, **Countdown** to the target, or a **Focus block** with **Work** and **Break** minutes and a number of **Rounds**. A Task with a [rest timer](tasks.md#rest-timer) starts a rest after each set. It runs in the line above the tabs, also on other pages and with the phone locked, with **+15 s** and **Skip**; after it ends it says for how long.
 
 ### Quick logs
 
