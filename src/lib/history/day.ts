@@ -4,11 +4,16 @@ export interface DayLog {
 	status: string;
 	/** Logged on a day it wasn't due. */
 	extra: boolean;
+	/** A group's or routine's day, judged from the habits inside it (they are counted instead). */
+	rollup?: unknown;
 }
 
-/** Done of what was due: a skip was not due, and a log on a day off changes nothing. */
+/**
+ * Done of what was due: a skip was not due, a log on a day off changes nothing, and a group or
+ * routine counts through the habits inside it, as Today and the Day page count.
+ */
 export function dayCount(logs: DayLog[]): { done: number; of: number } {
-	const due = logs.filter((o) => !o.extra && (o.status === 'done' || o.status === 'missed' || o.status === 'due'));
+	const due = logs.filter((o) => !o.extra && !o.rollup && (o.status === 'done' || o.status === 'missed' || o.status === 'due'));
 	return { done: due.filter((o) => o.status === 'done').length, of: due.length };
 }
 

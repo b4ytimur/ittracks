@@ -42,6 +42,7 @@ Pages edit in place. The switch at the top of a page (**Use**, **Edit**, and **S
 - **Hide** or **Show** each widget (progress, week strip, streaks at risk, quit counters) and each section.
 - **Layout**: **Outline**, **Up next first**, **Area blocks** or **One list**. It belongs to the view, so each saved view has its own. **Reset layout** puts back the template's, with Undo.
 - Sections and groups fold, and stay folded.
+- Every count on Today (the progress widget, each section, the week strip) counts the habits themselves: a group or routine counts through the habits inside it. A group that is done by its rule while a habit inside is still due stays with what is still to do, so that habit isn't filed under Done.
 - Under **Customize → More options**: what happens to done items, the **Headline number** (a habit can have its own, in Edit), **Only show what fits the current part of the day**, and the **Lines on each habit**.
 
 ### Habits

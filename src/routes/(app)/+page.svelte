@@ -29,6 +29,7 @@
 	import LogControl, { type Way } from '$lib/ui/LogControl.svelte';
 	import StatusTag from '$lib/ui/StatusTag.svelte';
 	import { SvelteMap } from 'svelte/reactivity';
+	import { keepFocus, rowOf } from '$lib/ui/focus';
 	import { reorderFrom, type Mode } from '$lib/ui/list';
 	import { usualWay } from '$lib/log/usual';
 	import {
@@ -82,6 +83,7 @@
 					if (entry) dismiss(entry);
 					just.delete(habitId);
 					await invalidateAll();
+					void keepFocus(nameOf(habitId));
 				})
 		});
 		if (entry) hold(entry);
@@ -149,6 +151,8 @@
 	});
 
 	type Did = { occurrence: string; habit: string; clear: boolean; undo?: string; skipped?: boolean; short?: 'minimum' | 'target' };
+	/** A row's name: it stays put while the row's controls change, so focus waits there. */
+	const nameOf = (habitId: string) => `${rowOf(habitId)} a.name`;
 	/** After a quick action: say what happened and offer Undo. */
 	function afterDid(result: ActionResult) {
 		if (result.type !== 'success') return;
@@ -166,6 +170,14 @@
 			const item = data.build.find((b) => b.occurrence?.id === did.occurrence);
 			if (item && !did.skipped) celebrate(item.habitId, entry, undo);
 		}
+		const item = data.build.find((b) => b.occurrence?.id === did.occurrence);
+		if (item) void keepFocus(nameOf(item.habitId));
+	}
+	/** The row's Undo worked: say so, since the band's line about it goes, and keep focus on the row. */
+	function reopened(item: Item) {
+		dismissAbout(item.occurrence!.id);
+		showToast(`${item.name} is open again.`);
+		void keepFocus(nameOf(item.habitId));
 	}
 	const quick = (occurrenceId: string, name: string, kind: 'done' | 'skipped' = 'done') =>
 		queueable(`${name}`, {
@@ -186,6 +198,8 @@
 				if (!p) return;
 				const n = (x: number) => String(Math.round(x * 100) / 100);
 				showToast(`${name}: ${n(p.value)} of ${n(p.target)}${p.unit ? ` ${p.unit}` : ''}${p.done ? '. Done!' : '.'}`, undoWith('/?/plus', { occurrence: occurrenceId, by: '-1' }));
+				const item = data.build.find((b) => b.occurrence?.id === occurrenceId);
+				if (item) void keepFocus(nameOf(item.habitId));
 			}
 		});
 	const resisted: SubmitFunction =
@@ -371,8 +385,8 @@
 		);
 	});
 	const isDone = (b: Item) => statusOf(b.occurrence!) !== 'due';
-	/** Finished, and past its moment in place. */
-	const settled = (b: Item) => isDone(b) && !just.has(b.habitId);
+	/** Finished, and past its moment in place. A group done by its rule with a habit inside still due isn't: that habit is still to do. */
+	const settled = (b: Item): boolean => isDone(b) && !just.has(b.habitId) && kidsOf(b.habitId).every(settled);
 	const shownBuild = $derived.by(() => {
 		let list = sorted.filter((b) => !timeHidden.has(b.habitId));
 		const at = layout === 'flat' ? 'bottom' : layout === 'focus' ? 'collapse' : views.today.done;
@@ -389,8 +403,10 @@
 		return (due.find((b) => b.upNext) ?? due[0])?.habitId;
 	});
 	const areaOf = (id: string | null) => data.areas.find((a) => a.id === id);
+	/** The habits a list stands for: a group or routine counts through the habits inside it, at any depth. */
+	const leavesOf = (items: Item[]): Item[] => items.flatMap((b) => (b.group ? leavesOf(kidsOf(b.habitId)) : [b]));
 	const countOf = (items: Item[]) => {
-		const all = items.flatMap((b) => (b.group ? kidsOf(b.habitId) : [b]));
+		const all = leavesOf(items);
 		return all.length ? `${all.filter(isDone).length} of ${all.length} done` : '';
 	};
 	const groups = $derived(
@@ -406,8 +422,9 @@
 	const showSection = (k: SectionKey) =>
 		view.direction === 'build' ? k !== 'breaking' : view.direction === 'break' ? k === 'breaking' : true;
 	const identityNames = $derived([...new Set([...data.build, ...data.breaking].flatMap((b) => b.identities))].sort());
-	// A group is counted through the habits inside it.
-	const doneCount = $derived(data.build.filter((b) => !b.group && isDone(b)).length);
+	// A group is counted through the habits inside it, on both sides, as the sections and the week strip count.
+	const dueLeaves = $derived(data.build.filter((b) => !b.group));
+	const doneCount = $derived(dueLeaves.filter(isDone).length);
 	const atRiskItems = $derived(data.build.filter((b) => b.atRisk && !isDone(b)));
 	const weekdayShort = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'narrow' });
 
@@ -637,7 +654,7 @@
 		{@render habitList(first, 'Up next')}
 	{/if}
 	{#if rest.length}
-		<GroupHeading title="Still to do" {mode} count={String(rest.length)} />
+		<GroupHeading title="Still to do" {mode} count={String(leavesOf(rest).filter((b) => !isDone(b)).length)} />
 		{@render habitList(rest, 'Still to do')}
 	{/if}
 	{@render timeLine()}
@@ -646,7 +663,7 @@
 		{@render breakingSection()}
 	{/if}
 	{#if doneFolded.length}
-		<GroupHeading title="Done today" {mode} count={String(doneFolded.length)} folded={folded('focus:done')} onfold={() => fold('focus:done')} />
+		<GroupHeading title="Done today" {mode} count={String(leavesOf(doneFolded).length)} folded={folded('focus:done')} onfold={() => fold('focus:done')} />
 		{#if !folded('focus:done')}{@render habitList(doneFolded, 'Done today')}{/if}
 	{/if}
 	{#if data.resting.length}
@@ -717,10 +734,10 @@
 {/snippet}
 
 {#snippet widget(w: WidgetKey)}
-	{#if w === 'progress' && data.build.length}
+	{#if w === 'progress' && dueLeaves.length}
 		<div class="card widget">
-			<div class="row"><strong class="grow">{doneCount} of {data.build.length} done today</strong></div>
-			<progress max={data.build.length} value={doneCount} aria-label="Done today"></progress>
+			<div class="row"><strong class="grow">{doneCount} of {dueLeaves.length} done today</strong></div>
+			<progress max={dueLeaves.length} value={doneCount} aria-label="Done today"></progress>
 		</div>
 	{:else if w === 'week'}
 		<div class="card widget week" role="group" aria-label="This week">
@@ -871,7 +888,7 @@
 		{:else if !undoShows(band.entries, o.id) && (!item.group || item.group.undoable)}
 			<!-- One Undo at a time: the band's while its line is this one, else the row's (after a reload too).
 			     A routine done only through the habits inside it has nothing of its own to undo. -->
-			<form method="POST" action="?/undo" use:enhance={() => async ({ result, update }) => { if (result.type === 'success') dismissAbout(o.id); await update(); }}>
+			<form method="POST" action="?/undo" use:enhance={() => async ({ result, update }) => { await update(); if (result.type === 'success') reopened(item); }}>
 				<input type="hidden" name="occurrence" value={o.id} />
 				<button class="quiet hit" aria-label="Undo {item.name}">Undo</button>
 			</form>
@@ -913,7 +930,7 @@
 			depth={2}
 			title="Done"
 			{mode}
-			count={String(doneFolded.length)}
+			count={String(leavesOf(doneFolded).length)}
 			folded={views.today.done === 'hide' || folded('done')}
 			onfold={views.today.done === 'hide' ? undefined : () => fold('done')}
 		/>

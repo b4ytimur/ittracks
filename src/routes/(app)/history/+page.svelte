@@ -14,7 +14,7 @@
 	import BulkBar from '$lib/bulk/BulkBar.svelte';
 	import DayNote from '$lib/DayNote.svelte';
 	import Markdown from '$lib/Markdown.svelte';
-	import { dayCount, dayMark, dayTitle, placeNotes } from '$lib/history/day';
+	import { dayCount, dayMark, dayTitle, placeNotes, type DayLog } from '$lib/history/day';
 	import { dayExcerpt } from '$lib/journal';
 	import { STATUSES } from '$lib/views';
 	import { saveLayout } from '$lib/viewclient';
@@ -49,12 +49,14 @@
 				// A note belongs to its habit; the day's own note shows while nothing is filtered.
 				const shows = (i: { habitId: string | null }) => [...occurrences, ...slips].some((x) => x.habitId === i.habitId);
 				const items = (w?.items ?? []).filter((i) => (view.habit ? i.habitId === view.habit : view.areas.length || status !== 'all' ? shows(i) : true));
-				return { date, occurrences, slips, items, notes: placeNotes(items, occurrences, slips), moods: data.notesOnly ? (w?.moods ?? []) : [], count: dayCount(day.occurrences) };
+				return { date, occurrences, slips, items, notes: placeNotes(items, occurrences, slips), moods: data.notesOnly ? (w?.moods ?? []) : [], count: dayCount(countedOn(date, day.occurrences)) };
 			})
 			.filter((d) => d.occurrences.length || d.slips.length || d.items.length || d.moods.length);
 		return view.sort === 'oldest' ? out.reverse() : out;
 	});
-	const logsOf = $derived(new Map(data.history.map(([date, d]) => [date, d.occurrences])));
+	/** A day's logs as its count sees them: today's also holds what is still to do. */
+	const countedOn = <T extends DayLog>(date: string, logs: T[]): DayLog[] => (date === data.today ? [...logs, ...data.openToday] : logs);
+	const logsOf = $derived(new Map(data.history.map(([date, d]) => [date, countedOn(date, d.occurrences)])));
 	const yesterday = $derived(dayCount(logsOf.get(data.strip[5]) ?? []));
 	const withLogs = $derived(data.history.filter(([, d]) => d.occurrences.some((o) => o.status === 'done')).length);
 
@@ -122,10 +124,10 @@
 {#if !data.notesOnly && !data.q}
 	<div class="day-week hi-strip" role="group" aria-label="The last seven days">
 		{#each data.strip as d (d)}
-			{@const logs = logsOf.get(d) ?? []}
+			{@const logs = logsOf.get(d) ?? (d === data.today ? data.openToday : [])}
 			{@const c = dayCount(logs)}
 			{@const mark = dayMark(logs, d === data.today)}
-			<a class="day-cell" href={logs.length ? `#d-${d}` : d === data.today ? '/' : `/day/${d}`} aria-current={d === data.today ? 'date' : undefined} aria-label="{title(d)}: {c.of ? `${c.done} of ${c.of} done` : 'nothing due'}">
+			<a class="day-cell" href={logsOf.has(d) ? `#d-${d}` : d === data.today ? '/' : `/day/${d}`} aria-current={d === data.today ? 'date' : undefined} aria-label="{title(d)}: {c.of ? `${c.done} of ${c.of} done` : 'nothing due'}">
 				<span class="note">{new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'narrow' })}</span>
 				<i data-day={mark === 'none' ? null : mark}></i>
 				<span class="note num">{Number(d.slice(8))}</span>

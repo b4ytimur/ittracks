@@ -10,6 +10,9 @@ describe('a day', () => {
 	it('leaves out skips and logs on days off', () => {
 		expect(dayCount([o('done'), o('skipped'), o('done', true)])).toEqual({ done: 1, of: 1 });
 	});
+	it('counts a group or routine through the habits inside it', () => {
+		expect(dayCount([o('done'), o('due'), { ...o('done'), rollup: { done: 1, total: 2 } }])).toEqual({ done: 1, of: 2 });
+	});
 	it('marks it the same way', () => {
 		expect(dayMark([o('done'), o('done')])).toBe('done');
 		expect(dayMark([o('done'), o('missed')])).toBe('partial');

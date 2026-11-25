@@ -78,7 +78,7 @@ export const DONE_MODES = {
 } as const;
 
 export const WIDGETS = {
-	progress: 'Progress today (3 of 5 done)',
+	progress: 'Progress today',
 	week: 'This week, day by day',
 	atRisk: 'Streaks at risk',
 	quit: 'Quit counters and money saved'

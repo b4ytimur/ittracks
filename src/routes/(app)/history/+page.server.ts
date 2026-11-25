@@ -53,6 +53,13 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		.where(and(eq(habit.accountId, accountId), ne(occurrence.status, 'due'), gte(occurrence.date, from)))
 		.orderBy(desc(occurrence.date))
 		.all();
+	// Today's habits still to do: not rows here, but today's count is of all that is due, as on Today.
+	const openToday = db
+		.select({ status: occurrence.status, extra: occurrence.extra, rollup: occurrence.rollup, habitId: habit.id, areaId: habit.areaId })
+		.from(occurrence)
+		.innerJoin(habit, eq(occurrence.habitId, habit.id))
+		.where(and(eq(habit.accountId, accountId), eq(occurrence.status, 'due'), eq(occurrence.date, today)))
+		.all();
 	const slips = db
 		.select({ date: slip.date, count: slip.count, habit: habit.name, habitId: habit.id, areaId: habit.areaId })
 		.from(slip)
@@ -173,7 +180,8 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		initial: initialState(views, 'history'),
 		/** The last seven days, whether or not anything was logged, for the strip. */
 		strip: Array.from({ length: 7 }, (_, i) => addDays(today, i - 6)),
-		history: shown
+		history: shown,
+		openToday
 	};
 };
 
