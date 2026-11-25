@@ -13,6 +13,7 @@ import { createKey, listKeys, revokeKey } from '$lib/server/core/tokens';
 import { publicKey, sendToAccount, subscriptionCount } from '$lib/server/push';
 import { listHabits } from '$lib/server/repo/habits';
 import { usedRanges } from '$lib/server/repo/ranges';
+import { renameTag } from '$lib/server/repo/tags';
 import { listVacations } from '$lib/server/repo/vacations';
 import { getGroupings, getKinds, getPacks, getSettings, getViews } from '$lib/server/settings';
 import { getStats, seedFields } from '$lib/server/stats';
@@ -175,6 +176,11 @@ export const actions: Actions = {
 		const id = randomUUID();
 		db.insert(tag).values({ id, accountId, name, grouping }).run();
 		return { id };
+	},
+	renameTag: async ({ request, locals }) => {
+		const f = await request.formData();
+		const r = renameTag(locals.account!.id, String(f.get('id') ?? ''), String(f.get('name') ?? ''));
+		return 'error' in r ? fail(400, r) : r;
 	},
 	/** Put a member in another grouping. Its Tasks keep their level. */
 	moveTag: async ({ request, locals }) => {
