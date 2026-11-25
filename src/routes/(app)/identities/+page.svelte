@@ -63,7 +63,7 @@
 	onremove={remove}
 	removeLabel="Delete"
 	onadd={add}
-	addLabel="+ Identity"
+	addLabel="Identity"
 	addInUse
 >
 	{#snippet row(i)}

@@ -135,11 +135,13 @@ const keysOf = <T extends Record<string, string>>(o: T) => Object.keys(o) as [ke
 
 export const viewSettings = z.object({
 	template: str(32).default('standard'),
-	/** What a page opens with: the last filter you used, the page default, or a saved view (its id). */
+	/** What a page opens with: the view you were on last, the page default, or a saved view (its id). */
 	open: z.record(z.string().max(16), str(64)).default({}),
+	/** The view each page is on: "default" or a saved view's id. What you change on the page changes that view. */
+	active: z.record(z.string().max(16), str(64)).default({}),
 	/** The page default each page resets to. */
 	defaults: z.record(z.string().max(16), viewState).default({}),
-	/** The last state of each page, kept while `open` is "last". */
+	/** The last state of each page, from before a page remembered its view (`active`). Read only to find that view. */
 	last: z.record(z.string().max(16), viewState).default({}),
 	saved: z.array(savedView).max(60).default([]),
 	startPage: z.enum(PAGES).default('today'),
@@ -535,6 +537,7 @@ export function switchTemplate(current: ViewSettings, id: string, opts: { keep?:
 		saved: current.saved,
 		startPage: current.startPage,
 		open: current.open,
+		active: current.active,
 		last: current.last,
 		today: { ...next.today, order: current.today.order, folded: current.today.folded, headlineFor: current.today.headlineFor },
 		own: {}
@@ -551,26 +554,49 @@ export function readViews(raw: unknown, opts: { groupByArea?: boolean } = {}): V
 	if (!parsed.success) return fromTemplate(typeof (raw as { template?: unknown }).template === 'string' ? (raw as { template: string }).template : 'standard', opts);
 	const v = parsed.data;
 	for (const p of PAGES) if (!v.defaults[p]) v.defaults[p] = fromTemplate(v.template, opts).defaults[p];
-	// A deleted saved view can't be what a page opens with.
+	// A deleted saved view can't be what a page opens with, or the view it is on.
 	for (const p of PAGES) {
 		const o = v.open[p];
 		if (o && o !== 'last' && o !== 'default' && !v.saved.some((s) => s.id === o)) delete v.open[p];
+		if (v.active[p] && !viewStateOf(v, p, v.active[p])) delete v.active[p];
 	}
 	return v;
 }
 
-/** The state a page opens with. */
-export function initialState(v: ViewSettings, page: Page): ViewState {
+/** The id of a page's own view, the page default. Every other view is a saved one, by its id. */
+export const DEFAULT_VIEW = 'default';
+
+/** A page's view by id, or undefined when that page has no such view. */
+export function viewStateOf(v: Pick<ViewSettings, 'defaults' | 'saved'>, page: Page, id: string): ViewState | undefined {
+	if (id === DEFAULT_VIEW) return v.defaults[page] ?? emptyState();
+	return v.saved.find((s) => s.id === id && s.page === page)?.state;
+}
+
+/** The views a page offers, in order: its default, then the ones you saved. */
+export const viewsOf = (v: Pick<ViewSettings, 'saved'>, page: Page): { id: string; name: string }[] => [
+	{ id: DEFAULT_VIEW, name: 'Default' },
+	...v.saved.filter((s) => s.page === page)
+];
+
+/** The view a page opens on: the one "opens with" names, else the one you were on last. */
+export function initialView(v: ViewSettings, page: Page): string {
 	const open = v.open[page] ?? 'last';
-	const def = v.defaults[page] ?? emptyState();
-	if (open === 'default') return def;
-	if (open === 'last') return v.last[page] ?? def;
-	return v.saved.find((s) => s.id === open)?.state ?? def;
+	if (open !== 'last') return viewStateOf(v, page, open) ? open : DEFAULT_VIEW;
+	const active = v.active[page];
+	if (active && viewStateOf(v, page, active)) return active;
+	// Stored before the page remembered its view: the first view that shows what you used last.
+	const last = v.last[page];
+	return (last && viewsOf(v, page).find((x) => sameState(viewStateOf(v, page, x.id)!, last))?.id) || DEFAULT_VIEW;
+}
+
+/** The state a page opens with: a copy of its view's. */
+export function initialState(v: ViewSettings, page: Page): ViewState {
+	return viewState.parse(viewStateOf(v, page, initialView(v, page)) ?? {});
 }
 
 export const isHidden = (v: Pick<ViewSettings, 'hidden'>, f: FeatureKey) => v.hidden.includes(f);
 
-/** Two states show the same thing (used to light up the matching saved view chip). */
+/** Two states show the same thing. */
 export function sameState(a: ViewState, b: ViewState): boolean {
 	return JSON.stringify(viewState.parse(a)) === JSON.stringify(viewState.parse(b));
 }

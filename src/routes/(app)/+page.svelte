@@ -8,7 +8,7 @@
 	import { replaceState } from '$app/navigation';
 	import { outbox } from '$lib/outbox.svelte';
 	import ViewBar from '$lib/ViewBar.svelte';
-	import { rememberLast, saveLayout, viewOp } from '$lib/viewclient';
+	import { saveLayout, saveView, viewOp } from '$lib/viewclient';
 	import { headlineText } from '$lib/engine/stats';
 	import { isPartial, progressText } from '$lib/engine/progress';
 	import { rollupDay, rollupText } from '$lib/engine/rollup';
@@ -260,8 +260,8 @@
 		view.layout = to;
 		showToast(`Today now uses ${LAYOUTS[to]}.`, () => {
 			view.layout = was;
-			// Pressed on another page, nothing here watches the view any more.
-			rememberLast('today', $state.snapshot(view));
+			// Pressed on another page, nothing here watches the view any more: put it back in the view Today is on.
+			saveView('today', $state.snapshot(view));
 		});
 	}
 	const template = $derived(fromTemplate(views.template).today);

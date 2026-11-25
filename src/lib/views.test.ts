@@ -4,6 +4,7 @@ import {
 	fromTemplate,
 	groupBy,
 	initialState,
+	initialView,
 	manualOrder,
 	partAt,
 	passes,
@@ -168,16 +169,61 @@ describe('views', () => {
 		expect(next.defaults.today).toMatchObject({ group: 'area', sort: 'cue' });
 	});
 
-	it('opens with last, the page default, or a saved view', () => {
+	it('opens on the view it was on last, the page default, or a saved view', () => {
 		const v = fromTemplate('standard');
-		const last = viewState.parse({ sort: 'name' });
-		v.last.today = last;
-		expect(initialState(v, 'today')).toEqual(last);
-		v.open.today = 'default';
-		expect(initialState(v, 'today')).toEqual(v.defaults.today);
 		v.saved.push({ id: 's1', name: 'Quit', page: 'today', state: viewState.parse({ direction: 'break' }) });
-		v.open.today = 's1';
+		expect(initialView(v, 'today')).toBe('default');
+		v.active.today = 's1';
+		expect(initialView(v, 'today')).toBe('s1');
 		expect(initialState(v, 'today').direction).toBe('break');
+		v.open.today = 'default';
+		expect(initialView(v, 'today')).toBe('default');
+		expect(initialState(v, 'today')).toEqual(v.defaults.today);
+		v.open.today = 's1';
+		v.active.today = 'default';
+		expect(initialState(v, 'today').direction).toBe('break');
+	});
+
+	it('is on one view even when two show the same thing', () => {
+		const v = fromTemplate('standard');
+		// A view made from Default before changing anything: same state, its own id.
+		v.saved.push({ id: 's1', name: 'Morning', page: 'today', state: v.defaults.today! });
+		v.active.today = 's1';
+		expect(initialView(v, 'today')).toBe('s1');
+		v.active.today = 'default';
+		expect(initialView(v, 'today')).toBe('default');
+	});
+
+	it('finds the view for a page stored before it remembered one, from what was used last', () => {
+		const v = fromTemplate('standard');
+		v.saved.push({ id: 's1', name: 'By name', page: 'today', state: viewState.parse({ sort: 'name' }) });
+		v.last.today = viewState.parse({ sort: 'name' });
+		expect(initialView(v, 'today')).toBe('s1');
+		v.last.today = viewState.parse({ sort: 'nothing saved' });
+		expect(initialView(v, 'today')).toBe('default');
+	});
+
+	it("is never on another page's view, or one that was deleted", () => {
+		const v = readViews({
+			...fromTemplate('standard'),
+			saved: [{ id: 'h1', name: 'Mine', page: 'habits', state: viewState.parse({}) }],
+			active: { today: 'h1', library: 'gone', habits: 'h1' }
+		});
+		expect(v.active).toEqual({ habits: 'h1' });
+		expect(initialView(v, 'today')).toBe('default');
+		expect(initialView(v, 'habits')).toBe('h1');
+	});
+
+	it('opens with a copy, so changing it leaves the view as it was until saved', () => {
+		const v = fromTemplate('standard');
+		const s = initialState(v, 'today');
+		s.areas.push('a');
+		expect(v.defaults.today!.areas).toEqual([]);
+	});
+
+	it('keeps the view each page is on over a template switch', () => {
+		const v = { ...fromTemplate('standard'), active: { today: 'default' } };
+		expect(switchTemplate(v, 'minimal').active).toEqual({ today: 'default' });
 	});
 
 	it('drops an "opens with" that points at a deleted view', () => {

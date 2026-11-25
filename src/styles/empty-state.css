@@ -1,5 +1,5 @@
-/* EmptyState: the sentence a list shows when it has no rows, and the ghost slot that ends a list.
-   Owns .ghost, .ghost-slot, .empty-first, .empty-filtered and .empty-range.
+/* EmptyState: the sentence a list shows when it has no rows, and the ghost slot (GhostSlot) that ends a list.
+   Owns .ghost, .ghost-slot, .ghost-slot.pill, .empty-first, .empty-filtered and .empty-range.
    The li is ListRow's (.elist > li); on a shelf NestedRow places it (.shelf .ghost).
    Dashes mean "type here or drop here", and the slot is both (R1.6). Its fill is the ground it stands on
    (page, card, shelf), so it reads as a place for a row: never a raised card, never a hole. */
@@ -58,6 +58,19 @@ button.ghost-slot { cursor: text; }
 /* Shelf and compact rows centre their content, so the slot does too. */
 .shelf .ghost-slot > :first-child,
 .elist[data-density='compact'] > .ghost > .ghost-slot > :first-child { align-self: center; }
+
+/* ---------- The pill: the same slot ending a row of chips (ViewBar's New view) ---------- */
+/* A chip's box, dashed: Chip's .toggle edge, padding, type and radius, so it lines up with the chips and is as tall.
+   Open, the name field takes the words' place at the chip type, 16ch wide; the + keeps its place. */
+.ghost-slot.pill {
+	display: inline-flex; width: auto; min-height: var(--target-min); vertical-align: middle;
+	padding: calc(var(--space-tight) - var(--edge)) calc(3 * var(--pitch));
+	border-radius: var(--radius-pill); background: none;
+	font-size: var(--font-size-chip); line-height: 1rem;
+}
+.ghost-slot.pill > :first-child { width: auto; line-height: 1rem; margin-inline-end: var(--space-tight); }
+.ghost-slot.pill > .name { flex: none; width: 16ch; min-height: 0; padding-block: 0; margin-block: 0; font: inherit; }
+@media (pointer: coarse) { .ghost-slot.pill { min-height: var(--control-md); padding-block: calc(var(--space-inline) - var(--edge)); } }
 
 /* ---------- Motion: the words slide 16px with the rows' names on a mode change ---------- */
 @media (prefers-reduced-motion: no-preference) {

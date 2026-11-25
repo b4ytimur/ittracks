@@ -18,6 +18,7 @@
 	import { tick, type Snippet } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { prefersReducedMotion } from 'svelte/motion';
+	import GhostSlot from './GhostSlot.svelte';
 	import { applyMove, dropPosition, gridDrop, rangeKeys, withDescendants, type Mode, type Move, type Position, type RowContext } from './list';
 
 	let {
@@ -290,15 +291,6 @@
 		commit(m, true);
 	}
 
-	// ----- Adding -----
-
-	let naming = $state<string | null>(null);
-	/** Enter adds it and is ready for the next one; leaving the slot adds what was typed. */
-	function add(again: boolean) {
-		const name = naming?.trim();
-		naming = again && name ? '' : null;
-		if (name) onadd?.(name);
-	}
 
 	// ----- Selecting -----
 
@@ -438,33 +430,7 @@
 		{#if empty}<li class="empty">{@render empty()}</li>{/if}
 	{/each}
 	{#if rowCard && onadd && (editing || (addInUse && mode === 'use'))}
-		<li class="ghost">
-			{#if naming === null}
-				<button type="button" class="ghost-slot" onclick={() => (naming = '')}><span aria-hidden="true">+</span><span>{addLabel}</span></button>
-			{:else}
-				<div class="ghost-slot">
-					<span aria-hidden="true">+</span>
-					<!-- svelte-ignore a11y_autofocus -->
-					<input
-						class="inline-text name"
-						aria-label={addLabel}
-						maxlength="120"
-						autofocus
-						bind:value={naming}
-						onkeydown={(e) => {
-							if (e.key === 'Enter') {
-								e.preventDefault();
-								add(true);
-							} else if (e.key === 'Escape') {
-								e.preventDefault();
-								naming = null;
-							}
-						}}
-						onblur={() => add(false)}
-					/>
-				</div>
-			{/if}
-		</li>
+		<li class="ghost"><GhostSlot label={addLabel} onadd={(name) => onadd?.(name)} /></li>
 	{/if}
 </ul>
 {#if !rowCard && editing && onadd}

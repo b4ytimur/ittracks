@@ -27,6 +27,16 @@ export const viewRules = defineRules<ViewSettings, ViewCtx>({
 			'A page can only open with one of its own saved views'
 		)
 	],
+	active: [
+		check(
+			(v) =>
+				PAGES.some((p) => {
+					const a = v.active[p];
+					return !!a && a !== 'default' && !v.saved.some((s) => s.id === a && s.page === p);
+				}),
+			'A page can only be on one of its own views'
+		)
+	],
 	defaults: independent,
 	last: independent,
 	saved: [check((v) => new Set(v.saved.map((s) => s.id)).size !== v.saved.length, 'Two saved views have the same id')],
