@@ -11,6 +11,9 @@
 		submit?: SubmitFunction;
 		href?: string;
 		onselect?: () => void;
+		/** One of a set, and whether it is the one now. */
+		checked?: boolean;
+		download?: boolean;
 	}
 </script>
 
@@ -25,16 +28,27 @@
 	const formOf = (i: number) => `${uid}-f${i}`;
 	let open = $state(false);
 	let up = $state(false);
+	let room = $state(0);
+	let nudge = $state(0);
 	let more = $state<HTMLButtonElement>();
 	let menu = $state<HTMLElement>();
-	const all = () => [...(menu?.querySelectorAll<HTMLElement>('[role=menuitem]') ?? [])];
+	const all = () => [...(menu?.querySelectorAll<HTMLElement>('[role^=menuitem]') ?? [])];
 
 	async function show(last = false) {
 		open = true;
 		await tick();
+		// Below where it fits, else on the side with more room, scrolling inside; never over an edge.
 		const r = more!.getBoundingClientRect();
-		const bar = document.querySelector('.tabbar .band')?.getBoundingClientRect().top ?? window.innerHeight;
-		up = r.bottom + (menu?.offsetHeight ?? 0) + 8 > bar && r.top > (menu?.offsetHeight ?? 0);
+		const bar = document.querySelector('.tabbar')?.getBoundingClientRect().top ?? window.innerHeight;
+		const tall = menu?.scrollHeight ?? 0;
+		const below = bar - r.bottom - 12;
+		const above = r.top - 12;
+		up = tall > below && above > below;
+		room = Math.max(120, up ? above : below);
+		nudge = 0;
+		await tick();
+		const m = menu!.getBoundingClientRect();
+		if (m.left < 8) nudge = 8 - m.left;
 		all().at(last ? -1 : 0)?.focus();
 	}
 	function close(refocus = true) {
@@ -84,15 +98,15 @@
 		}
 	}}><span aria-hidden="true">⋯</span></button
 >
-<div class="menu" role="menu" tabindex="-1" aria-label={menuLabel ?? label} data-side={up ? 'up' : null} hidden={!open} bind:this={menu} onkeydown={keys}>
+<div class="menu" role="menu" tabindex="-1" aria-label={menuLabel ?? label} data-side={up ? 'up' : null} style:--menu-room="{room}px" style:--menu-nudge="{nudge}px" hidden={!open} bind:this={menu} onkeydown={keys}>
 	{#each items as w, i (i)}
 		{#if w === '-'}
 			<hr />
 		{:else if w.href}
-			<a role="menuitem" tabindex="-1" href={w.href}><span class="menu-label">{w.label}</span></a>
+			<a role="menuitem" tabindex="-1" href={w.href} download={w.download ? '' : undefined}><span class="menu-label">{w.label}</span></a>
 		{:else}
-			<button type={w.action ? 'submit' : 'button'} role="menuitem" tabindex="-1" form={w.action ? formOf(i) : undefined} onclick={() => (close(), w.onselect?.())}
-				><span class="menu-label">{w.label}</span>{#if w.value}<span class="menu-note meta">{w.value}</span>{/if}</button
+			<button type={w.action ? 'submit' : 'button'} role={w.checked === undefined ? 'menuitem' : 'menuitemradio'} aria-checked={w.checked} tabindex="-1" form={w.action ? formOf(i) : undefined} onclick={() => (close(), w.onselect?.())}
+				>{#if w.checked !== undefined}<span class="menu-check" aria-hidden="true">✓</span>{/if}<span class="menu-label">{w.label}</span>{#if w.value}<span class="menu-note meta">{w.value}</span>{/if}</button
 			>
 		{/if}
 	{/each}

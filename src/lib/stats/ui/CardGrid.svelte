@@ -6,14 +6,15 @@
 	import { showToast } from '$lib/toast.svelte';
 	import type { CardResult, DrillRow, ValueKind } from '../engine';
 	import type { Catalog } from '../catalog';
-	import type { BoardFilter, CustomMeasure, Size, StatCard } from '../model';
+	import type { BoardFilter, Chart, CustomMeasure, Size, StatCard } from '../model';
+	import { autoTitle } from '../catalog';
+	import { fit, measureLabel, withChart, type Offer, type SlotKey } from '../sentence';
 	import { statsOp } from '../client';
 	import StatCardView from './StatCardView.svelte';
 	import CardBuilder from './CardBuilder.svelte';
 	import AddCard from './AddCard.svelte';
 	import Drill from './Drill.svelte';
 	import EditableList from '$lib/ui/EditableList.svelte';
-	import { SIZES } from '../model';
 
 	export interface Item {
 		card: StatCard;
@@ -62,7 +63,10 @@
 	/** The cards as shown: moved at once here, then refreshed from the server. */
 	let shown = $derived(items);
 	let saving = $state(false);
-	let drill = $state<{ title: string; rows: DrillRow[] | null; loading: boolean; unit: string; kind: ValueKind } | null>(null);
+	/** The logs behind one mark, unfolded in its card; one card at a time. */
+	let drill = $state<{ card: string; title: string; rows: DrillRow[] | null; unit: string; kind: ValueKind; all: boolean } | null>(null);
+	const offer = $derived<Offer>({ catalog, measures, hidden });
+	const titleOf = (c: StatCard) => c.title || autoTitle(c, catalog, measures) || measureLabel(c.perLog, measures);
 
 	async function op(body: Record<string, unknown>, done?: string) {
 		try {
@@ -92,25 +96,40 @@
 	}
 	async function remove(item: Item, title: string) {
 		const index = items.indexOf(item);
-		const r = await op({ op: 'card.delete', where, id: item.card.id });
-		if (r)
-			showToast(`Removed “${title}”`, async () => {
-				await op({ op: 'card.save', where, card: item.card, index });
-			});
+		const at = where; // The band outlives this board, so its Undo keeps where it was.
+		const card = $state.snapshot(item.card);
+		const r = await op({ op: 'card.delete', where: at, id: card.id });
+		if (r) showToast(`Removed “${title}”`, async () => !!(await op({ op: 'card.save', where: at, card, index })));
 	}
-	function reorder(order: string[]) {
+	async function reorder(order: string[]) {
+		const before = shown;
 		shown = order.map((id) => shown.find((x) => x.card.id === id)!);
-		op({ op: 'card.order', where, ids: order });
+		if (!(await op({ op: 'card.order', where, ids: order }))) shown = before;
 	}
-	const resize = (item: Item, size: Size) => op({ op: 'card.save', where, card: { ...item.card, look: { ...item.card.look, size } } });
+	/** Change a card at once; the band has its Undo. */
+	async function change(item: Item, card: StatCard, said: string) {
+		const before = $state.snapshot(item.card) as StatCard;
+		const at = where;
+		const r = await op({ op: 'card.save', where: at, card });
+		if (r) showToast(said, async () => !!(await op({ op: 'card.save', where: at, card: before })));
+	}
+	function pickWord(item: Item, key: SlotKey, v: string) {
+		const r = fit($state.snapshot(item.card) as StatCard, key, v, offer);
+		if (!r) return void showToast('Nothing on this card goes with that.');
+		// A title it was given by itself goes with what it says now.
+		const card = item.card.title === autoTitle(item.card, catalog, measures) ? { ...r.card, title: '' } : r.card;
+		change(item, card, r.moved || `Changed “${titleOf(item.card)}”.`);
+	}
+	const setChart = (item: Item, chart: Chart) => change(item, withChart($state.snapshot(item.card) as StatCard, chart, offer), `Changed how “${titleOf(item.card)}” is drawn.`);
+	const resize = (item: Item, size: Size) => change(item, { ...($state.snapshot(item.card) as StatCard), look: { ...item.card.look, size } }, `Resized “${titleOf(item.card)}”.`);
 
-	async function openDrill(item: Item, title: string, from: string, to: string, series: string | null) {
-		const label = series ? `${title}: ${item.result?.series.find((s) => s.key === series)?.label ?? item.result?.breakdown?.find((b) => b.key === series)?.label ?? item.result?.rows?.find((x) => x.key === series)?.label ?? ''}` : title;
-		const when = from === to ? from : `${from} to ${to}`;
-		drill = { title: `${label} · ${when}`, rows: null, loading: true, unit: '', kind: 'number' };
+	async function openDrill(item: Item, from: string, to: string, series: string | null) {
+		const label = series ? (item.result?.series.find((x) => x.key === series)?.label ?? item.result?.breakdown?.find((b) => b.key === series)?.label ?? item.result?.rows?.find((x) => x.key === series)?.label ?? '') : '';
+		drill = { card: item.card.id, title: [label, from === to ? from : `${from} to ${to}`].filter(Boolean).join(' · '), rows: null, unit: '', kind: 'number', all: false };
+		const mine = drill;
 		try {
 			const r = await statsOp<{ rows: DrillRow[]; unit: string; kind: ValueKind }>({ op: 'drill', card: item.card, ctx: board, from, to, series });
-			if (drill) drill = { ...drill, rows: r.rows, unit: r.unit, kind: r.kind, loading: false };
+			if (drill && drill.title === mine.title && drill.card === mine.card) drill = { ...drill, rows: r.rows, unit: r.unit, kind: r.kind };
 		} catch (e) {
 			showToast((e as Error).message);
 			drill = null;
@@ -128,58 +147,45 @@
 	<EditableList
 		class="cards"
 		axis="grid"
-		layout="block"
+		layout="bare"
 		items={shown}
 		key={(item) => item.card.id}
-		label={(item) => item.card.title || 'Card'}
+		label={(item) => titleOf(item.card)}
 		itemClass={(item) => item.card.look.size}
-		editing={editing && !readonly}
+		mode={editing && !readonly ? 'edit' : 'use'}
 		ariaLabel="Cards"
 		onmove={(_, order) => reorder(order)}
-		onremove={(item) => remove(item, item.card.title || 'Card')}
 	>
-		{#snippet title(item)}
-			{@const t = item.card.title || 'Card'}
-			<span class="tools">
-				<select class="size" aria-label="Size of {t}" value={item.card.look.size} onchange={(e) => resize(item, (e.currentTarget as HTMLSelectElement).value as Size)}>
-					{#each Object.entries(SIZES) as [k, label] (k)}<option value={k}>{label}</option>{/each}
-				</select>
-				<button type="button" class="small" onclick={() => (building = structuredClone($state.snapshot(item.card)) as StatCard)} aria-label="Edit {t}">Edit</button>
-			</span>
-		{/snippet}
-		{#snippet row(item)}
-			{@const title = item.card.title || 'Card'}
-			{#if item.result}
-				<StatCardView
-					card={item.card}
-					r={item.result}
-					{title}
-					rangeKey={item.rangeKey}
-					warnings={item.warnings}
-					editing={editing && !readonly}
-					csvHref={csv?.(item.card.id)}
-					onedit={readonly ? undefined : () => (building = structuredClone($state.snapshot(item.card)) as StatCard)}
-					onremove={readonly ? undefined : () => remove(item, title)}
-					ondrill={(from, to, series) => openDrill(item, title, from, to, series)}
-					onheadline={onheadline && item.card.look.chart === 'tile' ? () => onheadline(item.card) : undefined}
-					headline={headlines.includes(item.card.id)}
-				/>
-			{:else}
-				<article class="card">
-					<h3>{title}</h3>
-					<p class="error">This card could not be worked out. {item.warnings[0] ?? 'Edit it or remove it.'}</p>
-					<div class="row">
-						<button type="button" class="small" onclick={() => (building = item.card)}>Edit</button>
-						<button type="button" class="small danger" onclick={() => remove(item, title)}>Remove</button>
-					</div>
-				</article>
-			{/if}
+		{#snippet row(item, ctx)}
+			{@const title = titleOf(item.card)}
+			<StatCardView
+				card={item.card}
+				r={item.result}
+				{title}
+				rangeKey={item.rangeKey}
+				boardRange={board.range}
+				warnings={item.warnings}
+				offer={readonly ? undefined : offer}
+				csvHref={csv?.(item.card.id)}
+				grip={ctx.grip}
+				logs={drill?.card === item.card.id ? drill : null}
+				onpick={readonly ? undefined : (k, v) => pickWord(item, k, v)}
+				onchart={readonly ? undefined : (c) => setChart(item, c)}
+				onsize={readonly ? undefined : (x) => resize(item, x)}
+				onedit={readonly ? undefined : () => (building = structuredClone($state.snapshot(item.card)) as StatCard)}
+				onremove={readonly ? undefined : () => remove(item, title)}
+				ondrill={item.result ? (from, to, series) => openDrill(item, from, to, series) : undefined}
+				onclose={() => (drill = null)}
+				onall={() => drill && (drill = { ...drill, all: true })}
+				onheadline={onheadline && item.card.look.chart === 'tile' ? () => onheadline(item.card) : undefined}
+				headline={headlines.includes(item.card.id)}
+			/>
 		{/snippet}
 	</EditableList>
 {/if}
 
-{#if drill}
-	<Drill title={drill.title} rows={drill.rows} loading={drill.loading} unit={drill.unit} kind={drill.kind} onclose={() => (drill = null)} />
+{#if drill?.all}
+	<Drill title={drill.title} rows={drill.rows} loading={false} unit={drill.unit} kind={drill.kind} onclose={() => drill && (drill = { ...drill, all: false })} />
 {/if}
 
 <style>
@@ -199,11 +205,7 @@
 	:global(ul.cards > li + li) {
 		margin-top: 0;
 	}
-	:global(ul.cards > li > .body) {
-		flex: 1;
-		display: flex;
-	}
-	:global(ul.cards > li > .body > *) {
+	:global(ul.cards > li > .card) {
 		flex: 1;
 	}
 	:global(ul.cards > li.wide),
@@ -222,21 +224,5 @@
 		:global(ul.cards > li.small) {
 			grid-column: span 6;
 		}
-	}
-	.tools {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.35rem;
-		align-items: center;
-		font-weight: 400;
-	}
-	.size {
-		width: auto;
-		padding: 0.2rem 0.3rem;
-		font-size: 0.8rem;
-	}
-	h3 {
-		font-size: 0.95rem;
-		margin: 0 0 0.4rem;
 	}
 </style>

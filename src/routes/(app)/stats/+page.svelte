@@ -4,7 +4,9 @@
 	import { statsOp } from '$lib/stats/client';
 	import { RANGES, rangeLabel, type BoardFilter } from '$lib/stats/model';
 	import CardGrid from '$lib/stats/ui/CardGrid.svelte';
-	import EditButton from '$lib/ui/EditButton.svelte';
+	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import InlineText from '$lib/ui/InlineText.svelte';
+	import MenuButton, { type Way } from '$lib/ui/MenuButton.svelte';
 
 	let { data } = $props();
 
@@ -61,28 +63,53 @@
 			await goto('/stats');
 			showToast(`Deleted the board “${copy.name}”`, async () => {
 				await statsOp({ op: 'board.restore', board: copy, index });
-				await goto(`?board=${copy.id}`);
+				await goto(`/stats?board=${copy.id}`);
 			});
 		}
 	}
 	const csv = (cardId: string) => `/stats/export?board=${board?.id}&card=${cardId}`;
+	const boardMenu = $derived<(Way | '-')[]>([
+		{ label: 'New board…', onselect: () => (newBoard = true) },
+		...(board
+			? [
+					'-' as const,
+					...(data.boards[0]?.id !== board.id ? [{ label: 'Move left', onselect: () => void op({ op: 'board.move', id: board.id, dir: -1 }) }] : []),
+					...(data.boards.at(-1)?.id !== board.id ? [{ label: 'Move right', onselect: () => void op({ op: 'board.move', id: board.id, dir: 1 }) }] : []),
+					{ label: 'Delete this board', onselect: deleteBoard },
+					'-' as const,
+					{ label: 'Stats opens with the last board', checked: data.open === 'last', onselect: () => void op({ op: 'open', value: 'last' }) },
+					{ label: 'Stats opens with this board', checked: data.open === board.id, onselect: () => void op({ op: 'open', value: board.id }) }
+				]
+			: [])
+	]);
 </script>
 
 <svelte:head><title>Stats · ittracks</title></svelte:head>
 
 <div class="stats-page">
-	<header class="bar">
-		<h1>Stats</h1>
-		{#if board}
-			<EditButton bind:editing label="Customize" onchange={() => (adding = false)} />
-		{/if}
-	</header>
+	<EditChrome
+		title="Stats"
+		mode={editing ? 'edit' : 'use'}
+		modes={board ? ['use', 'edit'] : ['use']}
+		onmode={(m) => ((editing = m === 'edit'), (adding = false))}
+		hints={{ use: board ? `${board.cards.length} ${board.cards.length === 1 ? 'card' : 'cards'}` : '', edit: 'Drag a card to move it. Press a word to change it.' }}
+	>
+		{#snippet actions()}
+			{#if board}<button type="button" onclick={() => (adding = true)}>+ Card</button>{/if}
+		{/snippet}
+	</EditChrome>
 
-	<nav class="boards" aria-label="Boards">
-		{#each data.boards as b (b.id)}
-			<button type="button" class="chip" class:on={b.id === board?.id} aria-current={b.id === board?.id ? 'page' : undefined} onclick={() => pick(b.id)}>{b.name}</button>
-		{/each}
-		<button type="button" class="chip add" onclick={() => (newBoard = !newBoard)} aria-expanded={newBoard}>+ Board</button>
+	<nav class="subtabs boards" aria-label="Boards">
+		<div class="subtabs-row">
+			{#each data.boards as b (b.id)}
+				{#if editing && b.id === board?.id}
+					<span class="tab" aria-current="page"><InlineText value={b.name} editing label="Name of this board" maxlength={40} onsave={(v) => patch({ name: v })} /></span>
+				{:else}
+					<a class="tab" href="?board={b.id}" data-reserve={b.name} aria-current={b.id === board?.id ? 'page' : undefined} onclick={(e) => (e.preventDefault(), pick(b.id))}>{b.name}</a>
+				{/if}
+			{/each}
+		</div>
+		<span class="board-more"><MenuButton class="hit" label="Boards" items={boardMenu} /></span>
 	</nav>
 
 	{#if newBoard}
@@ -109,32 +136,11 @@
 	{#if !board}
 		<p class="muted">No boards yet. Add one to see your numbers.</p>
 	{:else}
-		{#if editing}
-			<section class="card board-tools">
-				<div class="row">
-					<label class="grow">Board name <input value={board.name} maxlength="40" onchange={(e) => patch({ name: (e.currentTarget as HTMLInputElement).value.trim() || board.name })} /></label>
-					<label>
-						Stats opens with
-						<select value={data.open} onchange={(e) => op({ op: 'open', value: (e.currentTarget as HTMLSelectElement).value })}>
-							<option value="last">The last board I looked at</option>
-							{#each data.boards as b (b.id)}<option value={b.id}>{b.name}</option>{/each}
-						</select>
-					</label>
-				</div>
-				<div class="row actions-row">
-					<button type="button" class="primary" onclick={() => (adding = true)}>Add a card</button>
-					<button type="button" onclick={() => op({ op: 'board.move', id: board.id, dir: -1 })} disabled={data.boards[0]?.id === board.id}>Move board left</button>
-					<button type="button" onclick={() => op({ op: 'board.move', id: board.id, dir: 1 })} disabled={data.boards.at(-1)?.id === board.id}>Move board right</button>
-					<button type="button" class="danger" onclick={deleteBoard}>Delete board</button>
-				</div>
-			</section>
-		{/if}
-
 		<div class="filters">
-			<select class="range" aria-label="Range" value={board.range} onchange={(e) => patch({ range: (e.currentTarget as HTMLSelectElement).value })}>
-				{#each Object.entries(RANGES) as [k, label] (k)}<option value={k}>{label}</option>{/each}
-				{#if board.range.startsWith('since:')}<option value={board.range}>{rangeLabel(board.range)}</option>{/if}
-			</select>
+			<div class="chips" role="group" aria-label="Range">
+				{#each Object.entries(RANGES) as [k, label] (k)}<button type="button" class="toggle" aria-pressed={board.range === k} onclick={() => patch({ range: k })}>{label}</button>{/each}
+				{#if board.range.startsWith('since:')}<button type="button" class="toggle" aria-pressed="true">{rangeLabel(board.range)}</button>{/if}
+			</div>
 			<details class="filter">
 				<summary>Filter{filterCount ? ` (${filterCount})` : ''}</summary>
 				<div class="card pop stack">
@@ -167,7 +173,7 @@
 							<div class="muted small">Areas</div>
 							<div class="chips">
 								{#each data.catalog.areas as a (a.id)}
-									<button type="button" class="chip" class:on={board.filter.areas.includes(a.id)} aria-pressed={board.filter.areas.includes(a.id)} onclick={() => setFilter({ areas: toggle(board.filter.areas, a.id) })}>{a.icon} {a.name}</button>
+									<button type="button" class="toggle" aria-pressed={board.filter.areas.includes(a.id)} onclick={() => setFilter({ areas: toggle(board.filter.areas, a.id) })}>{a.name}</button>
 								{/each}
 							</div>
 						</div>
@@ -177,7 +183,7 @@
 							<div class="muted small">Tags</div>
 							<div class="chips">
 								{#each data.catalog.tags as t (t)}
-									<button type="button" class="chip" class:on={board.filter.tags.includes(t)} aria-pressed={board.filter.tags.includes(t)} onclick={() => setFilter({ tags: toggle(board.filter.tags, t) })}>{t}</button>
+									<button type="button" class="toggle" aria-pressed={board.filter.tags.includes(t)} onclick={() => setFilter({ tags: toggle(board.filter.tags, t) })}>{t}</button>
 								{/each}
 							</div>
 						</div>
@@ -225,28 +231,7 @@
 	:global(.content:has(.stats-page)) {
 		max-width: 1080px;
 	}
-	.boards {
-		display: flex;
-		gap: 0.35rem;
-		overflow-x: auto;
-		padding-bottom: 0.25rem;
-		margin-bottom: 0.75rem;
-		scrollbar-width: thin;
-	}
-	.boards .chip {
-		flex: none;
-		background: var(--surface);
-		font-size: 0.9rem;
-		padding: 0.3rem 0.8rem;
-		cursor: pointer;
-	}
-	.boards .add {
-		border-style: dashed;
-	}
 	.new,
-	.board-tools {
-		margin-bottom: 0.75rem;
-	}
 	.new h2 {
 		margin-top: 0;
 	}
@@ -267,18 +252,12 @@
 		flex-direction: column;
 		gap: 0.2rem;
 	}
-	.actions-row {
-		margin-top: 0.6rem;
-	}
 	.filters {
 		display: flex;
 		gap: 0.5rem;
 		align-items: center;
 		margin-bottom: 0.75rem;
 		flex-wrap: wrap;
-	}
-	.range {
-		width: auto;
 	}
 	.filter {
 		position: relative;
@@ -312,5 +291,18 @@
 	.foot {
 		margin-top: 1.5rem;
 		text-align: center;
+	}
+	.boards {
+		justify-content: space-between;
+		margin-block-end: var(--space-inline);
+	}
+	.boards .subtabs-row {
+		flex-wrap: wrap;
+	}
+	.boards :global(button.inline-text::after) {
+		width: 0;
+	}
+	.board-more {
+		position: relative;
 	}
 </style>

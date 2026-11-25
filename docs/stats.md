@@ -4,21 +4,28 @@ The **Stats** page holds boards of cards. Each card asks one question of your lo
 
 ## Boards
 
-- **+ Board** starts a board from a template, made from the habits and Tasks you already have, or as an empty board.
-- Each board has a **Range** (**This week**, **Last 7 days**, **This month**, **Last 30 days**, **Last 90 days**, **This year**, **Last 12 months**, **All time**) and a **Filter**: building or breaking habits, one habit, an identity, Areas and tags.
-- In **Customize** you can rename a board, move it left or right, delete it, and choose whether Stats opens on **The last board I looked at** or a fixed one.
+- **⋯ → New board…**, next to the boards, starts one from a template, made from the habits and Tasks you already have, or empty.
+- Each board has a range, as buttons (**This week**, **Last 7 days**, **This month**, **Last 30 days**, **Last 90 days**, **This year**, **Last 12 months**, **All time**), and a **Filter**: building or breaking habits, one habit, an identity, Areas and tags.
+- In **Edit**, press a board's name to rename it. **⋯** moves it left or right, deletes it (with Undo), and sets whether Stats opens with the last board or with this one.
 
 ## Cards
 
-Press **Customize**, then **Add a card**:
+Under its title a card says what it shows: *Volume · Bench press · per week · the board's range*. The words are the controls: press one and pick another, in Use and in Edit. A word offers only what the logs have. When a word doesn't go with the others, the nearest one that does takes its place, and the line above the tabs says so. Every change has **Undo**.
+
+- **⋯** on a card: the chart kinds that suit it, its size (**Small**, **Wide**, **Full width**), **Show as a table**, **Show the logs**, **Download CSV**, **All settings…** and **Remove**.
+- A chart says its point in a sentence ("Last 85 kg (8 Nov). Highest 90 kg (1 Nov).").
+- Press a mark to see the logs behind it, in the card: five, then **All … logs**.
+- In **Edit**, drag a card by its ⠿, or use the arrow keys on it.
+
+Press **+ Card** to add one:
 
 - **From your habits**: cards suggested from what you log. **Add** it as it is, or **Change first**.
 - **Gallery**: ready-made cards.
 - **Build your own**.
 
-While customizing, drag cards in the grid, resize them (**Small**, **Wide**, **Full width**), and edit or remove them from each card's bar. Tap a number on a card to see the logs behind it. Each card can be downloaded as CSV.
+### All settings
 
-### Building a card
+What a sentence can't say (goals, rolling averages, splits, filters) is in **⋯ → All settings…**:
 
 | Setting | Choices |
 | --- | --- |
@@ -37,7 +44,7 @@ Choices that don't fit the rest of the card are greyed out, with the reason.
 
 ## A habit's Stats tab
 
-Each habit has a **Stats** tab (from its editor or chain) with cards made automatically from what it logs. **Customize** changes them like any board; **Back to the automatic cards** undoes your changes. A Task's **History** in the Task editor shows its charts.
+Each habit has a **Stats** tab (from its editor or chain) with cards made automatically from what it logs. They change like any card; **Back to the automatic cards** undoes your changes. **Last times** on a Task's page shows its charts.
 
 ## Your measures
 
