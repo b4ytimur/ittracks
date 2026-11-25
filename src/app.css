@@ -1,4 +1,5 @@
 @import './tokens.css';
+@import './styles/chip.css';
 
 /* The names from before the design system's tokens. Screens move off them one by one. */
 :root {

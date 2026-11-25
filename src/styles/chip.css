@@ -1,0 +1,130 @@
+/* Chip: two shapes for two jobs. A pill you can press (.toggle) and a square tag that only states a fact (.tag).
+   Owns .chips, .toggle, .tags, .tag, .tag.strong, .tag.pending, .tag.count.
+   Both use the chip type style (0.8rem / 1rem); weight is set here so a tag inside a 700 heading stays 400. */
+
+/* ---------- Toggle pill: pressable. Rest, hover, on and focus never look alike (F.7, F.28) ---------- */
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-inline); }
+.toggle {
+	--toggle-pad-block: calc(var(--space-tight) - 1px); /* 1px edge + 3px + 16px line + 3px + 1px = 24px (target-min) */
+	--toggle-pad-inline: calc(3 * var(--pitch));
+}
+/* button.toggle (0,1,1) beats Button's :where(button, .button).small and its hover (0,1,0): a pill that keeps `small`
+   keeps the chip type and padding, and Button's hover edge never reaches a pill. */
+.toggle, button.toggle {
+	display: inline-block; vertical-align: middle; /* inline, not flex: the ✓ and × flow with the words, a long label wraps */
+	min-height: var(--target-min); padding: var(--toggle-pad-block) var(--toggle-pad-inline);
+	font-size: var(--font-size-chip); line-height: 1rem; font-weight: 400; text-align: start; text-decoration: none;
+	color: var(--ink); /* a live pill's words are ink; muted is the blocked look (D3.26) */
+	background: none; /* no fill, ever: a fill means a fact (tag) */
+	border: 1px solid var(--line-control); border-radius: var(--radius-pill); cursor: pointer;
+}
+/* Hover: the edge goes to ink, 1px; the words already are. Never a fill. Only where the pointer hovers, so on touch a pill
+   just tapped off doesn't keep the hover look. .hover is the preview's stand-in. A blocked toggle takes no hover;
+   the :where keeps both at (0,2,0), so the forced-colours on rule below still wins on a hovered on pill. */
+.toggle.hover:where(:not([aria-disabled='true'], :has(> input:disabled))) { border-color: var(--ink); }
+@media (hover: hover) {
+	.toggle:where(:not([aria-disabled='true'], :has(> input:disabled))):hover { border-color: var(--ink); }
+}
+/* On: the one chosen look (R1.1). A 1px ink border plus a 1px inset ink ring = 2px (chosen-width), weight 600 and a
+   leading ✓ on the same ink words. Twice the hover edge, so hover never reads as on.
+   Three forms: aria-pressed buttons, .on, and a label wrapping a checked radio (choice). A current Stats board is a Tab, not a toggle. */
+.toggle:is(.on, [aria-pressed='true'], :has(> input:checked)) {
+	font-weight: 600; border-color: var(--line-chosen);
+	box-shadow: inset 0 0 0 calc(var(--chosen-width) - 1px) var(--line-chosen);
+}
+/* Blocked (States, BlockedReason): aria-disabled on the toggle, a choice whose radio is disabled, or a pill in a region
+   that is inert while it saves (States rule 5: SelectionBar's Applying). The words step back to ink-muted (D3.26), the
+   line-control edge stays, no hover; an on toggle keeps its ✓, 600 and ink edge. Never faded (C.6). The reason is
+   BlockedReason's line under the .chips group. */
+.toggle:is([aria-disabled='true'], :has(> input:disabled), [inert], [inert] *) { color: var(--ink-muted); cursor: not-allowed; }
+/* The ✓ is always there, 0 wide when off, so the state stays in aria-pressed and screen readers skip the glyph. */
+.toggle::before {
+	content: '✓'; content: '✓' / '';
+	display: inline-block; vertical-align: top; overflow: hidden; max-width: 0; opacity: 0;
+}
+.toggle:is(.on, [aria-pressed='true'], :has(> input:checked))::before { max-width: 1em; opacity: 1; margin-inline-end: var(--space-tight); }
+/* Choice: the radio is visually hidden, so the pill draws its focus ring. */
+.toggle:has(> input:focus-visible) { outline: var(--focus-width) solid var(--focus-ring); outline-offset: var(--focus-width); }
+
+/* ---------- In a form a choice pill keeps its width, so a choice never moves its neighbours (D4.21) ---------- */
+/* <label class="toggle"><input class="vh" type="radio" …><span data-reserve="Morning">Morning</span></label>
+   The words stand in a span that reserves their 600 width (base's data-reserve: on the span, because a pill's ::after is
+   its coarse hit area). The ✓'s place (0.9em, the glyph's own width, and its 4px) is split between the two sides while
+   the pill is off, so the words are centred, and stands before them while it is on. 8px of padding and not 12: the ✓'s
+   place is padding already. */
+.toggle:has(> [data-reserve]) {
+	--toggle-pad-inline: var(--space-inline); --check: 0.9em;
+	display: inline-flex; justify-content: center; align-items: flex-start; gap: 0; text-align: center; /* a long label wraps beside its ✓ */
+}
+.toggle:has(> [data-reserve]):not(.on, [aria-pressed='true'], :has(> input:checked)) {
+	padding-inline: calc(var(--toggle-pad-inline) + (var(--check) + var(--space-tight)) / 2);
+}
+.toggle:has(> [data-reserve])::before { flex: none; min-width: 0; } /* a length, so it eases with the padding */
+.toggle:has(> [data-reserve]):is(.on, [aria-pressed='true'], :has(> input:checked))::before { min-width: var(--check); max-width: var(--check); }
+
+/* ---------- Status tag: a fact, square, never pressable ---------- */
+/* Tags carry only the record's state (Archived, Hidden, Paused, Unused) plus the one strong daily item (F.25). */
+.tags { display: inline-flex; flex-wrap: wrap; gap: var(--space-tight); }
+.tag {
+	display: inline-block; padding: 1px calc(1.5 * var(--pitch)); /* 1px edge + 1px + 16px + 1px + 1px = 20px, 5 pitches */
+	font-size: var(--font-size-chip); line-height: 1rem; font-weight: 400; white-space: nowrap;
+	color: var(--ink); background: var(--surface-tint);
+	border: 1px solid transparent; border-radius: var(--radius-mark); /* the edge is there so pending and forced colours keep the size */
+}
+/* Strong: the one solid inverse shape in the system, for Up next only. tone comes from data. */
+.tag.strong { color: var(--ink-inverse); background: var(--surface-inverse); }
+/* Pending: what a bulk action will make of this row (SelectionBar preview). Blue, because it is the act's outcome. */
+.tag.pending { color: var(--accent-ink); background: none; border-color: var(--accent); }
+/* The consumer's → (aria-hidden, first) points from the name to the outcome; in RTL the name is on the right, so it turns. */
+.tag.pending:dir(rtl) > [aria-hidden='true']:first-child { display: inline-block; transform: scaleX(-1); }
+/* Count: done of total, or a plain total, on a group heading. Figures keep their width as the count changes. */
+.tag.count { font-variant-numeric: tabular-nums; }
+
+/* ---------- Coarse pointers: 32px pills, 44px hit areas that meet but never overlap ---------- */
+@media (pointer: coarse) {
+	.chips { row-gap: calc(3 * var(--pitch)); } /* 32 + 12: two 6px hit-area overhangs meet in the gap */
+	.toggle, button.toggle {
+		--toggle-pad-block: calc(var(--space-inline) - 1px);
+		position: relative; min-height: var(--control-md);
+	}
+	/* ::after, not base's .hit: a pill's ::before is the ✓. inset counts from the padding edge, so the edge (1px, 2px
+	   when on under forced colours) is taken off too: the area is 44px tall and reaches 6px over and under the pill and
+	   4px to each side. */
+	.toggle::after {
+		content: ''; position: absolute;
+		inset: calc((var(--control-md) - var(--target-touch)) / 2 - var(--toggle-edge, 1px))
+			calc(-0.5 * var(--space-inline) - var(--toggle-edge, 1px));
+	}
+}
+
+/* ---------- Motion: the ✓ slides in only when motion is welcome; otherwise it appears ---------- */
+@media (prefers-reduced-motion: no-preference) {
+	.toggle {
+		transition: border-color var(--duration-quick) var(--ease-standard), color var(--duration-quick) var(--ease-standard),
+			box-shadow var(--duration-quick) var(--ease-standard);
+	}
+	.toggle::before {
+		transition: max-width var(--duration-quick) var(--ease-standard), margin var(--duration-quick) var(--ease-standard),
+			opacity var(--duration-quick) var(--ease-standard);
+	}
+	/* A reserved pill's padding gives up what the ✓ takes, on one clock, so its width holds all the way. */
+	.toggle:has(> [data-reserve]) { transition-property: border-color, color, box-shadow, padding; }
+	.toggle:has(> [data-reserve])::before { transition-property: max-width, min-width, margin, opacity; }
+}
+
+/* ---------- Forced colours: fills and box-shadow are dropped, so edges carry every state ---------- */
+@media (forced-colors: active) {
+	.toggle, button.toggle, .tag { border-color: CanvasText; }
+	/* On: a 2px Highlight border, padding 1px less so the box keeps its size. Focus stays the outset outline. */
+	.toggle:is(.on, [aria-pressed='true'], :has(> input:checked)) {
+		--toggle-edge: var(--chosen-width);
+		border: var(--chosen-width) solid Highlight;
+		padding: calc(var(--toggle-pad-block) - 1px) calc(var(--toggle-pad-inline) - 1px);
+	}
+	.toggle:has(> input:focus-visible) { outline-color: Highlight; }
+	/* Blocked: words and edge GrayText; after the on rule, so an on toggle keeps its 2px edge, in GrayText. */
+	.toggle:is([aria-disabled='true'], :has(> input:disabled), [inert], [inert] *) { color: GrayText; border-color: GrayText; }
+	/* Strong: no fill here, so it can't outshout the primary verb (which loses its fill too). A 2px edge and 600,
+	   padding 1px less so it stays 20px: one step above a neutral tag's 1px edge at 400. */
+	.tag.strong { border-width: var(--chosen-width); padding: 0 calc(1.5 * var(--pitch) - 1px); font-weight: 600; }
+}
