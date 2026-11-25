@@ -15,7 +15,7 @@ import { keepEarlier, sameSchedule, scheduleStartBy, startMovedBack, type Earlie
 import { isFollow, isGroup, type Schedule } from '$lib/engine/schedule';
 import { fitFollow, standaloneSchedule } from '$lib/engine/follow';
 import { keepParent, makesCycle } from '$lib/engine/tree';
-import { keepGoals, rejudge } from '../progress';
+import { keepGoals, keepSlots, rejudge } from '../progress';
 import type { StreakRule } from '$lib/engine/streak';
 import { checkHabit, checkHabitPast, removedTriggers, type HabitCheck, type HabitCtx } from '$lib/rules/habit';
 import { feelingsUsed, habitLogged, PastEditError } from '../history';
@@ -471,6 +471,7 @@ export function saveHabit(
 					return !now || goal(old) !== goal({ ...now, taskId: now.fillRule ? null : now.taskId, minTargets: now.minTargets, stretchTargets: now.stretchTargets });
 				});
 			if (changed) keepGoals(tx, [v.id]);
+			keepSlots(tx, was.filter((s) => !slotIds.includes(s.id)));
 			tx.delete(slot)
 				.where(
 					slotIds.length

@@ -14,6 +14,8 @@ export interface OccLike {
 	picks: Record<string, string> | null;
 	/** The targets the Slots had when they changed later; null when today's still apply. */
 	goals?: Record<string, SlotGoals> | null;
+	/** Slots taken out of the plan that this log has values in. */
+	kept?: Record<string, SlotGoals> | null;
 }
 
 /** Every part reachable from these Tasks, by the Task they are inside, in order. */
@@ -63,6 +65,15 @@ export interface PlannedSlot {
  * later (see keepGoals), in their order then, else the Variant's Slots now.
  */
 export function plannedSlots(o: OccLike, current: (typeof slot.$inferSelect)[]): PlannedSlot[] {
+	const out = plannedNow(o, current);
+	const kept = Object.entries(o.kept ?? {})
+		.filter(([id]) => !out.some((s) => s.slotId === id))
+		.sort(([, a], [, b]) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+	for (const [slotId, g] of kept) out.splice(Math.min(g.sortOrder ?? out.length, out.length), 0, { slotId, taskId: o.picks?.[slotId] ?? g.taskId, sets: g.sets, targets: null, minTargets: null, stretchTargets: null });
+	return out;
+}
+
+function plannedNow(o: OccLike, current: (typeof slot.$inferSelect)[]): PlannedSlot[] {
 	if (o.goals)
 		return Object.entries(o.goals)
 			.map(([slotId, g], i) => ({ slotId, g, at: g.sortOrder ?? i }))

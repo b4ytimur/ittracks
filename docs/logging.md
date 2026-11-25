@@ -38,7 +38,7 @@ A day logged short of its target reads like "Done · 5 of 6 glasses" or "Missed 
 - A number that starts from last time, changed by hand on one set, moves the sets still to do by as much ("+2.5 kg, as set 1"). One that starts from its target, such as reps, never does.
 - The line above the open set says what you did; press it to go back and correct the last one, or untick it. **Add set** and **Remove set** change the count, for this log.
 - Other Tasks are one line each. Press one to do it now (a machine is taken); press it again later to go on. **Layout: All open** shows them all.
-- **Edit**, on an open log of today, changes the plan where it stands, from now on: drag Tasks into another order, rename one, or press "3 sets" or "8 reps" to change the number. Inside an open Task, sets can be dragged too, for this log only. Every change has an Undo. Adding and removing Tasks is on the habit's page.
+- **Edit**, on an open log of today, changes the plan where it stands, from now on: drag Tasks into another order, rename one, or press "3 sets" or "8 reps" to change the number. **+ Task…** adds one and **Remove** takes one out; a log that has values in it keeps it. "rest 90 s" changes the Task's clock everywhere; 0 turns it off. Inside an open Task, sets can be dragged too, for this log only. Every change has an Undo.
 - **⋯** on a Task: **How to** (its notes), **Last 7 times**, **Swap…**, and **Pick another** in an [auto-filled slot](tasks.md#auto-filled-slots).
 - With Levels on, pick the level you are logging at.
 - The note box takes Markdown.

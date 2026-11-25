@@ -6,6 +6,7 @@ import { db } from './db';
 import { entry, habit, metric, occurrence, slot, task, type SlotGoals } from './db/schema';
 import { getUnits } from './settings';
 import { positionsFor } from './positions';
+import { slotOfPath } from '$lib/engine/parts';
 import { amountTarget, loggedValue, progressOf, verdict, type Progress, type ProgressMetric, type ProgressSlot, type Verdict } from '$lib/engine/progress';
 import { defaultStep } from '$lib/task-types';
 import { STARTER, type UnitTable } from '$lib/units';
@@ -19,6 +20,7 @@ interface OccRow {
 	status: string;
 	/** The targets the Slots had when they changed later; null when today's still apply. */
 	goals?: Record<string, SlotGoals> | null;
+	kept?: Record<string, SlotGoals> | null;
 }
 
 type Goals = Pick<SlotGoals, 'targets' | 'minTargets' | 'stretchTargets'>;
@@ -256,6 +258,26 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
  * Target met, "3 of 6 glasses", the habit's rule and the log screen judge and show each log
  * by the plan it had. Logs that already keep theirs are left as they are.
  */
+/**
+ * Slots about to leave a Variant's plan: a log still open with values in one keeps it, without
+ * anything left to reach.
+ */
+export function keepSlots(tx: Tx, gone: (typeof slot.$inferSelect)[]) {
+	if (!gone.length) return;
+	const open = tx
+		.select({ id: occurrence.id, kept: occurrence.kept, picks: occurrence.picks })
+		.from(occurrence)
+		.where(and(inArray(occurrence.variantId, [...new Set(gone.map((s) => s.variantId))]), eq(occurrence.status, 'due')))
+		.all();
+	for (const o of open) {
+		const paths = tx.select({ path: entry.path }).from(entry).where(eq(entry.occurrenceId, o.id)).all();
+		const mine = gone.filter((s) => paths.some((e) => e.path && slotOfPath(e.path) === s.id));
+		if (!mine.length) continue;
+		const kept = { ...o.kept, ...Object.fromEntries(mine.map((s) => [s.id, { sortOrder: s.sortOrder, taskId: s.taskId ?? o.picks?.[s.id] ?? null, sets: null, targets: null, minTargets: null, stretchTargets: null }])) };
+		tx.update(occurrence).set({ kept }).where(eq(occurrence.id, o.id)).run();
+	}
+}
+
 export function keepGoals(tx: Tx, variantIds: string[]) {
 	for (const variantId of variantIds) {
 		const slots = tx.select().from(slot).where(eq(slot.variantId, variantId)).orderBy(asc(slot.sortOrder)).all();

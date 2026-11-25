@@ -17,6 +17,11 @@ export const inOrder = (plan: Plan, order: string[]): Plan =>
 
 export const withSlot = (plan: Plan, id: string, set: Partial<Slot>): Plan => plan.map((v) => ({ ...v, slots: v.slots.map((s) => (s.id === id ? { ...s, ...set } : s)) }));
 
+export const withoutSlot = (plan: Plan, id: string): Plan => plan.map((v) => ({ ...v, slots: v.slots.filter((s) => s.id !== id) }));
+/** A Task at the end of one Variant. */
+export const withTask = (plan: Plan, variant: string, id: string, taskId: string): Plan =>
+	plan.map((v) => (v.id === variant ? { ...v, slots: [...v.slots, { id, taskId, fillRule: null, sets: null, targets: {}, minTargets: {}, stretchTargets: {} }] } : v));
+
 /** The number in "4 sets" or "62,5 kg"; null when there is none. */
 export function numberIn(text: string): number | null {
 	const m = /\d+(?:[.,]\d+)?/.exec(text);
