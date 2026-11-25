@@ -16,7 +16,7 @@ import {
 	type Prepared
 } from './engine';
 import { emptyStats, makeCard, readStats, type StatCardInput } from './model';
-import { BOARD_TEMPLATES, boardTemplate, galleryCards, habitCards, headlineOptions, startingBoards, suggestedCards, taskCards, type BoardTemplateId } from './auto';
+import { boardFrom, boardSeeds, galleryCards, habitCards, headlineOptions, startingBoards, suggestedCards, taskCards } from './auto';
 import { perLogChoices, statCtx } from './catalog';
 import { catalogOf } from './catalog-of';
 import { checkCard, checkStatsSettings } from '../rules/stats';
@@ -51,7 +51,6 @@ function dataset(): Dataset {
 	const set = (w: number, r: number) => ({ w, r });
 	return {
 		today: TODAY,
-		weightUnit: 'kg',
 		ranges: [],
 		areas: [{ id: 'a1', name: 'Fitness' }],
 		habits: [
@@ -411,12 +410,17 @@ describe('auto cards and templates', () => {
 
 	it('starts with Overview, plus the board for the view template', () => {
 		expect(startingBoards(P, 'standard').map((b) => b.name)).toEqual(['Overview']);
-		expect(startingBoards(P, 'gym').map((b) => b.name)).toEqual(['Overview', 'Gym']);
+		expect(startingBoards(P, 'gym').map((b) => b.name)).toEqual(['Overview', 'Measures']);
+		// A pack names its board in its own words, in place of the plain one.
+		expect(boardSeeds([]).map((x) => x.name)).toEqual(['Overview', 'Measures', 'Time', 'Numbers', 'Breaking habits']);
+		expect(boardSeeds(['gym', 'reading']).map((x) => x.name)).toEqual(['Overview', 'Numbers', 'Breaking habits', 'Gym', 'Reading']);
+		expect(boardFrom(boardSeeds(['gym']).find((x) => x.id === 'gym')!, P).cards[0].title).toBe('Sessions per week');
 	});
 
 	it('never builds a card the rules would block', () => {
 		const all = [
-			...(Object.keys(BOARD_TEMPLATES) as BoardTemplateId[]).flatMap((id) => boardTemplate(id, P).cards),
+			...boardSeeds(['gym', 'reading', 'study']).flatMap((x) => boardFrom(x, P).cards),
+			...boardSeeds([]).flatMap((x) => boardFrom(x, P).cards),
 			...galleryCards(P).flatMap((g) => g.cards),
 			...suggestedCards(P).flatMap((g) => g.cards),
 			...P.ds.habits.flatMap((h) => headlineOptions(P, h).map((o) => o.card))

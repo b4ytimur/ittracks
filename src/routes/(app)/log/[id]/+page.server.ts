@@ -209,7 +209,6 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		/** False for a past day outside the window in Settings: only a finished log can be changed. */
 		canLog: win === 'ok' || win === 'today',
 		back: safeBack(url.searchParams.get('back')) ?? (past ? `/day/${o.occ.date}` : '/'),
-		weightUnit: getUnits(accountId).shown('weight'),
 		levels: o.habit.levels?.enabled ? o.habit.levels : null,
 		variantName: v?.name ?? null,
 		/** The plan this log follows, to change where it stands: an open log of today only. */
@@ -222,7 +221,6 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 			accountId,
 			items.flatMap((it) => (it.task ? [it.task.id] : [])),
 			o.occ.id,
-			getUnits(accountId).shown('weight'),
 			o.occ.date
 		),
 		library: db

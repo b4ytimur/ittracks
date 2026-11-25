@@ -67,7 +67,6 @@ export function loadDataset(accountId: string, tz?: string): Dataset {
 
 	return {
 		today,
-		weightUnit: units.shown('weight'),
 		units,
 		groups: getGroups(accountId),
 		measures: getStats(accountId).measures,
@@ -272,7 +271,7 @@ export interface Recap {
  * so opening a log stays quick on a big account. Only logs up to `today` count, so a past
  * day's log shows what came before it.
  */
-export function recapFor(accountId: string, taskIds: string[], excludeOcc: string, weightUnit: string, today: string): Record<string, Recap> {
+export function recapFor(accountId: string, taskIds: string[], excludeOcc: string, today: string): Record<string, Recap> {
 	if (!taskIds.length) return {};
 	// Those Tasks and everything inside them, so "3 of 4 steps" counts.
 	const parts = partsOfTasks(taskIds);
@@ -297,7 +296,6 @@ export function recapFor(accountId: string, taskIds: string[], excludeOcc: strin
 	const habits = habitIds.length ? db.select().from(habit).where(and(eq(habit.accountId, accountId), inArray(habit.id, habitIds))).all() : [];
 	const ds: Dataset = {
 		today,
-		weightUnit,
 		ranges: [],
 		areas: [],
 		habits: habits.map((h) => ({ id: h.id, name: h.name, direction: h.direction, areaId: h.areaId, startDate: h.startDate, archived: h.archived, identities: [], cost: null, streakRule: DEFAULT_STREAK_RULE, minimumCounts: true, limit: null })),
@@ -329,15 +327,15 @@ function bestOf(P: Prepared, taskId: string): string | null {
 	const [first, second] = rep;
 	if (first && second?.times) {
 		const sign = first.better === 'less' ? -1 : 1;
-		let top: { w: number; reps: number } | null = null;
+		let top: { v: number; times: number } | null = null;
 		for (const l of logs)
 			for (const s of l.sets) {
-				const w = Number(s[first.id]);
+				const v = Number(s[first.id]);
 				const n = Number(s[second.id]);
-				if (!Number.isFinite(w) || !Number.isFinite(n) || !n) continue;
-				if (!top || (w - top.w) * sign > 0 || (w === top.w && n > top.reps)) top = { w, reps: n };
+				if (!Number.isFinite(v) || !Number.isFinite(n) || !n) continue;
+				if (!top || (v - top.v) * sign > 0 || (v === top.v && n > top.times)) top = { v, times: n };
 			}
-		return top ? `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(top.w)}${first.unit ? ` ${first.unit}` : ''} × ${top.reps}` : null;
+		return top ? `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(top.v)}${first.unit ? ` ${first.unit}` : ''} × ${top.times}` : null;
 	}
 	const m = (P.metricsByTask.get(taskId) ?? []).find((x) => !x.repeats && ['number', 'duration', 'count'].includes(x.type));
 	if (!m) return null;

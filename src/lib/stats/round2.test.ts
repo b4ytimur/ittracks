@@ -39,7 +39,6 @@ function dataset(): Dataset {
 	const e = (occurrenceId: string, taskId: string, values: Record<string, unknown>, sortOrder: number) => ({ occurrenceId, taskId, values, sortOrder });
 	return {
 		today: TODAY,
-		weightUnit: 'kg',
 		ranges: [],
 		areas: [],
 		habits: [

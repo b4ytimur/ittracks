@@ -11,7 +11,7 @@ A view template is a starting layout. Pick one in **Settings → View template**
 | **Morning and evening routine** | Your day in order: what fits now first, grouped by part of the day, in your own order |
 | **Standard** | Everything on, sorted by time of day |
 | **Minimal** | A plain checklist. Only what is due; done items fold away; extras hidden |
-| **Gym-focused** | Training plans: a week strip and progress on Today, "done this week" on each habit, the Library sorted by most logged |
+| **Week first** | Plans: a week strip and progress on Today, "done this week" on each habit, the Library sorted by most logged |
 | **Quitter** | Breaking habits: Breaking first, quit counters and money saved, no Levels or prep |
 | **Data nerd** | Every widget and line, consistency as the headline number, logged values in History |
 

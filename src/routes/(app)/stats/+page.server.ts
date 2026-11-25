@@ -1,6 +1,7 @@
 import { boardsOf, catalogFor, itemsFor, statsContext } from '$lib/server/stats';
 import { getViews } from '$lib/server/settings';
-import { BOARD_TEMPLATES, galleryCards, suggestedCards } from '$lib/stats/auto';
+import { getPacks } from '$lib/server/settings';
+import { boardSeeds, galleryCards, suggestedCards } from '$lib/stats/auto';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ locals, cookies, url }) => {
@@ -27,7 +28,7 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		open: s.open,
 		suggested: suggestedCards(P),
 		gallery: galleryCards(P),
-		templates: Object.entries(BOARD_TEMPLATES).map(([id, t]) => ({ id, ...t })),
+		templates: boardSeeds(getPacks(accountId)).map(({ id, name, blurb }) => ({ id, name, blurb })),
 		logged: P.logs.length + P.ds.occurrences.filter((o) => o.status !== 'due').length + P.ds.slips.length
 	};
 };

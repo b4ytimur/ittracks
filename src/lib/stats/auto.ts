@@ -2,6 +2,7 @@
 // Auto cards come from the type of each field a habit or Task logs; board templates pick
 // the habits and Tasks that fit them from what the account already has.
 import { makeCard, MAX_CARDS, newId, perLogOf, type Board, type CustomMeasure, type StatCard, type StatCardInput } from './model';
+import { PACKS } from '../packs';
 import { measuresOf } from './catalog-of';
 import { compile, fieldsOf, FormulaError } from './formula';
 import { fits, groupsOf, type DsHabit, type DsMetric, type DsTask, type Prepared } from './engine';
@@ -255,31 +256,47 @@ export function headlineOptions(P: Prepared, h: DsHabit): HeadlineOption[] {
 	return out;
 }
 
-// ---------- board templates (A2) ----------
+// ---------- starting points for a board ----------
 
-export const BOARD_TEMPLATES = {
-	overview: { name: 'Overview', blurb: 'Everyone: done this week, consistency, streaks, target met and a calendar.' },
-	gym: { name: 'Gym', blurb: 'Lifters: sessions per week, hard sets per muscle group, volume, e1RM and records.' },
-	learner: { name: 'Learner', blurb: 'Languages and study: minutes per week, running totals and minutes by weekday.' },
-	quitter: { name: 'Quitter', blurb: 'Breaking habits: days clean, money saved, cravings resisted and when slips happen.' },
-	health: { name: 'Health log', blurb: 'Meds and vitals: each number as a line with a 7-day average, doses taken.' }
-} as const;
-export type BoardTemplateId = keyof typeof BOARD_TEMPLATES;
+/** What a board can be made of, from whatever you track. No shape knows what it is about. */
+export type BoardShape = 'overview' | 'rows' | 'time' | 'numbers' | 'breaking';
+export interface BoardSeed {
+	id: string;
+	shape: BoardShape;
+	name: string;
+	blurb: string;
+	/** What one day of its habits is called: "Sessions". */
+	days?: string;
+}
+const SEEDS: BoardSeed[] = [
+	{ id: 'overview', shape: 'overview', name: 'Overview', blurb: 'Done this week, consistency, streaks, target met and a calendar.' },
+	{ id: 'rows', shape: 'rows', name: 'Measures', blurb: 'What you log in rows: days per week, each grouping, your measures and records.' },
+	{ id: 'time', shape: 'time', name: 'Time', blurb: 'Time per week, running totals, and which weekdays it happens on.' },
+	{ id: 'numbers', shape: 'numbers', name: 'Numbers', blurb: 'Each number as a line with a 7-day average, and how often it was done.' },
+	{ id: 'breaking', shape: 'breaking', name: 'Breaking habits', blurb: 'Days clean, money saved, cravings resisted and when slips happen.' }
+];
+/** Those, with the ones your packs name in their own words in place of the plain one. */
+export function boardSeeds(packs: string[]): BoardSeed[] {
+	const own = PACKS.filter((p) => packs.includes(p.id)).flatMap((p) => p.boards ?? []);
+	return [...SEEDS.filter((x) => !own.some((o) => o.shape === x.shape)), ...own];
+}
+export const seedById = (id: string): BoardSeed | undefined => [...SEEDS, ...PACKS.flatMap((p) => p.boards ?? [])].find((x) => x.id === id);
 
-/** Which board template goes with which view template. */
-export const BOARD_FOR_VIEW: Record<string, BoardTemplateId | undefined> = { gym: 'gym', quitter: 'quitter', data: undefined };
+/** Which board goes with which view template. */
+export const BOARD_FOR_VIEW: Record<string, string | undefined> = { gym: 'rows', quitter: 'breaking' };
 
 const logsPerTask = (P: Prepared) =>
 	[...P.logsByTask.entries()].map(([id, ls]) => ({ t: P.tasks.get(id)!, n: ls.length })).filter((x) => x.t).sort((a, b) => b.n - a.n);
 
-export function boardTemplate(id: BoardTemplateId, P: Prepared): Board {
+export function boardFrom(seed: BoardSeed, P: Prepared): Board {
+	const id = seed.shape;
 	const b = (cards: StatCard[]): Board => ({
 		id: newId(),
-		name: BOARD_TEMPLATES[id].name,
+		name: seed.name,
 		cards,
 		range: '30d',
 		filter: { areas: [], tags: [], habit: null, identity: null, direction: 'all' },
-		template: id
+		template: seed.id
 	});
 	const build = P.ds.habits.filter((h) => h.direction === 'build' && !h.archived);
 	if (id === 'overview') {
@@ -295,11 +312,11 @@ export function boardTemplate(id: BoardTemplateId, P: Prepared): Board {
 			cards.splice(3, 0, card({ title: 'Slips this week', what: { source: 'slips' }, perLog: 'count', overTime: 'sum', range: 'week', compare: { previous: true }, look: { chart: 'tile' } }));
 		return b(cards);
 	}
-	if (id === 'gym') {
+	if (id === 'rows') {
 		const rows = logsPerTask(P).filter((x) => inRows(P, x.t));
 		const own = build.filter((h) => habitTasks(P, h.id).some((t) => inRows(P, t))).map((h) => h.id);
 		const cards = [
-			card({ title: 'Sessions per week', what: { source: 'outcomes' }, perLog: 'done', overTime: 'sum', bucket: 'week', range: '90d', filter: { habits: own }, look: { chart: 'bars', size: 'wide' } }),
+			card({ title: `${seed.days ?? 'Days'} per week`, what: { source: 'outcomes' }, perLog: 'done', overTime: 'sum', bucket: 'week', range: '90d', filter: { habits: own }, look: { chart: 'bars', size: 'wide' } }),
 			...splitCards(P, rows.map((x) => x.t)),
 			...measuresOf(P)
 				.filter((m) => m.auto === 'week' && m.sets && !m.off)
@@ -311,7 +328,7 @@ export function boardTemplate(id: BoardTemplateId, P: Prepared): Board {
 		if (top) cards.push(card({ title: `${rows[0].t.name}: records`, what: { source: 'task', taskId: rows[0].t.id }, perLog: perLogOf(top), overTime: top.over ?? 'sum', range: 'all', look: { chart: 'records' } }));
 		return b(cards);
 	}
-	if (id === 'learner') {
+	if (id === 'time') {
 		const durations = new Map<string, number>();
 		const counts = new Map<string, number>();
 		for (const m of P.ds.metrics) {
@@ -332,7 +349,7 @@ export function boardTemplate(id: BoardTemplateId, P: Prepared): Board {
 		);
 		return b(cards);
 	}
-	if (id === 'quitter') {
+	if (id === 'breaking') {
 		const cards = [
 			card({ title: 'Days clean', what: { source: 'slips' }, perLog: 'count', look: { chart: 'streak', size: 'wide' } }),
 			card({ title: 'Money saved', what: { source: 'money' }, perLog: 'saved', overTime: 'sum', range: 'all', look: { chart: 'tile' } }),
@@ -344,15 +361,15 @@ export function boardTemplate(id: BoardTemplateId, P: Prepared): Board {
 		board.filter.direction = 'break';
 		return board;
 	}
-	// health
+	// numbers
 	const vitals = P.ds.metrics
 		.filter((m) => m.type === 'number' && !m.repeats && !(P.tasks.get(m.taskId) && isPace(P, P.tasks.get(m.taskId)!)))
 		.map((m) => ({ m, n: (P.logsByTask.get(m.taskId) ?? []).length }))
 		.sort((a, c) => c.n - a.n)
 		.slice(0, 6);
 	const cards = [
-		card({ title: 'Taken as planned', what: { source: 'outcomes' }, perLog: 'rate', overTime: 'avg', compare: { previous: true }, look: { chart: 'tile' } }),
-		card({ title: 'Taken per habit', what: { source: 'outcomes' }, perLog: 'rate', overTime: 'avg', bucket: 'all', split: 'habit', look: { chart: 'bars', size: 'wide', top: 12 } })
+		card({ title: 'Done as planned', what: { source: 'outcomes' }, perLog: 'rate', overTime: 'avg', compare: { previous: true }, look: { chart: 'tile' } }),
+		card({ title: 'Done per habit', what: { source: 'outcomes' }, perLog: 'rate', overTime: 'avg', bucket: 'all', split: 'habit', look: { chart: 'bars', size: 'wide', top: 12 } })
 	];
 	for (const { m } of vitals)
 		cards.push(card({ title: m.name, what: { source: 'field', metrics: [m.id] }, perLog: 'value', overTime: 'avg', bucket: 'day', range: '90d', compare: { rolling: 7 }, look: { chart: 'line', size: 'wide' } }));
@@ -361,9 +378,9 @@ export function boardTemplate(id: BoardTemplateId, P: Prepared): Board {
 
 /** Starting boards: Overview, plus the one that matches the view template (choice 3). */
 export function startingBoards(P: Prepared, viewTemplate: string): Board[] {
-	const out = [boardTemplate('overview', P)];
-	const extra = BOARD_FOR_VIEW[viewTemplate];
-	if (extra) out.push(boardTemplate(extra, P));
+	const out = [boardFrom(seedById('overview')!, P)];
+	const extra = seedById(BOARD_FOR_VIEW[viewTemplate] ?? '');
+	if (extra) out.push(boardFrom(extra, P));
 	return out;
 }
 

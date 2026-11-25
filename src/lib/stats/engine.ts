@@ -137,7 +137,6 @@ export interface DsCraving {
 export interface Dataset {
 	today: ISODate;
 	/** The unit Weight is shown in. */
-	weightUnit: string;
 	/** The account's measures, for the cards it gets by itself; the starting ones when left out. */
 	measures?: CustomMeasure[];
 	/** The account's groupings; its tags with the weights set in Stats when left out. */
