@@ -4,6 +4,7 @@ import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { drop, packById, packState, take, type PackState } from '$lib/packs';
 import { cardsUsing } from '$lib/stats/model';
+import { unitTable } from '$lib/units';
 import { db } from './db';
 import { metric, tag, task, taskTag } from './db/schema';
 import { getGroupings, getGroups, getKinds, getPacks, getSettings, getTaskTypes, saveSettings } from './settings';
@@ -21,6 +22,11 @@ const stateOf = (accountId: string): PackState => ({
 	measures: getStats(accountId).measures,
 	taskTypes: getTaskTypes(accountId).filter((t) => !PLAIN_TASK_TYPES.some((p) => p.key === t.key))
 });
+/** The account's units as they are once a pack is in. */
+export function unitsWith(accountId: string, id: string) {
+	const p = packById(id);
+	return unitTable(p ? take(stateOf(accountId), p).units : getKinds(accountId));
+}
 function write(accountId: string, s: PackState) {
 	// Stats first: it says that the built-in measures are among them now.
 	saveStats(accountId, { ...getStats(accountId), measures: s.measures });

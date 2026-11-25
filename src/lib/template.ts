@@ -698,3 +698,21 @@ export function applyAnswers(tpl: TemplateFile, answers: TemplateAnswers): Templ
 	}
 	return out;
 }
+
+/** Why a file can't be added, in words, or the template in it. Nothing is added by looking. */
+export function checkTemplate(text: string): { ok: true; tpl: TemplateFile } | { ok: false; why: string } {
+	if (text.length > 1_000_000) return { ok: false, why: 'That file is too large for a template. A whole backup is restored in Settings.' };
+	let json: unknown;
+	try {
+		json = JSON.parse(text);
+	} catch {
+		return { ok: false, why: 'That file can’t be read: it isn’t JSON. Nothing was changed.' };
+	}
+	const o = (json ?? {}) as { format?: unknown; version?: unknown; tables?: unknown };
+	if (o.format !== TEMPLATE_FORMAT) return { ok: false, why: o.tables ? 'That is a whole backup, not a template. It is restored under Settings → Restore from a backup.' : 'That file isn’t an ittracks template. Nothing was changed.' };
+	if (typeof o.version === 'number' && o.version > TEMPLATE_VERSION) return { ok: false, why: `That file was made by a newer ittracks (version ${o.version}; this one reads up to ${TEMPLATE_VERSION}). Update this server, then add it.` };
+	const p = templateFile.safeParse(json);
+	if (p.success) return { ok: true, tpl: p.data };
+	const at = p.error.issues[0];
+	return { ok: false, why: `That template is broken${at?.path.length ? ` at ${at.path.join(' › ')}` : ''}. Nothing was changed.` };
+}

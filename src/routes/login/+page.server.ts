@@ -12,7 +12,7 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const username = String(form.get('username') ?? '').trim();
 		const id = await checkPassword(username, String(form.get('password') ?? ''));
-		if (!id) return fail(400, { error: 'Wrong username or password.', username });
+		if (!id) return fail(400, { error: 'Wrong username or password.', field: 'password', username });
 		startSession(id, cookies, url.protocol === 'https:');
 		redirect(303, '/');
 	}
