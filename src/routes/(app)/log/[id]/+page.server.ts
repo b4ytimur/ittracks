@@ -17,6 +17,8 @@ import { pickTask, type FillRule } from '$lib/engine/fill';
 import { appActor } from '$lib/server/core/actor';
 import { emit } from '$lib/server/core/events';
 import { isRoutine, kidsOn } from '$lib/server/rollup';
+import { contentOf, staleSave } from '$lib/server/stale';
+import { revOf } from '$lib/logrev';
 import type { Actions, PageServerLoad } from './$types';
 
 /** One place in the log (see engine/parts.ts): a Slot's Task, or a Task inside it. */
@@ -188,6 +190,8 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 			notes: o.occ.notes ?? '',
 			level: o.occ.level ?? 'target'
 		},
+		/** What this log holds, for telling a save made from an older version of it (see logrev.ts). */
+		rev: revOf(contentOf(o.occ)),
 		habitName: o.habit.name,
 		habitId: o.habit.id,
 		/** A past day: no autosave or timer, and Back goes to that day. */
@@ -226,6 +230,8 @@ const savePayload = z.object({
 	level: z.enum(['minimum', 'target', 'stretch']).default('target'),
 	/** Where to go after Finish on a past day. */
 	back: z.string().max(200).nullish(),
+	/** The versions of the log this one grew from; left out by saves queued before it existed. */
+	bases: z.array(z.string().max(32)).max(40).optional(),
 	entries: z.array(
 		z.object({
 			taskId: z.string().uuid(),
@@ -264,6 +270,10 @@ export const actions: Actions = {
 		const win = windowFor(locals.account!.id, o.occ.date, today);
 		if (past && o.occ.status !== 'done' && win !== 'ok')
 			return fail(400, { error: win === 'off' ? 'Logging past days is off in Settings.' : 'This day is too far back to log. You can change how far back in Settings.' });
+		// Another device, a link or an assistant wrote this log since: say so instead of overwriting it.
+		// Nothing is awaited between here and the write, so nothing can come in between.
+		const stale = staleSave(o.occ, p, p.bases);
+		if (stale) return fail(409, { error: 'This log changed on another device.', stale });
 		const schedule = o.habit.schedule as ScheduleForm | null;
 		const plan = past && schedule ? planOfToday(o.habit.id, schedule, today) : null;
 

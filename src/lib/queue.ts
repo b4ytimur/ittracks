@@ -11,10 +11,12 @@ export interface Queued {
 	at: number;
 	/** Why the server said no. It stays here until someone tries again or discards it. */
 	refused?: string;
+	/** Refused because what it saves changed elsewhere: it can be kept over that. */
+	stale?: boolean;
 }
 
 /** Saved, refused (sending it again won't help), or not answered yet (it will be sent again). */
-export type Answer = { kind: 'saved' } | { kind: 'refused'; why: string; to?: string } | { kind: 'later' };
+export type Answer = { kind: 'saved' } | { kind: 'refused'; why: string; to?: string; stale?: unknown } | { kind: 'later' };
 
 /** Answers that stay the same however often it is sent. */
 const FINAL = [400, 404, 405, 410, 413, 422];
@@ -38,7 +40,8 @@ export async function readAnswer(res: Response): Promise<Answer> {
 		if (r.location.startsWith('/log/')) return { kind: 'refused', why: 'It needs something filled in first.', to: r.location };
 		return { kind: 'saved' };
 	}
-	if (r.type === 'failure') return { kind: 'refused', why: String(r.data?.error ?? 'The server did not accept it.') };
+	if (r.type === 'failure')
+		return { kind: 'refused', why: String(r.data?.error ?? 'The server did not accept it.'), ...(r.data?.stale ? { stale: r.data.stale } : {}) };
 	if (r.type === 'error' && FINAL.includes(res.status))
 		return { kind: 'refused', why: res.status === 404 ? 'It is no longer there.' : 'The server did not accept it.' };
 	return { kind: 'later' };
@@ -51,6 +54,15 @@ const field = (fields: [string, string][], k: string) => fields.find(([f]) => f 
  */
 export const keyOf = (q: Pick<Queued, 'url' | 'fields'>) =>
 	q.url + '|' + (field(q.fields, 'occurrence') ?? field(q.fields, 'habit') ?? field(q.fields, 'date') ?? '');
+
+/** The same save, not held back by what changed elsewhere since: the payload without the versions it grew from. */
+export function overriding(fields: [string, string][]): [string, string][] {
+	return fields.map(([k, v]) => {
+		if (k !== 'payload') return [k, v];
+		const { bases: _, ...rest } = JSON.parse(v);
+		return [k, JSON.stringify(rest)];
+	});
+}
 
 export interface Store {
 	read(): Queued[];
@@ -74,9 +86,9 @@ export async function sendAll(store: Store, post: (q: Queued) => Promise<Respons
 			break;
 		}
 		if (a.kind === 'later') continue;
-		const why = a.kind === 'refused' ? a.why : null;
-		store.write(why === null ? store.read().filter((x) => x.id !== q.id) : store.read().map((x) => (x.id === q.id ? { ...x, refused: why } : x)));
-		if (why === null) sent++;
+		const no = a.kind === 'refused' ? { refused: a.why, ...(a.stale ? { stale: true } : {}) } : null;
+		store.write(no ? store.read().map((x) => (x.id === q.id ? { ...x, ...no } : x)) : store.read().filter((x) => x.id !== q.id));
+		if (!no) sent++;
 	}
 	return sent;
 }
