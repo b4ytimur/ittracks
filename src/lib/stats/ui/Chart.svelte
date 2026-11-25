@@ -26,7 +26,7 @@
 		onpick?: (from: string, to: string, series: string | null) => void;
 	} = $props();
 
-	const upIsGood = $derived(card.what.source !== 'slips' && card.perLog !== 'pace');
+	const upIsGood = $derived(card.what.source !== 'slips' && r.better !== 'less');
 	const pickBucket = (i: number, series: string | null) => {
 		const b = r.buckets[i];
 		if (b) onpick?.(b.from, b.to, series);

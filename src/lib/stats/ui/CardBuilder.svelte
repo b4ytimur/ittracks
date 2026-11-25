@@ -16,6 +16,7 @@
 		SIZES,
 		SOURCES,
 		SPLITS,
+		measureOf,
 		perLogLabel,
 		type BoardFilter,
 		type CustomMeasure,
@@ -72,15 +73,15 @@
 	};
 
 	const defaultOver = (perLog: string) =>
-		SHARE_MEASURES.includes(perLog) || perLog === 'pace' || perLog === 'pctTarget'
+		measureOf(perLog, measures)?.over ?? (SHARE_MEASURES.includes(perLog) || perLog === 'pctTarget'
 			? 'avg'
-			: ['e1rm', 'best'].includes(perLog)
+			: perLog === 'best'
 				? 'max'
 				: perLog === 'option' || perLog === 'present'
 					? 'count'
 					: perLog === 'value' && cardFields(c, catalog)[0]?.type === 'number'
 						? 'avg'
-						: 'sum';
+						: 'sum');
 
 	function fitPerLog() {
 		if (!choices.includes(c.perLog)) {
@@ -254,7 +255,7 @@
 					Task
 					<select value={c.what.taskId ?? ''} onchange={(e) => ((c.what.taskId = (e.currentTarget as HTMLSelectElement).value || null), fitPerLog())}>
 						<option value="">Every Task</option>
-						{#each catalog.tasks as t (t.id)}<option value={t.id}>{t.name}{t.strength ? ' · weight and reps' : t.cardio ? ' · time and distance' : ''}</option>{/each}
+						{#each catalog.tasks as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
 					</select>
 				</label>
 			{/if}

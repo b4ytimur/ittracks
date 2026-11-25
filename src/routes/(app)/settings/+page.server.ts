@@ -15,7 +15,8 @@ import { listHabits } from '$lib/server/repo/habits';
 import { usedRanges } from '$lib/server/repo/ranges';
 import { listVacations } from '$lib/server/repo/vacations';
 import { getGroupings, getKinds, getSettings, getViews } from '$lib/server/settings';
-import { getStats } from '$lib/server/stats';
+import { getStats, seedFields } from '$lib/server/stats';
+import { suggestions } from '$lib/stats/seed';
 import { repaused, userToday } from '$lib/server/today';
 import { unitWord } from '$lib/units';
 import { TEMPLATES } from '$lib/views';
@@ -94,7 +95,7 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		views,
 		viewIssues: checkViews(views, { ranges: ranges.length }),
 		templates: TEMPLATES.map(({ id, name, blurb, summary }) => ({ id, name, blurb, summary })),
-		stats: { measures: s.measures, e1rm: s.e1rm, e1rmMaxReps: s.e1rmMaxReps, fields: formulaFields(accountId) },
+		stats: { measures: s.measures, fields: formulaFields(accountId), suggestions: suggestions(seedFields(accountId)) },
 		vapidKey: publicKey(),
 		devices: subscriptionCount(accountId),
 		habits,

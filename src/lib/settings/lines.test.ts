@@ -18,7 +18,6 @@ const now: Now = {
 	showAllSections: false,
 	units: STARTER_KINDS,
 	measures: [],
-	e1rm: { name: 'Epley', maxReps: 12 },
 	groupings: starterGroupings(),
 	startPage: 'Today',
 	template: 'Standard',

@@ -9,6 +9,7 @@ import {
 	BUCKETS,
 	OVER_TIME,
 	PER_LOG,
+	isCustom,
 	PER_LOG_FOR,
 	SHARE_MEASURES,
 	SOURCES,
@@ -53,7 +54,7 @@ export function analysisOptions() {
 	return {
 		sources: SOURCES,
 		measures: Object.fromEntries(Object.entries(PER_LOG_FOR).map(([src, keys]) => [src, Object.fromEntries(keys.map((k) => [k, PER_LOG[k]]))])),
-		customMeasures: 'Also "custom:<id>" for the custom measures describe lists (source task).',
+		customMeasures: 'For source task also the ids of the measures describe lists (customMeasures), such as volume.',
 		combine: OVER_TIME,
 		buckets: BUCKETS,
 		splits: SPLITS,
@@ -73,7 +74,7 @@ function cardOf(actor: Actor, P: Prepared, spec: SeriesSpec): StatCard {
 	const source = spec.source ?? 'outcomes';
 	const measure = spec.measure ?? DEFAULT_MEASURE[source];
 	const allowed = PER_LOG_FOR[source] as string[];
-	if (!allowed.includes(measure) && !(source === 'task' && measure.startsWith('custom:')))
+	if (!allowed.includes(measure) && !(source === 'task' && isCustom(measure)))
 		throw new ActionError('invalid', `“${measure}” isn't a measure of ${source}. Use one of: ${allowed.join(', ')}.`);
 	const habits = (spec.habits ?? []).map((r) => findHabit(actor, r).id);
 	// A key limited to some habits only ever reads those.

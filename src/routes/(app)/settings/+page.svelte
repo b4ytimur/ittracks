@@ -23,9 +23,6 @@
 	import Template from '$lib/settings/Template.svelte';
 	import Units from '$lib/settings/Units.svelte';
 	import Vacations from '$lib/settings/Vacations.svelte';
-	import { statsOp } from '$lib/stats/client';
-	import { formulaProblem } from '$lib/stats/formula';
-	import { E1RM_PRESETS } from '$lib/stats/model';
 	import { showError, showToast } from '$lib/toast.svelte';
 	import EditChrome from '$lib/ui/EditChrome.svelte';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
@@ -37,7 +34,6 @@
 
 	const s = $derived(data.settings);
 	const views = $derived(data.views);
-	const preset = $derived(Object.values(E1RM_PRESETS).find((p) => p.formula === data.stats.e1rm)?.name ?? 'Your own formula');
 	const groups = $derived(
 		settingGroups({
 			...s,
@@ -46,7 +42,6 @@
 			vacations: data.vacations,
 			journalOff: views.hidden.includes('journal'),
 			measures: data.stats.measures,
-			e1rm: { name: preset, maxReps: data.stats.e1rmMaxReps },
 			startPage: PAGE_LABEL[views.startPage],
 			template: data.templates.find((t) => t.id === views.template)?.name ?? 'Custom',
 			own: ownChanges(views).length,
@@ -142,22 +137,6 @@
 		const without = new Set(checkViews({ ...views, hidden: [] }, { ranges: s.ranges.length }).map((i) => i.reason));
 		return data.viewIssues.filter((i) => !without.has(i.reason));
 	});
-	async function stat(line: string, body: Record<string, unknown>, back: Record<string, unknown>, said: string) {
-		try {
-			await statsOp({ op: 'settings', ...body });
-		} catch (e) {
-			return void failed(line, navigator.onLine ? (e as Error).message : NO_ANSWER);
-		}
-		problem[line] = '';
-		showToast(said, () => statsOp({ op: 'settings', ...back }).then(() => true));
-		await invalidateAll();
-	}
-	function formula(f: string) {
-		const bad = formulaProblem(f) ?? (!/\[\s*weight\s*\]/i.test(f) || !/\[\s*reps\s*\]/i.test(f) ? 'Not saved. The formula needs [Weight] and [Reps].' : '');
-		if (bad) return void (problem.e1rm = bad);
-		if (f !== data.stats.e1rm) stat('e1rm', { e1rm: f }, { e1rm: data.stats.e1rm }, 'Changed the 1RM formula.');
-	}
-
 	// ----- Other apps -----
 	let made = $state<{ name: string; secret: string } | null>(null);
 	let pasted = $state('');
@@ -259,13 +238,7 @@
 	{:else if id === 'units'}
 		<Units kinds={s.units} used={data.usedUnits} bind:problem={() => problem.units ?? '', (v) => (problem.units = v)} onsave={(units, said, renames) => save('units', { units }, said, {}, renames)} />
 	{:else if id === 'measures'}
-		<Measures measures={data.stats.measures} fields={data.stats.fields} />
-	{:else if id === 'e1rm'}
-		<div class="chips" role="radiogroup" aria-label="Formula">
-			{#each Object.values(E1RM_PRESETS) as p (p.name)}<label class="toggle"><input type="radio" class="vh" name="e1rm" checked={data.stats.e1rm === p.formula} onchange={() => formula(p.formula)} />{p.name}</label>{/each}
-		</div>
-		<div class="field"><label class="label" for="e1rm-f">Formula</label><input id="e1rm-f" value={data.stats.e1rm} maxlength="300" spellcheck="false" autocomplete="off" onchange={(e) => formula(e.currentTarget.value.trim())} /></div>
-		<div class="field"><label class="label" for="e1rm-n">For sets of this many reps or fewer</label><input id="e1rm-n" class="short" type="number" min="1" max="30" value={data.stats.e1rmMaxReps} onchange={(e) => { const n = Number(e.currentTarget.value); if (Number.isInteger(n) && n >= 1 && n <= 30) stat('e1rm', { e1rmMaxReps: n }, { e1rmMaxReps: data.stats.e1rmMaxReps }, `1RM is worked out for sets of ${n} reps or fewer.`); else problem.e1rm = 'Not saved. Pick 1 to 30 reps.'; }} /></div>
+		<Measures measures={data.stats.measures} fields={data.stats.fields} suggestions={data.stats.suggestions} />
 	{:else if id === 'groupings'}
 		<Groupings groupings={s.groupings} tags={data.tags} bind:problem={() => problem.groupings ?? '', (v) => (problem.groupings = v)} onsave={(groupings, said) => save('groupings', { groupings }, said)} />
 	{:else if id === 'startpage'}

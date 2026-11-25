@@ -61,7 +61,7 @@ Drag ⠿ to reorder fields, or use the arrow keys on it.
 - Renaming a choice option renames it in past logs too. Removing one that was logged archives it.
 - A changed option number applies from today; past days keep the numbers they had.
 - A unit change asks whether to convert past values or keep their numbers. See [Units](units.md#change-a-unit).
-- Renaming a field keeps its values, but [your own measures](stats.md#your-measures) find fields by name, so check them after a rename.
+- Renaming a field keeps its values, but [measures](stats.md#measures) find fields by name, so check them after a rename.
 
 ## Rest timer
 

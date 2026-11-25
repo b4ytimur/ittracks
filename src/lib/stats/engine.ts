@@ -5,17 +5,18 @@ import { addDays, daysBetween, toDays, fromDays, weekStart, weekday, type ISODat
 import { daysSinceSlip, longestRun, streak, type Level, type Mark, type StreakRule } from '../engine/streak';
 import { chainCells } from '../engine/chain';
 import { withinOn, withinStreak, usedIn, limitOn, type Limit } from '../engine/limit';
-import { compile, evaluate, FormulaError } from './formula';
+import { canRead, compile, countsSets, evaluate, FormulaError, type Lookup } from './formula';
+import { rolesOf, type Roles } from './seed';
 import { excerpt } from '../markdown';
 import { groupTable, readGroupings, type GroupTable } from '../groupings';
-import { effectiveUnit, STARTER, TIME_BASE, type UnitTable } from '../units';
+import { effectiveUnit, STARTER, TIME_BASE, withShownUnits, type UnitTable } from '../units';
 import { parentPath, parsePath, withoutRounds } from '../engine/parts';
 import { optionName, scoresOn, type ChoiceOption, type EarlierScores, type Scores } from '../options';
 import {
 	ADDS_UP,
 	SHARE_MEASURES,
-	customId,
-	isCustom,
+	measureOf,
+	perLogOf,
 	type BoardFilter,
 	type Bucket,
 	type CustomMeasure,
@@ -133,6 +134,8 @@ export interface Dataset {
 	today: ISODate;
 	/** The unit Weight is shown in. */
 	weightUnit: string;
+	/** The account's measures, for the cards it gets by itself; the starting ones when left out. */
+	measures?: CustomMeasure[];
 	/** The account's groupings; its tags with the weights set in Stats when left out. */
 	groups?: GroupTable;
 	/** The account's units; the starting ones when left out. */
@@ -171,13 +174,6 @@ export interface Log {
 	slot: DsSlot | null;
 }
 
-export interface Roles {
-	weight: DsMetric | null;
-	reps: DsMetric | null;
-	distance: DsMetric | null;
-	time: DsMetric | null;
-}
-
 export interface Prepared {
 	ds: Dataset;
 	habits: Map<string, DsHabit>;
@@ -191,7 +187,8 @@ export interface Prepared {
 	occsByHabit: Map<string, DsOcc[]>;
 	logs: Log[];
 	logsByTask: Map<string, Log[]>;
-	roles: Map<string, Roles>;
+	/** A weight and reps, for the words of a log (describeLog). */
+	roles: Map<string, Roles<DsMetric>>;
 	/** The parts inside each Task (archived ones left out). */
 	partsOf: Map<string, DsPart[]>;
 	/** First date anything was logged. */
@@ -219,18 +216,6 @@ export function num(v: unknown): number | null {
 }
 
 const filled = (v: unknown) => v !== null && v !== undefined && v !== '' && v !== false;
-
-export function rolesOf(metrics: DsMetric[]): Roles {
-	const rep = metrics.filter((m) => m.repeats);
-	const unit = (m: DsMetric) => (m.unit ?? '').trim().toLowerCase();
-	const weight =
-		rep.find((m) => m.type === 'number' && (['kg', 'lb', 'lbs'].includes(unit(m)) || /weight|load/i.test(m.name))) ?? null;
-	const reps = rep.find((m) => m.type === 'count' && /rep/i.test(m.name)) ?? rep.find((m) => m.type === 'count') ?? null;
-	const distance =
-		metrics.find((m) => m.type === 'number' && (['km', 'mi', 'mile', 'miles', 'm'].includes(unit(m)) || /distance/i.test(m.name))) ?? null;
-	const time = metrics.find((m) => m.type === 'duration') ?? null;
-	return { weight, reps, distance, time };
-}
 
 export function prepare(ds: Dataset): Prepared {
 	const habits = new Map(ds.habits.map((h) => [h.id, h]));
@@ -541,7 +526,7 @@ export interface Ctx {
 	today: ISODate;
 	boardRange: string;
 	boardFilter: BoardFilter;
-	settings: Pick<StatsSettings, 'muscle' | 'e1rm' | 'e1rmMaxReps' | 'measures'>;
+	settings: Pick<StatsSettings, 'muscle' | 'measures'>;
 }
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -645,7 +630,7 @@ function splitTags(card: StatCard, P: Prepared, ctx: Ctx, l: { habit: DsHabit; t
 		}
 		case 'tag': {
 			if (!l.task || !l.task.tags.length) return one('none', 'No tag', 1e9);
-			const weighted = ['hardSets', 'volume'].includes(card.perLog);
+			const weighted = !!measureOf(card.perLog, ctx.settings.measures)?.weigh;
 			const groups = groupsOf(P, ctx);
 			const tags = l.task.tags
 				.filter((t) => !card.grouping || groups.of(t.name).id === card.grouping)
@@ -746,81 +731,56 @@ export function targetMetOfOcc(o: DsOcc, P: Prepared): number | null {
 	return rs.every((r) => r === 1) ? 1 : 0;
 }
 
-function measureOf(id: string, ms: CustomMeasure[]) {
-	return ms.find((m) => m.id === id) ?? null;
-}
-
-/** A field's value in a set (or the log) by name, with Weight and Reps falling back to the detected fields. */
-function fieldLookup(l: Log, P: Prepared, set: Values | null, mode: 'set' | 'log') {
+/** A field's value in a set (or the log) by name, read the way the measure reads it. */
+function fieldLookup(l: Log, P: Prepared, set: Values | null, mode: 'set' | 'log', m: CustomMeasure): Lookup {
 	const ms = P.metricsByTask.get(l.task.id) ?? [];
-	const roles = P.roles.get(l.task.id);
-	return (name: string): number | null => {
+	const units = unitsOf(P);
+	return (name, minutes) => {
 		const n = name.trim().toLowerCase();
-		let m = ms.find((x) => x.name.trim().toLowerCase() === n);
-		if (!m && n === 'weight') m = roles?.weight ?? undefined;
-		if (!m && n === 'reps') m = roles?.reps ?? undefined;
-		if (!m) return null;
-		if (m.repeats) {
-			if (mode === 'set') return set ? num(set[m.id]) : null;
-			const vs = l.sets.map((s) => num(s[m!.id])).filter((v): v is number => v !== null);
-			return vs.length ? vs.reduce((a, b) => a + b, 0) : null;
-		}
-		if (m.type === 'checkbox') return l.single[m.id] === true ? 1 : 0;
-		return num(l.single[m.id]);
+		const f = ms.find((x) => (!m.sets || x.repeats) && x.name.trim().toLowerCase() === n);
+		if (!f) return undefined;
+		let v: number | null;
+		if (f.repeats) {
+			if (mode === 'set') v = set ? num(set[f.id]) : null;
+			else {
+				const vs = l.sets.map((s) => num(s[f.id])).filter((x): x is number => x !== null);
+				v = vs.length ? vs.reduce((a, b) => a + b, 0) : null;
+			}
+		} else if (f.type === 'checkbox') return l.single[f.id] === true ? 1 : 0;
+		else v = num(l.single[f.id]);
+		if (v === null) return null;
+		const unit = unitOfMetric(f);
+		if (minutes) return units.convert(v, unit, TIME_BASE);
+		return m.read === 'shown' ? units.convert(v, unit, units.kindOf(unit)?.shown ?? unit) : v;
 	};
 }
 
-/** e1RM of one set under the user's formula. */
-function e1rmOf(set: Values, l: Log, P: Prepared, ctx: Ctx): number | null {
-	const r = P.roles.get(l.task.id);
-	if (!r?.weight || !r.reps) return null;
-	const w = num(set[r.weight.id]);
-	const reps = num(set[r.reps.id]);
-	if (w === null || reps === null || reps < 1 || w <= 0 || reps > ctx.settings.e1rmMaxReps) return null;
-	const f = compile(ctx.settings.e1rm);
-	if (f instanceof FormulaError) return null;
-	const v = evaluate(f, (name) => {
-		const n = name.trim().toLowerCase();
-		if (n === 'weight') return w;
-		if (n === 'reps') return reps;
-		return fieldLookup(l, P, set, 'set')(name);
+/** Whether a Task has what a measure reads. */
+export function fits(m: CustomMeasure, fields: Pick<DsMetric, 'name' | 'type' | 'repeats'>[]): boolean {
+	const f = compile(m.formula);
+	if (f instanceof FormulaError) return false;
+	const own = fields.filter((x) => ['number', 'count', 'duration', 'checkbox'].includes(x.type) && (!m.sets || x.repeats));
+	if ((m.sets || countsSets(f)) && !fields.some((x) => x.repeats)) return false;
+	return canRead(f, (name) => own.some((x) => x.name.trim().toLowerCase() === name.trim().toLowerCase()));
+}
+
+/** The measure's unit on a card: the unit a kind is shown in, or a field's own on its Task. */
+export function unitText(m: CustomMeasure, P: Prepared, taskId: string | null): string {
+	return withShownUnits(m.unit, unitsOf(P)).replace(/\[([^\]]+)\]/g, (_, list: string) => {
+		const names = list.split('|').map((x) => x.trim().toLowerCase());
+		const named = P.ds.metrics.filter((x) => names.includes(x.name.trim().toLowerCase()) && x.unit);
+		const own = taskId ? named.find((x) => x.taskId === taskId)?.unit : null;
+		return own || unitsOf(P).kindOf(named[0]?.unit)?.shown || named[0]?.unit || '';
 	});
-	return v === null ? null : unitsOf(P).convert(v, r.weight.unit, P.ds.weightUnit);
 }
 
 /** The number one log gives for a Task measure. */
 export function taskValue(perLog: string, l: Log, P: Prepared, ctx: Ctx): number | null {
-	const r = P.roles.get(l.task.id) ?? { weight: null, reps: null, distance: null, time: null };
 	const repIds = (P.metricsByTask.get(l.task.id) ?? []).filter((m) => m.repeats).map((m) => m.id);
 	const doneSets = l.sets.filter((s) => repIds.some((id) => filled(s[id])));
 	switch (perLog) {
-		case 'volume': {
-			if (!r.weight || !r.reps) return null;
-			let v = 0;
-			let any = false;
-			for (const s of doneSets) {
-				const w = num(s[r.weight.id]);
-				const n = num(s[r.reps.id]);
-				if (w !== null && n !== null) {
-					v += unitsOf(P).convert(w, r.weight.unit, P.ds.weightUnit) * n;
-					any = true;
-				}
-			}
-			return any ? v : null;
-		}
-		case 'e1rm': {
-			const vs = doneSets.map((s) => e1rmOf(s, l, P, ctx)).filter((v): v is number => v !== null);
-			return vs.length ? Math.max(...vs) : null;
-		}
-		case 'hardSets':
 		case 'sets':
 			return repIds.length ? doneSets.length || null : null;
-		case 'pace': {
-			if (!r.time || !r.distance) return null;
-			const t = fieldLookup(l, P, null, 'log')(r.time.name);
-			const d = fieldLookup(l, P, null, 'log')(r.distance.name);
-			return t !== null && d ? unitsOf(P).convert(t, r.time.unit || TIME_BASE, TIME_BASE) / d : null;
-		}
 		case 'pctTarget': {
 			const t = targetsFor(l, P);
 			if (!t) return null;
@@ -840,13 +800,13 @@ export function taskValue(perLog: string, l: Log, P: Prepared, ctx: Ctx): number
 			// A log still open today isn't judged yet.
 			return l.occ.status === 'due' ? null : metOf(targetMetOfLog(l, P));
 		default: {
-			if (!isCustom(perLog)) return null;
-			const m = measureOf(customId(perLog), ctx.settings.measures);
+			const m = measureOf(perLog, ctx.settings.measures);
 			if (!m) return null;
 			const f = compile(m.formula);
 			if (f instanceof FormulaError) return null;
-			if (m.per === 'log' || !doneSets.length) return evaluate(f, fieldLookup(l, P, null, 'log'));
-			const vs = doneSets.map((s) => evaluate(f, fieldLookup(l, P, s, 'set'))).filter((v): v is number => v !== null);
+			const sets = repIds.length ? doneSets.length || null : null;
+			if (m.per === 'log' || (!doneSets.length && !m.sets)) return evaluate(f, fieldLookup(l, P, null, 'log', m), sets);
+			const vs = doneSets.map((s) => evaluate(f, fieldLookup(l, P, s, 'set', m), sets)).filter((v): v is number => v !== null);
 			if (!vs.length) return null;
 			if (m.combine === 'max') return Math.max(...vs);
 			if (m.combine === 'avg') return vs.reduce((a, b) => a + b, 0) / vs.length;
@@ -1072,6 +1032,8 @@ export interface CardResult {
 	range: Range;
 	unit: string;
 	kind: ValueKind;
+	/** Less is better here. */
+	better?: 'less';
 	empty: boolean;
 	notes: string[];
 	total: number | null;
@@ -1115,23 +1077,15 @@ export function unitOf(card: StatCard, P: Prepared, ctx: Ctx): { unit: string; k
 	}
 	// task
 	switch (card.perLog) {
-		case 'volume':
-		case 'e1rm':
-			return { unit: P.ds.weightUnit, kind: 'number', share: false };
-		case 'hardSets':
 		case 'sets':
 			return { unit: 'sets', kind: 'count', share: false };
-		case 'pace': {
-			const t = card.what.taskId ? P.roles.get(card.what.taskId)?.distance : null;
-			return { unit: `min/${t?.unit || 'km'}`, kind: 'number', share: false };
-		}
 		case 'pctTarget':
 			return { unit: '%', kind: 'percent', share: false };
 		case 'targetMet':
 			return { unit: 'times', kind: 'count', share: false };
 		default: {
-			const m = isCustom(card.perLog) ? ctx.settings.measures.find((x) => x.id === customId(card.perLog)) : null;
-			return { unit: m?.unit ?? '', kind: 'number', share: false };
+			const m = measureOf(card.perLog, ctx.settings.measures);
+			return { unit: m ? unitText(m, P, card.what.taskId) : '', kind: m?.kind ?? 'number', share: false };
 		}
 	}
 }
@@ -1213,6 +1167,7 @@ export function computeCard(card: StatCard, P: Prepared, ctx: Ctx): CardResult {
 		range,
 		unit,
 		kind,
+		...(measureOf(card.perLog, ctx.settings.measures)?.better === 'less' ? { better: 'less' as const } : {}),
 		empty: points.length === 0,
 		notes,
 		total: null,
@@ -1452,10 +1407,50 @@ function rollingAvg(card: StatCard, P: Prepared, ctx: Ctx, range: Range, buckets
 	return buckets.map((b) => round(scale(at(b.to > ctx.today ? ctx.today : b.to))));
 }
 
+interface Top {
+	v: number;
+	date: ISODate;
+	occId: string;
+	label?: string;
+}
+/** Its record names fields of the set it was done in. */
+const ofOneSet = (m: CustomMeasure) => m.per === 'set' && /\[[^\]]+\]/.test(m.record ?? '');
+
+/** The best set by a measure, with the fields its record names: all of them filled, and the larger ones first among equals. */
+function bestSet(m: CustomMeasure, logs: Log[], P: Prepared): Top | null {
+	const f = compile(m.formula);
+	if (f instanceof FormulaError) return null;
+	const sign = m.better === 'less' ? -1 : 1;
+	let top: (Top & { named: number[] }) | null = null;
+	for (const l of logs)
+		for (const s of l.sets) {
+			const at = fieldLookup(l, P, s, 'set', { ...m, read: 'logged' });
+			const v = evaluate(f, fieldLookup(l, P, s, 'set', m));
+			const named: number[] = [];
+			const label = m.record!.replace(/\[([^\]]+)\]/g, (_, list: string) => {
+				const n = list.split('|').map((x) => at(x, false)).find((x) => x !== undefined) ?? 0;
+				named.push(n);
+				return String(n);
+			});
+			if (v === null || named.some((n) => !n)) continue;
+			const tie = top?.v === v && named.findIndex((n, i) => n !== top!.named[i]);
+			if (!top || (v - top.v) * sign > 0 || (typeof tie === 'number' && tie >= 0 && named[tie] > top.named[tie])) top = { v, date: l.occ.date, occId: l.occ.id, label, named };
+		}
+	return top;
+}
+function bestLog(perLog: string, less: boolean, logs: Log[], P: Prepared, ctx: Ctx): Top | null {
+	let top: Top | null = null;
+	for (const l of logs) {
+		const v = taskValue(perLog, l, P, ctx);
+		if (v !== null && (!top || (less ? v < top.v : v > top.v))) top = { v, date: l.occ.date, occId: l.occ.id };
+	}
+	return top;
+}
+
 function recordsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range, points: Point[], unit: string, kind: ValueKind): NonNullable<CardResult['records']> {
 	const out: NonNullable<CardResult['records']> = [];
-	// "Lowest" cards (and paces) count the smallest number as the best.
-	const lower = card.overTime === 'min' || card.perLog === 'pace';
+	// "Lowest" cards, and measures where less is better, count the smallest number as the best.
+	const lower = card.overTime === 'min' || measureOf(card.perLog, ctx.settings.measures)?.better === 'less';
 	const best = (ps: Point[]) =>
 		ps.reduce<Point | null>((a, p) => (!a || (lower ? p.value < a.value : p.value > a.value) ? p : a), null);
 	const byPeriod = (ps: Point[], b: 'day' | 'week') => {
@@ -1469,32 +1464,18 @@ function recordsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range, points:
 		return [...m.values()].reduce<{ v: number; date: ISODate } | null>((a, x) => (!a || x.v > a.v ? x : a), null);
 	};
 	const taskId = card.what.source === 'task' ? card.what.taskId : card.what.source === 'field' && card.what.metrics.length ? P.metrics.get(card.what.metrics[0])?.taskId ?? null : null;
-	const roles = taskId ? P.roles.get(taskId) : null;
-	if (taskId && roles?.weight && roles.reps) {
+	const listed = taskId ? ctx.settings.measures.filter((m) => m.record && !m.off && fits(m, P.metricsByTask.get(taskId) ?? [])) : [];
+	if (taskId && listed.length) {
 		const t = { ...card, what: { ...card.what, source: 'task' as const, taskId } };
 		const logs = (P.logsByTask.get(taskId) ?? []).filter((l) => l.occ.date >= range.from && l.occ.date <= range.to && scope(t, P, ctx).logOk(l));
-		let heavy: { v: number; reps: number; date: ISODate; occId: string } | null = null;
-		for (const l of logs)
-			for (const s of l.sets) {
-				const w = num(s[roles.weight.id]);
-				const r = num(s[roles.reps.id]);
-				if (w === null || !r) continue;
-				const wv = unitsOf(P).convert(w, roles.weight.unit, P.ds.weightUnit);
-				if (!heavy || wv > heavy.v || (wv === heavy.v && r > heavy.reps)) heavy = { v: wv, reps: r, date: l.occ.date, occId: l.occ.id };
-			}
-		if (heavy) out.push({ label: `Heaviest set (× ${heavy.reps})`, value: round(heavy.v)!, unit: P.ds.weightUnit, kind: 'number', date: heavy.date, occId: heavy.occId });
-		for (const [pl, label, u, k] of [
-			['e1rm', 'Best estimated 1RM', P.ds.weightUnit, 'number'],
-			['volume', 'Most volume in a session', P.ds.weightUnit, 'number'],
-			['sets', 'Most sets in a session', 'sets', 'count']
-		] as const) {
-			let top: { v: number; date: ISODate; occId: string } | null = null;
-			for (const l of logs) {
-				const v = taskValue(pl, l, P, ctx);
-				if (v !== null && (!top || v > top.v)) top = { v, date: l.occ.date, occId: l.occ.id };
-			}
-			if (top) out.push({ label, value: round(top.v)!, unit: u, kind: k, date: top.date, occId: top.occId });
+		// What a single set did comes first, then what the sets did together.
+		const rank = (m: CustomMeasure) => (ofOneSet(m) ? 0 : m.per === 'set' && m.combine === 'max' ? 1 : 2);
+		for (const m of [...listed].sort((a, b) => rank(a) - rank(b))) {
+			const top = ofOneSet(m) ? bestSet(m, logs, P) : bestLog(perLogOf(m), m.better === 'less', logs, P, ctx);
+			if (top) out.push({ label: top.label ?? m.record!, value: round(top.v)!, unit: unitText(m, P, taskId), kind: m.kind ?? 'number', date: top.date, occId: top.occId });
 		}
+		const most = bestLog('sets', false, logs, P, ctx);
+		if (most) out.push({ label: 'Most sets in a session', value: round(most.v)!, unit: 'sets', kind: 'count', date: most.date, occId: most.occId });
 		return out;
 	}
 	if (card.what.source === 'outcomes') {

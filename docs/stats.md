@@ -29,9 +29,9 @@ What a sentence can't say (goals, rolling averages, splits, filters) is in **⋯
 
 | Setting | Choices |
 | --- | --- |
-| **What it reads** | **Habit outcomes** (done, missed, target met), **A field you log**, **A Task** (sets, volume, e1RM, your own measures), **Slips**, **Cravings resisted**, **Money saved** |
+| **What it reads** | **Habit outcomes** (done, missed, target met), **A field you log**, **A Task** (sets, and your measures), **Slips**, **Cravings resisted**, **Money saved** |
 | Fields | **Pick fields**, or **Every field called…** to add up every field with that name across your Tasks, in one unit |
-| **Each log counts as** | Depends on the source: times done, done or missed (consistency), target met, the value, sum / best / average / number of sets, ticked, which option, volume (weight × reps), estimated 1RM, hard sets, pace, % of target, how many, amount saved, or [your own measure](#your-measures) |
+| **Each log counts as** | Depends on the source: times done, done or missed (consistency), target met, the value, sum / best / average / number of sets, ticked, which option, % of target, how many, amount saved, or one of your [measures](#measures) |
 | **Over time, take the** | **Sum**, **Average**, **Median**, **Lowest**, **Highest**, **Last**, **Number of logs**, **Days with a log** |
 | **Card type** | **Number**, **Bars**, **Line**, **Calendar**, **Goal progress**, **Records**, **Table**, **Streak**, **Breakdown**, **Pattern grid**, **Recent sessions** |
 | **One bar or point per** | **Each session**, **Day**, **Week**, **Month**, **Quarter**, **Year**, **Whole range**, or **Automatic** |
@@ -46,19 +46,22 @@ Choices that don't fit the rest of the card are greyed out, with the reason.
 
 Each habit has a **Stats** tab (from its editor or chain) with cards made automatically from what it logs. They change like any card; **Back to the automatic cards** undoes your changes. **Last times** on a Task's page shows its charts.
 
-## Your measures
+## Measures
 
-**Settings → Your measures**. A measure is a formula over the fields you log, with field names in square brackets: `[Weight] * [Reps]` (tonnage) or `[Distance] / [Time] * 60` (speed).
+**Settings → Measures**. A measure is a formula over the fields you log, with field names in square brackets: `[Weight] * [Reps]` or `[Distance] / [Time] * 60`. All of them are yours to change, delete and add to, also the ones an account starts with (Volume, Estimated 1RM, Hard sets, Pace and Heaviest set).
 
-- Give it a **Name** and a **Unit**.
+- Give it a **Name** and a **Unit**. In the unit, `{weight}` is the unit Weight is [shown in](units.md#change-your-units), and `[Distance]` the unit of that field.
 - Work it out **On each set** (then **Add the sets up**, **Take the best set** or **Average the sets**) or **Once per log**.
-- Use numbers, `+ - * / ^`, parentheses, and the functions listed under **Fields and functions you can use**. A missing value or a division by zero gives no number for that log, never a made-up 0.
+- Use numbers, `+ - * / ^`, parentheses, and the functions listed under **Fields and functions you can use**. `first([Weight], [Load])` reads the first of these fields a Task has; `above([Weight], 0)`, `atleast([Reps], 1)` and `upto([Reps], 12)` leave a set out when it is outside the limit; `minutes([Time])` reads a time in minutes; `sets()` is how many sets were logged. A missing value or a division by zero gives no number for that log, never a made-up 0.
+- Under **How it reads fields, and where it shows**: **Convert first** reads fields in the unit their kind is shown in, **Only Tasks logged in sets**, **Split by a grouping, it counts by the level**, **Less is better** (a pace), how logs combine **On a new card**, and the line it has **Among a Task's records**.
 
-Once saved, pick it under **Each log counts as** on any Task card. Measures find fields by name, so renaming a field changes their results.
+A formula that can't be read is not saved, and the line says why. One that names a field no Task has is, and counts nothing until one does.
 
-## Estimated 1RM
+Once saved, pick a measure under **Each log counts as** on any Task card. Measures find fields by name, so renaming a field changes their results. Deleting one that cards count by takes it off your list and keeps it for those cards.
 
-How the best single lift is estimated from a set's weight and reps: **Epley**, **Brzycki**, **Lombardi**, or **Your own** formula. **Only for sets of this many reps or fewer** (default 12) leaves out high-rep sets, where estimates get unreliable.
+### Estimated 1RM
+
+How the best single lift is estimated from a set's weight and reps. **Epley**, **Brzycki** and **Lombardi** are there to pick, or write your own. `upto(…, 12)` in it leaves out high-rep sets, where estimates get unreliable.
 
 ## Groupings
 

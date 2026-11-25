@@ -15,7 +15,7 @@ export const SOURCES = {
 } as const;
 export type Source = keyof typeof SOURCES;
 
-/** M2: how one log becomes one number. Custom measures are `custom:<id>`. */
+/** M2: how one log becomes one number. The account's measures are `custom:<id>` (perLogOf). */
 export const PER_LOG = {
 	// outcomes
 	done: 'Times done',
@@ -31,11 +31,7 @@ export const PER_LOG = {
 	option: 'Which option',
 	score: "The option's number (mood 5 to 1)",
 	present: 'Filled in',
-	// tasks
-	volume: 'Volume (weight × reps)',
-	e1rm: 'Estimated 1RM, best set',
-	hardSets: 'Hard sets',
-	pace: 'Pace (time ÷ distance)',
+	// tasks; the rest of what a Task card can count are the account's measures
 	pctTarget: '% of target',
 	// slips, cravings, money
 	count: 'How many',
@@ -47,7 +43,7 @@ export type BuiltinPerLog = keyof typeof PER_LOG;
 export const PER_LOG_FOR: Record<Source, BuiltinPerLog[]> = {
 	outcomes: ['done', 'rate', 'targetMet'],
 	field: ['value', 'sum', 'best', 'avg', 'sets', 'ticked', 'option', 'score', 'present'],
-	task: ['volume', 'e1rm', 'hardSets', 'pace', 'pctTarget', 'targetMet', 'sets'],
+	task: ['pctTarget', 'targetMet', 'sets'],
 	slips: ['count'],
 	cravings: ['count'],
 	money: ['saved']
@@ -225,16 +221,32 @@ export const board = z.object({
 });
 export type Board = z.infer<typeof board>;
 
-/** M7: a measure the user writes as a formula. */
+/** M7: a measure: a formula over field names, the account's to change. */
 export const customMeasure = z.object({
 	id,
 	name: str(40).min(1),
 	/** e.g. "[Weight] * [Reps]". Field names in square brackets. */
-	formula: str(300).min(1),
+	formula: str(1000).min(1),
 	/** Work it out on each set and combine, or once per log. */
 	per: z.enum(['set', 'log']).default('set'),
 	combine: z.enum(['sum', 'max', 'avg']).default('sum'),
-	unit: str(16).default('')
+	/** Its unit. `{weight}` is the unit that kind is shown in; `[Distance]` the unit of that field on the card's Task. */
+	unit: str(240).default(''),
+	/** Fields are read as they were logged, or in the unit their kind is shown in. */
+	read: z.enum(['logged', 'shown']).optional(),
+	/** Only Tasks logged in sets, reading the fields logged per set. */
+	sets: z.boolean().optional(),
+	/** Split by a grouping, it counts toward each member by the level's weight. */
+	weigh: z.boolean().optional(),
+	/** Which way is better; more, unless it says so. */
+	better: z.enum(['more', 'less']).optional(),
+	kind: z.enum(['number', 'count']).optional(),
+	/** How logs combine on a new card; added up, unless it says so. */
+	over: z.enum(keysOf(OVER_TIME)).optional(),
+	/** Its line among a Task's records. `[Reps]` is that field in the set. */
+	record: str(240).optional(),
+	/** Off your list, kept for the cards that count by it. */
+	off: z.boolean().optional()
 });
 export type CustomMeasure = z.infer<typeof customMeasure>;
 
@@ -253,7 +265,9 @@ export const statsSettings = z.object({
 	habitCards: z.record(id, z.array(statCard).max(MAX_CARDS)).default({}),
 	/** Headline numbers on Today, per habit. */
 	headlines: z.record(id, statCard).default({}),
-	measures: z.array(customMeasure).max(50).default([]),
+	measures: z.array(customMeasure).max(60).default([]),
+	/** The measures that were written in code are among them now (seed.ts). */
+	seeded: z.boolean().optional(),
 	/** How much a set counts toward a tag at each level (low, medium, high). */
 	muscle: z
 		.object({
@@ -262,8 +276,8 @@ export const statsSettings = z.object({
 			high: z.number().min(0).max(1).default(1)
 		})
 		.prefault({}),
+	/** Before measures were data: what Estimated 1RM starts from (seed.ts). */
 	e1rm: str(300).default(E1RM_PRESETS.epley.formula),
-	/** e1RM is only worked out for sets of this many reps or fewer. */
 	e1rmMaxReps: z.number().int().min(1).max(30).default(12),
 	/** Board templates already offered after a view template switch, so they aren't offered twice. */
 	offered: z.array(str(32)).max(20).default([])
@@ -286,7 +300,7 @@ export function readStats(raw: unknown): StatsSettings {
 		ok.data.cards = cards.map((c) => statCard.safeParse(c)).filter((c) => c.success).map((c) => c.data!);
 		out.boards.push(ok.data);
 	}
-	for (const k of ['open', 'last', 'habitCards', 'headlines', 'measures', 'muscle', 'e1rm', 'e1rmMaxReps', 'offered'] as const) {
+	for (const k of ['open', 'last', 'habitCards', 'headlines', 'measures', 'seeded', 'muscle', 'e1rm', 'e1rmMaxReps', 'offered'] as const) {
 		const one = statsSettings.shape[k].safeParse(r[k]);
 		if (one.success) (out as Record<string, unknown>)[k] = one.data;
 	}
@@ -299,8 +313,16 @@ export const newId = () =>
 /** A card with defaults filled in. */
 export const makeCard = (c: Omit<StatCardInput, 'id'> & { id?: string }): StatCard => statCard.parse({ id: newId(), ...c });
 
-export const isCustom = (perLog: string) => perLog.startsWith('custom:');
-export const customId = (perLog: string) => perLog.slice('custom:'.length);
+/** Measures that were written in code: cards name them without "custom:". */
+const OWN_IDS = ['volume', 'e1rm', 'hardSets', 'pace'];
+export const perLogOf = (m: Pick<CustomMeasure, 'id'>) => (OWN_IDS.includes(m.id) ? m.id : `custom:${m.id}`);
+/** Does a card count by one of the account's measures? */
+export const isCustom = (perLog: string) => perLog.startsWith('custom:') || OWN_IDS.includes(perLog);
+export const customId = (perLog: string) => (perLog.startsWith('custom:') ? perLog.slice('custom:'.length) : perLog);
+/** How many cards count by a measure. */
+export const cardsUsing = (s: Pick<StatsSettings, 'boards' | 'habitCards' | 'headlines'>, m: Pick<CustomMeasure, 'id'>): number =>
+	[...s.boards.flatMap((b) => b.cards), ...Object.values(s.habitCards).flat(), ...Object.values(s.headlines)].filter((c) => c.perLog === perLogOf(m)).length;
+export const measureOf = (perLog: string, measures: CustomMeasure[]) => (isCustom(perLog) ? (measures.find((m) => m.id === customId(perLog)) ?? null) : null);
 
 /** The label of a per-log measure, including custom ones. */
 export function perLogLabel(perLog: string, measures: CustomMeasure[]): string {
