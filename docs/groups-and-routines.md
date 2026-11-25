@@ -49,7 +49,7 @@ Today's log of a habit that follows its routine is planned again when the routin
 
 ### How a routine's day counts
 
-On its days, a routine is judged from the habits inside it that are due, with the same **Done when** and Minimum choices as a group (under **On its days, judged from the habits inside**). A habit that follows the routine and wasn't logged on one of its days counts as missed. A day when none of them is due, you tick the routine off like any habit.
+On its days, a routine is judged from the habits inside it that are due, with the same **Done when** and Minimum choices as a group (under **On its days, judged from the habits inside**). A routine inside another routine that follows it has these choices too. A habit that follows the routine and wasn't logged on one of its days counts as missed. A day when none of them is due, you tick the routine off like any habit.
 
 When the routine's days change (a schedule change to past days too, a past log that moves its rotation on), the habits that follow it count their days again from the routine's new days.
 
@@ -58,6 +58,8 @@ When the routine's days change (a schedule change to past days too, a past log t
 On Today, a routine shows the habits inside it.
 
 - **Start** opens the routine's log: the habits inside that are due, in order. One is open, the rest are a line each. **Done** marks the open one and goes to the next; a habit with Tasks says **Open its log**, and Finish there comes back here. **Skip** is in its ⋯. The ⋯ at the top has **Mark the rest done** (every open habit gets its one tap; one that needs values stays open) and **Skip the rest**. The band's Undo puts back exactly what that marked. Leave and come back: the first one still to do is open.
-- **Done** on the routine marks every habit inside that is due done. **Skip** skips them, and **Undo** takes it back. This works on [past days](logging.md#log-a-past-day) too.
+- **Done** on the routine marks every habit inside that is due done. **Skip** skips them. This works on [past days](logging.md#log-a-past-day) too.
+- **Undo** on the routine opens again only the habits its own Done or Skip marked, and takes away what that one tap filled in. A habit you logged on its own stays as it is. A routine that is done only because every habit inside it was logged on its own has no Undo: undo those habits instead.
+- **Clear** on a past routine day takes the logs of the habits inside it away too, so the day counts as missed again. Its Undo brings them all back.
 
 Routines can sit inside other routines. Deleting a routine gives each habit that followed it the closest schedule of its own: its weekdays, a rotation of the Variants it was paired with (with the routine's other days as rest days), or its average gap.

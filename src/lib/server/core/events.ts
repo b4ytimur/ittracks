@@ -12,10 +12,11 @@ import type { Actor } from './actor';
  */
 export const EVENT_TYPES = {
 	'occurrence.done': {
-		v: 2,
-		about: 'A habit was done for a day. data: occurrenceId, level, how, fresh (the log held nothing before, so everything in it came from this; v2)'
+		v: 3,
+		about:
+			'A habit was done for a day. data: occurrenceId, level, how, fresh (the log held nothing before, so everything in it came from this; v2), via (the routine day, by its occurrenceId, whose Done marked it; v3)'
 	},
-	'occurrence.skipped': { v: 1, about: 'A habit was skipped for a day. data: occurrenceId' },
+	'occurrence.skipped': { v: 2, about: 'A habit was skipped for a day. data: occurrenceId, via (the routine day whose Skip marked it; v2)' },
 	'occurrence.reopened': { v: 1, about: 'A done or skipped day was put back to due (Undo). data: occurrenceId, cleared' },
 	'occurrence.cleared': { v: 1, about: "A past day's log was taken away. data: occurrenceId" },
 	'occurrence.restored': { v: 1, about: 'Undo on the Day page put a day back as it was before the last change. data: none' },
@@ -93,6 +94,12 @@ export function listEvents(actor: Actor, opts: { after?: number; limit?: number;
 }
 
 /** The newest event of some types about one day of a habit. */
+/** The routine day (by its occurrenceId) whose Done or Skip left this day as it is, or null when something else did. */
+export function markedVia(accountId: string, habitId: string, date: string): string | null {
+	const e = lastEventOn(accountId, habitId, date, ['occurrence.done', 'occurrence.skipped', 'occurrence.reopened', 'occurrence.cleared']);
+	return e && e.type !== 'occurrence.reopened' && e.type !== 'occurrence.cleared' && typeof e.data.via === 'string' ? e.data.via : null;
+}
+
 export function lastEventOn(accountId: string, habitId: string, date: string, types: EventType[]): EventRow | undefined {
 	const r = db
 		.select()

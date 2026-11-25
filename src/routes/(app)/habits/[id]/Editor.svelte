@@ -203,7 +203,7 @@
 				return { kind, target: groupTarget, minimum: groupMinimum };
 			case 'follow':
 				return fitFollow(
-					{ kind, variantId: ids.has(followVariant) ? followVariant : firstVariant, on: followOn, map: followMap },
+					{ kind, variantId: ids.has(followVariant) ? followVariant : firstVariant, on: followOn, map: followMap, ...routineRule },
 					h.variants.map((v) => v.id),
 					parent?.variants.map((v) => v.id)
 				);

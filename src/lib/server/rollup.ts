@@ -15,6 +15,7 @@ import { rollupDay, type ChildDay, type GroupDay } from '$lib/engine/rollup';
 import { deepestFirst, parentOn, parentsEver, type EarlierParent } from '$lib/engine/tree';
 import { scheduleOn, type EarlierSchedule } from '$lib/engine/unlogged';
 import { pauseOn, type Pause } from '$lib/engine/pause';
+import { markedVia } from './core/events';
 
 interface GroupRow {
 	id: string;
@@ -259,6 +260,17 @@ export function kidsOn(parentId: string, date: string) {
 		const occ = occs.get(k.id);
 		return occ ? [{ occ, habit: { id: k.id, name: k.name, accountId: k.accountId } }] : [];
 	});
+}
+
+/**
+ * The habits inside a routine's day that its own Done or Skip marked, still as it left them:
+ * what its Undo takes back. None for a routine done only through the habits inside it.
+ */
+export function markedBy(accountId: string, occ: { id: string; habitId: string; date: string }) {
+	if (!isRoutine(occ.habitId, occ.date)) return [];
+	return kidsOn(occ.habitId, occ.date).filter(
+		(k) => !k.occ.extra && (k.occ.status === 'done' || k.occ.status === 'skipped') && markedVia(accountId, k.habit.id, occ.date) === occ.id
+	);
 }
 
 function syncGroup(g: GroupRow, all: Member[], today: string, pauses: Pause[]) {

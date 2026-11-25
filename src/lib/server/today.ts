@@ -18,7 +18,7 @@ import {
 	variant
 } from './db/schema';
 import { dueOn, historyOn, isFollow, isGroup, nextInRotation, planOn, rollupRuleOf, type Done, type ParentDue, type Schedule } from '$lib/engine/schedule';
-import { followDue, parentDueFor, syncParents } from './rollup';
+import { followDue, markedBy, parentDueFor, syncParents } from './rollup';
 import { depthOf, parentsEver } from '$lib/engine/tree';
 import { pickTask, type Candidate, type FillRule } from '$lib/engine/fill';
 import {
@@ -798,7 +798,16 @@ export interface TodayItem {
 	 * and the habits inside it (shown on Today or not). A routine can be marked done or skipped
 	 * as a whole, which marks the habits inside.
 	 */
-	group: { routine: boolean; target: number | null; minimum: number | null; done: number; total: number; kids: string[] } | null;
+	group: {
+		routine: boolean;
+		target: number | null;
+		minimum: number | null;
+		done: number;
+		total: number;
+		kids: string[];
+		/** A routine whose own Done or Skip marked habits inside it: Undo takes those back. Done only through them, it has no Undo. */
+		undoable: boolean;
+	} | null;
 }
 
 export interface PrepItem {
@@ -1039,7 +1048,8 @@ export function loadToday(accountId: string, today: string) {
 						minimum: group.minimum,
 						done: occ?.rollup?.done ?? 0,
 						total: occ?.rollup?.total ?? 0,
-						kids: kidsOf.get(h.id) ?? []
+						kids: kidsOf.get(h.id) ?? [],
+						undoable: !!occ && routineIds.has(h.id) && (occ.status === 'done' || occ.status === 'skipped') && markedBy(accountId, occ).length > 0
 					}
 				: null
 		};

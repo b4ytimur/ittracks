@@ -147,9 +147,10 @@ interface Routine {
  * the routine's Variant that day: `map` pairs a routine Variant with one of the habit's, and
  * any other day (or a day with no Variant known) logs `variantId`. So the two go through their
  * Variants in step: "Upper A" in the routine is always "Heavy" here, whatever the routine's
- * own rotation does. `on` decides when, `map` decides which.
+ * own rotation does. `on` decides when, `map` decides which. A routine inside a routine follows
+ * it too, with its own rule for the habits inside it.
  */
-export interface Follow {
+export interface Follow extends Routine {
 	kind: 'follow';
 	variantId: string;
 	on: string[] | null;
@@ -166,7 +167,7 @@ export const followVariant = (f: Pick<Follow, 'variantId' | 'map'>, routineVaria
 
 /** The rule a habit with habits inside it judges its day by. */
 export function rollupRuleOf(s: Schedule | null | undefined): RollupRule {
-	if (!s || isFollow(s)) return { target: null, minimum: null };
+	if (!s) return { target: null, minimum: null };
 	if (isGroup(s)) return { target: s.target, minimum: s.minimum };
 	return s.rollup ?? { target: null, minimum: null };
 }

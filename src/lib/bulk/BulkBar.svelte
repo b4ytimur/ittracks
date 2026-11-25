@@ -142,7 +142,11 @@
 			...(preview?.changes ?? []).map((c) => [c.id, { tag: c.detail || 'Changes' }] as const)
 		]);
 	});
-	const left = $derived((preview?.skipped ?? []).reduce((n, s) => n + s.items.length, 0));
+	/** Items left as they are: an item that changes on some days and stays on others changes. */
+	const left = $derived.by(() => {
+		const changes = new Set((preview?.changes ?? []).map((c) => c.id));
+		return new Set((preview?.skipped ?? []).flatMap((s) => s.items.map((i) => i.id)).filter((id) => !changes.has(id))).size;
+	});
 	const say = $derived(
 		error ||
 			(!preview

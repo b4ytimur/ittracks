@@ -8,7 +8,7 @@ import { db } from './db';
 import { slot } from './db/schema';
 import { ownedOccurrence } from './owned';
 import { progressForIds } from './progress';
-import { isRoutine, kidsOn } from './rollup';
+import { isRoutine, kidsOn, markedBy } from './rollup';
 import { restoreUnchanged, snapshot } from './backfill';
 import type { Actor } from './core/actor';
 import { emit } from './core/events';
@@ -36,6 +36,8 @@ export function routineSteps(accountId: string, occurrenceId: string) {
 		status: o.occ.status,
 		level: o.occ.level,
 		count: o.occ.rollup && o.occ.status !== 'skipped' ? rollupText(o.occ.rollup) : null,
+		/** Its own Done or Skip marked habits inside it, so opening it again has something to take back. */
+		undoable: markedBy(accountId, o.occ).length > 0,
 		steps: kids.map((k) => {
 			const p = progress.get(k.occ.id);
 			return {

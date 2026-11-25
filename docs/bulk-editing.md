@@ -18,7 +18,7 @@ Undo puts back everything the change did. Items you changed again since are kept
 
 | Action | Asks for | What it does |
 | --- | --- | --- |
-| **Skip days** | **From**, **To** | Skips every due day in the range. Days already done stay done. Days after today are left out: pause those instead. A skip neither adds to nor breaks a streak |
+| **Skip days** | **From**, **To** | Skips every due day in the range. Days already done stay done, and so do days with something logged (half a dose, a short session): skip one of those on its day if you mean to. Skipping a routine skips the habits inside it too, and the preview lists each of them, ticked or not. A habit with no fixed days (a weekly target, a rotation that waits) only has the days it was due and missed skipped. Days after today are left out: pause those instead. A skip neither adds to nor breaks a streak |
 | **Pause** | **From**, **To**, **Note** | Pauses the habits, as [Pause](schedules.md#pause-and-vacation) in the editor does. Paused days aren't due, and a pause over past days takes back the misses counted for them. Archived habits, groups and habits already paused then are left out |
 | **Archive** | **Archive** or **Bring back** | Archives the habits, as **Archive** on the Habits page does: their days up to today are counted first, and they keep every log. **Bring back** returns them, and days spent in the archive never count as missed. To bring habits back, show archived habits first. A group or routine is archived on its own: the habits inside it stay, and the preview names them |
 | **Area** | An Area, or **No Area** | Moves the habits to that Area |

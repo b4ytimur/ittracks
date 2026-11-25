@@ -17,7 +17,7 @@ import { NOTE_MAX, type ScheduleForm } from '$lib/forms';
 import { pickTask, type FillRule } from '$lib/engine/fill';
 import { appActor } from '$lib/server/core/actor';
 import { emit } from '$lib/server/core/events';
-import { doneOcc, reopenOcc, skipOcc } from '$lib/server/core/log';
+import { doneOcc, reopenOcc, skipOcc, undoClears } from '$lib/server/core/log';
 import { routineDay, routineSteps, undoRoutine, withRoutineUndo } from '$lib/server/routine-day';
 import { contentOf, staleSave } from '$lib/server/stale';
 import { revOf } from '$lib/logrev';
@@ -288,8 +288,8 @@ export const actions: Actions = {
 		const { occ, actor } = step(event, f);
 		const undo = String(f.get('undo') ?? '');
 		if (undo) return undoRoutine(actor, occ, undo) ? undefined : fail(400, { error: 'Could not undo.' });
-		// What Same as last filled in goes again; what you logged stays.
-		reopenOcc(actor, occ, f.get('clear') === '1');
+		// What one tap filled in goes again; what you logged stays. Without a word on it, the event log says.
+		reopenOcc(actor, occ, f.has('clear') ? f.get('clear') === '1' : undoClears(actor, occ));
 	},
 	save: async ({ request, locals, params, cookies }) => {
 		const o = ownedOccurrence(locals.account!.id, params.id);

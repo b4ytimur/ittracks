@@ -180,10 +180,10 @@ describe('Done, Skip and Undo on a routine', () => {
 		expect(doneOcc(app, occOf(r.id), 'mark', null)).toBe('done');
 		expect([occOf(a).status, occOf(b).status, occOf(r.id).status]).toEqual(['done', 'done', 'done']);
 
+		// Undo opens again what the routine marked; Floss was done on its own and stays done.
 		reopenOcc(app, occOf(r.id), false);
-		expect([occOf(a).status, occOf(b).status, occOf(r.id).status]).toEqual(['due', 'due', 'due']);
+		expect([occOf(a).status, occOf(b).status, occOf(r.id).status]).toEqual(['done', 'due', 'due']);
 
-		doneOcc(app, occOf(a), 'mark', null);
 		skipOcc(app, occOf(r.id));
 		// Done stays done; the rest is skipped, so the day counts the one that was done.
 		expect([occOf(a).status, occOf(b).status]).toEqual(['done', 'skipped']);

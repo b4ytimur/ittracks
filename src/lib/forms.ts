@@ -160,7 +160,8 @@ const schedule = z.discriminatedUnion('kind', [
 		map: z
 			.record(id, id)
 			.refine((m) => Object.keys(m).length <= 50, 'Pair at most 50 of the routine\'s Variants')
-			.optional()
+			.optional(),
+		...routine
 	})
 ]);
 export type ScheduleForm = z.infer<typeof schedule>;

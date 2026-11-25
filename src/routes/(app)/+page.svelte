@@ -868,8 +868,9 @@
 		{@const undo = just.get(item.habitId)?.undo}
 		{#if undo}
 			<button type="button" class="quiet hit" aria-label="Undo {item.name}" onclick={undo}>Undo</button>
-		{:else if !undoShows(band.entries, o.id)}
-			<!-- One Undo at a time: the band's while its line is this one, else the row's (after a reload too). -->
+		{:else if !undoShows(band.entries, o.id) && (!item.group || item.group.undoable)}
+			<!-- One Undo at a time: the band's while its line is this one, else the row's (after a reload too).
+			     A routine done only through the habits inside it has nothing of its own to undo. -->
 			<form method="POST" action="?/undo" use:enhance={() => async ({ result, update }) => { if (result.type === 'success') dismissAbout(o.id); await update(); }}>
 				<input type="hidden" name="occurrence" value={o.id} />
 				<button class="quiet hit" aria-label="Undo {item.name}">Undo</button>

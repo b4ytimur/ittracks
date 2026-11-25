@@ -124,7 +124,7 @@ describe('skip_days', () => {
 		expect(r.changes[0].detail).toMatch(/^3 days/);
 		const why = reasons(r);
 		expect(why['Break habits count slips, not days']).toEqual(['Quit smoking']);
-		expect(why['It has no fixed days, so no day counts as missed. Pause it instead']).toEqual(['5x5 strength']);
+		expect(why['It has no fixed days, so only a day it was due and missed can be skipped. Pause it instead']).toEqual(['5x5 strength']);
 		expect(db.select().from(occurrence).all().length).toBe(before);
 		expect(statusOn(ids.water, from())).not.toBe('skipped');
 	});

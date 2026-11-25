@@ -1,7 +1,7 @@
 // A habit that follows its routine (a Follow schedule): the Follow as it is saved, and the
 // schedule it gets when it has to stand on its own (the routine was deleted, or it is shared
 // without it). Pure, so it can be tested.
-import { followVariant, NOTHING_DUE, variantsIn, type Follow, type Plain, type Rotation, type Schedule } from './schedule';
+import { followVariant, isFollow, isGroup, NOTHING_DUE, variantsIn, type Follow, type Plain, type Rotation, type Schedule } from './schedule';
 import type { ISODate } from './dates';
 
 /**
@@ -41,6 +41,12 @@ export function pairByName(routine: { id: string; name: string }[], own: { id: s
  * every day.
  */
 export function standaloneSchedule(parent: Schedule | null, f: Follow, start: ISODate): Schedule {
+	const s = ownDays(parent, f, start);
+	// A routine inside the routine keeps its own rule for the habits inside it.
+	return f.rollup && !isGroup(s) && !isFollow(s) ? { ...s, rollup: f.rollup } : s;
+}
+
+function ownDays(parent: Schedule | null, f: Follow, start: ISODate): Schedule {
 	const v = f.variantId;
 	const counts = (pv: string) => !f.on || f.on.includes(pv);
 	const as = (pv: string) => followVariant(f, pv);
@@ -50,7 +56,7 @@ export function standaloneSchedule(parent: Schedule | null, f: Follow, start: IS
 			start: parent.start,
 			phases: parent.phases.map((p) => ({
 				...p,
-				schedule: variantsIn(p.schedule).some(counts) ? (standaloneSchedule(p.schedule, f, start) as Plain) : NOTHING_DUE
+				schedule: variantsIn(p.schedule).some(counts) ? (ownDays(p.schedule, f, start) as Plain) : NOTHING_DUE
 			}))
 		};
 	if (parent?.kind === 'weekly')

@@ -73,14 +73,16 @@
 					{ label: 'Mark the rest done', onselect: () => act('stepDone', r.occurrenceId, `Marked the rest of ${r.name} done.`) },
 					{ label: 'Skip the rest', onselect: () => act('stepSkip', r.occurrenceId, `Skipped the rest of ${r.name}.`) }
 				]
-			: [{ label: `Open ${r.name} again`, onselect: () => act('stepUndo', r.occurrenceId, `${r.name} is open again.`) }]
+			: r.undoable
+				? [{ label: `Open ${r.name} again`, onselect: () => act('stepUndo', r.occurrenceId, `${r.name} is open again.`) }]
+				: []
 	);
 </script>
 
 <svelte:head><title>{r.name} · ittracks</title></svelte:head>
 
 <EditChrome title={r.name} modes={['use']} back={{ href: back, label: 'Back' }} hints={{ use: [day, said(r.status, r.level), r.count].filter(Boolean).join(' · ') }}>
-	{#snippet actions()}{#if canLog}<span class="menu-at"><MenuButton class="hit" label="More for {r.name}" items={all} /></span>{/if}{/snippet}
+	{#snippet actions()}{#if canLog && all.length}<span class="menu-at"><MenuButton class="hit" label="More for {r.name}" items={all} /></span>{/if}{/snippet}
 </EditChrome>
 
 {#if !canLog}
