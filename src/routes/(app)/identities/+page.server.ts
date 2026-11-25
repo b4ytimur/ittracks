@@ -1,10 +1,12 @@
 import { fail } from '@sveltejs/kit';
+import { z } from 'zod';
 import { userToday } from '$lib/server/today';
 import {
 	identityFor,
 	deleteIdentity,
 	identityVotes,
-	renameIdentity
+	renameIdentity,
+	restoreIdentity
 } from '$lib/server/repo/identities';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -27,6 +29,14 @@ export const actions: Actions = {
 		renameIdentity(locals.account!.id, String(f.get('id')), statement);
 	},
 	delete: async ({ request, locals }) => {
-		deleteIdentity(locals.account!.id, String((await request.formData()).get('id')));
+		const deleted = deleteIdentity(locals.account!.id, String((await request.formData()).get('id')));
+		return deleted ? { deleted } : fail(404, { error: 'No such identity' });
+	},
+	restore: async ({ request, locals }) => {
+		const p = z
+			.object({ id: z.string().uuid(), statement: z.string().min(1).max(120), sortOrder: z.number().int(), habitIds: z.array(z.string()).max(2000) })
+			.safeParse(JSON.parse(String((await request.formData()).get('deleted'))));
+		if (!p.success) return fail(400, { error: 'Not an identity' });
+		restoreIdentity(locals.account!.id, p.data);
 	}
 };

@@ -3,6 +3,8 @@
 	import CardGrid from '$lib/stats/ui/CardGrid.svelte';
 	import { untrack } from 'svelte';
 	import { enhance } from '$app/forms';
+	import { deleteHere } from '$lib/undelete';
+	import { page } from '$app/state';
 	import { noteDefaults, type MetricForm, type TaskForm } from '$lib/forms';
 	import NoteBox from '$lib/NoteBox.svelte';
 	import OptionList from '$lib/OptionList.svelte';
@@ -499,11 +501,7 @@
 			<div class="row">
 				<button formaction="?/duplicate" formnovalidate>Duplicate</button>
 				{#if !data.archived}<button formaction="?/archive" formnovalidate>Archive</button>{/if}
-				<button
-					class="danger"
-					formaction="?/delete"
-					formnovalidate
-					onclick={(e) => !confirm('Delete this task and every log of it? Archive keeps the history.') && e.preventDefault()}>Delete</button
+				<button type="button" class="danger" onclick={() => deleteHere('task', page.params.id!, t.name, '/library')}>Delete</button
 				>
 			</div>
 		{/if}

@@ -286,3 +286,11 @@ describe('view rules', async () => {
 		expect(checkViews(fromTemplate('routine'), { ranges: 0 }).map((i) => i.path)).toContain('today.timeAware');
 	});
 });
+
+it('folded headings: the defaults for old views, kept over a template switch', () => {
+	const old = JSON.parse(JSON.stringify(fromTemplate('standard')));
+	delete old.today.folded;
+	const v = readViews(old);
+	expect(v.today.folded).toEqual(['done', 'focus:later', 'blocks:later']);
+	expect(switchTemplate({ ...v, today: { ...v.today, folded: ['area:x'] } }, 'focus', { keep: false }).today.folded).toEqual(['area:x']);
+});

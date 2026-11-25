@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { page } from '$app/state';
+	import { deleteHere } from '$lib/undelete';
 	import { tick, untrack } from 'svelte';
 	import { deserialize, enhance } from '$app/forms';
 	import type { SubmitFunction } from '@sveltejs/kit';
@@ -1389,12 +1391,7 @@
 		{#if !data.isNew}
 			<div class="row">
 				{#if !data.archived}<button formaction="?/archive" formnovalidate>Archive</button>{/if}
-				<button
-					class="danger"
-					formaction="?/delete"
-					formnovalidate
-					onclick={(e) => !confirm('Delete this habit and its history? Archive keeps the history.') && e.preventDefault()}
-					>Delete</button
+				<button type="button" class="danger" onclick={() => deleteHere('habit', page.params.id!, h.name, '/habits')}>Delete</button
 				>
 			</div>
 		{/if}

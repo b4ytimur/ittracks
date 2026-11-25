@@ -1,4 +1,7 @@
 <script lang="ts">
+	import Ask from '$lib/ui/Ask.svelte';
+	import { invalidateAll } from '$app/navigation';
+	import { runAction, showToast } from '$lib/toast.svelte';
 	import { enhance } from '$app/forms';
 
 	let { data, form } = $props();
@@ -65,6 +68,12 @@
 			copied = '';
 		}
 	}
+
+	async function revoke(k: { id: string; name: string }) {
+		const r = await runAction('?/revoke', { id: k.id });
+		showToast(r.ok ? `Revoked ${k.name}.` : (r.error ?? 'Not revoked. Are you online?'));
+		await invalidateAll();
+	}
 </script>
 
 <svelte:head><title>Integrations · Settings · ittracks</title></svelte:head>
@@ -111,13 +120,7 @@
 							<span class="chip">{k.habitIds ? `Only ${k.habitIds.map(habitName).join(', ')}` : 'Every habit'}</span>
 						</div>
 					</div>
-					<form method="POST" action="?/revoke" use:enhance>
-						<input type="hidden" name="id" value={k.id} />
-						<button
-							class="danger small"
-							onclick={(e) => !confirm(`Revoke “${k.name}”? Anything using it stops working.`) && e.preventDefault()}>Revoke</button
-						>
-					</form>
+					<Ask label="Revoke" text="Revoke “{k.name}”? Anything using it stops working, and it can't be brought back." act="Revoke {k.name}" onact={() => revoke(k)} />
 				</div>
 			</li>
 		{/each}

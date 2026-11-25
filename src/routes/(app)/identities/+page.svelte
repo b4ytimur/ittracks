@@ -1,8 +1,17 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
+	import { runAction, showToast } from '$lib/toast.svelte';
 
 	let { data, form } = $props();
 	let editing = $state<string | null>(null);
+	async function remove(i: { id: string; statement: string }) {
+		const r = await runAction<{ deleted: object }>('?/delete', { id: i.id });
+		if (!r.ok || !r.data) return void showToast(r.error ?? 'Not deleted. Are you online?');
+		const deleted = JSON.stringify(r.data.deleted);
+		await invalidateAll();
+		showToast(`Deleted “${i.statement}”. Its habits stay.`, async () => void (await runAction('?/restore', { deleted })));
+	}
 	const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 </script>
 
@@ -42,14 +51,7 @@
 					<div class="row">
 						<strong class="grow">{i.statement}</strong>
 						<button class="small" onclick={() => (editing = i.id)}>Edit</button>
-						<form method="POST" action="?/delete" use:enhance>
-							<input type="hidden" name="id" value={i.id} />
-							<button
-								class="small danger"
-								onclick={(e) => !confirm('Delete this identity? Habits stay as they are.') && e.preventDefault()}
-								>Delete</button
-							>
-						</form>
+						<button type="button" class="small danger" onclick={() => remove(i)}>Delete</button>
 					</div>
 				{/if}
 				<div class="votes">
