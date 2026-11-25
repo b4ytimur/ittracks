@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dayCount, dayMark } from './day';
+import { dayCount, dayMark, placeNotes } from './day';
 
 const o = (status: string, extra = false) => ({ status, extra });
 
@@ -20,4 +20,14 @@ describe('a day', () => {
 		expect(dayMark([o('done'), o('skipped')])).toBe('done');
 		expect(dayMark([])).toBe('none');
 	});
+});
+
+it('a note stands under its own row, the day’s own first, the rest after', () => {
+	const n = (kind: string, habitId: string | null, text: string) => ({ kind, habitId, text });
+	const p = placeNotes([n('day', null, 'a'), n('field', 'gym', 'b'), n('log', 'gym', 'c'), n('slip', 'smoke', 'd'), n('log', 'open', 'e')], [{ id: 'o1', habitId: 'gym' }], [{ habitId: 'smoke' }, { habitId: 'smoke' }]);
+	expect(p.day.map((x) => x.text)).toEqual(['a']);
+	expect([...p.row].map(([k, v]) => [k, v.map((x) => x.text)])).toEqual([['o1', ['b', 'c']]]);
+	// Two slips of one habit: under the last.
+	expect([...p.slip].map(([k, v]) => [k, v.map((x) => x.text)])).toEqual([[1, ['d']]]);
+	expect(p.rest.map((x) => x.text)).toEqual(['e']);
 });
