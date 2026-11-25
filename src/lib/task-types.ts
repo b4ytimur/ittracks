@@ -9,6 +9,10 @@ export interface TaskTypeMetric {
 	unit: string;
 	repeats: boolean;
 	step: number | null;
+	/** In a row it is written after a ×. */
+	times?: boolean;
+	/** Less is better. */
+	better?: 'less';
 }
 
 export interface TaskType {
@@ -17,6 +21,8 @@ export interface TaskType {
 	description: string;
 	metrics: TaskTypeMetric[];
 	restTimerEnabled: boolean;
+	/** Its own words, when "set" and "Rest" aren't them. */
+	words?: { rowOne: string; rowMany: string; betweenName: string };
 }
 
 /** Built-in types. `{weight}` in a unit becomes the unit that kind is shown in. */
@@ -28,7 +34,7 @@ export const BUILTIN_TASK_TYPES: TaskType[] = [
 		restTimerEnabled: true,
 		metrics: [
 			{ name: 'Weight', type: 'number', unit: '{weight}', repeats: true, step: null },
-			{ name: 'Reps', type: 'count', unit: '', repeats: true, step: 1 }
+			{ name: 'Reps', type: 'count', unit: '', repeats: true, step: 1, times: true }
 		]
 	},
 	{
@@ -103,7 +109,9 @@ export function metricsFromType(t: TaskType, units: UnitTable, newId: () => stri
 			step: m.step,
 			required: false,
 			quick: true,
-			...noteDefaults()
+			...noteDefaults(),
+			times: !!m.times,
+			better: m.better ?? null
 		};
 	});
 }

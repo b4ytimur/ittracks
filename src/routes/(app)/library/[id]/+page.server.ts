@@ -2,7 +2,7 @@ import { userToday } from '$lib/server/today';
 import { trash } from '$lib/server/trash';
 import { error, fail, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
-import { firstError, taskForm, type TaskForm } from '$lib/forms';
+import { firstError, rowWords, taskForm, type TaskForm } from '$lib/forms';
 import { checkTask } from '$lib/rules/task';
 import {
 	checkTaskEdit,
@@ -38,6 +38,7 @@ const blank = (): TaskForm => ({
 	notes: '',
 	restTimerEnabled: false,
 	restTimerSeconds: 90,
+	...rowWords(),
 	tags: [],
 	metrics: [],
 	parts: [],
@@ -94,6 +95,7 @@ const unitChoice = z.record(z.string().uuid(), z.enum(['convert', 'relabel']));
 const savedType = z.object({
 	name: z.string().trim().min(1).max(40),
 	restTimerEnabled: z.boolean(),
+	words: z.object({ rowOne: z.string().max(20), rowMany: z.string().max(20), betweenName: z.string().max(20) }).optional(),
 	metrics: z
 		.array(
 			z.object({
@@ -101,6 +103,8 @@ const savedType = z.object({
 				type: z.enum(metricTypes),
 				unit: z.string().max(20),
 				repeats: z.boolean(),
+				times: z.boolean().optional(),
+				better: z.literal('less').optional(),
 				step: z.number().positive().nullable()
 			})
 		)
@@ -183,6 +187,7 @@ export const actions: Actions = {
 			name: t.name,
 			description: t.metrics.map((m) => m.name).join(', ') || 'Just done',
 			restTimerEnabled: t.restTimerEnabled,
+			...(t.words ? { words: t.words } : {}),
 			metrics: t.metrics.map((m) => ({ ...m, unit: m.unit }))
 		};
 		saveSettings(accountId, { taskTypes: [...s.taskTypes.filter((x) => x.key !== key), type].slice(-20) });

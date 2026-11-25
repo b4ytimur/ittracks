@@ -70,7 +70,7 @@ function dataset(): Dataset {
 		],
 		metrics: [
 			{ id: 'w', taskId: 'bench', name: 'Weight', type: 'number', unit: 'kg', repeats: true, choices: null },
-			{ id: 'r', taskId: 'bench', name: 'Reps', type: 'count', unit: null, repeats: true, choices: null },
+			{ id: 'r', taskId: 'bench', name: 'Reps', type: 'count', unit: null, repeats: true, times: true, choices: null },
 			{ id: 'dist', taskId: 'runT', name: 'Distance', type: 'number', unit: 'km', repeats: false, choices: null },
 			{ id: 'time', taskId: 'runT', name: 'Time', type: 'duration', unit: 'min', repeats: false, choices: null },
 			{ id: 'mins', taskId: 'book', name: 'Minutes', type: 'duration', unit: 'min', repeats: false, choices: null },

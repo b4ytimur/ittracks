@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { cursor, difference, follow, rowText, rowsName, rowsText, skippedName, type Field, type RowState } from './run';
 
 const weight: Field = { id: 'w', name: 'Weight', type: 'number', unit: 'kg', prefill: 'last', choices: null };
-const reps: Field = { id: 'r', name: 'Reps', type: 'count', unit: null, prefill: 'target', choices: null };
+const reps: Field = { id: 'r', name: 'Reps', type: 'count', unit: null, prefill: 'target', times: true, choices: null };
 const grip: Field = { id: 'g', name: 'Grip', type: 'choice', unit: null, prefill: 'last', choices: [{ id: 'o', name: 'Overhand' }] };
 const fields = [weight, reps, grip];
 const row = (w: number | null, r: number | null = 8, o: Partial<RowState> = {}): RowState => ({ done: false, values: { w, r }, ...o });

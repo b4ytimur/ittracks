@@ -14,6 +14,7 @@ import { progressForIds } from '$lib/server/progress';
 import { isPartial, progressText } from '$lib/engine/progress';
 import { rollupText } from '$lib/engine/rollup';
 import { excerpt } from '$lib/markdown';
+import { joinRow } from '$lib/rowtext';
 import { isHidden } from '$lib/views';
 import type { PageServerLoad } from './$types';
 
@@ -113,7 +114,7 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		);
 	const metrics = entries.length
 		? db
-				.select({ id: metric.id, taskId: metric.taskId, name: metric.name, type: metric.type, unit: metric.unit, choices: metric.choices })
+				.select({ id: metric.id, taskId: metric.taskId, name: metric.name, type: metric.type, unit: metric.unit, times: metric.times, choices: metric.choices })
 				.from(metric)
 				.where(inArray(metric.taskId, [...new Set(entries.map((e) => e.taskId))]))
 				.orderBy(metric.sortOrder)
@@ -176,15 +177,13 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 	};
 };
 
-type Metric = { id: string; taskId: string; name: string; type: string; unit: string | null; choices: ChoiceOption[] | null };
+type Metric = { id: string; taskId: string; name: string; type: string; unit: string | null; times: boolean; choices: ChoiceOption[] | null };
 
 /** "Bench press: 80 kg × 8, 80 kg × 8" — one line per Task, sets in order. */
 function summarize(entries: { taskId: string; task: string; values: Record<string, unknown> }[], metrics: Metric[]): string[] {
 	const byTask = new Map<string, { task: string; sets: string[] }>();
 	for (const e of entries) {
-		const parts = metrics
-			.filter((m) => m.taskId === e.taskId)
-			.map((m) => {
+		const said = (m: Metric): string | null => {
 				const v = e.values[m.id];
 				if (v === undefined || v === null || v === '' || v === false) return null;
 				if (v === true) return m.name;
@@ -192,11 +191,11 @@ function summarize(entries: { taskId: string; task: string; values: Record<strin
 				if (m.type === 'text' && typeof v === 'string') return `${m.name}: ${excerpt(v, 60)}`;
 				if (m.type === 'choice') return optionName(m.choices, v);
 				return `${v}${m.unit ? ` ${m.unit}` : ''}`;
-			})
-			.filter(Boolean);
-		if (!parts.length) continue;
+			};
+		const row = joinRow(metrics.filter((m) => m.taskId === e.taskId).map((m) => ({ text: said(m) ?? '', times: m.times })));
+		if (!row) continue;
 		const t = byTask.get(e.taskId) ?? byTask.set(e.taskId, { task: e.task, sets: [] }).get(e.taskId)!;
-		t.sets.push(parts.join(' × '));
+		t.sets.push(row);
 	}
 	return [...byTask.values()].map((t) => `${t.task}: ${t.sets.join(', ')}`);
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TEMPLATE_VERSION, applyAnswers, fromTemplate, templateFile, toTemplate, type TemplateFile } from './template';
-import { habitForm, noteDefaults, type HabitForm, type TaskForm } from './forms';
+import { habitForm, noteDefaults, rowWords, type HabitForm, type TaskForm } from './forms';
 import { shareDetails, shareForm, type ShareCtx } from './share';
 import { checkShare, shareRules } from './rules/share';
 import { normalize } from './rules/core';
@@ -17,6 +17,7 @@ const bench: TaskForm = {
 	name: 'Bench press',
 	notes: '',
 	restTimerEnabled: true,
+	...rowWords(),
 	restTimerSeconds: 120,
 	tags: [{ name: 'chest', level: 3 }],
 	metrics: [

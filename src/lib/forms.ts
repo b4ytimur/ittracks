@@ -35,6 +35,10 @@ export const taskForm = z.object({
 	notes: z.string().max(NOTE_MAX).default(''),
 	restTimerEnabled: z.boolean(),
 	restTimerSeconds: z.number().int().min(5).max(3600),
+	/** Its own words: one row of it, several, and the clock between two. */
+	rowOne: z.string().trim().min(1, 'One row needs a word').max(20).default('set'),
+	rowMany: z.string().trim().min(1, 'Several rows need a word').max(20).default('sets'),
+	betweenName: z.string().trim().min(1, 'The clock needs a word').max(20).default('Rest'),
 	tags: z.array(z.object({ name: z.string().trim().min(1).max(40), level: z.number().int().min(1).max(99) })),
 	metrics: z.array(
 		z.object({
@@ -43,6 +47,10 @@ export const taskForm = z.object({
 			type: z.enum(metricTypes),
 			unit: z.string().trim().max(20).default(''),
 			repeats: z.boolean(),
+			/** In a row it is written after a ×: "60 kg × 8". */
+			times: z.boolean().default(false),
+			/** Which way is better; null is more. */
+			better: z.enum(['more', 'less']).nullable().default(null),
 			/** Choice field: its options. Logs store the option's id, so a rename keeps past values. */
 			choices: z.array(optionForm).default([]),
 			prefill: z.enum(['last', 'target', 'blank']).default('last'),
@@ -72,7 +80,12 @@ export const taskForm = z.object({
 });
 export type MetricForm = TaskForm['metrics'][number];
 /** Notes and journal options a new Metric starts with: one line, no prompts, no numbers. */
-export const noteDefaults = (): Pick<MetricForm, 'long' | 'starter' | 'prompts' | 'promptOrder' | 'scores'> => ({
+/** What a new Task's words are. */
+export const rowWords = () => ({ rowOne: 'set', rowMany: 'sets', betweenName: 'Rest' });
+/** What a new field has besides its name, type and unit. */
+export const noteDefaults = (): Pick<MetricForm, 'long' | 'starter' | 'prompts' | 'promptOrder' | 'scores' | 'times' | 'better'> => ({
+	times: false,
+	better: null,
 	long: false,
 	starter: '',
 	prompts: [],

@@ -1,6 +1,8 @@
 // How a log runs: which row is open, what the rows still to do become when a number changes, and
 // what a row says. No Svelte here, so it can be tested.
 
+import { inReadingOrder, joinRow } from '../rowtext';
+
 export interface RowState {
 	done: boolean;
 	values: Record<string, unknown>;
@@ -21,6 +23,8 @@ export interface Field {
 	type: string;
 	unit: string | null;
 	prefill: string;
+	/** Written after a ×. */
+	times?: boolean;
 	choices: { id: string; name: string }[] | null;
 }
 
@@ -79,24 +83,24 @@ export function valueText(f: Field, v: unknown): string {
 
 /** A row's values in words: "62.5 kg × 8 · Overhand". */
 export function rowText(fields: Field[], values: Record<string, unknown>): string {
-	const numbers = fields.filter(isNumber).map((f) => valueText(f, values[f.id])).filter(Boolean);
+	const numbers = joinRow(fields.filter(isNumber).map((f) => ({ text: valueText(f, values[f.id]), times: f.times })));
 	const rest = fields.filter((f) => !isNumber(f)).map((f) => valueText(f, values[f.id])).filter(Boolean);
-	return [numbers.join(' × '), ...rest].filter(Boolean).join(' · ');
+	return [numbers, ...rest].filter(Boolean).join(' · ');
 }
 
 /** Several rows in words: "62.5 kg × 8, 8, 7" while only the last number differs, else each row. */
 export function rowsText(fields: Field[], rows: RowState[]): string {
 	if (rows.length < 2) return rows.map((r) => rowText(fields, r.values)).join('');
-	const numbers = fields.filter(isNumber);
+	const numbers = inReadingOrder(fields.filter(isNumber));
 	const last = numbers.at(-1);
 	const texts = rows.map((r) => rowText(fields, r.values));
 	if (new Set(texts).size === 1) return `${rows.length} × ${texts[0]}`;
-	if (last) {
+	if (last && (last.times || numbers.length === 1)) {
 		const head = (r: RowState) => rowText(fields, { ...r.values, [last.id]: null });
 		if (new Set(rows.map(head)).size === 1 && rows.every((r) => r.values[last.id] != null)) {
-			const before = numbers.slice(0, -1).map((f) => valueText(f, rows[0].values[f.id])).filter(Boolean);
+			const before = numbers.slice(0, -1).map((f) => ({ text: valueText(f, rows[0].values[f.id]), times: f.times }));
 			const list = rows.map((r) => valueText({ ...last, unit: null, type: 'count' }, r.values[last.id])).join(', ');
-			return [...before, list + (unitOf(last) ? ` ${unitOf(last)}` : '')].join(' × ');
+			return joinRow([...before, { text: list + (unitOf(last) ? ` ${unitOf(last)}` : ''), times: last.times }]);
 		}
 	}
 	return texts.join(', ');

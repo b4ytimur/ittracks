@@ -15,6 +15,7 @@ import { statCtx, type Catalog } from '$lib/stats/catalog';
 import { catalogOf } from '$lib/stats/catalog-of';
 import { checkCard } from '$lib/rules/stats';
 import { DEFAULT_STREAK_RULE } from '$lib/engine/streak';
+import { inReadingOrder } from '$lib/rowtext';
 import { logicalDate } from '$lib/engine/day';
 import { value as formatValue } from '$lib/stats/format';
 import { isGroup, type Schedule } from '$lib/engine/schedule';
@@ -94,7 +95,7 @@ export function loadDataset(accountId: string, tz?: string): Dataset {
 			archived: t.archived,
 			tags: tags.filter((x) => x.taskId === t.id).map((x) => ({ name: x.name, level: x.level }))
 		})),
-		metrics: metrics.map((m) => ({ id: m.id, taskId: m.taskId, name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, choices: m.choices ?? null, scores: m.scores ?? null, earlierScores: m.earlierScores ?? null })),
+		metrics: metrics.map((m) => ({ id: m.id, taskId: m.taskId, name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, times: m.times, better: m.better, choices: m.choices ?? null, scores: m.scores ?? null, earlierScores: m.earlierScores ?? null })),
 		variants: variants.map((v) => ({ id: v.id, habitId: v.habitId, name: v.name })),
 		slots: slots.map((x) => ({ id: x.id, variantId: x.variantId, taskId: x.taskId, sets: x.sets, targets: x.targets ?? null, minTargets: x.minTargets ?? null, stretchTargets: x.stretchTargets ?? null })),
 		occurrences: occs.map((o) => ({
@@ -301,7 +302,7 @@ export function recapFor(accountId: string, taskIds: string[], excludeOcc: strin
 		areas: [],
 		habits: habits.map((h) => ({ id: h.id, name: h.name, direction: h.direction, areaId: h.areaId, startDate: h.startDate, archived: h.archived, identities: [], cost: null, streakRule: DEFAULT_STREAK_RULE, minimumCounts: true, limit: null })),
 		tasks: tasks.map((t) => ({ id: t.id, name: t.name, areaId: t.areaId, parentTaskId: t.parentTaskId, archived: t.archived, tags: [] })),
-		metrics: metrics.map((m) => ({ id: m.id, taskId: m.taskId, name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, choices: m.choices ?? null, scores: m.scores ?? null, earlierScores: m.earlierScores ?? null })),
+		metrics: metrics.map((m) => ({ id: m.id, taskId: m.taskId, name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, times: m.times, better: m.better, choices: m.choices ?? null, scores: m.scores ?? null, earlierScores: m.earlierScores ?? null })),
 		variants: [],
 		slots: [],
 		occurrences: occs.map((o) => ({ id: o.id, habitId: o.habitId, variantId: null, date: o.date, status: o.status, level: o.level ?? null, picks: null, time: null })),
@@ -321,20 +322,22 @@ export function recapFor(accountId: string, taskIds: string[], excludeOcc: strin
 	return out;
 }
 
-/** The best a Task has done: the heaviest set for weight and reps, else the top value of its first number field. */
+/** The best a Task has done: the top of what a row counts with a ×, else the top value of its first number field. */
 function bestOf(P: Prepared, taskId: string): string | null {
 	const logs = P.logsByTask.get(taskId) ?? [];
-	const r = P.roles.get(taskId);
-	if (r?.weight && r.reps) {
+	const rep = inReadingOrder((P.metricsByTask.get(taskId) ?? []).filter((x) => x.repeats && ['number', 'duration', 'count'].includes(x.type)));
+	const [first, second] = rep;
+	if (first && second?.times) {
+		const sign = first.better === 'less' ? -1 : 1;
 		let top: { w: number; reps: number } | null = null;
 		for (const l of logs)
 			for (const s of l.sets) {
-				const w = Number(s[r.weight.id]);
-				const n = Number(s[r.reps.id]);
+				const w = Number(s[first.id]);
+				const n = Number(s[second.id]);
 				if (!Number.isFinite(w) || !Number.isFinite(n) || !n) continue;
-				if (!top || w > top.w || (w === top.w && n > top.reps)) top = { w, reps: n };
+				if (!top || (w - top.w) * sign > 0 || (w === top.w && n > top.reps)) top = { w, reps: n };
 			}
-		return top ? `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(top.w)}${r.weight.unit ? ` ${r.weight.unit}` : ''} × ${top.reps}` : null;
+		return top ? `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(top.w)}${first.unit ? ` ${first.unit}` : ''} × ${top.reps}` : null;
 	}
 	const m = (P.metricsByTask.get(taskId) ?? []).find((x) => !x.repeats && ['number', 'duration', 'count'].includes(x.type));
 	if (!m) return null;
