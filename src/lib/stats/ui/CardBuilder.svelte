@@ -305,10 +305,11 @@
 			{/if}
 			<label>
 				Split into one series per
-				<select bind:value={c.split}>
+				<select bind:value={() => (c.split === 'tag' && c.grouping ? `tag:${c.grouping}` : c.split), (v) => ((c.split = v.split(':')[0] as typeof c.split), (c.grouping = v.startsWith('tag:') ? v.slice(4) : undefined))}>
 					{#each SPLITS_BY_SOURCE[c.what.source] as k (k)}
 						{@const bad = optionIssue('split', k, ['split', 'look.chart', 'look.stacked'])}
-						<option value={k} disabled={!!bad && c.split !== k} title={bad ?? ''}>{SPLITS[k as keyof typeof SPLITS]}</option>
+						<option value={k} disabled={!!bad && c.split !== k} title={bad ?? ''}>{k !== 'tag' ? SPLITS[k as keyof typeof SPLITS] : catalog.groupings.length > 1 ? 'Every grouping' : (catalog.groupings[0]?.name ?? SPLITS.tag)}</option>
+						{#if k === 'tag' && catalog.groupings.length > 1}{#each catalog.groupings as g (g.id)}<option value="tag:{g.id}" disabled={!!bad && c.split !== k}>{g.name}</option>{/each}{/if}
 					{/each}
 				</select>
 			</label>

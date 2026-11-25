@@ -20,6 +20,7 @@ const catalog: Catalog = {
 	],
 	tags: [],
 	areas: [],
+	groupings: [],
 	identities: []
 };
 const o: Offer = { catalog, measures: [], hidden: [] };

@@ -90,7 +90,7 @@ export const SPLITS = {
 	none: 'Nothing',
 	habit: 'Habit',
 	task: 'Task',
-	tag: 'Tag (muscle group)',
+	tag: 'Tag',
 	area: 'Area',
 	variant: 'Variant',
 	level: 'Level',
@@ -168,6 +168,8 @@ export const statCard = z.object({
 	overTime: z.enum(keysOf(OVER_TIME)).default('sum'),
 	bucket: z.enum(keysOf(BUCKETS)).default('auto'),
 	split: z.enum(keysOf(SPLITS)).default('none'),
+	/** Split by tag: only the members of this grouping. Left out, every tag. */
+	grouping: str(40).optional(),
 	filter: statFilter.prefault({}),
 	/** "page" follows the board's range. */
 	range: cardRange.default('page'),

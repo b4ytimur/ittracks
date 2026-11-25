@@ -22,6 +22,7 @@
 	import { allowedNow, lockedNow } from '$lib/rules/history';
 	import type { UnitChoice } from '$lib/units';
 	import { units } from '$lib/units-here';
+	import { groups } from '$lib/groupings-here';
 	import { promptFor } from '$lib/journal';
 
 	let {
@@ -99,7 +100,10 @@
 		else next[c] = n;
 		m.scores = next;
 	}
-	let newLevel = $state(2);
+	let newLevel = $state<number | null>(null);
+	/** A tag's levels, weakest first, with the one it has even when that is off the list. */
+	const levelsOf = (tag: string, has = 0) => groups().of(tag).levels.filter((l) => !l.off || l.id === has).reverse();
+	const levelNow = $derived(levelsOf(newTag).some((l) => l.id === newLevel) ? newLevel! : (levelsOf(newTag)[Math.floor(levelsOf(newTag).length / 2)]?.id ?? 1));
 
 	const typeLabels: Record<string, string> = {
 		number: 'Number (e.g. weight)',
@@ -113,7 +117,7 @@
 	function addTag() {
 		const name = newTag.trim();
 		if (!name || t.tags.some((g) => g.name.toLowerCase() === name.toLowerCase())) return;
-		t.tags.push({ name, level: newLevel });
+		t.tags.push({ name, level: levelNow });
 		newTag = '';
 	}
 
@@ -290,7 +294,7 @@
 		parts: W.listWords(f.parts.map((p) => (p.kind === 'step' ? p.name : (choiceOf(p.taskId)?.name ?? 'A Task'))), 'Nothing inside it.'),
 		rest: f.restTimerEnabled ? `${f.restTimerSeconds % 60 ? `${f.restTimerSeconds} s` : `${f.restTimerSeconds / 60} min`} between sets.` : 'Off.',
 		notes: W.noteWords(f.notes),
-		tags: W.listWords(f.tags.map((g) => `${g.name} ${['', 'low', 'medium', 'high'][g.level]}`)),
+		tags: W.listWords(f.tags.map((g) => `${g.name} ${groups().levelName(g.name, g.level)}`)),
 		area: data.areas.find((a) => a.id === f.areaId)?.name ?? 'None.',
 		collections: W.listWords(f.collectionIds.map((id) => data.collections.find((c) => c.id === id)?.name ?? ''), 'In none.')
 	});
@@ -371,9 +375,7 @@
 		<div class="row">
 			<span class="grow">{g.name}</span>
 			<select bind:value={g.level} aria-label="Level for {g.name}" style="width: auto">
-				<option value={1}>low</option>
-				<option value={2}>medium</option>
-				<option value={3}>high</option>
+				{#each levelsOf(g.name, g.level) as l (l.id)}<option value={l.id}>{l.name}</option>{/each}
 			</select>
 			<button type="button" class="small danger" onclick={() => t.tags.splice(i, 1)}>Remove</button>
 		</div>
@@ -383,10 +385,8 @@
 			>New tag <input bind:value={newTag} list="all-tags" placeholder="triceps"
 				onkeydown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())} /></label
 		>
-		<select bind:value={newLevel} aria-label="Level" style="width: auto">
-			<option value={1}>low</option>
-			<option value={2}>medium</option>
-			<option value={3}>high</option>
+		<select bind:value={() => levelNow, (v) => (newLevel = v)} aria-label="Level" style="width: auto">
+			{#each levelsOf(newTag) as l (l.id)}<option value={l.id}>{l.name}</option>{/each}
 		</select>
 		<button type="button" onclick={addTag}>Add</button>
 	</div>

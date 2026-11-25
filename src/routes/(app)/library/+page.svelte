@@ -15,6 +15,7 @@
 	import BulkBar from '$lib/bulk/BulkBar.svelte';
 	import { unitOptions } from '$lib/bulk/catalog';
 	import { units } from '$lib/units-here';
+	import { groups as tagGroups } from '$lib/groupings-here';
 	import { groupBy } from '$lib/views';
 
 	let { data } = $props();
@@ -40,7 +41,6 @@
 	const setArea = (id: string | null) => (view.areas = id ? [id] : []);
 	let showTags = $state(false);
 
-	const levelWord = ['', 'low', 'medium', 'high'];
 	const toggleTag = (t: string) => (view.tags = view.tags.includes(t) ? view.tags.filter((x) => x !== t) : [...view.tags, t]);
 
 	const shown = $derived.by(() => {
@@ -238,7 +238,7 @@
 			{:else if !t.usedIn.length && !t.timesLogged}<span class="tags"><StatusTag status="unused" /></span>{/if}
 			{#if o?.reason || metaOf(t)}<p class="meta-line label">{o?.reason ?? metaOf(t)}</p>{/if}
 			{#if t.tags.length}
-				<span class="row-line tags">{#each t.tags as tg (tg.name)}<span class="tag">{tg.name}: {levelWord[tg.level]}</span>{/each}</span>
+				<span class="row-line tags">{#each t.tags as tg (tg.name)}<span class="tag">{tg.name}: {tagGroups().levelName(tg.name, tg.level)}</span>{/each}</span>
 			{/if}
 		{/snippet}
 	</EditableList>

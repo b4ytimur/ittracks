@@ -3,6 +3,7 @@
 import type { Settings } from '../server/settings';
 import { minutesOf, type DayRange } from '../engine/day';
 import { check, defineRules, evaluate, independent, normalize, onlyWhen, type Issue } from './core';
+import { groupingsProblem } from '../groupings';
 import { kindsProblem } from '../units';
 import { readViews } from '../views';
 
@@ -40,6 +41,8 @@ export const settingsRules = defineRules<Settings, SettingsCtx>({
 	weightUnit: independent,
 	/** Which table can be is in units.ts (kindsProblem). */
 	units: [check((s) => !!s.units && !!kindsProblem(s.units), 'These units can\'t be saved')],
+	/** Which list can be is in groupings.ts (groupingsProblem). */
+	groupings: [check((s) => !!s.groupings && !!groupingsProblem(s.groupings), 'These groupings can\'t be saved')],
 	timeZone: independent,
 	dayStart: independent,
 	ranges: [

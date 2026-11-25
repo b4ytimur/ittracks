@@ -414,7 +414,7 @@ describe('auto cards and templates', () => {
 	it('never builds a card the rules would block', () => {
 		const all = [
 			...(Object.keys(BOARD_TEMPLATES) as BoardTemplateId[]).flatMap((id) => boardTemplate(id, P).cards),
-			...galleryCards().flatMap((g) => g.cards),
+			...galleryCards(P).flatMap((g) => g.cards),
 			...suggestedCards(P).flatMap((g) => g.cards),
 			...P.ds.habits.flatMap((h) => headlineOptions(P, h).map((o) => o.card))
 		];

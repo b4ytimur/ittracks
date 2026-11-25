@@ -3,7 +3,7 @@
 import { and, asc, eq, inArray, lte, ne } from 'drizzle-orm';
 import { db } from './db';
 import { area, craving, entry, habit, habitIdentity, identity, metric, occurrence, slip, slot, tag, task, taskPart, taskTag, variant } from './db/schema';
-import { getSettings, getUnits, getViews, saveSettings } from './settings';
+import { getGroups, getSettings, getUnits, getViews, saveSettings } from './settings';
 import { settleAll, timeIn, userToday } from './today';
 import { listAreas } from './repo/areas';
 import { listIdentities } from './repo/identities';
@@ -66,6 +66,7 @@ export function loadDataset(accountId: string, tz?: string): Dataset {
 		today,
 		weightUnit: units.shown('weight'),
 		units,
+		groups: getGroups(accountId),
 		ranges: s.ranges ?? [],
 		areas,
 		habits: habits.map((h) => ({

@@ -33,7 +33,6 @@ const body = z.discriminatedUnion('op', [
 	z.object({ op: z.literal('headline'), habit: id, card: statCard.nullable() }),
 	z.object({
 		op: z.literal('settings'),
-		muscle: statsSettings.shape.muscle.unwrap().partial().optional(),
 		e1rm: z.string().max(300).optional(),
 		e1rmMaxReps: z.number().int().min(1).max(30).optional()
 	}),
@@ -214,7 +213,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 			break;
 		}
 		case 'settings':
-			s = { ...s, muscle: { ...s.muscle, ...(b.muscle ?? {}) }, e1rm: b.e1rm ?? s.e1rm, e1rmMaxReps: b.e1rmMaxReps ?? s.e1rmMaxReps };
+			s = { ...s, e1rm: b.e1rm ?? s.e1rm, e1rmMaxReps: b.e1rmMaxReps ?? s.e1rmMaxReps };
 			break;
 		case 'measure.save': {
 			const m = b.measure;

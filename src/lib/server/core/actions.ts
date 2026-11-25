@@ -43,7 +43,7 @@ const seriesSpec = z.object({
 	habits: habitList,
 	fields: z.array(z.string().max(200)).max(10).optional().describe('source field: field ids (exact) or names (rolls up every field with that name).'),
 	task: z.string().max(200).optional().describe('source task: one Task by id or name; left out means every Task.'),
-	tags: z.array(z.string().max(100)).max(20).optional().describe('Only Tasks with these tags (muscle groups).'),
+	tags: z.array(z.string().max(100)).max(20).optional().describe('Only Tasks with these tags.'),
 	measure: z.string().max(80).optional().describe('How one log becomes a number (perLog), e.g. done, rate, value, sum, best, volume, e1rm, count. See analysis_options.'),
 	combine: z.enum(keys(OVER_TIME)).optional().describe('How a bucket combines: sum, avg, median, min, max, last, count, days.'),
 	bucket: z.enum(keys(BUCKETS)).optional().describe('day, week, month, quarter, year, session, all, or auto.'),

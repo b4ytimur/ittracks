@@ -51,7 +51,7 @@ const templateTask = z.object({
 	notes: z.string().max(NOTE_MAX).default(''),
 	restTimerEnabled: z.boolean().default(false),
 	restTimerSeconds: z.number().int().min(5).max(3600).default(90),
-	tags: z.array(z.object({ name: z.string().min(1).max(40), level: z.number().int().min(1).max(3) })).default([]),
+	tags: z.array(z.object({ name: z.string().min(1).max(40), level: z.number().int().min(1).max(99) })).default([]),
 	/** Version 5: the Task's Area, matched by name on import (falls back to the habit's). */
 	area: z.string().max(40).nullable().default(null),
 	metrics: z

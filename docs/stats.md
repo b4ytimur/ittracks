@@ -35,7 +35,7 @@ What a sentence can't say (goals, rolling averages, splits, filters) is in **⋯
 | **Over time, take the** | **Sum**, **Average**, **Median**, **Lowest**, **Highest**, **Last**, **Number of logs**, **Days with a log** |
 | **Card type** | **Number**, **Bars**, **Line**, **Calendar**, **Goal progress**, **Records**, **Table**, **Streak**, **Breakdown**, **Pattern grid**, **Recent sessions** |
 | **One bar or point per** | **Each session**, **Day**, **Week**, **Month**, **Quarter**, **Year**, **Whole range**, or **Automatic** |
-| **Split into one series per** | Habit, Task, **Tag (muscle group)**, Area, Variant, Level, Weekday, Part of the day, Choice option, Set number, Field |
+| **Split into one series per** | Habit, Task, a **grouping** of tags, Area, Variant, Level, Weekday, Part of the day, Choice option, Set number, Field |
 | **Range** | **Same as the board**, a fixed range, or **Since a date…** |
 | **Only some habits, tags or Areas** | Narrows the card within the board |
 | **Compare and goals** | **Compare with the period before**, a **Goal** line (or a band, with **Top of a goal band**), **Take the goal from the targets**, and a 7 or 30 day **Rolling average** |
@@ -60,9 +60,9 @@ Once saved, pick it under **Each log counts as** on any Task card. Measures find
 
 How the best single lift is estimated from a set's weight and reps: **Epley**, **Brzycki**, **Lombardi**, or **Your own** formula. **Only for sets of this many reps or fewer** (default 12) leaves out high-rep sets, where estimates get unreliable.
 
-## Muscle groups
+## Groupings
 
-When hard sets or volume are split by tag, a set counts toward each of its Task's tags by the tag's level. Set what **High**, **Medium** and **Low** count for: 1 is a full set, 0.5 half, 0 not at all.
+Tags belong to groupings, under **Settings → Groupings**. When hard sets or volume are split by one, a set counts toward each of its Task's tags by the tag's level: a level that counts 1 is a full set, 0.5 half, 0 not at all. With several groupings, a card can be split by one of them or by every tag. See [Groupings and levels](tasks.md#groupings-and-levels).
 
 ## Download your logs
 

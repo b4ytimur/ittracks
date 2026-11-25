@@ -7,7 +7,7 @@ import { and, asc, eq, gte, inArray, lte } from 'drizzle-orm';
 import { db } from '../db';
 import { area, dayNote, entry, habit, metric, occurrence, slip, slot, tag, task, taskPart, taskTag, variant } from '../db/schema';
 import { parsePath } from '$lib/engine/parts';
-import { getSettings, getUnits } from '../settings';
+import { getGroups, getSettings, getUnits } from '../settings';
 import { getStats, loadDataset } from '../stats';
 import { ensureToday, settleAll, userToday } from '../today';
 import { prepare, describeLog, type Dataset, type Prepared } from '$lib/stats/engine';
@@ -124,7 +124,7 @@ export function describe(actor: Actor) {
 		: [];
 	const slipRows = ids.length ? db.select({ habitId: slip.habitId, count: slip.count, date: slip.date }).from(slip).where(inArray(slip.habitId, ids)).all() : [];
 	const dates = [...counts.filter((c) => c.status !== 'due').map((c) => c.date), ...slipRows.map((x) => x.date)].sort();
-	const levelName = ['', 'low', 'medium', 'high'];
+	const groups = getGroups(actor.accountId);
 
 	return {
 		apiVersion: 1,
@@ -219,7 +219,7 @@ export function describe(actor: Actor) {
 				: {}),
 			area: t.areaId ? (areaName.get(t.areaId) ?? null) : null,
 			archived: t.archived,
-			tags: tags.filter((x) => x.taskId === t.id).map((x) => `${x.name} (${levelName[x.level] ?? x.level})`),
+			tags: tags.filter((x) => x.taskId === t.id).map((x) => `${x.name} (${groups.levelName(x.name, x.level)})`),
 			fields: metrics
 				.filter((m) => m.taskId === t.id)
 				.map((m) => ({

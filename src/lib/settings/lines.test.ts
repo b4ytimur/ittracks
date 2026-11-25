@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { starterGroupings } from '$lib/groupings';
 import { STARTER_KINDS } from '$lib/units';
 import { FEATURES } from '$lib/views';
 import { FEATURE_HIDES, matches, settingGroups, type Now } from './lines';
@@ -18,7 +19,7 @@ const now: Now = {
 	units: STARTER_KINDS,
 	measures: [],
 	e1rm: { name: 'Epley', maxReps: 12 },
-	muscle: { high: 1, medium: 0.5, low: 0 },
+	groupings: starterGroupings(),
 	startPage: 'Today',
 	template: 'Standard',
 	own: 0,

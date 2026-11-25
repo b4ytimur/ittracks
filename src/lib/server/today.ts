@@ -37,7 +37,7 @@ import { hitsInARow, raise, type Progression } from '$lib/engine/progression';
 import { DEFAULT_TRIGGERS, type ScheduleForm } from '$lib/forms';
 import { activeOptions, optionName } from '$lib/options';
 import { identitiesByHabit } from './repo/identities';
-import { getSettings } from './settings';
+import { getGroups, getSettings } from './settings';
 import { dayOrder, logicalDate } from '$lib/engine/day';
 import { pauseOn, type Pause } from '$lib/engine/pause';
 import { carriesOver, lastTimeFor } from '$lib/engine/backfill';
@@ -134,11 +134,12 @@ export function pickForVariant(accountId: string, variantId: string): Record<str
 		.all();
 	if (!slots.some((s) => s.fillRule)) return {};
 	const pool = candidates(accountId);
+	const { rank } = getGroups(accountId);
 	const used = new Set(slots.map((s) => s.taskId).filter((x): x is string => !!x));
 	const picks: Record<string, string> = {};
 	for (const s of slots) {
 		if (!s.fillRule) continue;
-		const id = pickTask(s.fillRule as FillRule, pool, used);
+		const id = pickTask(s.fillRule as FillRule, pool, rank, used);
 		if (id) {
 			picks[s.id] = id;
 			used.add(id);

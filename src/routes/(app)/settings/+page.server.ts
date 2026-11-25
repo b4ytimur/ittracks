@@ -6,7 +6,7 @@ import { and, asc, eq, inArray, isNotNull } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { checkViews } from '$lib/rules/views';
 import { db } from '$lib/server/db';
-import { account, metric, pause, slot, task, variant } from '$lib/server/db/schema';
+import { account, metric, pause, slot, tag, task, taskTag, variant } from '$lib/server/db/schema';
 import { ActionError, ALL_SCOPES, appActor, SCOPES, type Scope } from '$lib/server/core/actor';
 import { importReplace, keepTimeZone, readExport } from '$lib/server/core/export';
 import { createKey, listKeys, revokeKey } from '$lib/server/core/tokens';
@@ -14,7 +14,7 @@ import { publicKey, sendToAccount, subscriptionCount } from '$lib/server/push';
 import { listHabits } from '$lib/server/repo/habits';
 import { usedRanges } from '$lib/server/repo/ranges';
 import { listVacations } from '$lib/server/repo/vacations';
-import { getKinds, getSettings, getViews } from '$lib/server/settings';
+import { getGroupings, getKinds, getSettings, getViews } from '$lib/server/settings';
 import { getStats } from '$lib/server/stats';
 import { repaused, userToday } from '$lib/server/today';
 import { unitWord } from '$lib/units';
@@ -60,6 +60,23 @@ function usedUnits(accountId: string): Record<string, number> {
 	return out;
 }
 
+/** Every tag, the grouping it is in, and how many Tasks have it at each level. */
+function tagsWithUses(accountId: string) {
+	const uses = db
+		.select({ tagId: taskTag.tagId, level: taskTag.level })
+		.from(taskTag)
+		.innerJoin(tag, eq(taskTag.tagId, tag.id))
+		.where(eq(tag.accountId, accountId))
+		.all();
+	return db
+		.select({ id: tag.id, name: tag.name, grouping: tag.grouping })
+		.from(tag)
+		.where(eq(tag.accountId, accountId))
+		.orderBy(asc(tag.name))
+		.all()
+		.map((t) => ({ ...t, levels: uses.filter((x) => x.tagId === t.id).map((x) => x.level) }));
+}
+
 export const load: PageServerLoad = ({ locals, cookies, url }) => {
 	const accountId = locals.account!.id;
 	const { dayStart, ranges, pastDays, nudgeYesterday, dayNote, guidedSetup, showAllSections } = getSettings(accountId);
@@ -69,14 +86,15 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 	return {
 		username: locals.account!.username,
 		today: userToday(accountId, cookies.get('tz')),
-		settings: { dayStart: dayStart ?? null, ranges, pastDays, nudgeYesterday, dayNote, guidedSetup, showAllSections, units: getKinds(accountId) },
+		settings: { dayStart: dayStart ?? null, ranges, pastDays, nudgeYesterday, dayNote, guidedSetup, showAllSections, units: getKinds(accountId), groupings: getGroupings(accountId) },
+		tags: tagsWithUses(accountId),
 		usedUnits: usedUnits(accountId),
 		usedRanges: usedRanges(accountId),
 		vacations: listVacations(accountId),
 		views,
 		viewIssues: checkViews(views, { ranges: ranges.length }),
 		templates: TEMPLATES.map(({ id, name, blurb, summary }) => ({ id, name, blurb, summary })),
-		stats: { measures: s.measures, e1rm: s.e1rm, e1rmMaxReps: s.e1rmMaxReps, muscle: s.muscle, fields: formulaFields(accountId) },
+		stats: { measures: s.measures, e1rm: s.e1rm, e1rmMaxReps: s.e1rmMaxReps, fields: formulaFields(accountId) },
 		vapidKey: publicKey(),
 		devices: subscriptionCount(accountId),
 		habits,
@@ -131,6 +149,38 @@ export const actions: Actions = {
 		if (!p || p.habitId) return fail(404, { error: 'That vacation is already gone.' });
 		db.delete(pause).where(where).run();
 		repaused(locals.account!.id, null, p.start, p.end, userToday(locals.account!.id, cookies.get('tz')));
+	},
+	/** A member for a grouping: a tag no Task has yet. */
+	addTag: async ({ request, locals }) => {
+		const f = await request.formData();
+		const name = String(f.get('name') ?? '').trim().slice(0, 40);
+		const grouping = String(f.get('grouping') ?? '');
+		const accountId = locals.account!.id;
+		if (!name) return fail(400, { error: 'Give it a name.' });
+		if (!getGroupings(accountId).some((g) => g.id === grouping)) return fail(404, { error: 'That grouping is gone.' });
+		if (db.select({ name: tag.name }).from(tag).where(eq(tag.accountId, accountId)).all().some((t) => t.name.toLowerCase() === name.toLowerCase())) return fail(400, { error: `${name} is already in a grouping.` });
+		const id = randomUUID();
+		db.insert(tag).values({ id, accountId, name, grouping }).run();
+		return { id };
+	},
+	/** Put a member in another grouping. Its Tasks keep their level. */
+	moveTag: async ({ request, locals }) => {
+		const f = await request.formData();
+		const grouping = String(f.get('grouping') ?? '') || null;
+		if (grouping && !getGroupings(locals.account!.id).some((g) => g.id === grouping)) return fail(404, { error: 'That grouping is gone.' });
+		const where = and(eq(tag.id, String(f.get('id') ?? '')), eq(tag.accountId, locals.account!.id));
+		const t = db.select().from(tag).where(where).get();
+		if (!t) return fail(404, { error: 'That one is gone.' });
+		db.update(tag).set({ grouping }).where(where).run();
+		return { was: t.grouping ?? '' };
+	},
+	/** Only one no Task has. */
+	removeTag: async ({ request, locals }) => {
+		const id = String((await request.formData()).get('id') ?? '');
+		const where = and(eq(tag.id, id), eq(tag.accountId, locals.account!.id));
+		if (!db.select().from(tag).where(where).get()) return fail(404, { error: 'That one is gone.' });
+		if (db.select().from(taskTag).where(eq(taskTag.tagId, id)).get()) return fail(400, { error: 'A Task has it, so it stays.' });
+		db.delete(tag).where(where).run();
 	},
 	testReminder: async ({ locals }) => {
 		const sent = await sendToAccount(locals.account!.id, { title: 'ittracks', body: 'Reminders work on this device.', url: '/settings#reminders' });

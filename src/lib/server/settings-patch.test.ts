@@ -14,7 +14,7 @@ import type { DayRange } from '$lib/engine/day';
 import { saveTask } from './repo/tasks';
 import { taskForm } from '$lib/forms';
 import { metric } from './db/schema';
-import { getKinds, getUnits } from './settings';
+import { getGroupings, getGroups, getKinds, getUnits } from './settings';
 import { metricsFromType } from '$lib/task-types';
 import { STARTER, STARTER_KINDS } from '$lib/units';
 
@@ -129,5 +129,16 @@ describe('a line of the settings', () => {
 		expect(getUnits(me).shown('weight')).toBe('kg');
 		undo(r);
 		expect(getUnits(me).shown('weight')).toBe('lb');
+	});
+	it('the weights set in Stats are the first grouping, and a change to it has an exact Undo', () => {
+		saveSettings(me, { stats: { muscle: { high: 0.9, low: 0.2 } } });
+		expect(getGroupings(me)[0].levels.map((l) => l.weight)).toEqual([0.9, 0.5, 0.2]);
+		const before = getGroupings(me);
+		const r = patch({ groupings: [...before, { id: 's', name: 'Skills', one: 'skill', levels: [{ id: 1, name: 'focus', weight: 1 }] }] }, { groupings: before });
+		expect(getGroupings(me)).toHaveLength(2);
+		expect(getGroups(me).of('anything').id).toBe('main');
+		undo(r);
+		expect(getGroupings(me)).toEqual(before);
+		expect(patch({ groupings: [] }, { groupings: before })).toHaveProperty('error');
 	});
 });

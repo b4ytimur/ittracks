@@ -22,7 +22,7 @@ Deleting a collection never deletes its Tasks.
 
 1. **Start from a type** to get its fields: **Strength** (weight and reps per set, with a rest timer), **Bodyweight** (reps per set), **Cardio** (time and distance), **Study** (minutes and items), **Timed** (minutes, with the built-in timer), **Count** (one number, like glasses or pages) or **Yes or no** (nothing to fill in). Types you saved yourself show here too.
 2. Give it a **Name**, and optionally an **Area** and **Collections**.
-3. Add **Tags** with a level (**low**, **medium**, **high**) to describe what it works on, such as "triceps: high". [Auto-filled slots](#auto-filled-slots) and Stats use them.
+3. Add **Tags** with a level (**low**, **medium**, **high**, or [your own](#groupings-and-levels)) to describe what it works on, such as "triceps: high". [Auto-filled slots](#auto-filled-slots) and Stats use them.
 4. Adjust the fields under **What you log**.
 5. **Save task**.
 
@@ -67,11 +67,19 @@ Drag ⠿ to reorder fields, or use the arrow keys on it.
 
 Tick **Start a rest countdown after each set** and set the **Seconds**. It needs a field logged per set.
 
+## Groupings and levels
+
+**Settings → Groupings** holds what your tags are members of. An account starts with one; you can rename it, and add others ("Skills", "Rooms").
+
+- **Members** are tags. Add one before any Task has it, remove one no Task has, and move one to another grouping.
+- **Levels** have a name and a weight, strongest first. Rename them, weigh them, add your own. A level Tasks have can come off your list; those Tasks keep it. Their order is what "at least" and "at most" compare in an auto-filled slot.
+- **One is called** is the word used in card titles ("Hard sets per muscle group").
+
 ## Auto-filled slots
 
 An auto-filled slot picks a Task from your Library each time the habit comes up, by tags. Add one with **Add an auto-filled slot** in the habit editor. Rules:
 
-- **Must have**: a tag at **at least low**, **at least medium**, or **high**.
+- **Must have**: a tag at **at least low**, **at least medium**, or **high** (your own levels, if you named them).
 - **Must not have**: a tag **not at all**, **at most low** or **at most medium**.
 - **Prefer**: tags that rank a Task higher.
 
