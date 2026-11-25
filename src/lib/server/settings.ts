@@ -34,6 +34,8 @@ export interface Settings {
 	pinned: string[];
 	/** Task types: the ones the packs brought and the ones you saved. */
 	taskTypes: TaskType[];
+	/** Hints that were there once and are done with (src/lib/hints.ts). */
+	hints?: string[];
 	/** Starter packs copied in. Unset on an account from before there were packs: it has what used to be built in. */
 	packs?: string[];
 	/** The starting Areas were created once; deleting them all doesn't bring them back. */
