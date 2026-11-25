@@ -16,9 +16,11 @@ const post = (e: Omit<Entry, 'id'>) => {
 };
 
 /** Say what changed, with how to take it back. Returns the entry, for `hold` and `release`. */
-export const showToast = (text: string, undo?: Entry['undo']) => post({ text, undo });
+export const showToast = (text: string, undo?: Entry['undo'], subject?: string) => post({ text, undo, subject });
 /** A save that failed, and how to send it again. */
 export const showError = (text: string, retry?: Entry['retry']) => post({ text, error: true, retry });
+/** What these are about was taken back elsewhere, such as on its row. */
+export const dismissAbout = (subject: string) => (band.entries = band.entries.filter((e) => e.subject !== subject));
 export const dismiss = (id: number) => (band.entries = dropEntry(band.entries, id));
 /** The row shows its own way back for now, so the band doesn't. */
 export const hold = (id: number) => (band.entries = setHeld(band.entries, id, true));
