@@ -1,26 +1,25 @@
 // Offline logging: actions taken with no connection wait on this device and are sent
 // when it comes back. Each saved action replaces the whole state it touches (a log's
-// entries, a status), so sending one twice does no harm.
+// entries, a status), so sending one twice does no harm. What an answer means is in queue.ts.
+import { untrack } from 'svelte';
 import { browser } from '$app/environment';
+import { keyOf, readAnswer, sendAll, type Answer, type Queued } from './queue';
 
-export interface Queued {
-	id: string;
-	/** Form action URL, such as /log/<id>?/save */
-	url: string;
-	fields: [string, string][];
-	label: string;
-	at: number;
-}
+export type { Queued } from './queue';
 
 const KEY = 'ittracks-outbox';
 
 export const outbox = $state<{ items: Queued[]; syncing: boolean }>({ items: [], syncing: false });
 
+/** Storage is full or blocked: what waits is only in memory. */
+let memoryOnly = false;
+
 function read(): Queued[] {
+	if (memoryOnly) return $state.snapshot(outbox.items) as Queued[];
 	try {
 		return JSON.parse(localStorage.getItem(KEY) ?? '[]');
 	} catch {
-		return [];
+		return $state.snapshot(outbox.items) as Queued[];
 	}
 }
 
@@ -28,51 +27,85 @@ function write(items: Queued[]) {
 	outbox.items = items;
 	try {
 		localStorage.setItem(KEY, JSON.stringify(items));
+		memoryOnly = false;
 	} catch {
-		/* storage full or blocked: keep it in memory */
+		memoryOnly = true;
 	}
 }
 
-/** Queue an action. A later save of the same log replaces an earlier one. */
+/** The newest save of each thing that a page is sending right now. */
+const sending = new Map<string, number>();
+let saves = 0;
+
+/** Queue an action. A later save of the same log replaces an earlier one, also one still on its way. */
 export function enqueue(url: string, fields: [string, string][], label: string) {
-	// The same action on the same log, or on the same habit for actions that name a habit (a past day),
-	// or on the same date for the day note.
-	const field = (q: Queued, k: string) => q.fields.find(([f]) => f === k)?.[1];
-	const key = (q: Queued) => q.url + '|' + (field(q, 'occurrence') ?? field(q, 'habit') ?? field(q, 'date') ?? '');
 	const item: Queued = { id: crypto.randomUUID(), url, fields, label, at: Date.now() };
-	write([...read().filter((q) => key(q) !== key(item)), item]);
+	sending.delete(keyOf(item));
+	write([...read().filter((q) => keyOf(q) !== keyOf(item)), item]);
+}
+
+function post(q: Pick<Queued, 'url' | 'fields'>) {
+	const body = new FormData();
+	for (const [k, v] of q.fields) body.append(k, v);
+	return fetch(q.url, { method: 'POST', body, headers: { 'x-sveltekit-action': 'true' } });
+}
+
+/**
+ * Save now and say what became of it. What gets no answer waits here and is sent again. A save
+ * holds everything an earlier one of the same thing did, so once it is saved that one goes.
+ */
+export async function save(url: string, fields: [string, string][], label: string): Promise<Answer> {
+	const key = keyOf({ url, fields });
+	const mine = ++saves;
+	sending.set(key, mine);
+	let a: Answer;
+	try {
+		a = await readAnswer(await post({ url, fields }));
+	} catch {
+		a = { kind: 'later' };
+	}
+	// A newer save of the same thing has started since: what happened to this one no longer matters.
+	if (sending.get(key) !== mine) return a;
+	sending.delete(key);
+	if (a.kind === 'later') enqueue(url, fields, label);
+	else if (a.kind === 'saved' && read().some((q) => keyOf(q) === key)) write(read().filter((q) => keyOf(q) !== key));
+	return a;
 }
 
 /** Send what is waiting. Stops at the first network failure and tries again later. */
 export async function flush(): Promise<number> {
-	if (!browser || outbox.syncing || !navigator.onLine) return 0;
-	const items = read();
-	if (!items.length) return 0;
+	if (!browser || outbox.syncing || !navigator.onLine || !read().length) return 0;
 	outbox.syncing = true;
-	let sent = 0;
 	try {
-		for (const q of items) {
-			const body = new FormData();
-			for (const [k, v] of q.fields) body.append(k, v);
-			try {
-				await fetch(q.url, { method: 'POST', body, headers: { 'x-sveltekit-action': 'true' } });
-			} catch {
-				break;
-			}
-			// Delivered (a server refusal won't get better by retrying).
-			write(read().filter((x) => x.id !== q.id));
-			sent++;
-		}
+		return await sendAll({ read, write }, post, (q) => sending.has(keyOf(q)));
 	} finally {
 		outbox.syncing = false;
 	}
-	return sent;
+}
+
+/** Send a refused action again, for instance after changing what it was refused for. */
+export function retry(id: string) {
+	write(read().map(({ refused, ...q }) => (q.id === id || !refused ? q : { ...q, refused })));
+	return flush();
+}
+
+/** Give up on an action, and how to take that back. */
+export function discard(id: string): () => void {
+	const q = read().find((x) => x.id === id);
+	write(read().filter((x) => x.id !== id));
+	return () => {
+		if (q) write([...read().filter((x) => keyOf(x) !== keyOf(q)), q]);
+	};
 }
 
 /** Start watching the connection. Call once from the app layout. */
 export function startOutbox(onSent: (n: number) => void) {
-	outbox.items = read();
-	const go = () => flush().then((n) => n && onSent(n));
+	// Untracked: an effect that calls this would otherwise run again after every round, and with
+	// something still waiting that is a round without pause.
+	const go = () => untrack(() => flush().then((n) => n && onSent(n)));
+	untrack(() => {
+		outbox.items = read();
+	});
 	window.addEventListener('online', go);
 	const t = setInterval(go, 30_000);
 	go();
