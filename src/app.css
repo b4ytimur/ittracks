@@ -69,6 +69,12 @@ button.small { padding: 0.25rem 0.6rem; font-size: 0.85rem; }
 .list { list-style: none; padding: 0; margin: 0; }
 .list li + li { margin-top: 0.5rem; }
 .list a.card { display: block; text-decoration: none; color: inherit; }
+.page-title { font-size: var(--font-size-page-title); line-height: 2rem; font-weight: 700; }
+.section-title { font-size: var(--font-size-section-title); line-height: 1.5rem; font-weight: 700; }
+.card-title { font-size: var(--font-size-card-title); line-height: 1.25rem; font-weight: 600; }
+.figure { font-size: var(--font-size-figure); line-height: 2rem; font-weight: 600; }
+.meta { font-size: var(--font-size-meta); line-height: 1.25rem; }
+.small-text { font-size: var(--font-size-meta); }
 .muted { color: var(--muted); }
 .error { color: var(--danger); }
 .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.4rem; }
