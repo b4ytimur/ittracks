@@ -2,7 +2,7 @@ import { error, fail, redirect } from '@sveltejs/kit';
 import { and, eq, isNull } from 'drizzle-orm';
 import { galleryItem, PACK_OF } from '$lib/gallery';
 import { packById } from '$lib/packs';
-import { takePack, undoPack } from '$lib/server/packs';
+import { takePack, undoPack, unitsWith } from '$lib/server/packs';
 import { getPacks, getUnits } from '$lib/server/settings';
 import { userToday } from '$lib/server/today';
 import { addTemplate, addedPath, readAddForm } from '$lib/server/repo/templates';
@@ -14,16 +14,17 @@ import { listAreas } from '$lib/server/repo/areas';
 import type { TemplateFile } from '$lib/template';
 import type { Actions, PageServerLoad } from './$types';
 
+/** The pack a ready-made template brings, unless the account has it. */
+const packFor = (accountId: string, slug: string) => (PACK_OF[slug] && !getPacks(accountId).includes(PACK_OF[slug]) ? packById(PACK_OF[slug]) : undefined);
+
 /** A ready-made template, or one you saved (by its id): `mine` says which. */
 function find(accountId: string, slug: string): { template: TemplateFile; mine: boolean } | null {
-	const builtIn = galleryItem(slug, getUnits(accountId));
+	const pack = packFor(accountId, slug);
+	const builtIn = galleryItem(slug, pack ? unitsWith(accountId, pack.id) : getUnits(accountId));
 	if (builtIn) return { template: builtIn.template, mine: false };
 	const saved = getSavedTemplate(accountId, slug);
 	return saved ? { template: saved.template, mine: true } : null;
 }
-
-/** The pack a ready-made template brings, unless the account has it. */
-const packFor = (accountId: string, slug: string) => (PACK_OF[slug] && !getPacks(accountId).includes(PACK_OF[slug]) ? packById(PACK_OF[slug]) : undefined);
 
 export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 	const accountId = locals.account!.id;
@@ -61,7 +62,7 @@ export const actions: Actions = {
 			if (taken && 'undo' in taken) undoPack(accountId, taken.undo);
 			return fail(400, { error: r.error });
 		}
-		redirect(303, addedPath(r, add.tpl.view));
+		return { added: { name: r.name, path: addedPath(r, add.tpl.view), made: r.made, pack: taken && 'undo' in taken ? taken.undo : null } };
 	},
 	/** Take a template you saved out of your Gallery. The habits added from it stay. */
 	delete: ({ locals, params }) => {

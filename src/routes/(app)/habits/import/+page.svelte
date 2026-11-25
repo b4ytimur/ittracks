@@ -1,63 +1,50 @@
 <script lang="ts">
-	import TemplatePreview from '$lib/TemplatePreview.svelte';
-	import { templateFile, type TemplateFile } from '$lib/template';
+	// A template file: checked first, in words. Nothing is added until Add is pressed.
+	import TemplateSentence from '$lib/say/TemplateSentence.svelte';
+	import { addFrom } from '$lib/say/add';
+	import { checkTemplate, type TemplateFile } from '$lib/template';
+	import EditChrome from '$lib/ui/EditChrome.svelte';
 
-	let { data, form } = $props();
+	let { data } = $props();
 
 	let text = $state('');
 	let tpl = $state.raw<TemplateFile | null>(null);
 	let problem = $state('');
+	let busy = $state(false);
 
 	async function read(e: Event & { currentTarget: HTMLInputElement }) {
 		problem = '';
 		tpl = null;
 		const file = e.currentTarget.files?.[0];
 		if (!file) return;
-		if (file.size > 1_000_000) return (problem = 'That file is too large for a template.');
-		const raw = await file.text();
-		let json: unknown;
-		try {
-			json = JSON.parse(raw);
-		} catch {
-			return (problem = 'That file is not valid JSON.');
-		}
-		const parsed = templateFile.safeParse(json);
-		if (!parsed.success) return (problem = 'That file is not an ittracks template.');
+		const raw = await file.slice(0, 1_000_001).text();
+		const c = checkTemplate(raw);
+		if (!c.ok) return void (problem = c.why);
 		text = raw;
-		tpl = parsed.data;
+		tpl = c.tpl;
+	}
+	async function add(e: SubmitEvent) {
+		e.preventDefault();
+		if (busy) return;
+		busy = true;
+		problem = await addFrom('?/add', new FormData(e.target as HTMLFormElement));
+		busy = false;
 	}
 </script>
 
-<svelte:head><title>Import a template · ittracks</title></svelte:head>
+<svelte:head><title>Add a template · ittracks</title></svelte:head>
 
-<header class="bar">
-	<h1>{tpl ? tpl.name : 'Import a template'}</h1>
-	<a href="/habits">Habits</a>
-</header>
+<EditChrome title={tpl ? tpl.name : 'Add a template'} modes={['use']} back={{ href: '/habits', label: 'Habits' }} hints={{ use: tpl?.description.split('\n')[0] || 'A file someone shared, or one you saved. Nothing is added until you press Add.' }} />
 
-<label
-	>Template file
-	<input type="file" accept=".json,application/json" onchange={read} aria-label="Template file" /></label
->
-<p class="muted small-text">A <code>.ittracks.json</code> file someone shared, or one you exported. Nothing is added until you press Add.</p>
-{#if problem}<p class="error">{problem}</p>{/if}
+<div class="field"><label class="label" for="tpl-file">Template file</label><input id="tpl-file" type="file" accept=".json,application/json" onchange={read} /></div>
+{#if problem}<p class="notice" data-tone="error" role="alert"><span class="notice-text">{problem}</span></p>{/if}
 
 {#if tpl}
 	{#key text}
-		<form method="POST" action="?/add" class="stack" style="margin-top: 1rem">
+		<form onsubmit={add}>
 			<input type="hidden" name="template" value={text} />
-			<TemplatePreview {tpl} today={data.today} libraryNames={data.libraryNames} habitNames={data.habitNames} areaNames={data.areaNames} />
-			{#if form?.error}<p class="error">{form.error}</p>{/if}
-			<button class="primary">Add this habit</button>
-			<p class="muted small-text">You can change the schedule, Tasks and targets afterwards in the habit editor.</p>
+			<TemplateSentence {tpl} today={data.today} libraryNames={data.libraryNames} habitNames={data.habitNames} areaNames={data.areaNames} />
+			<div class="ob-add l-cluster"><button class="primary hit" aria-disabled={busy}>{busy ? 'Adding…' : tpl.children.length ? `Add these ${tpl.children.length + 1} habits` : 'Add this habit'}</button><span class="meta muted">Anything can be changed on its page afterwards.</span></div>
 		</form>
 	{/key}
-{:else if form?.error}
-	<p class="error">{form.error}</p>
 {/if}
-
-<style>
-	.small-text {
-		font-size: 0.85rem;
-	}
-</style>

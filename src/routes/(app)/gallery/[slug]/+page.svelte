@@ -1,48 +1,43 @@
 <script lang="ts">
-	import TemplatePreview from '$lib/TemplatePreview.svelte';
+	import TemplateSentence from '$lib/say/TemplateSentence.svelte';
+	import { addFrom } from '$lib/say/add';
+	import EditChrome from '$lib/ui/EditChrome.svelte';
 
-	let { data, form } = $props();
+	let { data } = $props();
 	const inside = $derived(data.template.children.length);
+	let problem = $state('');
+	let busy = $state(false);
+	async function add(e: SubmitEvent) {
+		e.preventDefault();
+		if (busy) return;
+		busy = true;
+		problem = await addFrom('?/add', new FormData(e.target as HTMLFormElement));
+		busy = false;
+	}
 </script>
 
 <svelte:head><title>{data.template.name} · Gallery · ittracks</title></svelte:head>
 
-<header class="bar">
-	<h1>{data.template.name}</h1>
-	<a href="/gallery">Gallery</a>
-</header>
+<EditChrome title={data.template.name} modes={['use']} back={{ href: '/gallery', label: 'Gallery' }} hints={{ use: data.template.description.split('\n')[0] }} />
 
-{#if data.saved}<p class="card added">Saved to your Gallery. Add it from here whenever you like, or download it to send to someone.</p>{/if}
+{#if data.saved}<p class="notice" role="status"><span class="notice-text">Saved to your Gallery. Add it from here whenever you like, or download it to send to someone.</span></p>{/if}
 
-<form method="POST" action="?/add" class="stack">
-	<TemplatePreview tpl={data.template} today={data.today} libraryNames={data.libraryNames} habitNames={data.habitNames} areaNames={data.areaNames} />
-	{#if data.pack}<p class="muted small-text">It brings the {data.pack} pack: {data.brings} You can change or take out any of it in Settings.</p>{/if}
-	{#if form?.error}<p class="error">{form.error}</p>{/if}
-	<button class="primary">{inside ? `Add these ${inside + 1} habits` : 'Add this habit'}</button>
-	<p class="muted small-text">You can change the schedule, Tasks and targets afterwards in the habit editor.</p>
+<form onsubmit={add}>
+	<TemplateSentence tpl={data.template} today={data.today} libraryNames={data.libraryNames} habitNames={data.habitNames} areaNames={data.areaNames} brings={data.pack ? `The ${data.pack} pack: ${data.brings}` : ''} />
+	{#if problem}<p class="error" role="alert">{problem}</p>{/if}
+	<div class="ob-add l-cluster"><button class="primary hit" aria-disabled={busy}>{busy ? 'Adding…' : inside ? `Add these ${inside + 1} habits` : 'Add this habit'}</button><span class="meta muted">Anything can be changed on its page afterwards.</span></div>
 </form>
 
 {#if data.mine}
-	<section class="row mine">
-		<a href="/gallery/{data.slug}/template.json" download>Download the file</a>
-		<form method="POST" action="?/delete">
-			<button class="danger">Remove from my Gallery</button>
-		</form>
-	</section>
-	<p class="muted small-text">Removing it keeps the habits you added from it.</p>
+	<div class="l-cluster mine">
+		<a class="button hit" href="/gallery/{data.slug}/template.json" download>Download the file</a>
+		<form method="POST" action="?/delete"><button class="quiet hit">Remove from my Gallery</button></form>
+		<span class="meta muted">Removing it keeps the habits you added from it.</span>
+	</div>
 {/if}
 
 <style>
-	.small-text {
-		font-size: 0.85rem;
-	}
 	.mine {
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		margin-top: 1rem;
-	}
-	.added {
-		border-color: var(--accent);
+		margin-block-start: var(--space-section);
 	}
 </style>

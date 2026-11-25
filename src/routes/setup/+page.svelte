@@ -2,15 +2,32 @@
 	let { form } = $props();
 </script>
 
-<svelte:head><title>Set up ittracks</title></svelte:head>
+<svelte:head><title>Set up ittracks · ittracks</title></svelte:head>
 
-<main class="auth">
-	<h1>Welcome to ittracks</h1>
-	<p class="muted">Create the account for this server. You only do this once.</p>
-	<form method="POST" class="stack">
-		<label>Username <input name="username" value={form?.username ?? ''} autocomplete="username" required /></label>
-		<label>Password <input name="password" type="password" autocomplete="new-password" minlength="8" required /></label>
-		{#if form?.error}<p class="error">{form.error}</p>{/if}
-		<button class="primary">Create account</button>
+<main class="ob-auth">
+	<h1 class="page-title">Welcome to ittracks</h1>
+	<p class="meta muted">Create the account for this server. You only do this once.</p>
+	<form method="POST" class="card">
+		<div class="field">
+			<label class="label" for="user">Username</label>
+			<input id="user" name="username" value={form?.username ?? ''} autocomplete="username" required aria-invalid={form?.field === 'username' || undefined} aria-describedby="user-e" />
+			{#if form?.field === 'username'}<p class="error meta" id="user-e" role="alert">{form.error}</p>{/if}
+		</div>
+		<div class="field">
+			<label class="label" for="pw">Password</label>
+		<p class="field-hint meta" id="pw-h">At least 8 characters.</p>
+			<input id="pw" name="password" type="password" autocomplete="new-password" minlength="8" required aria-invalid={form?.field === 'password' || undefined} aria-describedby="pw-h pw-e" />
+			{#if form?.field === 'password'}<p class="error meta" id="pw-e" role="alert">{form.error}</p>{/if}
+		</div>
+		<div><button class="primary hit">Create account</button></div>
 	</form>
 </main>
+
+<style>
+	.ob-auth {
+		padding-inline: var(--space-group);
+	}
+	p {
+		margin: 0;
+	}
+</style>

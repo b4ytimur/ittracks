@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { TEMPLATE_VERSION, applyAnswers, fromTemplate, templateFile, toTemplate, type TemplateFile } from './template';
+import { TEMPLATE_VERSION, applyAnswers, fromTemplate, templateFile, toTemplate, type TemplateFile, checkTemplate, TEMPLATE_FORMAT } from './template';
+import { listGallery } from './gallery';
 import { habitForm, noteDefaults, rowWords, type HabitForm, type TaskForm } from './forms';
 import { shareDetails, shareForm, type ShareCtx } from './share';
 import { checkShare, shareRules } from './rules/share';
@@ -555,5 +556,23 @@ describe('habits inside a habit (version 8)', () => {
 		delete v7.children;
 		expect(templateFile.parse(v7).children).toEqual([]);
 		expect(fromTemplate(templateFile.parse(v7), '2026-12-07').children).toEqual([]);
+	});
+});
+
+describe('checking a file before adding it', () => {
+	const why = (text: string) => {
+		const c = checkTemplate(text);
+		return c.ok ? '' : c.why;
+	};
+	it('says in words what is wrong', () => {
+		expect(why('nope')).toMatch(/isn’t JSON/);
+		expect(why('{}')).toMatch(/isn’t an ittracks template/);
+		expect(why(JSON.stringify({ tables: {}, username: 'x' }))).toMatch(/whole backup/);
+		expect(why(JSON.stringify({ format: TEMPLATE_FORMAT, version: TEMPLATE_VERSION + 1 }))).toMatch(/newer ittracks \(version 11/);
+		expect(why(JSON.stringify({ format: TEMPLATE_FORMAT, version: TEMPLATE_VERSION, name: 'x', habit: {} }))).toMatch(/broken at habit/);
+		expect(why('x'.repeat(1_000_001))).toMatch(/too large/);
+	});
+	it('reads what the Gallery ships', () => {
+		for (const i of listGallery()) expect(checkTemplate(JSON.stringify(i.template)).ok).toBe(true);
 	});
 });

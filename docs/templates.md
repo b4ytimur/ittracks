@@ -22,18 +22,15 @@ A routine or a group shares as a whole program: the habits inside it come along,
 
 For a plain export with no questions, use **Settings → Templates → Save as a file**.
 
-## Import a template
+## Add a template file
 
-**Habits → Import a template file**, and pick the file. Nothing is added until you press **Add this habit**. First you see:
+**Habits → Import a template file**, or **Add a file** on an empty Today, and pick the file. It is checked first: a file that can't be read, that isn't a template, that is a whole backup, or that a newer ittracks made says so in words, and nothing is changed. Nothing is added until you press **Add this habit**. First you see:
 
-- The **Habit name**, with a note if you already have a habit by that name.
-- The template's questions (days, time, starting numbers), and the next four weeks with your answers.
-- Its Tasks. A Task with the same name as one in your Library uses yours, unless you tick **Make separate Tasks instead**.
-- The habits inside it, if any, with their days and Tasks. They are added inside the new habit, all at once: if one can't go where the file puts it, nothing is added. A starting-number question sets its targets in every habit that has them.
-- Areas you don't have yet, with a box to add them.
-- **Remind me**, when the habit has a time or part of the day.
+- The habit as a sentence: its name and its days. The template's questions (days, time, starting numbers) have their defaults, so adding takes one press; change one and the sentence follows. **Called** is the habit's name, with a note if you already have one by that name.
+- **What it adds**: the habits inside it, what each Variant has in it, its Tasks and what they log, and the [pack](packs.md) that comes with it. A Task with the same name as one in your Library is yours, used as it is, unless you tick **Make separate Tasks**.
+- Areas you don't have yet, with a box to add them, and **Remind me** when the habit has a time or part of the day.
 
-Change anything afterwards in the habit editor.
+A program's habits are added all at once: if one can't go where the file puts it, nothing is added. Adding has Undo: what it made goes again, except a Task another habit uses by then. Anything can be changed on the habit's page afterwards.
 
 ## The Gallery
 
@@ -41,8 +38,8 @@ Change anything afterwards in the habit editor.
 
 Templates you saved from the Share page are at the top, under **Yours**, newest first. Open one to add it again (a whole program adds all its habits at once), **Download the file** to send it to someone, or **Remove from my Gallery**; removing it keeps the habits you added from it. Saved templates are part of the full export in Settings, so they move with your data.
 
-Filter by search, category, **Any days a week**, **Any time a day** and **No equipment**. Adding one works like an import, with the same questions and preview. Weights in gallery templates use your [default weight unit](units.md#your-default-weight-unit).
+The Gallery groups habits by what you want (**Get stronger**, **Learn something**, **Stop something**) and has a search and three filters. **Add** on a row adds it as it comes, with Undo; open the row to change its words first. Adding one brings the [pack](packs.md) it belongs to, and says so. Weights use the unit Weight is [shown in](units.md#change-your-units).
 
 ## File format
 
-The format is defined in `src/lib/template.ts` and is at version 9. Version 7 added phases, which start on the day you add the template. Version 8 added `children`: the habits inside the file's habit, each naming the habit it sits in by key, parents first. Version 9 added `map` to a follower's schedule: the routine's Variant key paired with the habit's own Variant key. Older files (versions 1 to 8) still import; newer fields take their defaults (versions 1 to 7 as one habit). Notes in a template come from a stranger, so they are shown with raw HTML off and images as links (see [Notes](notes-and-journal.md)).
+The format is defined in `src/lib/template.ts` and is at version 10. Version 7 added phases, which start on the day you add the template. Version 10 added a Task's own words and `times` and `better` on fields. Version 8 added `children`: the habits inside the file's habit, each naming the habit it sits in by key, parents first. Version 9 added `map` to a follower's schedule: the routine's Variant key paired with the habit's own Variant key. Older files (versions 1 to 8) still import; newer fields take their defaults (versions 1 to 7 as one habit). Notes in a template come from a stranger, so they are shown with raw HTML off and images as links (see [Notes](notes-and-journal.md)).

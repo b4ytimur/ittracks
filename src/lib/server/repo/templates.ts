@@ -6,11 +6,12 @@ import { metric, task } from '../db/schema';
 import { applyAnswers, fromTemplate, type TemplateAnswers, type TemplateFile } from '$lib/template';
 import { habitForm, type HabitForm, type TaskForm } from '$lib/forms';
 import { MAX_DEPTH } from '$lib/engine/parts';
-import { saveTask } from './tasks';
+import { saveTask, taskUsage } from './tasks';
 import { checkHabitForm, checkLinks, saveHabit } from './habits';
 import { checkTask } from '$lib/rules/task';
 import { identityFor } from './identities';
 import { areaFor } from './areas';
+import { trash } from '../trash';
 
 export interface AddResult {
 	habitId: string;
@@ -19,6 +20,8 @@ export interface AddResult {
 	reused: number;
 	/** Habits added inside it. */
 	inside: number;
+	/** Everything it made, for its Undo. */
+	made: { habits: string[]; tasks: string[] };
 }
 
 /** Where adding a template lands: Habits, saying what was added (and the view it suggests). */
@@ -144,7 +147,7 @@ export function addTemplate(
 			const habitId = save(habit, identities, null);
 			const saved = new Map<string | null, string>([[null, habitId]]);
 			for (const c of children) saved.set(c.key, save(c.habit, c.identities, saved.get(c.parent)!));
-			return { habitId, name: habit.name, created: toCreate.length, reused: taskMap.size, inside: children.length };
+			return { habitId, name: habit.name, created: toCreate.length, reused: taskMap.size, inside: children.length, made: { habits: [...saved.values()], tasks: ordered.map((t) => t.id) } };
 		});
 	} catch (e) {
 		if (e instanceof Refused) return { error: `The template can't be added: ${e.message}` };
@@ -162,7 +165,9 @@ function depthOf(tasks: { id: string; form: TaskForm }[], id: string, seen = new
 /** Read the add form shared by the Gallery and file import: answers, name, and the choices under the preview. */
 export function readAddForm(f: FormData, tpl: TemplateFile) {
 	const answers: TemplateAnswers = {};
-	for (const q of tpl.questions) {
+	// Added as it comes: its questions keep their defaults.
+	const plain = f.get('plain') === 'on';
+	for (const q of plain ? [] : tpl.questions) {
 		const name = `q_${q.key}`;
 		if (q.kind === 'days') answers[q.key] = f.getAll(name).map(Number).filter((d) => Number.isInteger(d));
 		else if (q.kind === 'number') {
@@ -177,7 +182,17 @@ export function readAddForm(f: FormData, tpl: TemplateFile) {
 		tpl: named,
 		answers,
 		reuse: f.get('separate') !== 'on',
-		remind: f.get('remind') === 'on',
+		remind: plain ? tpl.habit.remind : f.get('remind') === 'on',
 		addAreas: f.get('addAreas') === 'on'
 	};
+}
+
+/** Take back what adding a template made. Tasks something else uses by now stay. */
+export function unadd(accountId: string, made: AddResult['made'], today: string): boolean {
+	// The habits inside go before the one they are in.
+	const gone = [...made.habits].reverse().map((id) => !!trash(accountId, 'habit', id, today));
+	const usage = taskUsage(accountId);
+	const ours = new Set(made.habits);
+	for (const id of [...made.tasks].reverse()) if (!usage.get(id)?.habits.some((h) => !ours.has(h.id))) trash(accountId, 'task', id, today);
+	return gone.at(-1) ?? false;
 }
