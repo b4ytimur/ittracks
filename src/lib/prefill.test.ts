@@ -1,6 +1,6 @@
 // What Finish keeps of the values the log screen suggests (last time's, or the targets).
 import { describe, expect, it } from 'vitest';
-import { hasLog, isSuggestion, keepsSuggestions, onlySuggested, type PlaceStart, type PlaceState } from './prefill';
+import { hasLog, isSuggestion, keepsSuggestions, onlySuggested, setByHand, type PlaceStart, type PlaceState } from './prefill';
 
 const fresh = (prefill: Record<string, unknown>): PlaceStart => ({ prefill, saved: {}, savedAny: false });
 const at = (summary: Record<string, unknown>, done = false): PlaceState => ({ sets: [{ done, values: {} }], summary });
@@ -30,5 +30,22 @@ describe('suggested values', () => {
 		expect(onlySuggested(states, starts)).toEqual([]);
 		expect(keepsSuggestions(states, starts, 1, { finish: true, confirmed: false })).toBe(true);
 		expect(keepsSuggestions(states, starts, 1, { finish: false, confirmed: true })).toBe(false);
+	});
+
+	it('a value typed by hand is logged, also when it is the suggested number', () => {
+		const starts = [fresh({ time: 112 }), fresh({ time: 110 }), fresh({ time: 108 })];
+		const states = [at({ time: 105 }), setByHand(at({ time: 110 }), 'time', 110), at({ time: 108 })];
+		expect(isSuggestion(states[1], starts[1], 'time')).toBe(false);
+		expect(hasLog(states[1], starts[1])).toBe(true);
+		// Only the round nobody touched is asked about. Saving as you go sends a value unless it is a
+		// suggestion it doesn't keep, so the typed one goes too.
+		expect(onlySuggested(states, starts)).toEqual([2]);
+		const sent = (i: number) => keepsSuggestions(states, starts, i, { finish: false, confirmed: false }) || !isSuggestion(states[i], starts[i], 'time');
+		expect([0, 1, 2].map(sent)).toEqual([true, true, false]);
+	});
+
+	it('a place with nothing suggested (a finished log) has no suggestions', () => {
+		expect(isSuggestion(at({ time: 110 }), fresh({}), 'time')).toBe(false);
+		expect(hasLog(at({ time: 110 }), fresh({}))).toBe(true);
 	});
 });

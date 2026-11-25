@@ -252,4 +252,9 @@ describe('"Same as last time" on a past day', () => {
 		expect(lastTimeFor(done, { id: 'wed', date: WED })?.id).toBe('mon');
 		expect(lastTimeFor([{ id: 'wed', date: WED }], { id: 'wed', date: WED })).toBeUndefined();
 	});
+
+	it('earlier only: nothing from a day that came after', () => {
+		expect(lastTimeFor(done, { id: 'sun', date: '2026-11-22' }, { earlierOnly: true })).toBeUndefined();
+		expect(lastTimeFor(done, { id: 'thu', date: THU }, { earlierOnly: true })?.id).toBe('wed');
+	});
 });

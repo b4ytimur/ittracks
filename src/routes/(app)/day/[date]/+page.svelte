@@ -15,6 +15,7 @@
 	import GroupHeading from '$lib/ui/GroupHeading.svelte';
 	import LogControl, { type Way } from '$lib/ui/LogControl.svelte';
 	import { dayCount } from '$lib/history/day';
+	import { usualWay } from '$lib/log/usual';
 
 	let { data, form } = $props();
 
@@ -107,8 +108,9 @@
 				: [];
 		const rest = [...levels, ...details, ...(skip.length && (levels.length || details.length) ? ['-' as const] : []), ...skip];
 		if (it.slotCount > 0) {
-			if (it.canRepeat) return { act: { label: 'Same as last', action: '?/same', fields, submit: after }, ways: rest };
-			if (it.quickDone) return { act: { label: 'Done', action: '?/done', fields, submit: after }, ways: rest };
+			const usual = usualWay(it);
+			if (usual === 'done') return { act: { label: 'Done', action: '?/done', fields, submit: after }, ways: rest };
+			if (usual === 'same') return { act: { label: 'Same as last', action: '?/same', fields, submit: after }, ways: rest };
 			return { act: { label: 'Log', action: '?/open', fields }, ways: [...levels, ...skip] };
 		}
 		return { act: { label: 'Done', action: '?/done', fields: { ...fields, slots: '0' }, submit: after }, ways: [...levels, ...skip] };

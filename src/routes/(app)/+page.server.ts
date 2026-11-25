@@ -20,7 +20,7 @@ import { unloggedOn } from '$lib/server/backfill';
 import { logWindow } from '$lib/engine/backfill';
 import { ActionError, appActor } from '$lib/server/core/actor';
 import { undoRoutine, withRoutineUndo } from '$lib/server/routine-day';
-import { addSlip, doneOcc, plusOcc, removeCraving, removeSlip, reopenOcc, resistCraving, skipOcc } from '$lib/server/core/log';
+import { addSlip, doneOcc, plusOcc, removeCraving, removeSlip, reopenOcc, resistCraving, skipOcc, undoClears } from '$lib/server/core/log';
 import type { Actions, PageServerLoad } from './$types';
 
 /** The signed-in person, as the core's actions and the event log see them. */
@@ -196,7 +196,9 @@ export const actions: Actions = {
 		if (!o) error(404);
 		const undo = field(f, 'undo');
 		if (undo) return undoRoutine(actorOf(locals, cookies), o.occ, undo) ? undefined : fail(400, { error: 'Could not undo.' });
-		reopenOcc(actorOf(locals, cookies), o.occ, field(f, 'clear') === '1');
+		const actor = actorOf(locals, cookies);
+		// The row's Undo after a reload doesn't know how the day was logged: the event log does.
+		reopenOcc(actor, o.occ, f.has('clear') ? field(f, 'clear') === '1' : undoClears(actor, o.occ));
 	},
 	/** A habit from the sentence it was said in. */
 	start: async ({ request, locals, cookies }) => {
