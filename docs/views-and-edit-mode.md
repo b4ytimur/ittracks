@@ -49,7 +49,7 @@ Pages edit in place. The switch at the top of a page (**Use**, **Edit**, and **S
 - Drag to reorder (this is **My order**, shared with Today).
 - Tap a name to rename it.
 - **Archive** strikes a habit where it stands; **Unarchive** takes that back. When you leave Edit it goes, and the line above the tabs has the Undo.
-- Drop a habit on a group or routine to put it inside; drag it left to take it out. With the keyboard, the right arrow puts a habit inside the one above and the left arrow takes it out. See [Groups and routines](groups-and-routines.md).
+- Up and down picks the place; sideways picks how deep. To the right puts a habit inside the group or routine above it, to the left takes it out; the line's start says which. With the keyboard, the right arrow puts a habit inside the one above and the left arrow takes it out. See [Groups and routines](groups-and-routines.md).
 
 ### Library
 

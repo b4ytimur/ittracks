@@ -14,7 +14,7 @@
 	import BulkBar from '$lib/bulk/BulkBar.svelte';
 	import DayNote from '$lib/DayNote.svelte';
 	import Markdown from '$lib/Markdown.svelte';
-	import { dayCount, dayMark, dayTitle } from '$lib/history/day';
+	import { dayCount, dayMark, dayTitle, placeNotes } from '$lib/history/day';
 	import { dayExcerpt } from '$lib/journal';
 	import { STATUSES } from '$lib/views';
 	import { saveLayout } from '$lib/viewclient';
@@ -29,6 +29,7 @@
 	let q = $derived(data.q);
 
 	type Occ = (typeof data.history)[number][1]['occurrences'][number];
+	type Note = (typeof data.notes)[string]['items'][number];
 	const title = (d: string) => dayTitle(d, data.today);
 	const levelName = { minimum: 'Minimum', target: 'Target', stretch: 'Stretch' } as const;
 
@@ -39,12 +40,16 @@
 	const days = $derived.by(() => {
 		const out = data.history
 			.map(([date, day]) => {
-				const occurrences = data.notesOnly || view.status === 'slip' ? [] : day.occurrences.filter((o) => fits(o) && (view.status === 'all' || o.status === view.status));
-				const slips = !data.notesOnly && (view.status === 'all' || view.status === 'slip') ? day.slips.filter(fits) : [];
 				const w = data.notes[date];
+				// With notes only, the rows that have one.
+				const wrote = (kind: 'slip' | null) => (x: { habitId: string }) => !data.notesOnly || (w?.items ?? []).some((i) => i.habitId === x.habitId && (i.kind === 'slip') === (kind === 'slip'));
+				const status = data.notesOnly ? 'all' : view.status;
+				const occurrences = status === 'slip' ? [] : day.occurrences.filter((o) => fits(o) && wrote(null)(o) && (status === 'all' || o.status === status));
+				const slips = status === 'all' || status === 'slip' ? day.slips.filter((s) => fits(s) && wrote('slip')(s)) : [];
 				// A note belongs to its habit; the day's own note shows while nothing is filtered.
-				const items = (w?.items ?? []).filter((i) => (view.habit ? i.habitId === view.habit : view.areas.length ? occurrences.some((o) => o.habitId === i.habitId) : data.notesOnly || view.status === 'all'));
-				return { date, occurrences, slips, items, moods: data.notesOnly ? (w?.moods ?? []) : [], count: dayCount(day.occurrences) };
+				const shows = (i: { habitId: string | null }) => [...occurrences, ...slips].some((x) => x.habitId === i.habitId);
+				const items = (w?.items ?? []).filter((i) => (view.habit ? i.habitId === view.habit : view.areas.length || status !== 'all' ? shows(i) : true));
+				return { date, occurrences, slips, items, notes: placeNotes(items, occurrences, slips), moods: data.notesOnly ? (w?.moods ?? []) : [], count: dayCount(day.occurrences) };
 			})
 			.filter((d) => d.occurrences.length || d.slips.length || d.items.length || d.moods.length);
 		return view.sort === 'oldest' ? out.reverse() : out;
@@ -179,11 +184,22 @@
 	{:else}<EmptyState kind="range" text={data.notesOnly ? `Nothing written in the last ${data.days} days. Journal fields, notes on logs and slips, and day notes show up here.` : `Nothing logged in the last ${data.days} days yet.`} />{/if}
 {/if}
 
+{#snippet note(it: Note, k: string, date: string, alone = '')}
+	<!-- Under its row a note needs no name, only its field's; one that stands alone says what it is. -->
+	<div class="hi-notewrap" class:note-of={alone}>
+		{#if alone}<p class="meta"><span class="muted">{alone}</span> <a class="quiet hit" href={it.href} aria-label="Change {alone}, {title(date)}">Change</a></p>
+		{:else if it.kind === 'field'}<p class="meta muted">{it.title.slice((it.habit ?? '').length).replace(/^ · /, '')}</p>{/if}
+		<div class:hi-clamp={long(it.text) && !openNotes[k]}><Markdown text={it.text} small /></div>
+		{#if long(it.text)}<button type="button" class="quiet hi-show hit" aria-expanded={!!openNotes[k]} aria-label="{openNotes[k] ? 'Show less' : 'Show the whole note'} of {alone || it.habit}, {title(date)}" onclick={() => (openNotes[k] = !openNotes[k])}>{openNotes[k] ? 'Show less' : 'Show the whole note'}</button>{/if}
+	</div>
+{/snippet}
+
 <div class="hi-days">
 	{#each days as day (day.date)}
 		<section class="hi-day" id="d-{day.date}">
 			<GroupHeading title={title(day.date)} {mode} count={!data.notesOnly && day.count.of ? `${day.count.done} of ${day.count.of}` : undefined} verb={data.canBackfill && day.date < data.today && (!data.windowFrom || day.date >= data.windowFrom) ? verb : undefined} />
 			{#snippet verb()}<a class="quiet verb hit" href="/day/{day.date}" aria-label="Log {title(day.date)}">Log this day</a>{/snippet}
+			{#each day.notes.day as it, i (i)}{@render note(it, `${day.date}:d${i}`, day.date, it.title)}{/each}
 			{#if day.moods.length}<p class="tags moods">{#each day.moods as m (m.field + m.value)}<span class="tag">{m.field}: {m.value}</span>{/each}</p>{/if}
 			{#if day.occurrences.length}
 				<EditableList
@@ -203,24 +219,18 @@
 						{#if mode === 'use'}<a class="name" href={hrefOf(o, day.date)}>{o.habit}</a>{:else}<span class="name">{o.habit}</span>{/if}
 						{#if out?.tag}<span class="tags"><span class="tag pending"><span aria-hidden="true">→</span> {out.tag}</span></span>{/if}
 						<p class="meta-line">{#if o.status !== 'missed'}<span class="mark" aria-hidden="true">{o.status === 'done' ? '✓' : '↷'}</span>{' '}{/if}{out?.reason ?? words(o)}</p>
+						{#each day.notes.row.get(o.id) ?? [] as it, i (i)}{@render note(it, `${o.id}:${i}`, day.date)}{/each}
 					{/snippet}
 				</EditableList>
 			{/if}
 			{#if day.slips.length}
 				<ul class="elist slips" data-mode="use" data-density="compact" aria-label="Slips on {title(day.date)}">
 					{#each day.slips as s, i (i)}
-						<li><div class="card link"><span class="slot"></span><div class="content"><a class="name" href="/day/{day.date}">{s.habit}</a><p class="meta-line">Slip{s.count !== 1 ? ` × ${s.count}` : ''}</p></div></div></li>
+						<li><div class="card link"><span class="slot"></span><div class="content"><a class="name" href="/day/{day.date}">{s.habit}</a><p class="meta-line">Slip{s.count !== 1 ? ` × ${s.count}` : ''}</p>{#each day.notes.slip.get(i) ?? [] as it, n (n)}{@render note(it, `${day.date}:s${i}:${n}`, day.date)}{/each}</div></div></li>
 					{/each}
 				</ul>
 			{/if}
-			{#each day.items as it, i (i)}
-				{@const k = `${day.date}:${i}`}
-				<article class="hi-notewrap note-of">
-					<p class="meta"><span class="muted">{it.title}</span> <a class="quiet hit" href={it.href} aria-label="Change {it.title}, {title(day.date)}">Change</a></p>
-					<div class:hi-clamp={long(it.text) && !openNotes[k]}><Markdown text={it.text} small /></div>
-					{#if long(it.text)}<button type="button" class="quiet hi-show hit" aria-expanded={!!openNotes[k]} onclick={() => (openNotes[k] = !openNotes[k])}>{openNotes[k] ? 'Show less' : 'Show all'}</button>{/if}
-				</article>
-			{/each}
+			{#each day.notes.rest as it, i (i)}{@render note(it, `${day.date}:${i}`, day.date, it.title)}{/each}
 		</section>
 	{/each}
 </div>

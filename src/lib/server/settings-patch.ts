@@ -12,7 +12,7 @@ import { kindsProblem, unitKinds, unitTable, unitWord } from '$lib/units';
 import { db } from './db';
 import { metric, task } from './db/schema';
 import { renameRanges } from './repo/ranges';
-import { getGroupings, getKinds, getPacks, getSettings, getTaskTypes, saveSettings, type Settings } from './settings';
+import { getGroupings, getKinds, getNewLines, getPacks, getSettings, getTaskTypes, saveSettings, type Settings } from './settings';
 
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Pick a time like 04:00');
 
@@ -25,12 +25,13 @@ const fields = z
 		nudgeYesterday: z.boolean(),
 		dayNote: z.boolean(),
 		guidedSetup: z.boolean(),
-		showAllSections: z.boolean(),
 		units: unitKinds,
 		groupings: groupingList,
 		taskTypes: z.array(taskTypeSchema).max(60),
 		hints: z.array(z.string().max(40)).max(50),
-		detail: z.partialRecord(z.enum(Object.keys(KINDS) as [Kind, ...Kind[]]), z.array(z.string().max(20)).max(20))
+		detail: z.partialRecord(z.enum(Object.keys(KINDS) as [Kind, ...Kind[]]), z.array(z.string().max(20)).max(20)),
+		newLines: z.partialRecord(z.enum(Object.keys(KINDS) as [Kind, ...Kind[]]), z.array(z.string().max(20)).max(20)),
+		logLayouts: z.record(z.uuid(), z.literal('all')).refine((x) => Object.keys(x).length <= 1000, 'Too many layouts')
 	})
 	.partial()
 	.strict();
@@ -70,6 +71,8 @@ export function patchSettings(accountId: string, body: unknown): SettingsResult 
 	const cur: Settings = { ...getSettings(accountId), units: getKinds(accountId), groupings: getGroupings(accountId), taskTypes: ownTypes(accountId) };
 	cur.hints ??= [];
 	cur.detail ??= {};
+	cur.logLayouts ??= {};
+	cur.newLines = getNewLines(cur);
 	const keys = Object.keys(p.set) as (keyof SettingsSet)[];
 	if (!keys.length) return { error: 'Nothing to change' };
 	const moved = keys.filter((k) => ordered(cur[k]) !== ordered(p.was[k]) && ordered(cur[k]) !== ordered(p.set[k]));

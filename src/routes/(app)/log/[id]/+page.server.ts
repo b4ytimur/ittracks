@@ -216,6 +216,7 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		levels: o.habit.levels?.enabled ? o.habit.levels : null,
 		variantName: v?.name ?? null,
 		variantId: v?.id ?? null,
+		logLayouts: getSettings(accountId).logLayouts ?? {},
 		/** The plan this log follows, to change where it stands: an open log of today only. */
 		plan: !past && o.occ.status === 'due' && v && !v.archived ? (currentForm(accountId, o.habit.id)?.variants ?? null) : null,
 		items,

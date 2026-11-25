@@ -7,7 +7,7 @@
 	import SaidLine from '$lib/detail/SaidLine.svelte';
 	import DeviceReminders from '$lib/settings/DeviceReminders.svelte';
 	import { noReminder, reminderWords } from '$lib/reminder';
-	import { everySection, KINDS, movedSections, SECTIONS, type Kind, type Section } from '$lib/detail/sections';
+	import { everySection, KINDS, LINES_FOR, movedSections, SECTIONS, type Kind, type Section } from '$lib/detail/sections';
 	import { saveSetting } from '$lib/settings/save';
 	import type { Mode } from '$lib/ui/list';
 	import * as W from '$lib/detail/words';
@@ -733,7 +733,7 @@
 		notes: { on: !!h.notes, can: true, clear: () => (h.notes = ''), word: 'Notes' },
 		inside: { on: !!h.parentId || !!base.parentId, can: build && data.groups.length > 0, clear: () => (h.parentId = null), word: 'Inside a group or routine' }
 	});
-	const shows = (id: string) => optional[id].on || (added[id] && (optional[id].can || optional[id].on)) || (data.showAllSections && optional[id].can);
+	const shows = (id: string) => optional[id].on || (added[id] && (optional[id].can || optional[id].on)) || (data.isNew && !!data.newLines[pageKind]?.includes(id) && optional[id].can);
 	// The sections under the first card, in the order this kind of habit has them.
 	let arranging = $state<Mode>('use');
 	const pageKind = $derived<Kind>(!build ? 'break' : isGroupKind ? 'group' : 'build');
@@ -760,6 +760,16 @@
 		if (why) showError(why);
 	}
 	const moveSection = (x: Section, shown: Section[]) => void arrange(movedSections(order, shown), `Moved ${sectionTitle(x)} to ${shown.indexOf(x) + 1} of ${shown.length}, ${everyOne}.`);
+	// Which lines every new one of this kind starts with.
+	const FEATURE: Partial<Record<string, Parameters<typeof off>[0]>> = { levels: 'levels', raise: 'progression', cost: 'cost', identity: 'identities', treat: 'rewards', reward: 'rewards', prep: 'prep', reframe: 'reframe', instead: 'ifThen' };
+	const startLines = $derived(LINES_FOR[pageKind].filter((id) => !FEATURE[id] || !off(FEATURE[id]!)));
+	async function startWith(id: string) {
+		const now = data.newLines[pageKind] ?? [];
+		const on = !now.includes(id);
+		const next = { ...data.newLines, [pageKind]: on ? [...now, id] : now.filter((x) => x !== id) };
+		const why = await saveSetting({ newLines: next }, () => ({ newLines: data.newLines }), on ? `Every new ${KINDS[pageKind]} starts with ${optional[id].word}.` : `A new ${KINDS[pageKind]} no longer starts with ${optional[id].word}.`);
+		if (why) showError(why);
+	}
 	const toAdd = $derived(Object.keys(optional).filter((id) => optional[id].can && !shows(id)));
 	let morePills = $state(false);
 	function add(id: string) {
@@ -1639,6 +1649,11 @@
 	</div>
 {/snippet}
 
+{#snippet startToggles()}
+	<div class="chips">{#each startLines as id (id)}<button type="button" class="toggle" aria-pressed={!!data.newLines[pageKind]?.includes(id)} onclick={() => startWith(id)}>{optional[id].word}</button>{/each}</div>
+	<p class="meta muted">These lines are there from the start on every {KINDS[pageKind]} you make. The rest come with their + button.</p>
+{/snippet}
+
 {#snippet lines()}
 	<div class="card su-lines">
 		{@render line('name', namePart, { lead: true })}
@@ -1664,6 +1679,18 @@
 			{#each morePills ? toAdd : toAdd.slice(0, 6) as id (id)}<button type="button" class="small" onclick={() => add(id)}>+ {optional[id].word}</button>{/each}
 			{#if toAdd.length > 6 && !morePills}<button type="button" class="small" onclick={() => (morePills = true)}>More…</button>{/if}
 		</div>
+	{/if}
+
+	{#if arranging === 'edit'}
+		<div class="field new-lines" role="group" aria-labelledby="new-lines-l">
+			<span class="label" id="new-lines-l">On every new {KINDS[pageKind]}</span>
+			{@render startToggles()}
+		</div>
+	{:else if data.isNew && mode === 'full'}
+		<details class="new-lines">
+			<summary class="meta">On every new {KINDS[pageKind]}</summary>
+			{@render startToggles()}
+		</details>
 	{/if}
 
 	{#each uniq(ruleCheck.errors.map((i) => i.reason)) as reason (reason)}<p class="error">{reason}</p>{/each}
@@ -1846,6 +1873,9 @@
 		margin: 0;
 	}
 	/* Sections stand apart as their headings did on the page itself. */
+	.new-lines {
+		margin-block-start: var(--space-section);
+	}
 	:global(.elist.sections) {
 		--gap: var(--space-section);
 		margin-block-start: var(--space-section);

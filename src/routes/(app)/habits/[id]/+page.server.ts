@@ -24,7 +24,7 @@ import { feelingsUsed, habitLogged, PastEditError } from '$lib/server/history';
 import { identityFor, listIdentities } from '$lib/server/repo/identities';
 import { listTagNames, listTasks, saveTask } from '$lib/server/repo/tasks';
 import { listAreas } from '$lib/server/repo/areas';
-import { getViews, getSettings, getTaskTypes, getUnits, saveSettings } from '$lib/server/settings';
+import { getNewLines, getViews, getSettings, getTaskTypes, getUnits, saveSettings } from '$lib/server/settings';
 import { repaused, userToday } from '$lib/server/today';
 import { ownedHabit } from '$lib/server/owned';
 import { publicKey } from '$lib/server/push';
@@ -176,7 +176,7 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		identities: listIdentities(accountId),
 		areas: listAreas(accountId),
 		ranges: settings.ranges,
-		showAllSections: settings.showAllSections,
+		newLines: getNewLines(settings),
 		detail: settings.detail ?? {},
 		hidden: getViews(accountId).hidden,
 		pinned: !isNew && settings.pinned.includes(params.id),

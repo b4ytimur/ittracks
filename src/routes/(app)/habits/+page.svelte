@@ -207,7 +207,7 @@
 	onmode={setMode}
 	hints={{
 		use: `${shown.length} ${shown.length === 1 ? 'habit' : 'habits'}`,
-		edit: 'Drag ⠿ to reorder, tap a name to rename it. Drop a habit on a group or routine to put it inside, or drag it left to take it out. The order is shared with Today.',
+		edit: 'Drag ⠿ to reorder: sideways puts a habit inside the group or routine above it, or takes it out. Tap a name to rename it. The order is shared with Today.',
 		select: 'Tick habits to change them together.'
 	}}
 >

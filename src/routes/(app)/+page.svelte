@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { queueable } from '$lib/queueable';
-	import { dismiss, hold, release, showError, showToast, undoWith } from '$lib/toast.svelte';
+	import { undoShows } from '$lib/echo';
+	import { band, dismiss, dismissAbout, hold, release, showError, showToast, undoWith } from '$lib/toast.svelte';
 	import type { ActionResult, SubmitFunction } from '@sveltejs/kit';
 	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
@@ -122,7 +123,7 @@
 		untrack(() => {
 			if (f.kind === 'notDue') notDue = f;
 			else if (f.kind === 'error') showError(f.text);
-			else showToast(f.text, f.kind === 'did' && f.occurrence ? undoWith('/?/undo', { occurrence: f.occurrence, clear: f.clear ? '1' : '' }) : undefined);
+			else showToast(f.text, f.kind === 'did' && f.occurrence ? undoWith('/?/undo', { occurrence: f.occurrence, clear: f.clear ? '1' : '' }) : undefined, f.kind === 'did' ? f.occurrence : undefined);
 		});
 	});
 
@@ -138,7 +139,7 @@
 			showToast(
 				`Saved ${item.name}${item.progress ? `: ${progressText(item.progress)}` : ''}. It counts once it reaches ${short === 'target' ? 'the full target' : 'the Minimum'}, and stays open until the day ends.`
 			);
-		else if (item) showToast(`Logged ${item.name}.`, undoWith('/?/undo', { occurrence: id, clear: clear ? '1' : '' }));
+		else if (item) showToast(`Logged ${item.name}.`, undoWith('/?/undo', { occurrence: id, clear: clear ? '1' : '' }), id);
 		const u = new URL(page.url);
 		u.searchParams.delete('did');
 		u.searchParams.delete('clear');
@@ -160,7 +161,7 @@
 				undo
 			);
 		else {
-			const entry = showToast(`${did.skipped ? 'Skipped' : 'Logged'} ${did.habit}.`, undo);
+			const entry = showToast(`${did.skipped ? 'Skipped' : 'Logged'} ${did.habit}.`, undo, did.occurrence);
 			const item = data.build.find((b) => b.occurrence?.id === did.occurrence);
 			if (item && !did.skipped) celebrate(item.habitId, entry, undo);
 		}
@@ -865,8 +866,9 @@
 		{@const undo = just.get(item.habitId)?.undo}
 		{#if undo}
 			<button type="button" class="quiet hit" aria-label="Undo {item.name}" onclick={undo}>Undo</button>
-		{:else}
-			<form method="POST" action="?/undo" use:enhance>
+		{:else if !undoShows(band.entries, o.id)}
+			<!-- One Undo at a time: the band's while its line is this one, else the row's (after a reload too). -->
+			<form method="POST" action="?/undo" use:enhance={() => async ({ result, update }) => { if (result.type === 'success') dismissAbout(o.id); await update(); }}>
 				<input type="hidden" name="occurrence" value={o.id} />
 				<button class="quiet hit" aria-label="Undo {item.name}">Undo</button>
 			</form>

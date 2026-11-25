@@ -28,17 +28,14 @@ export interface Move {
 	position: Position;
 }
 
+/** The gap for a pointer at `y` over a row: its upper half is the gap before it. */
+export const dropPosition = (y: number, rect: { top: number; height: number }): 'before' | 'after' => ((rect.height > 0 ? (y - rect.top) / rect.height : 0.5) < 0.5 ? 'before' : 'after');
+
 /**
- * The drop position for a pointer at `y` over a row. Without nesting the row splits in two
- * halves; with nesting the middle half means "inside" and a quarter at each edge "before" or "after".
+ * How deep a held row joins: its sideways travel in whole steps from where the drag began, kept to
+ * what the gap offers. 1 is inside the row above it, 0 among its own rows, -1 out of what holds it.
  */
-export function dropPosition(y: number, rect: { top: number; height: number }, nest: boolean): Position {
-	const at = rect.height > 0 ? (y - rect.top) / rect.height : 0.5;
-	if (!nest) return at < 0.5 ? 'before' : 'after';
-	if (at < 0.25) return 'before';
-	if (at > 0.75) return 'after';
-	return 'inside';
-}
+export const dropDepth = (dx: number, step: number, min: number, max: number, rtl = false): number => Math.min(max, Math.max(min, Math.round((rtl ? -dx : dx) / step) || 0));
 
 /** A row's key and every key inside it, however deep (for ticking a holder as one). */
 export function withDescendants(key: string, childrenOf: (key: string) => string[]): string[] {

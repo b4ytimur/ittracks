@@ -10,6 +10,7 @@
 .hi-note { margin-block: var(--space-tight) 0; white-space: pre-line; overflow-wrap: anywhere; }
 .hi-day > .hi-note, .hi-day > .hi-notewrap { margin-block-end: var(--space-inline); }
 .content > .hi-note, .hi-notewrap { flex: 1 0 100%; min-inline-size: 0; } /* under the row's one line, never beside it */
+.card.link > .content > .hi-notewrap { position: relative; z-index: 1; } /* over the row's link: read, and its links pressed, where it stands */
 .hi-clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
 .hi-show { min-block-size: var(--target-min); }
 .hi-end { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-inline) var(--space-group); margin-block: var(--space-section) var(--space-group); }
