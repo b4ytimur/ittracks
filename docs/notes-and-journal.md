@@ -29,7 +29,7 @@ A journal is a normal habit with a writing field. Set one up from **Habits → N
 - **Add a Journal habit**: a few lines each evening with a daily prompt, and a mood you can chart in Stats.
 - **Add a day note to Today**: one free note per day, no streak.
 
-The **Journal** page (from History) shows everything you wrote, by day, newest first. **Search** for words in any entry, filter by **Habit** and **Mood**, and see **On this day**: what you wrote a week, a month and a year ago. **Edit** opens an entry's log.
+The journal is **History** with **Notes only** on: everything you wrote, by day, newest first. **Search** for words in any entry, filter by **Habit** and **Mood**, and see **On this day**: what you wrote a week, a month and a year ago. **Edit** opens an entry's log.
 
 ## The day note
 
@@ -37,8 +37,8 @@ The **Journal** page (from History) shows everything you wrote, by day, newest f
 
 ## Export to Obsidian
 
-**Settings → Journal → Download the journal** (or **Export** on the Journal page) downloads your journal as Markdown, one file per day, ready to drop into an Obsidian vault.
+**Settings → Journal → Download the journal** (or **History → ⋯ → Export the journal**) downloads your journal as Markdown, one file per day, ready to drop into an Obsidian vault.
 
 ## Switching the journal off
 
-**Settings → Features → Journal** hides the Journal page and the day note. Nothing is deleted, and switching it back on brings everything back.
+**Settings → Features → Journal** hides the journal and the day note. Nothing is deleted, and switching it back on brings everything back.

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { tick, untrack } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { weekdayNames } from '$lib/describe';
 	import RecordTabs from '$lib/detail/RecordTabs.svelte';
 	import EditChrome from '$lib/ui/EditChrome.svelte';
@@ -6,8 +8,6 @@
 	let { data } = $props();
 
 	type Cell = (typeof data.cells)[number]['cell'];
-	const cls = (c: Cell) =>
-		c.kind === 'done' ? `done ${c.level}` : c.kind === 'missed' ? (c.forgiven ? 'forgiven' : 'missed') : c.kind;
 	const label = (c: Cell) =>
 		c.kind === 'done'
 			? `done${c.level !== 'target' ? ` at ${c.level}` : ''}`
@@ -45,6 +45,48 @@
 		if (!d || (w > 0 && weekDates[w - 1].slice(0, 7) === d.slice(0, 7))) return '';
 		return new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'short' });
 	};
+
+	/** One day of the grid: its date, its mark, what it says and where it leads. */
+	const tiles = $derived(
+		(data.direction === 'break' ? data.days : data.cells).map((x) => {
+			const b = 'kind' in x ? x : null;
+			const c = 'cell' in x ? x.cell : null;
+			const mark = b
+				? b.kind
+				: c!.kind === 'done'
+					? c!.level === 'target'
+						? 'done'
+						: c!.level
+					: c!.kind === 'missed' && c!.forgiven
+						? 'forgiven'
+						: c!.kind;
+			return {
+				date: x.date,
+				mark: ['rest', 'before', 'future', 'ahead'].includes(mark) ? null : mark,
+				says: b ? breakLabel(b) : label(c!),
+				href: hrefOf(x.date)
+			};
+		})
+	);
+	/** The day being read. One press reads it, the next opens it. */
+	let at = $state(untrack(() => Math.max(0, tiles.findIndex((x) => x.date === data.today))));
+	let reading = $state(false);
+	let grid = $state<HTMLElement>();
+	function press(i: number) {
+		if (reading && at === i && tiles[i].href) return void goto(tiles[i].href!);
+		at = i;
+		reading = true;
+	}
+	function keys(e: KeyboardEvent) {
+		const by = { ArrowUp: -1, ArrowDown: 1, ArrowLeft: -7, ArrowRight: 7 }[e.key];
+		if (!by) return;
+		e.preventDefault();
+		const to = at + by;
+		if (to < 0 || to >= tiles.length) return;
+		at = to;
+		reading = true;
+		tick().then(() => grid?.querySelector<HTMLElement>(`[data-i="${to}"]`)?.focus());
+	}
 </script>
 
 <svelte:head><title>{data.name} chain · ittracks</title></svelte:head>
@@ -52,145 +94,80 @@
 <EditChrome title={data.name} back={{ href: '/habits', label: 'Habits' }} modes={['use']} hints={{ use: `Last ${data.weeks} weeks${data.summary ? ` · ${data.summary}` : ''}` }} />
 <RecordTabs habit={data.id} at="chain" />
 
-<div class="grid" style="--weeks: {data.weeks}" role="group" aria-label="Calendar of the last {data.weeks} weeks">
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<div class="grid" style="--weeks: {data.weeks}" role="group" aria-label="The last {data.weeks} weeks, a column a week" bind:this={grid} onkeydown={keys}>
 	<span aria-hidden="true"></span>
 	{#each columns(data.weeks) as w (w)}<span class="month muted" aria-hidden="true">{monthLabel(w)}</span>{/each}
 	{#each weekdayNames as day, d (day)}
-		<span class="day muted" aria-hidden="true">{d % 2 === 0 ? day : ''}</span>
+		<span class="weekday muted" aria-hidden="true">{d % 2 === 0 ? day : ''}</span>
 		{#each columns(data.weeks) as w (w)}
-			{#if data.direction === 'break'}
-				{@const x = data.days[w * 7 + d]}
-				{@const href = hrefOf(x.date)}
-				{#if href}
-					<a class="cell {x.kind}" {href} aria-label="{nice(x.date)}: {breakLabel(x)}" title="{nice(x.date)}: {breakLabel(x)}"></a>
-				{:else}
-					<span class="cell {x.kind}" role="img" aria-label="{nice(x.date)}: {breakLabel(x)}" title="{nice(x.date)}: {breakLabel(x)}"></span>
-				{/if}
-			{:else}
-				{@const x = data.cells[w * 7 + d]}
-				{@const href = hrefOf(x.date)}
-				{#if href}
-					<a class="cell {cls(x.cell)}" {href} aria-label="{nice(x.date)}: {label(x.cell)}" title="{nice(x.date)}: {label(x.cell)}"></a>
-				{:else}
-					<span class="cell {cls(x.cell)}" role="img" aria-label="{nice(x.date)}: {label(x.cell)}" title="{nice(x.date)}: {label(x.cell)}"></span>
-				{/if}
-			{/if}
+			{@const i = w * 7 + d}
+			{@const x = tiles[i]}
+			<button type="button" class="cell" data-i={i} tabindex={i === at ? 0 : -1} aria-pressed={reading && i === at} aria-label="{nice(x.date)}: {x.says}" onclick={() => press(i)}>
+				<i data-day={x.mark} aria-current={x.date === data.today ? 'date' : undefined}></i>
+			</button>
 		{/each}
 	{/each}
 </div>
 
-{#if data.canBackfill}<p class="muted small-text tip">{'group' in data && data.group ? 'Tap a day to log the habits inside it.' : 'Tap a day to log it or change it.'}</p>{/if}
-
-<div class="legend small-text">
-	{#if data.direction === 'break'}
-		<span><i class="cell clean"></i>Clean</span>
-		{#if data.limit}<span><i class="cell within"></i>Within limit</span>{/if}
-		<span><i class="cell slip"></i>Slip</span>
+<p class="hi-read" role="status">
+	{#if reading}
+		{nice(tiles[at].date)}: {tiles[at].says}.
+		{#if tiles[at].href}<a href={tiles[at].href}>{'group' in data && data.group ? 'Log the habits inside it' : tiles[at].date === data.today ? 'Open Today' : 'Log or change it'}</a>{/if}
 	{:else}
-		<span><i class="cell done target"></i>Done</span>
-		<span><i class="cell done minimum"></i>Minimum</span>
-		<span><i class="cell done stretch"></i>Stretch</span>
-		<span><i class="cell forgiven"></i>Missed, forgiven</span>
-		<span><i class="cell missed"></i>Missed</span>
-		<span><i class="cell skipped"></i>Skipped</span>
-		{#if data.cells.some((x) => x.cell.kind === 'unlogged')}<span><i class="cell unlogged"></i>Not logged</span>{/if}
+		<span class="muted">Press a day to read it, again to open it.</span>
 	{/if}
+</p>
+
+<div class="legend">
+	{#each [...(data.direction === 'break' ? [['clean', 'Clean'], ...(data.limit ? [['within', 'Within limit']] : []), ['slip', 'Slip']] : [['done', 'Done'], ['minimum', 'Minimum'], ['stretch', 'Stretch'], ['forgiven', 'Missed, forgiven'], ['missed', 'Missed'], ['skipped', 'Skipped'], ['unlogged', 'Not logged'], ['due', 'Due']])].filter(([k]) => tiles.some((x) => x.mark === k)) as [k, word] (k)}
+		<span><i data-day={k}></i> {word}</span>
+	{/each}
 </div>
 
 <style>
 	.grid {
 		display: grid;
-		grid-template-columns: 2.2rem repeat(var(--weeks), 1fr);
-		gap: 3px;
+		grid-template-columns: 2.2rem repeat(var(--weeks), minmax(0, 1fr));
+		gap: 2px;
 		align-items: center;
+		max-width: 30rem;
 	}
-	.day,
+	.weekday,
 	.month {
-		font-size: 0.7rem;
+		font-size: var(--font-size-note);
+		line-height: 1rem;
 	}
 	.month {
 		white-space: nowrap;
 		overflow: visible;
 	}
 	.cell {
-		display: inline-block;
-		aspect-ratio: 1;
-		width: 100%;
-		max-width: 1.6rem;
-		border-radius: 3px;
-		background: var(--border);
-		opacity: 0.5;
+		display: grid;
+		place-items: center;
+		min-height: var(--target-min);
+		padding: 0;
+		border: 0;
+		background: none;
 	}
-	.cell.rest,
-	.cell.before,
-	.cell.future {
-		opacity: 0.25;
+	.cell > i {
+		width: 16px;
+		height: 16px;
 	}
-	.cell.due {
-		outline: 1px dashed var(--accent);
-		opacity: 1;
-		background: transparent;
+	.cell > i:not([data-day]) {
+		width: 4px;
+		height: 4px;
+		border-radius: var(--radius-pill);
+		background: var(--line);
 	}
-	.cell.done,
-	.cell.clean {
-		background: var(--accent);
-		opacity: 1;
-	}
-	.cell.done.minimum {
-		opacity: 0.45;
-	}
-	.cell.done.stretch {
-		box-shadow: inset 0 0 0 2px var(--text);
-	}
-	.cell.within {
-		background: var(--accent);
-		opacity: 0.45;
-	}
-	.cell.missed,
-	.cell.slip {
-		background: var(--danger);
-		opacity: 1;
-	}
-	.cell.forgiven {
-		background: transparent;
-		outline: 2px solid var(--danger);
-		outline-offset: -2px;
-		opacity: 1;
-	}
-	.cell.skipped {
-		background: var(--muted);
-		opacity: 0.6;
-	}
-	.cell.unlogged {
-		background: transparent;
-		outline: 1px dashed var(--muted);
-		outline-offset: -1px;
-		opacity: 1;
-	}
-	a.cell:hover,
-	a.cell:focus-visible {
-		outline: 2px solid var(--text);
-		outline-offset: 1px;
-	}
-	.tip {
-		margin: 0.75rem 0 0;
+	.cell[aria-pressed='true'] {
+		border-radius: var(--radius-mark);
+		box-shadow: var(--chosen-shadow);
 	}
 	.legend {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.4rem 1rem;
-		margin-top: 1rem;
-		color: var(--muted);
-	}
-	.legend span {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.35rem;
-	}
-	.legend .cell {
-		width: 0.9rem;
-	}
-	.small-text {
-		font-size: 0.85rem;
+		gap: var(--space-inline) var(--space-group);
+		font-size: var(--font-size-meta);
 	}
 </style>

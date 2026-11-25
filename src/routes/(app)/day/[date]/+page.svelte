@@ -10,6 +10,11 @@
 	import { addDays } from '$lib/engine/dates';
 	import DayNote from '$lib/DayNote.svelte';
 	import Markdown from '$lib/Markdown.svelte';
+	import EditableList from '$lib/ui/EditableList.svelte';
+	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import GroupHeading from '$lib/ui/GroupHeading.svelte';
+	import LogControl, { type Way } from '$lib/ui/LogControl.svelte';
+	import { dayCount } from '$lib/history/day';
 
 	let { data, form } = $props();
 
@@ -89,274 +94,196 @@
 		if (!v) return;
 		goto(v >= data.today ? '/' : `/day/${v}`);
 	}
+
+	/** The usual way to log a habit on this day, and the others. */
+	function waysOf(it: Item): { act: Way; ways: (Way | '-')[] } {
+		const fields = { habit: it.habitId, variant: variantOf(it) };
+		const o = it.occurrence;
+		const skip: Way[] = it.wasDue && o?.status !== 'skipped' ? [{ label: 'Skip that day', action: '?/skip', fields, submit: after }] : [];
+		const details: Way[] = it.slotCount > 0 ? [{ label: 'Log details…', action: '?/open', fields }] : [];
+		const levels: Way[] =
+			it.levels && (it.slotCount === 0 || it.quickDone || it.canRepeat)
+				? (['minimum', 'target', 'stretch'] as const).map((l) => ({ label: levelName[l], value: it.levels![l], action: '?/done', fields: { ...fields, slots: String(it.slotCount), level: l }, submit: after }))
+				: [];
+		const rest = [...levels, ...details, ...(skip.length && (levels.length || details.length) ? ['-' as const] : []), ...skip];
+		if (it.slotCount > 0) {
+			if (it.canRepeat) return { act: { label: 'Same as last', action: '?/same', fields, submit: after }, ways: rest };
+			if (it.quickDone) return { act: { label: 'Done', action: '?/done', fields, submit: after }, ways: rest };
+			return { act: { label: 'Log', action: '?/open', fields }, ways: [...levels, ...skip] };
+		}
+		return { act: { label: 'Done', action: '?/done', fields: { ...fields, slots: '0' }, submit: after }, ways: [...levels, ...skip] };
+	}
+	const sorted = $derived([...data.due].sort((a, b) => Number(notLogged(b)) - Number(notLogged(a))));
+	const count = $derived(dayCount(data.due.map((x) => ({ status: x.occurrence?.status ?? 'due', extra: false }))));
+	let openOther = $state(untrack(() => !data.due.length || data.other.some((x) => x.occurrence)));
+	let openSlip = $state<string | null>(null);
 </script>
 
 <svelte:head><title>{short(data.date)} · ittracks</title></svelte:head>
 
-<header class="bar">
-	<div>
-		<h1>{nice(data.date)}</h1>
-		<div class="muted">{ago === 1 ? 'Yesterday' : `${ago} days ago`} · logs here count like logs on the day</div>
-	</div>
-</header>
+<EditChrome
+	title={nice(data.date)}
+	back={{ href: '/history', label: 'History' }}
+	modes={['use']}
+	hints={{ use: [ago === 1 ? 'Yesterday' : `${ago} days ago`, count.of ? `${count.done} of ${count.of} done` : ''].filter(Boolean).join(' · ') }}
+/>
 
 <nav class="row daynav" aria-label="Pick a day">
-	<a class="button small" href="/day/{prev}" aria-label="Previous day, {short(prev)}">← {short(prev)}{data.prevUnlogged ? ` (${data.prevUnlogged} not logged)` : ''}</a>
-	<input
-		class="grow"
-		type="date"
-		value={data.date}
-		max={yesterday}
-		min={data.earliest ?? undefined}
-		aria-label="Go to a day"
-		onchange={(e) => jump(e.currentTarget.value)}
-	/>
-	{#if next < data.today}
-		<a class="button small" href="/day/{next}" aria-label="Next day, {short(next)}">{short(next)} →</a>
-	{:else}
-		<a class="button small" href="/">Today →</a>
-	{/if}
+	<a class="button" href="/day/{prev}" aria-label="The day before, {short(prev)}">{short(prev)}{data.prevUnlogged ? ` · ${data.prevUnlogged} not logged` : ''}</a>
+	<input class="grow" type="date" value={data.date} max={yesterday} min={data.earliest ?? undefined} aria-label="Go to a day" onchange={(e) => jump(e.currentTarget.value)} />
+	{#if next < data.today}<a class="button" href="/day/{next}" aria-label="The day after, {short(next)}">{short(next)}</a>{:else}<a class="button" href="/">Today</a>{/if}
 </nav>
 
-{#if data.window === 'off'}
-	<p class="card muted small-text">Logging past days is off, so this day can only be looked at. <a href="/settings/past-days">Change it in Settings</a>.</p>
-{:else if data.window === 'tooOld'}
-	<p class="card muted small-text">
-		You can log up to {data.pastDays === 1 ? 'yesterday' : `${data.pastDays} days back`}, so this day can only be looked at. Slips can still be added.
-		<a href="/settings/past-days">Change it in Settings</a>.
-	</p>
+{#if data.window === 'off' || data.window === 'tooOld'}
+	<div class="notice">
+		<span class="notice-text"
+			>{data.window === 'off'
+				? 'Logging past days is off, so this day can only be looked at.'
+				: `You can log up to ${data.pastDays === 1 ? 'yesterday' : `${data.pastDays} days back`}, so this day can only be looked at. Slips can still be added.`}</span
+		>
+		<span class="notice-acts"><a class="quiet hit" href="/settings/past-days">Change it in Settings</a></span>
+	</div>
 {/if}
-
-{#if form?.error && !form?.habit}<p class="error">{form.error}</p>{/if}
+{#if form?.error && !form?.habit}<p class="error" role="alert">{form.error}</p>{/if}
 
 {#if data.dayNote !== null}
 	{#key data.date}<DayNote date={data.date} text={data.dayNote} />{/key}
 {/if}
 
-<h2>Due that day</h2>
-{#if data.due.length}
-	<ul class="list">
-		{#each data.due as item (item.habitId)}{@render row(item)}{/each}
-	</ul>
-{:else}
-	<p class="muted">Nothing was due this day.</p>
-{/if}
+<GroupHeading title="Due that day" count={count.of ? `${count.done} of ${count.of} done` : undefined} />
+{#if data.due.length}{@render list(sorted, 'Due that day')}{:else}<p class="empty-range">Nothing was due this day.</p>{/if}
 
 {#if data.other.length}
-	<details class="other" open={!data.due.length || data.other.some((x) => x.occurrence)}>
-		<summary>Not due that day ({data.other.length}). Did one anyway?</summary>
-		<ul class="list">
-			{#each data.other as item (item.habitId)}{@render row(item)}{/each}
-		</ul>
-	</details>
+	<GroupHeading title="Not due that day" count={String(data.other.length)} folded={!openOther} onfold={() => (openOther = !openOther)} />
+	{#if openOther}{@render list(data.other, 'Not due that day')}{/if}
 {/if}
 
 {#if data.later.length}
-	<h2>Started later</h2>
-	<p class="muted small-text">
-		These habits start after {short(data.date)}. If you really began on this day, start them from here and log it.
-	</p>
-	<ul class="list">
-		{#each data.later as l (l.habitId)}
-			<li class="card" id="h-{l.habitId}">
-				<div class="row">
-					<div class="grow">
-						<strong>{l.name}</strong>
-						<div class="muted small-text">Starts {short(l.startDate)}</div>
-					</div>
-					{#if l.direction === 'break' || canLog}
-						<form method="POST" action="?/start" use:enhance={after}>
-							<input type="hidden" name="habit" value={l.habitId} />
-							<button aria-label="Start {l.name} from {short(data.date)}">Start from this day</button>
-						</form>
-					{/if}
-				</div>
-				{#if form?.habit === l.habitId && form?.error}<p class="error small-text">{form.error}</p>{/if}
-			</li>
-		{/each}
-	</ul>
+	<GroupHeading title="Started later" count={String(data.later.length)} />
+	<EditableList items={data.later} key={(l) => l.habitId} label={(l) => l.name} mode="use" rowCard ariaLabel="Started later">
+		{#snippet row(l)}
+			<span class="name" id="h-{l.habitId}">{l.name}</span>
+			<p class="meta-line">Starts {short(l.startDate)}. If you really began on this day, start it from here.</p>
+			{#if form?.habit === l.habitId && form?.error}<p class="row-line error meta">{form.error}</p>{/if}
+		{/snippet}
+		{#snippet actions(l)}
+			{#if l.direction === 'break' || canLog}
+				<form method="POST" action="?/start" use:enhance={after}>
+					<input type="hidden" name="habit" value={l.habitId} />
+					<button class="quiet hit" aria-label="Start {l.name} from {short(data.date)}">Start from this day</button>
+				</form>
+			{/if}
+		{/snippet}
+	</EditableList>
 {/if}
 
 {#if data.breaking.length}
-	<h2>Breaking</h2>
-	<ul class="list">
-		{#each data.breaking as b (b.habitId)}
-			<li class="card stack" id="h-{b.habitId}">
-				<div class="row">
-					<a class="name grow" href="/habits/{b.habitId}/chain"><strong>{b.name}</strong></a>
-					{#if b.limit}
-						<span class="small-text" class:warn={b.limit.used > b.limit.max}
-							>{b.limit.used} of {b.limit.max} {b.limit.period === 'week' ? 'that week' : 'that day'}</span
-						>
-					{/if}
+	<GroupHeading title="Breaking" count={String(data.breaking.length)} />
+	<EditableList items={data.breaking} key={(b) => b.habitId} label={(b) => b.name} mode="use" rowCard ariaLabel="Breaking">
+		{#snippet row(b)}
+			<a class="name" id="h-{b.habitId}" href="/habits/{b.habitId}/chain">{b.name}</a>
+			<p class="meta-line">
+				{[b.limit ? `${b.limit.used} of ${b.limit.max} ${b.limit.period === 'week' ? 'that week' : 'that day'}` : '', b.slips.length ? '' : 'Clean that day'].filter(Boolean).join(' · ')}
+			</p>
+			{#if b.limit && b.limit.used > b.limit.max}<p class="row-line warn meta">Over the limit.</p>{/if}
+			{#each b.slips as s (s.id)}
+				<div class="row-line slip">
+					<span class="meta">{b.limit ? `${s.count} logged` : `Slip${s.count !== 1 ? ` × ${s.count}` : ''}`}{s.time ? ` at ${s.time}` : ''}{s.feeling ? ` · ${s.feeling}` : ''}</span>
+					<form method="POST" action="?/unslip" use:enhance={after}>
+						<input type="hidden" name="id" value={s.id} />
+						<button class="quiet hit" aria-label="Remove this slip of {b.name}">Remove</button>
+					</form>
 				</div>
-				{#if b.slips.length}
-					<ul class="list slips">
-						{#each b.slips as s (s.id)}
-							<li class="row">
-								<span class="grow small-text"
-									>{b.limit ? `${s.count} logged` : `Slip${s.count !== 1 ? ` × ${s.count}` : ''}`}{s.time ? ` at ${s.time}` : ''}{s.feeling
-										? ` · ${s.feeling}`
-										: ''}</span
-								>
-								<form method="POST" action="?/unslip" use:enhance={after}>
-									<input type="hidden" name="id" value={s.id} />
-									<button class="link small-text" aria-label="Remove this slip">Remove</button>
-								</form>
-							</li>
-						{/each}
-					</ul>
-				{:else}
-					<div class="muted small-text">Clean that day.</div>
-				{/if}
-				<form method="POST" action="?/slip" class="row" use:enhance={after}>
+			{/each}
+			{#if openSlip === b.habitId}
+				<form method="POST" action="?/slip" class="row-line row" use:enhance={after}>
 					<input type="hidden" name="habit" value={b.habitId} />
-					<label style="width: 5rem">Count <input name="count" type="number" min="1" max="1000" step="1" value="1" required /></label>
-					<label style="width: 7rem">Time <input name="time" type="time" /></label>
-					<button>{b.limit ? 'Log one' : 'Add slip'}</button>
+					<label class="count">Count <input name="count" type="number" min="1" max="1000" step="1" value="1" required /></label>
+					<label class="time">Time <input name="time" type="time" /></label>
+					<button>{b.limit ? 'Log' : 'Add slip'}</button>
 				</form>
-				{#if form?.habit === b.habitId && form?.error}<p class="error small-text">{form.error}</p>{/if}
-			</li>
-		{/each}
-	</ul>
+			{/if}
+			{#if form?.habit === b.habitId && form?.error}<p class="row-line error meta">{form.error}</p>{/if}
+		{/snippet}
+		{#snippet actions(b)}<button type="button" class="quiet hit" aria-expanded={openSlip === b.habitId} aria-label="{b.limit ? 'Log one' : 'Log a slip'}: {b.name}" onclick={() => (openSlip = openSlip === b.habitId ? null : b.habitId)}>{b.limit ? 'Log one…' : 'Log a slip…'}</button>{/snippet}
+	</EditableList>
 {/if}
 
-{#snippet hidden(item: Item)}
-	<input type="hidden" name="habit" value={item.habitId} />
-	<input type="hidden" name="variant" value={variantOf(item)} />
-{/snippet}
-
-{#snippet row(item: Item)}
-	{@const o = item.occurrence}
-	{@const open = notLogged(item)}
-	<li class="card" id="h-{item.habitId}" class:finished={!open}>
-		<div class="row">
-			<div class="grow">
-				<a class="name" href="/habits/{item.habitId}/chain"><strong>{item.name}</strong></a>
-				{#if item.variants.length && !(open && canLog)}<span class="chip">{item.variants.find((v) => v.id === item.variantId)?.name}</span>{/if}
-				<div class="muted small-text" class:missed={o?.status === 'missed'}>{statusText(item)}</div>
-				{#if o && data.notes[o.id]}<div class="lognote"><Markdown text={data.notes[o.id]} small /></div>{/if}
-			</div>
-			{#if canLog && open}
-				{#if item.slotCount > 0}
-					<form method="POST" action="?/open" use:enhance>
-						{@render hidden(item)}
-						<button class:primary={!item.canRepeat && !item.quickDone} aria-label="Log {item.name}">Log</button>
-					</form>
-					{#if item.canRepeat}
-						<form method="POST" action="?/same" use:enhance={after}>
-							{@render hidden(item)}
-							<button class="primary" title="Copy your last log from before this day" aria-label="Same as last time: {item.name}">Same as last</button>
-						</form>
-					{:else if item.quickDone}
-						<form method="POST" action="?/done" use:enhance={after}>
-							{@render hidden(item)}
-							<button class="primary" title="Log your targets" aria-label="Done: {item.name}">Done</button>
-						</form>
-					{/if}
-				{:else}
-					<form method="POST" action="?/done" use:enhance={after}>
-						{@render hidden(item)}
-						<input type="hidden" name="slots" value="0" />
-						<button class="primary" aria-label="Done: {item.name}">Done</button>
-					</form>
-				{/if}
-				{#if item.wasDue && o?.status !== 'skipped'}
-					<form method="POST" action="?/skip" use:enhance={after}>
-						{@render hidden(item)}
-						<button aria-label="Skip {item.name}">Skip</button>
-					</form>
-				{/if}
+{#snippet list(items: Item[], name: string)}
+	<EditableList {items} key={(x) => x.habitId} label={(x) => x.name} mode="use" rowCard ariaLabel={name} itemClass={(x) => (x.occurrence?.status === 'done' ? 'done' : x.occurrence?.status === 'skipped' ? 'skipped' : '')}>
+		{#snippet row(item)}
+			{@const o = item.occurrence}
+			{@const open = notLogged(item)}
+			<a class="name" id="h-{item.habitId}" href="/habits/{item.habitId}/chain">{item.name}</a>
+			<p class="meta-line">
+				{#if o?.status === 'done' || o?.status === 'skipped'}<span class="mark" aria-hidden="true">{o.status === 'done' ? '✓' : '↷'}</span>{' '}{/if}{[
+					statusText(item),
+					item.variants.length && !(open && canLog) ? item.variants.find((v) => v.id === item.variantId)?.name : ''
+				]
+					.filter(Boolean)
+					.join(' · ')}
+			</p>
+			{#if o && data.notes[o.id]}<div class="row-line"><Markdown text={data.notes[o.id]} small /></div>{/if}
+			{#if canLog && open && item.variants.length}
+				<label class="row-line variant meta"
+					>Variant
+					<select value={variantOf(item)} onchange={(e) => (chosen[item.habitId] = e.currentTarget.value)}>
+						{#each item.variants as v (v.id)}<option value={v.id}>{v.name}</option>{/each}
+					</select>
+				</label>
+			{/if}
+			{#if form?.habit === item.habitId && form?.error}<p class="row-line error meta">{form.error}</p>{/if}
+		{/snippet}
+		{#snippet actions(item)}
+			{@const o = item.occurrence}
+			{#if canLog && notLogged(item)}
+				{@const w = waysOf(item)}
+				<LogControl name="{item.name} on {short(data.date)}" act={w.act} ways={w.ways} />
 			{:else if o}
-				{#if item.slotCount > 0 && (o.status === 'done' || canLog)}
-					<a class="button" href="/log/{o.id}?back={back}">{canLog ? (o.status === 'done' ? 'Edit' : 'Log') : 'View'}</a>
-				{/if}
+				{#if item.slotCount > 0 && (o.status === 'done' || canLog)}<a class="quiet hit" href="/log/{o.id}?back={back}" aria-label="{o.status === 'done' ? (canLog ? 'Change' : 'View') : 'Log'} {item.name}">{o.status === 'done' ? (canLog ? 'Change' : 'View') : 'Log'}</a>{/if}
 				{#if canLog}
 					<form method="POST" action="?/clear" use:enhance={after}>
-						{@render hidden(item)}
-						<button class="link" aria-label="Clear {item.name}" title="Take this log away">Clear</button>
+						<input type="hidden" name="habit" value={item.habitId} />
+						<input type="hidden" name="variant" value={variantOf(item)} />
+						<button class="quiet hit" aria-label="Clear {item.name} on {short(data.date)}">Clear</button>
 					</form>
 				{/if}
 			{/if}
-		</div>
-		{#if canLog && open && item.variants.length}
-			<label class="variant small-text"
-				>Variant
-				<select value={variantOf(item)} onchange={(e) => (chosen[item.habitId] = e.currentTarget.value)}>
-					{#each item.variants as v (v.id)}<option value={v.id}>{v.name}</option>{/each}
-				</select>
-			</label>
-		{/if}
-		{#if canLog && open && item.levels && (item.slotCount === 0 || item.quickDone || item.canRepeat)}
-			<div class="row levels">
-				<span class="muted small-text">Or log</span>
-				{#each ['minimum', 'stretch'] as const as l (l)}
-					<form method="POST" action="?/done" use:enhance={after}>
-						{@render hidden(item)}
-						<input type="hidden" name="slots" value={item.slotCount} />
-						<input type="hidden" name="level" value={l} />
-						<button class="small" title={item.levels[l] || undefined}>{levelName[l]}</button>
-					</form>
-				{/each}
-			</div>
-		{/if}
-		{#if form?.habit === item.habitId && form?.error}<p class="error small-text">{form.error}</p>{/if}
-	</li>
+		{/snippet}
+	</EditableList>
 {/snippet}
 
 <style>
+	p {
+		margin: 0;
+	}
 	.daynav {
 		align-items: center;
-		margin-bottom: 0.5rem;
+		margin-block: var(--space-inline) var(--space-group);
 	}
 	.daynav input {
 		min-width: 9rem;
 	}
-	.name {
-		color: inherit;
-		text-decoration: none;
+	.slip form {
+		flex: none;
 	}
-	.finished {
-		opacity: 0.75;
-	}
-	.lognote {
-		margin-top: 0.3rem;
-	}
-	.missed {
-		color: var(--danger);
-	}
-	.warn {
-		color: var(--danger);
-	}
-	.small-text {
-		font-size: 0.85rem;
-	}
-	.levels {
-		align-items: center;
-		margin-top: 0.4rem;
-	}
-	.variant {
+	.slip {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		margin-top: 0.4rem;
+		gap: var(--space-inline);
+	}
+	.count {
+		width: 5rem;
+	}
+	.time {
+		width: 7rem;
+	}
+	.variant {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-inline);
 	}
 	.variant select {
 		width: auto;
-		margin: 0;
-	}
-	.other {
-		margin-top: 1.25rem;
-	}
-	.other summary {
-		cursor: pointer;
-		color: var(--accent);
-		margin-bottom: 0.5rem;
-	}
-	.slips li + li {
-		margin-top: 0.25rem;
-	}
-	li:target {
-		outline: 2px solid var(--accent);
 	}
 </style>

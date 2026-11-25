@@ -1,0 +1,115 @@
+/* DayTile: one day as a mark. Owns i[data-day] (the mark), .day-week (seven days in a line) and .day-cell (a calendar cell).
+     a strip in a row     <span class="week" role="img" aria-label="Gym this week: …"><i data-day="done"></i>…</span>
+     a calendar cell      <a class="day focus-inset" href="/day/2026-11-16" aria-label="Mon 16 Nov: 5 of 5 done">
+                            <span class="note muted">Mon</span><i data-day="done"></i><span class="note num">5/5</span></a>
+   One shape per meaning, so no state relies on colour: full, full with a halo, half, ring, ring with a slash,
+   slash, small square, a bar ("none", CF.5), nothing. Done is good, never accent: it is data, not an act (P.13).
+   Sizes come from the holder: 12px in a strip and a legend (the default), 16px in a .day-cell, 24px on the cover
+   (its grid sets it). Every part of a mark is a fraction of the tile, so the encoding scales with it. */
+
+/* ---------- The mark ---------- */
+/* min-* sizes (S.3): a holder that stretches its items (the cover's grid) sets the size, nothing fights it. */
+i[data-day] {
+	display: inline-block; position: relative; flex: none; vertical-align: middle;
+	min-inline-size: calc(3 * var(--pitch)); min-block-size: calc(3 * var(--pitch));
+	border-radius: var(--radius-indicator);
+}
+/* --day-edge: the edge of every good mark. It defaults to good itself (invisible on a good fill); a holder on a
+   sunken surface sets it to line-control, because good is 2.82:1 on light surface-sunken (NestedRow's shelf). */
+/* Full: done at Target, a clean day (no slips). 3.35:1 on raised, 3.21 on the page, 5.21 dark. */
+i[data-day='done'], i[data-day='clean'] {
+	background: var(--good); box-shadow: inset 0 0 0 1px var(--day-edge, var(--good));
+}
+/* Full with a halo: done at Stretch, more than full. 1px good ring 1px outside the tile; the strip's 4px gap keeps 2px clear. */
+i[data-day='stretch'] {
+	background: var(--good); box-shadow: inset 0 0 0 1px var(--day-edge, var(--good));
+	outline: 1px solid var(--day-edge, var(--good)); outline-offset: 1px;
+}
+/* Half: part of the way, and it counts. Done at Minimum; slips within the limit; a day some of whose habits are done.
+   A good ring with the lower half filled. The 1px line at the half keeps the level at the edge's contrast on a shelf. */
+i[data-day='minimum'], i[data-day='within'], i[data-day='partial'] {
+	box-shadow: inset 0 0 0 1px var(--day-edge, var(--good));
+	background:
+		linear-gradient(var(--day-edge, var(--good)), var(--day-edge, var(--good))) center / 100% 1px no-repeat,
+		linear-gradient(to top, var(--good) 50%, transparent 50%);
+}
+/* Ring: due and not done, or a slip over the limit. A fact, so line-control (≥ 3:1 on page, raised and sunken). */
+i[data-day='missed'], i[data-day='slip'] { box-shadow: inset 0 0 0 1px var(--line-control); }
+/* Slash: doesn't break the chain. Skipped is the slash alone; forgiven is a miss the streak rule let through, ring and slash. */
+i[data-day='skipped'], i[data-day='forgiven'] {
+	background: linear-gradient(to bottom right, transparent calc(50% - 1px), var(--line-control) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px));
+}
+i[data-day='forgiven'] { box-shadow: inset 0 0 0 1px var(--line-control); }
+/* Small square: scheduled, not a fact yet (today not done, a scheduled day ahead). A third of the tile: 4, 5.3, 8px. */
+i[data-day='due'] { background: linear-gradient(var(--line-control), var(--line-control)) center / calc(100% / 3) calc(100% / 3) no-repeat; }
+/* Bar: due, never logged, and the habit ignores days you don't log. Half the tile wide, 2px: CF.5's "none". */
+i[data-day='unlogged'] { background: linear-gradient(var(--line-control), var(--line-control)) center / 50% 2px no-repeat; }
+/* rest (nothing due), before (before the start date) and future (still to come) draw nothing and keep their place. */
+/* Held (a row inside DragHandle's .dragging, on surface-lifted): line-control there is 2.96:1 in dark, so the strip's
+   edges (ring, slash, square, bar, --day-edge) turn ink-muted, 4.80 / 5.64:1 (D3.9), as Swatch's ring does. */
+.dragging i[data-day] { --line-control: var(--ink-muted); --day-edge: var(--ink-muted); }
+
+/* Today: a 2px ink bar 2px under the tile, so a strip is 12 + 2 + 2 = one 16px line. On the mark in a strip,
+   on the cell (aria-current belongs to the element that is read) in a calendar. */
+i[data-day][aria-current='date']::after,
+.day-cell[aria-current='date'] > i[data-day]::after {
+	content: ''; position: absolute; inset-inline: 0; top: calc(100% + 2px); height: 2px; background: var(--ink);
+}
+
+/* ---------- The celebration: today's mark while its row is Just done (ListRow's .just-done, P.16) ---------- */
+i[data-day][aria-current='date']::before { content: ''; position: absolute; inset: 0; border-radius: inherit; background: var(--good); opacity: 0; }
+@media (prefers-reduced-motion: no-preference) {
+	.just-done i[data-day][aria-current='date'] { animation: day-pop calc(var(--duration-pop) / 2) var(--ease-settle) 2 alternate; } /* out and back: scale 1.4 at the middle */
+	.just-done i[data-day][aria-current='date']::before { animation: day-spark var(--duration-celebrate) var(--ease-standard); }
+}
+@media (prefers-reduced-motion: reduce) {
+	.just-done i[data-day][aria-current='date'] { animation: day-fade var(--duration-quick) var(--ease-standard); }
+}
+@keyframes day-pop { to { transform: scale(1.4); } }
+@keyframes day-spark { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(calc(-1 * var(--space-inline))); } }
+@keyframes day-fade { from { opacity: 0; } }
+
+/* ---------- .day-week: seven days in a line, Monday first ---------- */
+/* Marks: a 16px line (12 + the today bar). Cells (Today's This week): seven equal columns, one height. */
+.day-week {
+	display: flex; align-items: flex-start; gap: var(--space-tight); margin-top: var(--space-tight);
+	min-height: 1rem;
+}
+.day-week > .day-cell { flex: 1 1 0; min-inline-size: 0; align-self: stretch; }
+
+/* ---------- .day-cell: one day in a calendar ---------- */
+/* A link, a button (in CalendarGrid and HeatGrid), or a static span (role="img") in a grid. Children in order, all optional
+   but the mark: a label (weekday or date number, .note.muted), the mark at 16px, a count (.note.num) or a Variant's name,
+   wrapping (.note).
+   4 + 16 + 4 + 16 + 8 + 16 + 4 = 68 with both texts (the line after the mark clears today's bar);
+   24 with the mark alone (the target minimum). */
+.day-cell {
+	display: inline-grid; justify-items: center; align-content: start; row-gap: var(--space-tight);
+	min-inline-size: var(--target-min); padding: var(--space-tight); border-radius: var(--radius-inset);
+	color: var(--ink); text-decoration: none; text-align: center;
+}
+.day-cell > i[data-day] { min-inline-size: calc(4 * var(--pitch)); min-block-size: calc(4 * var(--pitch)); border-radius: var(--radius-mark); }
+.day-cell > i[data-day] + * { margin-top: var(--space-tight); }
+/* Today: the cell's words go to ink and 600 (the figure, S.4), over their type class's weight. */
+.day-cell[aria-current='date'] > :not(i) { color: var(--ink); font-weight: 600; }
+/* A day that opens the logs behind it is a button: the same cell without Button's box. */
+button.day-cell { border: 0; background: none; }
+/* Hover: day cells are one of the two places a fill means hover (S.1). The label turns ink, because ink-muted
+   is 4.03:1 on light surface-hover (S.2). The mark keeps its colours: light good (2.82:1) and dark line-control
+   (2.96:1) dip under 3:1 only while the pointer is on the cell, since the shape still carries the state (D3.9).
+   .hover is the preview's stand-in. */
+:is(a, button).day-cell.hover { background: var(--surface-hover); }
+:is(a, button).day-cell.hover > .muted { color: var(--ink); }
+@media (hover: hover) {
+	:is(a, button).day-cell:hover { background: var(--surface-hover); }
+	:is(a, button).day-cell:hover > .muted { color: var(--ink); }
+}
+
+/* ---------- Forced colours: fills, gradients and shadows would be dropped, so the marks keep their own drawing
+   and every colour in it becomes CanvasText. One remap covers every state, the halo, the today bar and the spark. */
+@media (forced-colors: active) {
+	i[data-day], .dragging i[data-day] {
+		forced-color-adjust: none;
+		--good: CanvasText; --line-control: CanvasText; --ink: CanvasText; --day-edge: CanvasText;
+	}
+}

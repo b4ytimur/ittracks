@@ -1,81 +1,19 @@
-// The Journal page (J2): everything written, by day. Journal fields, log notes, slip notes
-// and the day note, with search, a habit and a mood filter, and "On this day". The journal
-// itself stays a normal habit; this is a read view over what exists, like History.
+// The Journal is History with notes only. This address keeps working for bookmarks, and its
+// actions for the day note (also sent by the offline outbox) and the journal's setup.
 import { error, fail, redirect } from '@sveltejs/kit';
-import { and, eq } from 'drizzle-orm';
-import { db } from '$lib/server/db';
-import { metric, task } from '$lib/server/db/schema';
 import { getSettings, getViews, saveSettings } from '$lib/server/settings';
 import { userToday } from '$lib/server/today';
-import { getDayNote, loadJournal, saveDayNote } from '$lib/server/journal';
+import { saveDayNote } from '$lib/server/journal';
 import { addTemplate } from '$lib/server/repo/templates';
 import { galleryItem } from '$lib/gallery';
-import { addDays, daysBetween } from '$lib/engine/dates';
 import { isRealDate } from '$lib/engine/backfill';
-import { matches, onThisDay } from '$lib/journal';
-import { isHidden } from '$lib/views';
 import { NOTE_MAX } from '$lib/forms';
 import type { Actions, PageServerLoad } from './$types';
 
-const DAYS = 90;
-
-/** Does the account already have a habit with a long text field (a journal)? */
-function hasJournal(accountId: string): boolean {
-	return !!db
-		.select({ id: metric.id })
-		.from(metric)
-		.innerJoin(task, eq(metric.taskId, task.id))
-		.where(and(eq(task.accountId, accountId), eq(metric.long, true), eq(task.archived, false)))
-		.get();
-}
-
-export const load: PageServerLoad = ({ locals, cookies, url }) => {
-	const accountId = locals.account!.id;
-	const settings = getSettings(accountId);
-	const today = userToday(accountId, cookies.get('tz'));
-	const q = (url.searchParams.get('q') ?? '').trim().slice(0, 200);
-	const habit = url.searchParams.get('habit') ?? '';
-	const mood = url.searchParams.get('mood') ?? '';
-	const filtered = !!(q || habit || mood);
-	// A search looks through everything; browsing shows the last few months.
-	const days = filtered ? 3650 : Math.max(1, Math.min(Math.round(Number(url.searchParams.get('days'))) || DAYS, 3650));
-	const all = loadJournal(accountId, { from: addDays(today, -days), to: today }, { today });
-
-	const shown = all
-		.map((d) => (habit ? { ...d, items: d.items.filter((i) => i.habitId === habit) } : d))
-		.filter((d) => (!habit || d.items.length) && (!mood || d.moods.some((m) => m.value === mood)) && matches(d, q));
-
-	const lookBack = filtered
-		? []
-		: onThisDay(today)
-				.map((x) => ({
-					...x,
-					day: loadJournal(accountId, { from: x.date, to: x.date }, { today })[0] ?? null,
-					// Far enough back for the day to be on the page.
-					href: `?days=${Math.max(days, daysBetween(x.date, today) + 1)}#d-${x.date}`
-				}))
-				.filter((x) => x.day);
-
-	const journalHabit = hasJournal(accountId);
-	return {
-		today,
-		off: isHidden(getViews(accountId), 'journal'),
-		dayNote: settings.dayNote ? getDayNote(accountId, today) : null,
-		days: shown,
-		lookBack,
-		range: days,
-		filters: { q, habit, mood },
-		filtered,
-		/** Filter choices from what was written. */
-		habits: [...new Map(all.flatMap((d) => d.items.filter((i) => i.habitId).map((i) => [i.habitId!, i.habit ?? ''] as const))).entries()]
-			.map(([id, name]) => ({ id, name }))
-			.sort((a, b) => a.name.localeCompare(b.name)),
-		moods: [...new Set(all.flatMap((d) => d.moods.map((m) => m.value)))],
-		/** J7: offer the setup when there is no journal yet, or when asked. */
-		setup: url.searchParams.has('setup') || (!all.length && !journalHabit && !settings.dayNote),
-		hasJournal: journalHabit,
-		dayNoteOn: settings.dayNote
-	};
+export const load: PageServerLoad = ({ url }) => {
+	const to = new URLSearchParams(url.searchParams);
+	to.set('notes', '');
+	redirect(303, `/history?${to}`);
 };
 
 export const actions: Actions = {
@@ -113,6 +51,6 @@ export const actions: Actions = {
 			const views = getViews(accountId);
 			if (views.hidden.includes('journal')) saveSettings(accountId, { views: { ...views, hidden: views.hidden.filter((h) => h !== 'journal') } });
 		}
-		redirect(303, `/journal?ready=${wantHabit ? 'habit' : ''}${wantNote ? 'note' : ''}`);
+		redirect(303, `/history?notes&ready=${wantHabit ? 'habit' : ''}${wantNote ? 'note' : ''}`);
 	}
 };

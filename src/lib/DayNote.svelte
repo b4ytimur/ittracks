@@ -63,7 +63,7 @@
 	<NoteBox bind:value label="Day note" rows={3} placeholder="Anything about today. Markdown works." />
 	<div class="foot">
 		<span class="muted small-text" role="status">{statusText}</span>
-		{#if link}<a class="small-text" href="/journal">Journal</a>{/if}
+		{#if link}<a class="small-text" href="/history?notes">Journal</a>{/if}
 	</div>
 </section>
 
