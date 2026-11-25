@@ -163,8 +163,9 @@
 	async function focusHandle(k: string) {
 		await tick();
 		const li = `li[data-key="${CSS.escape(k)}"]`;
-		const find = (from: string) => document.querySelector<HTMLElement>(`${from}${li} > .head > .handle, ${from}${li} > .card > .slot > .handle, ${from}${li} > .group-heading > .slot > .handle`);
-		(find(`#${uid} > `) ?? find(''))?.focus();
+		// A row's own handle comes before any in what it holds.
+		const find = (from: string) => document.querySelector<HTMLElement>(`${from}${li} .handle`);
+		(find(`#${CSS.escape(uid)} > `) ?? find(''))?.focus();
 	}
 
 	// ----- Dragging -----

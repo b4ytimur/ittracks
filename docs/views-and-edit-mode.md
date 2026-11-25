@@ -59,7 +59,7 @@ Group Habits or the Library by Area, then choose **Edit**: drag an Area's headin
 
 ### Stats
 
-**Customize** on a board or a habit's Stats tab: add cards, drag them in the grid, resize them, edit or remove them from each card's bar. See [Stats](stats.md).
+Drag cards, and rename the board. What a card shows is changed in its own words, in Use too. See [Stats](stats.md).
 
 **Select** on the Habits page and the Library is the other mode of the same list: see [Bulk editing](bulk-editing.md).
 
