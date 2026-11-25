@@ -90,6 +90,7 @@
 		margin-top: 0.25rem;
 	}
 	.head {
+		flex-wrap: wrap;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -100,6 +101,7 @@
 		min-width: 0;
 	}
 	.tools {
+		flex-wrap: wrap;
 		display: flex;
 		gap: 0.25rem;
 	}
