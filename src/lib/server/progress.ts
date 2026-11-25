@@ -253,12 +253,6 @@ export function plusOne(occurrenceId: string, by: 1 | -1 = 1): { value: number; 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
- * Before a Variant's Slots or targets change (Raise, an edit, a Slot added or taken away):
- * logs made against the old ones keep them, every Slot with its Task, sets and targets, so
- * Target met, "3 of 6 glasses", the habit's rule and the log screen judge and show each log
- * by the plan it had. Logs that already keep theirs are left as they are.
- */
-/**
  * Slots about to leave a Variant's plan: a log still open with values in one keeps it, without
  * anything left to reach.
  */
@@ -278,6 +272,12 @@ export function keepSlots(tx: Tx, gone: (typeof slot.$inferSelect)[]) {
 	}
 }
 
+/**
+ * Before a Variant's Slots or targets change (Raise, an edit, a Slot added or taken away):
+ * logs made against the old ones keep them, every Slot with its Task, sets and targets, so
+ * Target met, "3 of 6 glasses", the habit's rule and the log screen judge and show each log
+ * by the plan it had. Logs that already keep theirs are left as they are.
+ */
 export function keepGoals(tx: Tx, variantIds: string[]) {
 	for (const variantId of variantIds) {
 		const slots = tx.select().from(slot).where(eq(slot.variantId, variantId)).orderBy(asc(slot.sortOrder)).all();
