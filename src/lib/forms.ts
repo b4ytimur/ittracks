@@ -1,5 +1,6 @@
 // Shapes the editors send to the server. Shared by the browser (types) and the server (validation).
 import { z } from 'zod';
+import { reminderForm } from './reminder';
 import { metricTypes } from './metric-types';
 import { optionForm, type ChoiceOption } from './options';
 
@@ -283,6 +284,7 @@ export const habitForm = z
 		levels: levelsForm.default(defaultLevels),
 		quickDone: z.boolean().default(false),
 		remind: z.boolean().default(false),
+		reminder: reminderForm.nullable().default(null),
 		identityIds: z.array(id).default([]),
 		ifThen: ifThenForm.default({ when: '', then: '', habitId: null }),
 		/** Feelings a slip can be logged with. A slip stores the feeling's id, so a rename keeps past slips. */

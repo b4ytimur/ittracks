@@ -5,6 +5,8 @@
 	import { beforeNavigate } from '$app/navigation';
 	import type { ActionData, PageData } from './$types';
 	import SaidLine from '$lib/detail/SaidLine.svelte';
+	import DeviceReminders from '$lib/settings/DeviceReminders.svelte';
+	import { noReminder, reminderWords } from '$lib/reminder';
 	import { everySection, KINDS, movedSections, SECTIONS, type Kind, type Section } from '$lib/detail/sections';
 	import { saveSetting } from '$lib/settings/save';
 	import type { Mode } from '$lib/ui/list';
@@ -319,6 +321,7 @@
 	const ruleCheck = $derived(checkHabit(ruleForm));
 	const timeBlock = $derived(blocked(habitRules, ruleForm, 'cue.time', {}));
 	const rangeBlock = $derived(blocked(habitRules, ruleForm, 'cue.range', {}));
+	let deviceProblem = $state('');
 	const remindBlock = $derived(blocked(habitRules, ruleForm, 'remind', {}));
 	const uniq = (xs: string[]) => [...new Set(xs)];
 
@@ -475,7 +478,8 @@
 		name: { label: 'Name', fields: ['name'] },
 		days: { label: 'Days', fields: ['schedule'], held: true },
 		started: { label: h.direction === 'break' ? 'Counting from' : 'Started', fields: ['startDate', 'schedule'], held: true, effect: 'Days from here on count. What you logged stays.' },
-		when: { label: 'When and where', fields: ['cue', 'remind'] },
+		when: { label: 'When and where', fields: ['cue'] },
+		remind: { label: 'Reminder', fields: ['remind', 'reminder'] },
 		limit: { label: 'Limit', fields: ['limit'], held: true, effect: 'It applies from today. Past days keep the limit they had.' },
 		instead: { label: 'Instead', fields: ['ifThen'] },
 		what: { label: 'What you do', fields: ['variants'] },
@@ -525,8 +529,10 @@
 	/** One entry in the band per line and visit, with the value the visit began with. */
 	const said = new Map<string, { entry: number; was: Partial<HabitForm> }>();
 
+	/** Its own, read once: an Undo in the band is pressed on other pages too, where `data` is theirs. */
+	const HABIT = untrack(() => data.id);
 	async function send(id: string, body: object): Promise<{ status: number; r: { form?: HabitForm; undo?: string; error?: string; moved?: Partial<HabitForm> } } | null> {
-		const res = await fetch(`/api/habits/${data.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), keepalive: true }).catch(() => null);
+		const res = await fetch(`/api/habits/${HABIT}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), keepalive: true }).catch(() => null);
 		if (!res) return null;
 		return { status: res.status, r: await res.json().catch(() => ({})) };
 	}
@@ -684,7 +690,7 @@
 		name: f.name,
 		days: W.sentence(describeSchedule(f.schedule, parent ?? undefined, f.variants)),
 		started: shortDate(f.startDate),
-		when: W.cueWords(f.cue, f.remind, f.cue.afterHabitId ? nameOf(f.cue.afterHabitId) : undefined),
+		when: W.cueWords(f.cue, f.cue.afterHabitId ? nameOf(f.cue.afterHabitId) : undefined),
 		limit: W.limitWords(f.limit),
 		instead: W.insteadWords(f.ifThen, f.ifThen.habitId ? nameOf(f.ifThen.habitId) : undefined),
 		levels: W.levelWords(f.levels),
@@ -697,6 +703,7 @@
 		treat: W.treatWords(f.bundle),
 		reward: [W.celebrateWords(f.reward), W.jarWords(f.reward.jar)].filter(Boolean).join(' '),
 		prep: W.listWords(f.prep),
+		remind: reminderWords(f),
 		reframe: f.reframe,
 		notes: W.noteWords(f.notes),
 		area: data.areas.find((a) => a.id === f.areaId)?.name ?? 'None.',
@@ -710,7 +717,8 @@
 	const build = $derived(h.direction === 'build');
 	/** Lines that show only while they hold something, or were just added. */
 	const optional: Record<string, { on: boolean; can: boolean; clear: () => void; word: string }> = $derived({
-		when: { on: !!now.when, can: build, clear: () => ((h.cue = { time: null, place: null, afterHabitId: null, afterText: null, range: null }), (afterMode = 'none'), (h.remind = false)), word: 'When and where' },
+		when: { on: !!now.when, can: build, clear: () => ((h.cue = { time: null, place: null, afterHabitId: null, afterText: null, range: null }), (afterMode = 'none'), h.reminder?.time || (h.remind = false)), word: 'When and where' },
+		remind: { on: h.remind || base.remind, can: build && !isGroupKind, clear: () => (h.remind = false), word: 'Reminder' },
 		instead: { on: !!now.instead, can: !build && !off('ifThen'), clear: () => (h.ifThen = { when: '', then: '', habitId: null }), word: 'Instead' },
 		levels: { on: h.levels.enabled || base.levels.enabled, can: build && !isGroupKind && !off('levels'), clear: () => (h.levels.enabled = false), word: 'Levels' },
 		streak: { on: base.streakRule.kind !== 'neverTwice' || base.unlogged === 'ignore' || !base.minimumCounts || edited.streak, can: build, clear: () => ((h.streakRule = { kind: 'neverTwice' }), (h.unlogged = 'missed'), (h.minimumCounts = true)), word: 'Streak and days you don’t log' },
@@ -1208,12 +1216,24 @@
 			placeholder="I pour my morning coffee" aria-label="What this comes after" />
 	{/if}
 	{#if intention}<p class="intention">{intention}</p>{/if}
-	<label style="color: var(--ink)"
-		><input type="checkbox" bind:checked={h.remind} disabled={!!remindBlock && !h.remind} /> Remind me {h.cue.time ? 'at this time' : h.cue.range ? `when the ${h.cue.range.toLowerCase()} starts` : `(${remindBlock?.reason.toLowerCase() ?? 'set a time first'})`}</label
+{/snippet}
+
+{#snippet remindPart()}
+	{@const r = h.reminder ?? noReminder()}
+	{@const change = (v: Partial<typeof r>) => (h.reminder = { ...r, ...v })}
+	<label class="check"
+		><input type="checkbox" class="pick" bind:checked={h.remind} disabled={!!remindBlock && !h.remind} /> Remind me {r.time ? `at ${r.time}` : h.cue.time ? `at ${h.cue.time}` : h.cue.range ? `when the ${h.cue.range.toLowerCase()} starts` : ''}</label
 	>
-	{#if h.remind}
-		<p class="muted small-text">Turn on reminders for this device in <a href="/settings#reminders">Settings</a>.</p>
-	{/if}
+	{#if remindBlock && !h.remind}<p class="meta muted">{remindBlock.reason}, or a time of its own here.</p>{/if}
+	<div class="row">
+		<label style="width: 9rem">Time of its own <input type="time" value={r.time ?? ''} onchange={(e) => change({ time: e.currentTarget.value || null })} /></label>
+		<label class="grow">What it says <input value={r.text} maxlength="120" placeholder="The place, and the Minimum" oninput={(e) => change({ text: e.currentTarget.value })} /></label>
+	</div>
+	<p class="meta muted">Without a time it follows When and where. The notification offers Done{h.levels.enabled ? ', and what is ticked here' : ', and Snooze if you like'}.</p>
+	{#if h.levels.enabled}<label class="check"><input type="checkbox" class="pick" checked={r.minimum} onchange={(e) => change({ minimum: e.currentTarget.checked })} /> Minimum</label>{/if}
+	<label class="check"><input type="checkbox" class="pick" checked={r.snooze} onchange={(e) => change({ snooze: e.currentTarget.checked })} /> Snooze 30 min</label>
+	<DeviceReminders vapidKey={data.vapidKey} bind:problem={deviceProblem} />
+	{#if deviceProblem}<p class="error meta" role="alert">{deviceProblem}</p>{/if}
 {/snippet}
 
 {#snippet identityPart()}
@@ -1628,6 +1648,7 @@
 			{@render line('limit', limitPart)}
 		{/if}
 		{#if shows('when')}{@render line('when', cuePart)}{/if}
+		{#if shows('remind')}{@render line('remind', remindPart)}{/if}
 		{#if shows('instead')}{@render line('instead', insteadPart)}{/if}
 	</div>
 
@@ -1666,7 +1687,7 @@
 		<a href="/habits">Cancel</a>
 	</header>
 	<p class="muted">How do you want to start?</p>
-	<ul class="list" data-sveltekit-reload>
+	<ul class="list">
 		<li><a class="card" href="/gallery"><strong>Pick a ready-made habit</strong><div class="muted small-text">Gym plans, language practice, reading, quitting smoking and more. Adjust it after.</div></a></li>
 		<li><a class="card" href="?mode=guided{data.habit.areaId ? `&area=${data.habit.areaId}` : ''}"><strong>Build it step by step</strong><div class="muted small-text">Four short steps: what you do, which days, when, and a check.</div></a></li>
 		{#if data.habits.length}
@@ -1759,6 +1780,7 @@
 			<h2>When and where</h2>
 			<p class="muted">Optional. A clear time and place make a habit easier to start.</p>
 			{@render cuePart()}
+			{@render remindPart()}
 		{:else}
 			<h2>Check</h2>
 			<div class="card stack">

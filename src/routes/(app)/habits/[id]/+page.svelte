@@ -3,6 +3,7 @@
 	// page anew rather than patching its state.
 	import { onDestroy } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
+	import { page } from '$app/state';
 	import type { ScheduleForm } from '$lib/forms';
 	import Editor from './Editor.svelte';
 
@@ -22,4 +23,5 @@
 	}
 </script>
 
-{#key `${data.id}:${times}`}<Editor {data} {form} {openLines} {seed} onreset={reset} />{/key}
+<!-- A new one starts anew for each way to start it: step by step, blank, a copy. -->
+{#key `${data.id}:${data.isNew ? page.url.search : ''}:${times}`}<Editor {data} {form} {openLines} {seed} onreset={reset} />{/key}

@@ -4,6 +4,7 @@
 import { sqliteTable, text, integer, real, primaryKey, index, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type { Level, StreakRule } from '../../engine/streak';
 import type { Limit } from '../../engine/limit';
+import type { Reminder } from '../../reminder';
 import type { Progression } from '../../engine/progression';
 import type { EarlierSchedule } from '../../engine/unlogged';
 import type { EarlierParent } from '../../engine/tree';
@@ -292,6 +293,8 @@ export const habit = sqliteTable('habit', {
 	quickDone: integer('quick_done', { mode: 'boolean' }).notNull().default(false),
 	/** Push a reminder at the cue time. */
 	remind: integer('remind', { mode: 'boolean' }).notNull().default(false),
+	/** Its own time, words and buttons (src/lib/reminder.ts); null follows the cue. */
+	reminder: text('reminder', { mode: 'json' }).$type<Reminder>(),
 	ifThen: text('if_then', { mode: 'json' }).$type<IfThen>(),
 	/** Break habit: feelings a slip can be logged with, user-editable. A slip stores the feeling's id. */
 	triggers: text('triggers', { mode: 'json' }).$type<ChoiceOption[]>(),

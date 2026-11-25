@@ -27,6 +27,7 @@ import { listAreas } from '$lib/server/repo/areas';
 import { getViews, getSettings, getTaskTypes, getUnits, saveSettings } from '$lib/server/settings';
 import { repaused, userToday } from '$lib/server/today';
 import { ownedHabit } from '$lib/server/owned';
+import { publicKey } from '$lib/server/push';
 import { trash } from '$lib/server/trash';
 import { archiveHabit, unarchiveHabit } from '$lib/server/habit-actions';
 import { defaultStep, metricsFromType, PLAIN_TASK_TYPES } from '$lib/task-types';
@@ -84,6 +85,7 @@ const blank = (today: string): HabitForm => ({
 	levels: defaultLevels(),
 	quickDone: false,
 	remind: false,
+	reminder: null,
 	identityIds: [],
 	ifThen: { when: '', then: '', habitId: null },
 	triggers: defaultTriggers(),
@@ -193,6 +195,8 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		/** Feelings past slips were logged with: removing one archives it. */
 		usedFeelings: isNew ? [] : [...feelingsUsed(params.id)],
 		/** Variants something was logged on (removing one archives it), and the archived ones, to bring back. */
+		/** To turn on this device's reminders where a habit's is. */
+		vapidKey: publicKey(),
 		usedVariants: isNew ? [] : [...variantsLogged(params.id)],
 		archivedVariants: isNew ? [] : variantForms(params.id, true),
 		/** Something was logged already: a rotation's plan has days to keep when the start moves. */
