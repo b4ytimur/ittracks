@@ -59,7 +59,7 @@
 	}
 	h2 {
 		margin: 0;
-		font-size: 1rem;
+		font-size: var(--font-size-body);
 	}
 	.row-item {
 		display: flex;
@@ -77,6 +77,6 @@
 		overflow-wrap: anywhere;
 	}
 	.small {
-		font-size: 0.8rem;
+		font-size: var(--font-size-chip);
 	}
 </style>

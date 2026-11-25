@@ -37,7 +37,7 @@
 		width: 100%;
 		border-collapse: separate;
 		border-spacing: 2px;
-		font-size: 0.75rem;
+		font-size: var(--font-size-note);
 		table-layout: fixed;
 	}
 	th {

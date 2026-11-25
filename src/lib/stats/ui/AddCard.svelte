@@ -81,7 +81,7 @@
 		overflow: auto;
 	}
 	h3 {
-		font-size: 0.85rem;
+		font-size: var(--font-size-meta);
 		color: var(--ink-muted);
 		font-weight: 500;
 		margin: 0.8rem 0 0.3rem;
@@ -101,6 +101,6 @@
 		min-width: 0;
 	}
 	.small {
-		font-size: 0.8rem;
+		font-size: var(--font-size-chip);
 	}
 </style>

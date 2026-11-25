@@ -1133,6 +1133,7 @@
 		border: none;
 		background: none;
 		padding: 0.2rem 0;
+		min-height: 2rem;
 		text-align: left;
 	}
 	.check .box {
@@ -1142,7 +1143,7 @@
 		border-radius: 4px;
 		display: inline-grid;
 		place-items: center;
-		font-size: 0.8rem;
+		font-size: var(--font-size-chip);
 		color: var(--accent);
 	}
 	.check.done {

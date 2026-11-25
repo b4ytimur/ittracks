@@ -506,7 +506,7 @@
 	.block .title {
 		flex: 1;
 		min-width: 0;
-		font-size: 0.85rem;
+		font-size: var(--font-size-meta);
 		font-weight: 600;
 		color: var(--ink-muted);
 	}

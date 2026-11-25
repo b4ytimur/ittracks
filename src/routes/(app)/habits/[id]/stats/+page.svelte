@@ -77,7 +77,7 @@
 		margin-bottom: 0.75rem;
 	}
 	.small {
-		font-size: 0.8rem;
+		font-size: var(--font-size-chip);
 	}
 	.foot {
 		margin-top: 1.5rem;

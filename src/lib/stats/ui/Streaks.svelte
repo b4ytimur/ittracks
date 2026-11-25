@@ -55,7 +55,7 @@
 		display: flex;
 		justify-content: space-between;
 		gap: 0.5rem;
-		font-size: 0.9rem;
+		font-size: var(--font-size-label);
 	}
 	.name {
 		overflow: hidden;
@@ -98,6 +98,6 @@
 		background: var(--chart-grid);
 	}
 	.small {
-		font-size: 0.75rem;
+		font-size: var(--font-size-note);
 	}
 </style>
