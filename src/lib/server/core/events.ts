@@ -1,7 +1,7 @@
 // The event log: one row for everything that happened, whoever did it. Append-only: rows are
 // never changed, and undoing something adds an event of its own. Webhooks, reminders by ntfy
 // or Telegram, and feeds will read from here later. Notes and journal text never go in.
-import { and, asc, eq, gt, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray } from 'drizzle-orm';
 import { db } from '../db';
 import { event } from '../db/schema';
 import type { Actor } from './actor';
@@ -11,7 +11,10 @@ import type { Actor } from './actor';
  * Any event can also carry `batch`: the bulk change it was part of.
  */
 export const EVENT_TYPES = {
-	'occurrence.done': { v: 1, about: 'A habit was done for a day. data: occurrenceId, level, how' },
+	'occurrence.done': {
+		v: 2,
+		about: 'A habit was done for a day. data: occurrenceId, level, how, fresh (the log held nothing before, so everything in it came from this; v2)'
+	},
 	'occurrence.skipped': { v: 1, about: 'A habit was skipped for a day. data: occurrenceId' },
 	'occurrence.reopened': { v: 1, about: 'A done or skipped day was put back to due (Undo). data: occurrenceId, cleared' },
 	'occurrence.cleared': { v: 1, about: "A past day's log was taken away. data: occurrenceId" },
@@ -87,4 +90,16 @@ export function listEvents(actor: Actor, opts: { after?: number; limit?: number;
 		.all();
 	return rows
 		.map((r) => ({ seq: r.seq, at: r.at.toISOString(), type: r.type, v: r.v, habitId: r.habitId, date: r.date, source: r.source, data: r.data }));
+}
+
+/** The newest event of some types about one day of a habit. */
+export function lastEventOn(accountId: string, habitId: string, date: string, types: EventType[]): EventRow | undefined {
+	const r = db
+		.select()
+		.from(event)
+		.where(and(eq(event.accountId, accountId), eq(event.habitId, habitId), eq(event.date, date), inArray(event.type, types)))
+		.orderBy(desc(event.seq))
+		.limit(1)
+		.get();
+	return r && { seq: r.seq, at: r.at.toISOString(), type: r.type, v: r.v, habitId: r.habitId, date: r.date, source: r.source, data: r.data };
 }

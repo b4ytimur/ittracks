@@ -20,7 +20,7 @@ import { NOTE_MAX } from '$lib/forms';
 import { activeOptions, findOption, optionName } from '$lib/options';
 import type { Level } from '$lib/engine/streak';
 import { ActionError, canSeeHabit, requireScope, type Actor } from './actor';
-import { emit } from './events';
+import { emit, lastEventOn } from './events';
 import { buildDay, change, dayOf, findHabit, occurrenceFor, type Day, type HabitRow, type OccRow } from './day';
 import { isRoutine, kidsOn } from '../rollup';
 import { syncTree } from '../today';
@@ -94,6 +94,8 @@ export function doneOcc(actor: Actor, occ: OccRow, how: DoneHow, level: Level | 
 
 function doneOne(actor: Actor, occ: OccRow, how: DoneHow, level: Level | null): 'done' | 'needsInput' | 'gone' {
 	let r: 'done' | 'needsInput' | 'gone';
+	// Nothing logged yet: all the log holds after this came from this one tap, which Undo takes away.
+	const fresh = how !== 'mark' && !db.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, occ.id)).get();
 	if (how === 'mark') {
 		db.update(occurrence)
 			.set({ status: 'done', finishedAt: new Date(), level: level === 'target' ? null : level })
@@ -107,9 +109,19 @@ function doneOne(actor: Actor, occ: OccRow, how: DoneHow, level: Level | null): 
 	if (r === 'done' && finishAs(occ.id, userToday(actor.accountId, actor.tz)) !== 'done') return 'done';
 	if (r === 'done') {
 		const now = db.select({ level: occurrence.level }).from(occurrence).where(eq(occurrence.id, occ.id)).get();
-		emit(actor, 'occurrence.done', { habitId: occ.habitId, date: occ.date, data: { occurrenceId: occ.id, level: now?.level ?? null, how } });
+		emit(actor, 'occurrence.done', { habitId: occ.habitId, date: occ.date, data: { occurrenceId: occ.id, level: now?.level ?? null, how, fresh } });
 	}
 	return r;
+}
+
+/**
+ * Whether Undo takes away what the log holds: the day was last done by one tap on an empty log
+ * (one-tap Done, Same as last), with nothing saved since. For an Undo that doesn't say, such as
+ * Today's row after a reload.
+ */
+export function undoClears(actor: Actor, occ: OccRow): boolean {
+	const e = lastEventOn(actor.accountId, occ.habitId, occ.date, ['occurrence.done', 'log.saved', 'sets.logged', 'value.logged', 'occurrence.reopened']);
+	return e?.type === 'occurrence.done' && e.data.occurrenceId === occ.id && e.data.fresh === true;
 }
 
 export function skipOcc(actor: Actor, occ: OccRow) {

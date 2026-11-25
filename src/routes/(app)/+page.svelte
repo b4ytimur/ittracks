@@ -30,6 +30,7 @@
 	import StatusTag from '$lib/ui/StatusTag.svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { reorderFrom, type Mode } from '$lib/ui/list';
+	import { usualWay } from '$lib/log/usual';
 	import {
 		DONE_MODES,
 		LAYOUTS,
@@ -488,9 +489,10 @@
 		if (item.progress?.kind === 'amount' && !pending[o.id])
 			return { act: { label: stepLabel(item.progress), action: '?/plus', fields, submit: plus(o.id, item.name) }, ways: [...(details.length ? [] : [{ label: 'Log details…', href: `/log/${o.id}` }]), ...rest] };
 		if (o.slotCount) {
-			if (item.inProgress) return { act: { label: 'Resume', href: `/log/${o.id}` }, ways: [skip] };
-			if (item.canRepeat) return { act: { label: 'Same as last', action: '?/same', fields, submit: log }, ways: rest };
-			if (item.quickDone) return { act: { label: 'Done', action: '?/quick', fields, submit: log }, ways: rest };
+			const usual = usualWay(item);
+			if (usual === 'resume') return { act: { label: 'Resume', href: `/log/${o.id}` }, ways: [skip] };
+			if (usual === 'done') return { act: { label: 'Done', action: '?/quick', fields, submit: log }, ways: rest };
+			if (usual === 'same') return { act: { label: 'Same as last', action: '?/same', fields, submit: log }, ways: rest };
 			return { act: { label: 'Log', href: `/log/${o.id}` }, ways: [...levels, ...(levels.length ? ['-' as const] : []), skip] };
 		}
 		return { act: { label: 'Done', action: '?/done', fields, submit: log }, ways: levels.length ? rest : [skip] };
