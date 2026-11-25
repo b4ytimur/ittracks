@@ -141,4 +141,16 @@ describe('a line of the settings', () => {
 		expect(getGroupings(me)).toEqual(before);
 		expect(patch({ groupings: [] }, { groupings: before })).toHaveProperty('error');
 	});
+
+	it('keeps how a habit’s log is laid out, checked like any setting', () => {
+		const h = crypto.randomUUID();
+		const r = patchSettings(me, { set: { logLayouts: { [h]: 'all' } }, was: { logLayouts: {} } });
+		expect(r).toMatchObject({ now: { logLayouts: { [h]: 'all' } } });
+		expect(getSettings(me).logLayouts).toEqual({ [h]: 'all' });
+		// A page from before that doesn't overwrite it, and only known layouts go in.
+		expect(patchSettings(me, { set: { logLayouts: {} }, was: { logLayouts: { [crypto.randomUUID()]: 'all' } } })).toEqual({ moved: ['logLayouts'] });
+		expect(patchSettings(me, { set: { logLayouts: { [h]: 'sideways' } }, was: { logLayouts: { [h]: 'all' } } })).toHaveProperty('error');
+		patchSettings(me, { set: { logLayouts: {} }, was: { logLayouts: { [h]: 'all' } } });
+		expect(getSettings(me).logLayouts).toEqual({});
+	});
 });

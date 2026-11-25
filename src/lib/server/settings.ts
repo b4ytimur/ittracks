@@ -38,6 +38,8 @@ export interface Settings {
 	hints?: string[];
 	/** The order of the sections on a habit's page, per kind (src/lib/detail/sections.ts). */
 	detail?: Record<string, string[]>;
+	/** Habits whose log shows every place open, by id. Without one, one is open. */
+	logLayouts?: Record<string, 'all'>;
 	/** Starter packs copied in. Unset on an account from before there were packs: it has what used to be built in. */
 	packs?: string[];
 	/** The starting Areas were created once; deleting them all doesn't bring them back. */
