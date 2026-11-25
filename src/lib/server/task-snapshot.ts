@@ -4,6 +4,7 @@ import { and, eq, inArray, or } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { db } from './db';
 import { entry, metric, occurrence, slot, task, taskPart, undoSnapshot } from './db/schema';
+import { taskLogged } from './history';
 
 type Row = Record<string, unknown> & { id: string };
 interface Rows {
@@ -59,13 +60,20 @@ export function restoreTaskSnapshot(accountId: string, id: string): boolean {
 	const byId = (rows: Row[]) => new Map(rows.map((r) => [r.id, r]));
 	const sorted = (rows: Row[]) => [...rows].sort((a, b) => (a.id < b.id ? -1 : 1));
 	if (!now.task.length || (['task', 'metric', 'taskPart'] as const).some((k) => !same(sorted(now[k]), sorted(s.after[k])))) return false;
+	// What came with the change goes with it, unless something was logged in it since: then it is archived, and the log keeps it.
+	const logged = taskLogged(s.taskId);
 	db.transaction((tx) => {
 		const tables = { task, metric, taskPart } as const;
 		for (const k of ['task', 'metric', 'taskPart'] as const) {
 			const t = tables[k];
 			for (const r of s.before[k]) tx.insert(t).values(revive(r) as never).onConflictDoUpdate({ target: t.id, set: revive(r) as never }).run();
 			const keep = byId(s.before[k]);
-			for (const r of now[k]) if (!keep.has(r.id)) tx.delete(t).where(eq(t.id, r.id)).run();
+			for (const r of now[k]) {
+				if (keep.has(r.id)) continue;
+				const used = k === 'metric' ? logged.metrics.has(r.id) : k === 'taskPart' ? logged.parts.has(r.id) : now.taskPart.some((p) => p.childTaskId === r.id && logged.parts.has(p.id));
+				if (used) tx.update(t).set({ archived: true } as never).where(eq(t.id, r.id)).run();
+				else tx.delete(t).where(eq(t.id, r.id)).run();
+			}
 		}
 		for (const [k, t] of [['slot', slot], ['entry', entry], ['occurrence', occurrence]] as const) {
 			const left = byId(s.after[k]);

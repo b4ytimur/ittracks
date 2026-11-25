@@ -79,6 +79,11 @@ export function restoreSnapshot(accountId: string, id: string): boolean {
 		return plain([vs, r.slot.filter((x) => vs.some((v) => v.id === x.variantId)), r.identities.filter((x) => x.habitId === habitId).map((x) => x.identityId).sort()]);
 	};
 	if (!same(ofMine(now), ofMine(after))) return false;
+	// A Variant that came with the change goes with it, unless a day was logged on it since.
+	const goes = new Set(now.variant.filter((v) => v.habitId === habitId && !at(before.variant, v.id)).map((v) => v.id));
+	const onIt = now.occurrence.filter((o) => goes.has(o.variantId as string));
+	const logs = onIt.length ? new Set(db.select({ id: entry.occurrenceId }).from(entry).where(inArray(entry.occurrenceId, onIt.map((o) => o.id).slice(0, 900))).all().map((e) => e.id)) : new Set<string>();
+	if (onIt.some((o) => logs.has(o.id) || ((o.status === 'done' || o.status === 'skipped') && !same(plain(o), plain(at(after.occurrence, o.id) ?? null))))) return false;
 
 	db.transaction((tx) => {
 		const was = revive(at(before.habit, habitId)!);

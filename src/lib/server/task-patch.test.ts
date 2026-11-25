@@ -4,7 +4,7 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { eq } from 'drizzle-orm';
 import { db } from './db';
-import { entry, occurrence, slot } from './db/schema';
+import { entry, metric, occurrence, slot } from './db/schema';
 import { createAccount } from './auth';
 import { getTaskForm, saveTask } from './repo/tasks';
 import { saveHabit } from './repo/habits';
@@ -78,6 +78,21 @@ describe('a change to one line of a Task', () => {
 		expect(form().metrics.map((m) => m.id)).toEqual([w]);
 		expect(db.select().from(slot).where(eq(slot.id, slotId)).get()?.targets).toEqual({ [w]: 100 });
 		expect(restoreTaskSnapshot(me, r.undo)).toBe(false);
+	});
+
+	it('a field that came with it and was logged in since is kept for its logs', () => {
+		const [old] = form().metrics;
+		const added = { ...old, id: crypto.randomUUID(), name: 'Effort' };
+		const unused = { ...old, id: crypto.randomUUID(), name: 'Never used' };
+		const r = patch({ metrics: [added, unused] }, { metrics: form().metrics }, { keep: true }) as { undo: string };
+		const e = db.select().from(entry).where(eq(entry.taskId, id)).get()!;
+		db.update(entry).set({ values: { ...e.values, [added.id]: 8 } }).where(eq(entry.id, e.id)).run();
+		expect(restoreTaskSnapshot(me, r.undo)).toBe(true);
+		expect(form().metrics.map((m) => m.id)).toEqual([w]);
+		const left = db.select().from(metric).where(eq(metric.taskId, id)).all();
+		expect(left.find((m) => m.id === added.id)?.archived).toBe(true);
+		expect(left.some((m) => m.id === unused.id)).toBe(false);
+		expect(db.select().from(entry).where(eq(entry.id, e.id)).get()!.values[added.id]).toBe(8);
 	});
 
 	it('is not taken back over a later change', () => {
