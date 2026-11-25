@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fromDraft, placeKey } from './logplaces';
+import { fromDraft, placeKey } from './places';
 
 const at = (path: string, task: string | null) => ({ path, task: task ? { id: task } : null });
 const squat = at('s1', 'squat');
