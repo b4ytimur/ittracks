@@ -175,6 +175,7 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 		areas: listAreas(accountId),
 		ranges: settings.ranges,
 		showAllSections: settings.showAllSections,
+		detail: settings.detail ?? {},
 		hidden: getViews(accountId).hidden,
 		pinned: !isNew && settings.pinned.includes(params.id),
 		archived: !isNew && !!ownedHabit(accountId, params.id)?.archived,

@@ -36,6 +36,8 @@ export interface Settings {
 	taskTypes: TaskType[];
 	/** Hints that were there once and are done with (src/lib/hints.ts). */
 	hints?: string[];
+	/** The order of the sections on a habit's page, per kind (src/lib/detail/sections.ts). */
+	detail?: Record<string, string[]>;
 	/** Starter packs copied in. Unset on an account from before there were packs: it has what used to be built in. */
 	packs?: string[];
 	/** The starting Areas were created once; deleting them all doesn't bring them back. */

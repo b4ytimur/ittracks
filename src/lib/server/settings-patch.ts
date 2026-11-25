@@ -4,6 +4,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { checkSettings, cleanSettings } from '$lib/rules/settings';
+import { KINDS, type Kind } from '$lib/detail/sections';
 import { firstError } from '$lib/forms';
 import { groupingList, groupingsProblem } from '$lib/groupings';
 import { PLAIN_TASK_TYPES, taskTypeSchema } from '$lib/task-types';
@@ -28,7 +29,8 @@ const fields = z
 		units: unitKinds,
 		groupings: groupingList,
 		taskTypes: z.array(taskTypeSchema).max(60),
-		hints: z.array(z.string().max(40)).max(50)
+		hints: z.array(z.string().max(40)).max(50),
+		detail: z.partialRecord(z.enum(Object.keys(KINDS) as [Kind, ...Kind[]]), z.array(z.string().max(20)).max(20))
 	})
 	.partial()
 	.strict();
@@ -67,6 +69,7 @@ export function patchSettings(accountId: string, body: unknown): SettingsResult 
 	// Units and groupings are read as the account has them, also before any were stored.
 	const cur: Settings = { ...getSettings(accountId), units: getKinds(accountId), groupings: getGroupings(accountId), taskTypes: ownTypes(accountId) };
 	cur.hints ??= [];
+	cur.detail ??= {};
 	const keys = Object.keys(p.set) as (keyof SettingsSet)[];
 	if (!keys.length) return { error: 'Nothing to change' };
 	const moved = keys.filter((k) => ordered(cur[k]) !== ordered(p.was[k]) && ordered(cur[k]) !== ordered(p.set[k]));
