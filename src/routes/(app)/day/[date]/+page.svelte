@@ -5,7 +5,7 @@
 	import { page } from '$app/state';
 	import type { ActionResult, SubmitFunction } from '@sveltejs/kit';
 	import { onMount, untrack } from 'svelte';
-	import { postAction, showToast } from '$lib/toast.svelte';
+	import { showToast, undoWith } from '$lib/toast.svelte';
 	import { queueable } from '$lib/queueable';
 	import { addDays } from '$lib/engine/dates';
 	import DayNote from '$lib/DayNote.svelte';
@@ -57,16 +57,12 @@
 		if (result.type !== 'success') return;
 		const did = result.data?.did as { habit: string; verb: string; undo: string } | undefined;
 		if (did?.verb) {
-			showToast(`${did.verb} ${did.habit} on ${short(data.date)}.`, () =>
-				postAction('?/restore', { snapshot: did.undo }).then(() => {})
-			);
+			showToast(`${did.verb} ${did.habit} on ${short(data.date)}.`, undoWith(`/day/${data.date}?/restore`, { snapshot: did.undo }));
 			return;
 		}
 		const slipped = result.data?.slipped as { id: string; habit: string; limit: boolean } | undefined;
 		if (slipped) {
-			showToast(`${slipped.limit ? 'Logged one' : 'Slip logged'} for ${slipped.habit} on ${short(data.date)}.`, () =>
-				postAction('?/unslip', { id: slipped.id }).then(() => {})
-			);
+			showToast(`${slipped.limit ? 'Logged one' : 'Slip logged'} for ${slipped.habit} on ${short(data.date)}.`, undoWith(`/day/${data.date}?/unslip`, { id: slipped.id }));
 			return;
 		}
 		const started = result.data?.started as { habit: string } | undefined;
@@ -75,7 +71,7 @@
 			return;
 		}
 		const removed = result.data?.unslipped as Record<string, unknown> | undefined;
-		if (removed) showToast('Slip removed.', () => postAction('?/reslip', { slip: JSON.stringify(removed) }).then(() => {}));
+		if (removed) showToast('Slip removed.', undoWith(`/day/${data.date}?/reslip`, { slip: JSON.stringify(removed) }));
 	}
 
 	// Back from the full log of this day.

@@ -130,7 +130,7 @@
 	const nameOf = (item: T) => label?.(item) ?? key(item);
 	const removeOf = (item: T) => (typeof removeLabel === 'function' ? removeLabel(item) : removeLabel);
 	const keys = $derived(items.map(key));
-	const uid = `el-${Math.random().toString(36).slice(2, 9)}`;
+	const uid = $props.id();
 
 	// ----- Moves -----
 

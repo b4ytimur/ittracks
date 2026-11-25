@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { untrack } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import ViewBar from '$lib/ViewBar.svelte';
 	import EditableList from '$lib/ui/EditableList.svelte';
@@ -11,7 +11,7 @@
 	import AreaGroups from '$lib/ui/AreaGroups.svelte';
 	import InlineText from '$lib/ui/InlineText.svelte';
 	import { invalidateAll } from '$app/navigation';
-	import { runAction, showToast } from '$lib/toast.svelte';
+	import { runAction, showToast, undoWith } from '$lib/toast.svelte';
 	import BulkBar from '$lib/bulk/BulkBar.svelte';
 	import { unitOptions } from '$lib/bulk/catalog';
 	import { groupBy } from '$lib/views';
@@ -102,27 +102,24 @@
 	async function rename(t: Task, name: string) {
 		const before = t.name;
 		patch(t.id, { name });
-		const r = await runAction('?/rename', { id: t.id, name });
+		const r = await runAction('/library?/rename', { id: t.id, name });
 		if (!r.ok) {
 			patch(t.id, { name: before });
 			return showToast(r.error ?? "Couldn't rename it. Are you online?");
 		}
-		showToast(`Renamed to “${name}”.`, async () => {
-			await runAction('?/rename', { id: t.id, name: before });
-			await invalidateAll();
-		});
+		showToast(`Renamed to “${name}”.`, undoWith('/library?/rename', { id: t.id, name: before }));
 	}
 	async function archive(t: Task) {
 		const to = !t.archived;
 		patch(t.id, { archived: to });
-		const r = await runAction(to ? '?/archive' : '?/unarchive', { id: t.id });
+		const r = await runAction(to ? '/library?/archive' : '/library?/unarchive', { id: t.id });
 		if (!r.ok) {
 			patch(t.id, { archived: !to });
 			return showToast(r.error ?? "Couldn't change it. Are you online?");
 		}
 		// The row shows its own way back until editing ends.
 		if (to) struck.add(t.id);
-		else if (!struck.delete(t.id)) showToast(`${t.name} is back.`, async () => void (await runAction('?/archive', { id: t.id })));
+		else if (!struck.delete(t.id)) showToast(`${t.name} is back.`, undoWith('/library?/archive', { id: t.id }));
 	}
 	/** Editing ended: the struck rows go, and the band can bring them back. */
 	function leave() {
@@ -131,9 +128,13 @@
 		if (!gone.length) return;
 		invalidateAll();
 		showToast(`Archived ${gone.length === 1 ? gone[0].name : `${gone.length} Tasks`}. ${gone.length === 1 ? 'Its' : 'Their'} logs are kept.`, async () => {
-			for (const t of gone) await runAction('?/unarchive', { id: t.id });
+			let ok = true;
+			for (const t of gone) ok = (await runAction('/library?/unarchive', { id: t.id })).ok && ok;
+			return ok;
 		});
 	}
+	// Leaving the page ends editing too.
+	onDestroy(leave);
 	const setMode = (m: Mode) => {
 		if (mode === 'edit' && m !== 'edit') leave();
 		mode = m;

@@ -35,13 +35,13 @@ export function untrash(accountId: string, kind: Kind, id: string, archived: boo
 export function sweep(now = Date.now()): number {
 	const due = new Date(now);
 	let n = 0;
-	for (const h of db.select({ id: habit.id, accountId: habit.accountId }).from(habit).where(lt(habit.deleteAfter, due)).all()) {
+	for (const h of db.select({ id: habit.id, accountId: habit.accountId }).from(habit).where(and(lt(habit.deleteAfter, due), eq(habit.archived, true))).all()) {
 		deleteHabit(h.accountId, h.id);
 		const s = getSettings(h.accountId);
 		if (s.pinned.includes(h.id)) saveSettings(h.accountId, { pinned: s.pinned.filter((x) => x !== h.id) });
 		n++;
 	}
-	for (const t of db.select({ id: task.id, accountId: task.accountId }).from(task).where(lt(task.deleteAfter, due)).all()) {
+	for (const t of db.select({ id: task.id, accountId: task.accountId }).from(task).where(and(lt(task.deleteAfter, due), eq(task.archived, true))).all()) {
 		deleteTask(t.accountId, t.id);
 		n++;
 	}

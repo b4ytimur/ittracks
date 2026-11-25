@@ -117,7 +117,7 @@
 		if (!a.batch) return void showToast(a.summary);
 		showToast(`${a.summary}.`, async () => {
 			const u = await call('bulk_undo', { batch: a.batch });
-			if (!u.ok) return void showToast(u.error);
+			if (!u.ok) return u.error;
 			const res = u.result as { kept: number };
 			await onchanged();
 			showToast(res.kept ? `Undone. ${res.kept} changed again since, so ${res.kept === 1 ? 'it was' : 'they were'} kept.` : 'Undone.');

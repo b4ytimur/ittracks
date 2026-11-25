@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { queueable } from '$lib/queueable';
-	import { dismiss, hold, postAction, release, showToast } from '$lib/toast.svelte';
+	import { dismiss, hold, release, showError, showToast, undoWith } from '$lib/toast.svelte';
 	import type { ActionResult, SubmitFunction } from '@sveltejs/kit';
 	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
@@ -54,7 +54,7 @@
 	 */
 	const just = new SvelteMap<string, { words: string; undo?: () => void }>();
 	const HOLD_MS = 4500;
-	function celebrate(habitId: string, entry?: number, undo?: () => Promise<void>) {
+	function celebrate(habitId: string, entry?: number, undo?: () => Promise<boolean>) {
 		const item = data.build.find((b) => b.habitId === habitId);
 		const jar = item?.reward?.jar;
 		const words = item?.reward?.celebrate
@@ -70,9 +70,9 @@
 			undo:
 				undo &&
 				(async () => {
+					if (!(await undo())) return void showError('Not undone. Are you online?');
 					if (entry) dismiss(entry);
 					just.delete(habitId);
-					await undo();
 					await invalidateAll();
 				})
 		});
@@ -120,7 +120,7 @@
 			showToast(
 				`Saved ${item.name}${item.progress ? `: ${progressText(item.progress)}` : ''}. It counts once it reaches ${short === 'target' ? 'the full target' : 'the Minimum'}, and stays open until the day ends.`
 			);
-		else if (item) showToast(`Logged ${item.name}.`, () => postAction('?/undo', { occurrence: id, clear: clear ? '1' : '' }).then(() => {}));
+		else if (item) showToast(`Logged ${item.name}.`, undoWith('/?/undo', { occurrence: id, clear: clear ? '1' : '' }));
 		const u = new URL(page.url);
 		u.searchParams.delete('did');
 		u.searchParams.delete('clear');
@@ -134,7 +134,7 @@
 		if (result.type !== 'success') return;
 		const did = result.data?.did as Did | undefined;
 		if (!did) return;
-		const undo = () => postAction('?/undo', { occurrence: did.occurrence, clear: did.clear ? '1' : '' }).then(() => {});
+		const undo = undoWith('/?/undo', { occurrence: did.occurrence, clear: did.clear ? '1' : '' });
 		// Short of what counts for this habit: it stays open, and says why.
 		if (did.short)
 			showToast(
@@ -165,10 +165,7 @@
 				const p = result.data?.plus as { value: number; target: number; unit: string; done: boolean } | undefined;
 				if (!p) return;
 				const n = (x: number) => String(Math.round(x * 100) / 100);
-				showToast(`${name}: ${n(p.value)} of ${n(p.target)}${p.unit ? ` ${p.unit}` : ''}${p.done ? '. Done!' : '.'}`, async () => {
-					await postAction('?/plus', { occurrence: occurrenceId, by: '-1' });
-					await invalidateAll();
-				});
+				showToast(`${name}: ${n(p.value)} of ${n(p.target)}${p.unit ? ` ${p.unit}` : ''}${p.done ? '. Done!' : '.'}`, undoWith('/?/plus', { occurrence: occurrenceId, by: '-1' }));
 			}
 		});
 	const resisted =
@@ -178,7 +175,7 @@
 			await update();
 			if (result.type === 'success' && result.data?.cravingId) {
 				const id = String(result.data.cravingId);
-				showToast(vote ? `Resisted. That's a vote for who you want to be.` : `Craving resisted. Nice.`, () => postAction('?/uncraving', { id }).then(() => {}));
+				showToast(vote ? `Resisted. That's a vote for who you want to be.` : `Craving resisted. Nice.`, undoWith('/?/uncraving', { id }));
 			}
 		};
 	const stepLabel = (p: { type: string; unit: string; step: number | null }) => {
@@ -233,8 +230,10 @@
 		setToday({ sections: template.sections, done: template.done, widgets: template.widgets, lines: template.lines, timeAware: template.timeAware, headline: template.headline });
 		showToast('Layout reset.', () => setToday({ sections, done, widgets, lines, timeAware, headline }));
 	}
-	const folded = (k: string) => views.today.folded.includes(k);
-	const fold = (k: string) => setToday({ folded: toggleIn(views.today.folded, k) });
+	const folded = (k: string) => views.today.folded.includes(foldKey(k));
+	// Stored keys are short and few; a long group name folds by its start.
+	const foldKey = (k: string) => k.slice(0, 64);
+	const fold = (k: string) => setToday({ folded: toggleIn(views.today.folded, foldKey(k)).slice(-100) });
 	/** Every widget, the shown ones first in their order. */
 	const allWidgets = $derived([...views.today.widgets, ...(Object.keys(WIDGETS) as WidgetKey[]).filter((w) => !views.today.widgets.includes(w))]);
 	const reorderWidgets = (order: string[]) => setToday({ widgets: (order as WidgetKey[]).filter((w) => views.today.widgets.includes(w)) });
@@ -428,7 +427,7 @@
 		if (item.progress?.kind === 'amount' && !pending[o.id])
 			return { act: { label: stepLabel(item.progress), action: '?/plus', fields, submit: plus(o.id, item.name) }, ways: [...(details.length ? [] : [{ label: 'Log details…', href: `/log/${o.id}` }]), ...rest] };
 		if (o.slotCount) {
-			if (item.inProgress) return { act: { label: 'Resume', href: `/log/${o.id}` }, ways: ['-' as const, skip].slice(1) };
+			if (item.inProgress) return { act: { label: 'Resume', href: `/log/${o.id}` }, ways: [skip] };
 			if (item.canRepeat) return { act: { label: 'Same as last', action: '?/same', fields, submit: log }, ways: rest };
 			if (item.quickDone) return { act: { label: 'Done', action: '?/quick', fields, submit: log }, ways: rest };
 			return { act: { label: 'Log', href: `/log/${o.id}` }, ways: [...levels, ...(levels.length ? ['-' as const] : []), skip] };
@@ -906,9 +905,7 @@
 									await update({ reset: false });
 									if (result.type === 'success' && result.data?.slipped) {
 										const sl = result.data.slipped as { id: string; habit: string };
-										showToast(b.limit ? `Logged one for ${sl.habit}.` : `Slip logged for ${sl.habit}.`, () =>
-											postAction('?/unslip', { id: sl.id }).then(() => {})
-										);
+										showToast(b.limit ? `Logged one for ${sl.habit}.` : `Slip logged for ${sl.habit}.`, undoWith('/?/unslip', { id: sl.id }));
 									}
 								}}
 						>

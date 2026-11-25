@@ -67,8 +67,12 @@ export function changeArea(accountId: string, id: string, values: { name?: strin
 	return Object.keys(set).length > 0 && db.update(area).set(set).where(mine(accountId, id)).run().changes > 0;
 }
 
-/** Add an Area at the end, or find the one that has the name already. */
-export const addArea = (accountId: string, name: string): string | null => areaFor(accountId, name, true);
+/** Add an Area at the end. `existed`: there was one with that name, which is left as it is. */
+export function addArea(accountId: string, name: string): { id: string; existed: boolean } | null {
+	const had = areaByName(accountId, name);
+	const id = had ?? areaFor(accountId, name, true);
+	return id ? { id, existed: !!had } : null;
+}
 
 /** Put the Areas in this order. Areas left out keep their place after them. */
 export function moveAreas(accountId: string, order: string[]) {

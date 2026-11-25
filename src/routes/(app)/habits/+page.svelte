@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { describeSchedule } from '$lib/describe';
 	import { forest } from '$lib/engine/tree';
-	import { untrack } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { invalidateAll } from '$app/navigation';
 	import ViewBar from '$lib/ViewBar.svelte';
@@ -15,7 +15,7 @@
 	import { moveKey, reorderFrom, type Mode, type Move } from '$lib/ui/list';
 	import { isFollow, isGroup } from '$lib/engine/schedule';
 	import { saveLayout, viewOp } from '$lib/viewclient';
-	import { runAction, showToast } from '$lib/toast.svelte';
+	import { runAction, showToast, undoWith } from '$lib/toast.svelte';
 	import { HABIT_LINES, groupBy, manualOrder, passes, type HabitLineKey } from '$lib/views';
 
 	let { data } = $props();
@@ -114,7 +114,7 @@
 		const order = moveKey(mine(habits).map((x) => x.id), id, after, 'after');
 		habits = habits.map((x) => (x.id === id ? { ...x, parentId } : x));
 		views.today = { ...views.today, order };
-		const r = await runAction('?/move', { id, parent: parentId ?? '' });
+		const r = await runAction('/habits?/move', { id, parent: parentId ?? '' });
 		if (!r.ok) {
 			habits = habits.map((x) => (x.id === id ? { ...x, parentId: was.parentId } : x));
 			views.today = { ...views.today, order: was.order };
@@ -122,7 +122,7 @@
 		}
 		saveLayout({ op: 'patch', today: { order } }, () => (views.today = { ...views.today, order: was.order }));
 		showToast(done, async () => {
-			await runAction('?/move', { id, parent: was.parentId ?? '' });
+			if (!(await runAction('/habits?/move', { id, parent: was.parentId ?? '' })).ok) return false;
 			views.today = { ...views.today, order: was.order };
 			viewOp({ op: 'patch', today: { order: was.order } });
 			await invalidateAll();
@@ -139,28 +139,25 @@
 	async function rename(h: Habit, name: string) {
 		const before = h.name;
 		habits = habits.map((x) => (x.id === h.id ? { ...x, name } : x));
-		const r = await runAction('?/rename', { id: h.id, name });
+		const r = await runAction('/habits?/rename', { id: h.id, name });
 		if (!r.ok) {
 			habits = habits.map((x) => (x.id === h.id ? { ...x, name: before } : x));
 			return showToast(r.error ?? "Couldn't rename it. Are you online?");
 		}
-		showToast(`Renamed to “${name}”.`, async () => {
-			await runAction('?/rename', { id: h.id, name: before });
-			await invalidateAll();
-		});
+		showToast(`Renamed to “${name}”.`, undoWith('/habits?/rename', { id: h.id, name: before }));
 	}
 
 	async function archive(h: Habit) {
 		const to = !h.archived;
 		habits = habits.map((x) => (x.id === h.id ? { ...x, archived: to } : x));
-		const r = await runAction(to ? '?/archive' : '?/unarchive', { id: h.id });
+		const r = await runAction(to ? '/habits?/archive' : '/habits?/unarchive', { id: h.id });
 		if (!r.ok) {
 			habits = habits.map((x) => (x.id === h.id ? { ...x, archived: !to } : x));
 			return showToast(r.error ?? "Couldn't change it. Are you online?");
 		}
 		// The row shows its own way back until editing ends.
 		if (to) struck.add(h.id);
-		else if (!struck.delete(h.id)) showToast(`${h.name} is back.`, async () => void (await runAction('?/archive', { id: h.id })));
+		else if (!struck.delete(h.id)) showToast(`${h.name} is back.`, undoWith('/habits?/archive', { id: h.id }));
 	}
 	/** Editing ended: the struck rows go, and the band can bring them back. */
 	function leave() {
@@ -169,9 +166,13 @@
 		if (!gone.length) return;
 		invalidateAll();
 		showToast(`Archived ${gone.length === 1 ? gone[0].name : `${gone.length} habits`}. ${gone.length === 1 ? 'Its' : 'Their'} logs are kept.`, async () => {
-			for (const h of gone) await runAction('?/unarchive', { id: h.id });
+			let ok = true;
+			for (const h of gone) ok = (await runAction('/habits?/unarchive', { id: h.id })).ok && ok;
+			return ok;
 		});
 	}
+	// Leaving the page ends editing too.
+	onDestroy(leave);
 	const setMode = (m: Mode) => {
 		if (mode === 'edit' && m !== 'edit') leave();
 		mode = m;

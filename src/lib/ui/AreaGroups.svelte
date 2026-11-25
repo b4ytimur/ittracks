@@ -41,8 +41,10 @@
 		return i < 0 ? 999 : i;
 	};
 
+	const send = (body: object) => fetch('/api/areas', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null);
+	const undo = (body: object) => async () => !!(await send(body))?.ok;
 	async function call(body: object): Promise<Record<string, unknown> | null> {
-		const r = await fetch('/api/areas', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null);
+		const r = await send(body);
 		if (!r?.ok) {
 			showError('Not saved. Are you online?');
 			return null;
@@ -54,23 +56,24 @@
 	async function change(a: Area, values: { name?: string; color?: string; icon?: string }) {
 		const was = 'name' in values ? { name: a.name } : 'icon' in values ? { icon: a.icon } : { color: a.color };
 		if (!(await call({ op: 'change', id: a.id, ...values }))) return;
-		showToast(values.name ? `Renamed ${a.name} to ${values.name}.` : `${a.name} has a new ${'icon' in values ? 'icon' : 'colour'}.`, async () => void (await call({ op: 'change', id: a.id, ...was })));
+		showToast(values.name ? `Renamed ${a.name} to ${values.name}.` : `${a.name} has a new ${'icon' in values ? 'icon' : 'colour'}.`, undo({ op: 'change', id: a.id, ...was }));
 	}
 	async function remove(a: Area) {
 		const r = await call({ op: 'delete', id: a.id });
-		if (r) showToast(`Deleted ${a.name}. What was in it has no Area now.`, async () => void (await call({ op: 'restore', deleted: r.deleted })));
+		if (r) showToast(`Deleted ${a.name}. What was in it has no Area now.`, undo({ op: 'restore', deleted: r.deleted }));
 	}
 	async function add(name?: string) {
 		if (!name) return;
 		const r = await call({ op: 'add', name });
-		if (r) showToast(`Added ${name}.`, async () => void (await call({ op: 'delete', id: r.id })));
+		if (r?.existed) showToast(`There is an Area called ${name} already.`);
+		else if (r) showToast(`Added ${name}.`, undo({ op: 'delete', id: r.id }));
 	}
 	async function move(keys: string[]) {
 		const before = areas.map((a) => a.id);
 		order = keys;
 		const r = await call({ op: 'move', order: keys.filter((k) => areaOf(k)) });
 		order = null;
-		if (r) showToast('Areas reordered.', async () => void (await call({ op: 'move', order: before })));
+		if (r) showToast('Areas reordered.', undo({ op: 'move', order: before }));
 	}
 </script>
 

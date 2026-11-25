@@ -3,7 +3,7 @@
 	// connection. Nothing in it goes away on a timer; it tucks under the bar while you scroll down.
 	import { invalidateAll } from '$app/navigation';
 	import { canUndo, type Entry } from '$lib/echo';
-	import { band, dismiss } from '$lib/toast.svelte';
+	import { band, dismiss, showError } from '$lib/toast.svelte';
 
 	let { status = '' }: { status?: string } = $props();
 
@@ -31,7 +31,10 @@
 	async function act(e: Entry) {
 		dismiss(e.id);
 		if (e.error) return void (await e.retry?.());
-		await e.undo?.();
+		const r = await Promise.resolve()
+			.then(() => e.undo?.())
+			.catch(() => false);
+		if (r === false || typeof r === 'string') return void showError(typeof r === 'string' ? r : `Not undone: ${e.text}`, () => act(e));
 		said = 'Undone.';
 		await invalidateAll();
 	}

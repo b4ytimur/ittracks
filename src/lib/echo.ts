@@ -3,12 +3,13 @@
 export interface Entry {
 	id: number;
 	text: string;
-	undo?: () => void | Promise<void>;
+	/** Takes it back. False or a sentence says it couldn't. */
+	undo?: () => unknown;
 	/** The change shows its own way back where it is, so the band offers no Undo for it yet. */
 	held?: boolean;
 	/** A save that failed, and how to send it again. */
 	error?: boolean;
-	retry?: () => void | Promise<void>;
+	retry?: () => unknown;
 }
 
 const CAP = 10;

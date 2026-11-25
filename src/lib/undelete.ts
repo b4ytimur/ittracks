@@ -9,6 +9,6 @@ export async function deleteHere(kind: 'habit' | 'task', id: string, name: strin
 	await goto(to, { invalidateAll: true });
 	showToast(`Deleted ${name} with its logs.`, async () => {
 		const back = await fetch('/api/undelete', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind, id, archived }) }).catch(() => null);
-		showToast(back?.ok ? `${name} is back.` : back ? `${name} is gone for good.` : `${name} is not back. Are you online?`);
+		return back?.ok || (back?.status === 404 ? `${name} is gone for good.` : `${name} is not back. Are you online?`);
 	});
 }

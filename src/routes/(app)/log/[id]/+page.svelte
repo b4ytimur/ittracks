@@ -921,11 +921,11 @@
 		padding: 0 0.25rem 0.25rem;
 	}
 	.sets td {
-		padding: 0.2rem 0.25rem;
+		padding: 0.2rem 0.1rem;
 	}
 	.sets td:first-child {
 		color: var(--muted);
-		width: 2rem;
+		width: 1.2rem;
 	}
 	.sets tr.done :global(input[type='number']) {
 		border-color: var(--accent);
