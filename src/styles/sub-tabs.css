@@ -35,7 +35,6 @@
 }
 .subtabs-row > .tab { flex: none; justify-items: start; } /* a label never breaks, and starts where its bar does: on the column, and still there at 600 */
 /* A row opens on its current tab, before any script; elsewhere the same call on mount does it (README). */
-.subtabs-row > .tab:is([aria-current='page'], [aria-selected='true']) { scroll-initial-target: nearest; }
 
 /* ---------- Forced colours: the line is a plain edge; the current bar is Tab's Highlight ---------- */
 @media (forced-colors: active) { .subtabs { border-block-end-color: CanvasText; } }

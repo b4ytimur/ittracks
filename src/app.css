@@ -26,6 +26,8 @@
 @import './styles/number-field.css';
 @import './styles/log-screen.css';
 @import './styles/actions-bar.css';
+@import './styles/said-line.css';
+@import './styles/form-section.css';
 
 /* The names from before the design system's tokens. Screens move off them one by one. */
 :root {

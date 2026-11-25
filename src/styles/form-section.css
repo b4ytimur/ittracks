@@ -1,0 +1,39 @@
+/* FormSection: a titled part of a long form (Registries' block kind `fields`): GroupHeading over one card of Field rows,
+   or over a list of RepeatableRows. Owns .form-section (a heading's place in a form, the folded body) and .form-intro (the
+   one line under the heading). The heading is GroupHeading's, the fold Disclosure's, the card base's, the fields Field's
+   on Layout's .l-stack, the rows RepeatableRow's, the "+ Levels" pills Chip's.
+   Markup (the form stacks its sections 24 apart):
+     <form class="l-stack" style="--gap: var(--space-section)" novalidate>
+       <div class="card l-stack">… the fields that name the record: no heading …</div>
+       <div class="form-section l-region" data-node="schedule" data-kind="heading">
+         <h2 class="group-heading section-title" data-depth="1" data-mode="use">
+           <span class="fold"></span><span class="slot"></span>      or button.fold[aria-expanded][aria-controls][aria-labelledby]
+           <span class="title"><span id="s1">Schedule</span></span><span class="rule" aria-hidden="true"></span>
+         </h2>
+         <p class="form-intro meta">…</p>                             optional, one line or two
+         <div class="card l-stack">… .field …</div>                   or ul.elist (RepeatableRow), or an .l-stack of several
+       </div>
+       <div class="chips" role="group" aria-label="Add to this habit"> <button class="toggle">…</button> </div>
+       <div class="actions-bar l-stack">…</div>                       ActionsBar
+     </form> */
+
+/* ---------- The heading's place: the form's gap spaces sections (S.6, 24), so the heading's own 24 above goes ---------- */
+.form-section > .group-heading { margin-block-start: 0; }
+/* Folded, the section is its heading line: no 8 under it, so it adds nothing to the form's 24. */
+.form-section > .group-heading:has(> .fold[aria-expanded='false']) { margin-block-end: 0; }
+/* The body stays in the DOM while folded (a list's rows don't): the form still sends its values, and a gap in it can be
+   found and opened. Its own display would beat the browser's [hidden], so it is restated. */
+.form-section > [hidden] { display: none; }
+
+/* ---------- The intro: one line under the heading, on the title's and the fields' column ---------- */
+/* 1px card edge + 16, so it starts where the title and the card's labels do (x = 17). 8 under the heading, 8 over the body.
+   ink-muted on the page 4.59 / 7.83. */
+.form-intro {
+	padding-inline: calc(var(--space-group) + 1px); margin-block-end: var(--space-inline);
+	color: var(--ink-muted); overflow-wrap: anywhere;
+}
+
+/* ---------- A field a gap's link jumps to keeps its label and its message in view ---------- */
+/* Under the stuck heading's own scroll-padding (GroupHeading, 40) the box stops 40 lower: its hint and label (48) clear
+   the 32px heading, and at the bottom edge its message (24) clears the band (WCAG 2.4.11). */
+.form-section :is(input, select, textarea) { scroll-margin-block: var(--space-page); }

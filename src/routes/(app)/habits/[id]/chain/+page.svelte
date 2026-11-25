@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { weekdayNames } from '$lib/describe';
+	import RecordTabs from '$lib/detail/RecordTabs.svelte';
+	import EditChrome from '$lib/ui/EditChrome.svelte';
 
 	let { data } = $props();
 
@@ -47,17 +49,8 @@
 
 <svelte:head><title>{data.name} chain · ittracks</title></svelte:head>
 
-<header class="bar">
-	<div>
-		<h1>{data.name}</h1>
-		<div class="muted">Last {data.weeks} weeks{data.summary ? ` · ${data.summary}` : ''}</div>
-	</div>
-	<div class="row" style="align-items: center">
-		<a href="/habits/{data.id}/stats">Stats</a>
-		<a href="/habits/{data.id}">Edit</a>
-		<a href="/">Back</a>
-	</div>
-</header>
+<EditChrome title={data.name} back={{ href: '/habits', label: 'Habits' }} modes={['use']} hints={{ use: `Last ${data.weeks} weeks${data.summary ? ` · ${data.summary}` : ''}` }} />
+<RecordTabs habit={data.id} at="chain" />
 
 <div class="grid" style="--weeks: {data.weeks}" role="group" aria-label="Calendar of the last {data.weeks} weeks">
 	<span aria-hidden="true"></span>
@@ -118,9 +111,6 @@
 	.month {
 		white-space: nowrap;
 		overflow: visible;
-	}
-	h1 {
-		overflow-wrap: anywhere;
 	}
 	.cell {
 		display: inline-block;

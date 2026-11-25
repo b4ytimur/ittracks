@@ -542,6 +542,23 @@ export const appValue = sqliteTable('app_value', {
 // ---------- Integrations ----------
 
 /**
+ * What a change that rewrites past days replaced, so its Undo puts back exactly that. Kept for a
+ * day; only what nothing touched since is put back.
+ */
+export const undoSnapshot = sqliteTable(
+	'undo_snapshot',
+	{
+		id: id(),
+		accountId: text('account_id')
+			.notNull()
+			.references(() => account.id, { onDelete: 'cascade' }),
+		data: text('data', { mode: 'json' }).notNull(),
+		createdAt: createdAt()
+	},
+	(t) => [index('undo_snapshot_account_idx').on(t.accountId)]
+);
+
+/**
  * A key for Shortcuts, quick-log links, the MCP server and scripts. Only a hash of the secret
  * is kept, so a key is shown once. Scopes and habits limit what it can do
  * (src/lib/server/core/tokens.ts).
