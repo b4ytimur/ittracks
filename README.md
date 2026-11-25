@@ -65,11 +65,13 @@ SvelteKit (TypeScript), SQLite through Drizzle ORM, Vitest. It ships as one Dock
 ## Develop
 
 ```sh
-npm install
-npm run dev        # http://localhost:5173
+make up            # install, migrate, start; prints http://localhost:5173 once it answers
+make seed          # add the example data (below) to the database
 npm test           # schedule, fill and streak rules
 npm run check      # type check
 ```
+
+`make up` and `make seed` take `PORT`, `HOST` and `DATABASE_PATH` (default `./data/ittracks.db`), e.g. `make up PORT=5180 DATABASE_PATH=./data/try.db`. On a database with no account yet, `make seed` makes one first: `demo` / `demo1234`, or `SEED_USER` and `SEED_PASSWORD`. Without make: `npm install`, then `npm run dev`.
 
 After changing `src/lib/server/db/schema.ts`, run `npm run db:generate` to create a migration. Migrations run automatically on startup.
 
@@ -82,6 +84,19 @@ docker compose up -d
 The app listens on port 3000 and keeps its database in `./data`. Set `ORIGIN` in `docker-compose.yml` to the address you open it at (links and the MCP setup in Settings → AI assistants use it). On first visit you create the account for your server.
 
 To install it on your phone, open it in the browser and choose "Add to Home Screen". Phones only offer this over HTTPS, so put the app behind a reverse proxy with a certificate (for example Caddy or Traefik).
+
+Run it from a normal folder (not one reached through a symlink), so that Docker Desktop creates `./data` on your computer. Creating the folder first with `mkdir data` also works.
+
+### Example data
+
+To try the app without setting everything up, create your account and then add example habits (a gym rotation, a Spanish checklist with a timer, a deep-work target and two break habits), with a few weeks of history:
+
+```sh
+docker compose exec ittracks node scripts/seed-demo.mjs --today "$(date +%F)"  # if your day starts at 4 AM and it is past midnight, pass yesterday's date
+docker compose restart
+```
+
+It only adds rows, never changes what you made, and refuses to run twice. On a server nobody has set up yet, add `--create-user name:password` to make the account too. Restart the container afterwards so it picks up the new rows. Outside Docker, run `make seed`.
 
 ## Templates
 

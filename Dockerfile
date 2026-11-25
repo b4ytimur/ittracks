@@ -17,6 +17,7 @@ ENV NODE_ENV=production \
 COPY --from=build /app/build ./build
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/drizzle ./drizzle
+COPY scripts ./scripts
 COPY package.json ./
 VOLUME /data
 EXPOSE 3000
