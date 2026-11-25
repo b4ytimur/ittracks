@@ -14,7 +14,8 @@ import { makesLoop } from '$lib/engine/stack';
 import { keepEarlier, sameSchedule, scheduleStartBy, startMovedBack, type EarlierSchedule } from '$lib/engine/unlogged';
 import { isFollow, isGroup, type Schedule } from '$lib/engine/schedule';
 import { fitFollow, standaloneSchedule } from '$lib/engine/follow';
-import { keepParent, makesCycle } from '$lib/engine/tree';
+import { keepParent, makesCycle, type EarlierParent } from '$lib/engine/tree';
+import { startFrom } from '../backfill';
 import { keepGoals, keepSlots, rejudge } from '../progress';
 import type { StreakRule } from '$lib/engine/streak';
 import { checkHabit, checkHabitPast, removedTriggers, type HabitCheck, type HabitCtx } from '$lib/rules/habit';
@@ -66,7 +67,8 @@ export function listHabits(accountId: string, opts: { archived?: boolean } = {})
 			areaId: habit.areaId,
 			archived: habit.archived,
 			createdAt: habit.createdAt,
-			parentId: habit.parentId
+			parentId: habit.parentId,
+			startDate: habit.startDate
 		})
 		.from(habit)
 		.where(and(eq(habit.accountId, accountId), isNull(habit.deleteAfter), opts.archived ? undefined : eq(habit.archived, false)))
@@ -240,6 +242,35 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /** Which days a schedule edit applies to: from today on (the past keeps its plan), or past days too. */
 export type ScheduleApplies = 'today' | 'past';
+
+/**
+ * Where a habit sat before, after a save or a move: a move applies from today on, so the days
+ * before keep where it was. For past days too it sat where it is now on every day, and so did
+ * a habit whose plan follows its routine for past days too (it can only follow what it is in).
+ */
+export function parentsAfter(
+	before: { parentId: string | null; earlierParents: EarlierParent[] | null; startDate: string },
+	after: { parentId: string | null; schedule: unknown },
+	applies: ScheduleApplies,
+	today: string
+): EarlierParent[] | null {
+	const moved = before.parentId !== after.parentId;
+	const follows = isFollow(after.schedule as Schedule | null);
+	if (applies === 'past' && after.parentId && (moved || follows)) return keepParent(before.earlierParents, before.parentId, after.parentId, before.startDate, today, 'past');
+	return keepParent(before.earlierParents, before.parentId, after.parentId, before.startDate, today);
+}
+
+/**
+ * A habit's past days count in a group from the habit's start: a group that starts later reaches
+ * back to it, as "Start from this day" does. A routine keeps its start: its days are its own plan.
+ * Returns the group's new start, if it moved.
+ */
+export function reachBack(accountId: string, parentId: string, startDate: string): string | null {
+	const g = db.select().from(habit).where(and(eq(habit.id, parentId), eq(habit.accountId, accountId))).get();
+	if (!g || !isGroup(g.schedule as Schedule | null) || startDate >= g.startDate) return null;
+	startFrom(g, startDate);
+	return startDate;
+}
 
 interface Before {
 	startDate: string;
@@ -428,8 +459,11 @@ export function saveHabit(
 				? { earlierSchedules: null, settledThrough: null }
 				: scheduleAfter(tx, id, owned, values, opts.scheduleApplies ?? 'today', today);
 			const settled = settledAfter(tx, id, owned, values, sched.settledThrough === null);
-			// Moving into or out of a group or routine applies from today on, like a move on the Habits list.
-			const earlierParents = keepParent(owned.earlierParents, owned.parentId, values.parentId, owned.startDate, today);
+			// Moving into or out of a group or routine applies from today on, like a move on the Habits
+			// list, unless the change is for past days too.
+			const applies = opts.scheduleApplies ?? 'today';
+			const earlierParents = parentsAfter(owned, values, applies, today);
+			if (applies === 'past' && values.parentId && owned.parentId !== values.parentId) reachBack(accountId, values.parentId, values.startDate);
 			tx.update(habit).set({ ...values, ...sched, ...settled, earlierParents }).where(eq(habit.id, id)).run();
 			// The rule for what counts changed: past logs are judged again by it.
 			judgeAgain = owned.minimumCounts !== values.minimumCounts || !!owned.levels?.enabled !== !!values.levels?.enabled;

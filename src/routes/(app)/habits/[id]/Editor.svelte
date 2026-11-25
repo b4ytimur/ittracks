@@ -505,6 +505,12 @@
 	const copy = <T,>(v: T): T => JSON.parse(JSON.stringify(v ?? null));
 	/** What the server has, as this page writes it and as the server does. */
 	let base = $state.raw(untrack(() => ({ ...(copy($state.snapshot(full)) as HabitForm), ...(seed ? { schedule: copy(data.habit.schedule) } : {}) })));
+	/** Put inside a group or routine, with past days: from today on (the default), or its past days too. */
+	let moveApplies = $state<'today' | 'past'>('today');
+	const movedIn = $derived(!data.isNew && !!h.parentId && h.parentId !== base.parentId && savedStart < data.today);
+	/** Which days a line's change is for. */
+	const appliesOf = (id: string): 'today' | 'past' =>
+		id === 'inside' && movedIn ? moveApplies : id === 'days' || id === 'started' || id === 'inside' ? (scheduleEdited ? scheduleApplies : 'today') : 'today';
 	let onServer = $state.raw(untrack(() => copy(data.habit)));
 	const changedKey = (k: Key) => ordered(full[k]) !== ordered(base[k]);
 	const edited = $derived(Object.fromEntries(Object.entries(LINES).map(([id, l]) => [id, l.fields.some(changedKey)])));
@@ -1436,6 +1442,18 @@
 	{/if}
 {/snippet}
 
+{#snippet moveQuestion()}
+	{#if movedIn}
+		<div class="stack" role="radiogroup" aria-label="Which days it counts in {parent?.name}">
+			<label class="check"><input type="radio" class="choice" bind:group={moveApplies} value="today" /> <span>From today on <span class="meta">The days before keep where it was.</span></span></label>
+			<label class="check"
+				><input type="radio" class="choice" bind:group={moveApplies} value="past" />
+				<span>Past days too <span class="meta">Its days from {shortDate(savedStart)} count in {parent?.name}.{parent && !parent.routine && parent.startDate > savedStart ? ` ${parent.name}'s Started on moves back to ${shortDate(savedStart)}.` : ''}</span></span></label
+			>
+		</div>
+	{/if}
+{/snippet}
+
 {#snippet levelsPart()}
 			<label style="color: var(--ink)"
 				><input type="checkbox" bind:checked={h.levels.enabled} /> Use levels: a two-minute Minimum, your Target, and a Stretch</label
@@ -1603,7 +1621,7 @@
 		effect={o.effect ?? l.effect ?? ''}
 		saving={saving[id]}
 		problem={problems[id]}
-		onsave={() => saveLine(id, id === 'days' || id === 'started' || id === 'inside' ? (scheduleEdited ? scheduleApplies : 'today') : 'today')}
+		onsave={() => saveLine(id, appliesOf(id))}
 		oncancel={() => cancelLine(id)}
 		onremove={optional[id] ? () => remove(id) : undefined}
 		question={o.question}
@@ -1643,7 +1661,7 @@
 	<div class="card su-lines">
 		{#if shows('notes')}{@render line('notes', notesPart)}{/if}
 		{#if data.areas.length}{@render line('area', areaPart)}{/if}
-		{#if shows('inside')}{@render line('inside', insidePart)}{/if}
+		{#if shows('inside')}{@render line('inside', insidePart, { question: moveQuestion, effect: movedIn && moveApplies === 'past' ? `Its past days count in ${parent?.name} too.` : undefined })}{/if}
 		{@render line('started', startField, { question: appliesQuestion })}
 		{@render line('kind', typePart)}
 	</div>

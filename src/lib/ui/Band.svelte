@@ -61,11 +61,21 @@
 		said = 'Undone.';
 		await invalidateAll();
 	}
+	/** The entry's other way: it says what it did itself. */
+	async function also(e: Entry) {
+		dismiss(e.id);
+		const r = await Promise.resolve()
+			.then(() => e.also?.run())
+			.catch(() => false);
+		if (r === false || typeof r === 'string') return void showError(typeof r === 'string' ? r : `Not done: ${e.also?.label}`, () => also(e));
+		await invalidateAll();
+	}
 </script>
 
 <svelte:window onscroll={scroll} onkeydown={(e) => e.key === 'Escape' && (open = false)} />
 
 {#snippet acts(e: Entry)}
+	{#if e.also && !e.error}<button type="button" class="small echo-act" aria-label="{e.also.label}: {e.text}" onclick={() => also(e)}>{e.also.label}</button>{/if}
 	{#if e.error && e.retry}<button type="button" class="small echo-act" aria-label="Retry: {e.text}" onclick={() => act(e)}>Retry</button>
 	{:else if canUndo(e)}<button type="button" class="small echo-act" aria-label="Undo: {e.text}" onclick={() => act(e)}>Undo</button>{/if}
 {/snippet}

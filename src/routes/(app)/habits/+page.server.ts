@@ -62,6 +62,7 @@ export const load: PageServerLoad = ({ locals, url, cookies }) => {
 				/** Can hold habits: a group, or a build habit with a schedule and no Tasks of its own (a routine). */
 				holds: h.direction === 'build' && !!h.schedule && (isGroup(h.schedule) || !slotted.has(h.id)),
 				consistency: h.direction === 'break' ? null : st.consistency,
+				consistencyDays: st.days,
 				lastDone: st.lastDone
 			};
 		}),
@@ -99,9 +100,10 @@ export const actions: Actions = {
 	move: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
 		const accountId = locals.account!.id;
-		const r = moveHabit(accountId, String(f.get('id') ?? ''), String(f.get('parent') ?? '') || null, userToday(accountId, cookies.get('tz')));
+		const applies = f.get('applies') === 'past' ? 'past' : 'today';
+		const r = moveHabit(accountId, String(f.get('id') ?? ''), String(f.get('parent') ?? '') || null, userToday(accountId, cookies.get('tz')), applies);
 		if ('error' in r) return fail(400, { error: r.error });
-		return { moved: r.parentId };
+		return { moved: r.parentId, undo: 'undo' in r ? (r.undo ?? null) : null, groupStart: 'groupStart' in r ? (r.groupStart ?? null) : null };
 	},
 	unarchive: async ({ request, locals, cookies }) => {
 		const id = String((await request.formData()).get('id') ?? '');

@@ -137,10 +137,11 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 				!below.has(x.id) &&
 				(!x.archived || x.id === form.parentId)
 		)
-		.map(({ id, name, archived, schedule }) => ({
+		.map(({ id, name, archived, schedule, startDate }) => ({
 			id,
 			name,
 			archived,
+			startDate,
 			/** A routine has days of its own, so a habit inside it can follow them. */
 			routine: !isGroup(schedule),
 			/** Its days bring up more than one of its Variants, so a habit inside with its own rotation can drift from it. */

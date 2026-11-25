@@ -53,4 +53,4 @@ A break habit has no streak rule. Its counter shows whole days since the last sl
 
 ## The number on Today
 
-Each habit shows one headline number on Today: **Streak**, **Consistency, last 30 days**, **Done this week**, **Times done** or **Nothing**. Pick the default for all habits, or one per habit, in Today's [edit mode](views-and-edit-mode.md#edit-mode).
+Each habit shows one headline number on Today: **Streak**, **Consistency, last 30 days**, **Done this week**, **Times done** or **Nothing**. Consistency says how many days it covers: "86% in 30 days", or "100% in 2 days" for a habit or group that is newer than that. Pick the default for all habits, or one per habit, in Today's [edit mode](views-and-edit-mode.md#edit-mode).

@@ -293,6 +293,13 @@ describe('habit stats', () => {
 		expect(s.week).toBe(1);
 		expect(s.total).toBe(3);
 		expect(s.lastDone).toBe('2026-11-17');
+		// Its first day in the window is Nov 10: 12 days, not 30.
+		expect(headlineText('consistency', s, '')).toBe('67% in 12 days');
+	});
+	it('a group made yesterday never claims a month', () => {
+		const s = habitStats([{ date: '2026-11-20', status: 'done' }, { date: '2026-11-21', status: 'done' }], today);
+		expect(headlineText('consistency', s, '')).toBe('100% in 2 days');
+		expect(headlineText('consistency', habitStats([{ date: '2026-11-21', status: 'done' }], today), '')).toBe('100% in 1 day');
 	});
 	it('says nothing with nothing scheduled', () => {
 		expect(habitStats([], today).consistency).toBeNull();

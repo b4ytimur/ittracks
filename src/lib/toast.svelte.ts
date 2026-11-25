@@ -16,7 +16,7 @@ const post = (e: Omit<Entry, 'id'>) => {
 };
 
 /** Say what changed, with how to take it back. Returns the entry, for `hold` and `release`. */
-export const showToast = (text: string, undo?: Entry['undo'], subject?: string) => post({ text, undo, subject });
+export const showToast = (text: string, undo?: Entry['undo'], subject?: string, also?: Entry['also']) => post({ text, undo, subject, also });
 /** A save that failed, and how to send it again. */
 export const showError = (text: string, retry?: Entry['retry']) => post({ text, error: true, retry });
 /** What these are about was taken back elsewhere, such as on its row. */

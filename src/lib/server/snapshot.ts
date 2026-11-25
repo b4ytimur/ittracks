@@ -43,9 +43,12 @@ function rowsOf(ids: string[]): Rows {
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-/** Run a change on a habit and keep what it replaced. Returns the snapshot's id with the change's result. */
-export function withSnapshot<T>(accountId: string, habitId: string, change: () => T, now = Date.now()): { result: T; undo: string } {
-	const ids = familyOf(accountId, habitId);
+/**
+ * Run a change on a habit and keep what it replaced. Returns the snapshot's id with the change's
+ * result. `also`: other habits the change may touch, such as the group a habit moves into.
+ */
+export function withSnapshot<T>(accountId: string, habitId: string, change: () => T, now = Date.now(), also: string[] = []): { result: T; undo: string } {
+	const ids = [...new Set([...familyOf(accountId, habitId), ...also])];
 	const before = rowsOf(ids);
 	const result = change();
 	const after = rowsOf([...new Set([...ids, ...familyOf(accountId, habitId)])]);
@@ -88,6 +91,16 @@ export function restoreSnapshot(accountId: string, id: string): boolean {
 	db.transaction((tx) => {
 		const was = revive(at(before.habit, habitId)!);
 		tx.update(habit).set(was as never).where(eq(habit.id, habitId)).run();
+		// Other habits the change moved (a group's start reaching back): back, if still as it left them.
+		for (const o of before.habit) {
+			if (o.id === habitId) continue;
+			const cur = at(now.habit, o.id);
+			const left = at(after.habit, o.id);
+			if (cur && left && same(plan(cur), plan(left)) && !same(plan(left), plan(o))) {
+				const { startDate, schedule, earlierSchedules, limit } = revive(o);
+				tx.update(habit).set({ startDate, schedule, earlierSchedules, limit, settledThrough: null } as never).where(eq(habit.id, o.id)).run();
+			}
+		}
 		// Variants and Slots, without deleting one first: past days point at them.
 		const vs = before.variant.filter((v) => v.habitId === habitId);
 		for (const v of vs) tx.insert(variant).values(v as never).onConflictDoUpdate({ target: variant.id, set: v as never }).run();

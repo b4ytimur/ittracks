@@ -12,6 +12,8 @@ export interface Entry {
 	/** A save that failed, and how to send it again. */
 	error?: boolean;
 	retry?: () => unknown;
+	/** One more way to finish the change, beside its Undo, such as "Past days too" after a move. False or a sentence says it couldn't. */
+	also?: { label: string; run: () => unknown };
 }
 
 const CAP = 10;

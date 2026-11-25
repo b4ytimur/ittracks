@@ -44,7 +44,9 @@ export function patchHabit(accountId: string, id: string, p: HabitPatch, today: 
 	if (problem) return { error: problem, status: 400 };
 	const save = () => saveHabit(accountId, id, parsed.data, today, { scheduleApplies: p.applies as ScheduleApplies });
 	try {
-		const undo = p.keep ? withSnapshot(accountId, id, save).undo : (save(), undefined);
+		// A move into a group for past days too can move the group's start back: kept for the Undo too.
+		const into = typeof p.set.parentId === 'string' ? [p.set.parentId] : [];
+		const undo = p.keep ? withSnapshot(accountId, id, save, Date.now(), into).undo : (save(), undefined);
 		return { form: currentForm(accountId, id)!, undo };
 	} catch (e) {
 		if (e instanceof PastEditError) return { error: e.message, status: 400 };

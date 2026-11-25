@@ -16,6 +16,8 @@ Each habit inside keeps its own log, streak and Stats. The holder adds a streak 
 - In the habit's editor, pick the holder under **Inside**. The list shows **Groups** and **Routines** separately.
 - Or, on the Habits page, press **Edit** and drag the habit under a group or routine and sideways to the right to put it inside. Sideways to the left takes it out. See [edit mode](views-and-edit-mode.md#edit-mode).
 
+A habit with past days counts in its new holder **from today on**, unless you say otherwise. Under **Inside** in the editor, choose **Past days too**; on the Habits page, press **Past days too** beside the move's Undo. Then all its days count in the holder, as if it had always been there. A group that starts later than the habit reaches back to the habit's start (Started on moves back, as **Start from this day** does). A routine keeps its own start, since its days are its own plan. **Undo** puts it back to from today on.
+
 ## Groups
 
 Make a habit and set **How often** to **From the habits inside it (a group)**. A group has no Tasks of its own.
@@ -27,7 +29,7 @@ Choose when a day is done:
 
 On Today, a group shows a progress bar of the habits inside it. You can't log a group or set a reminder on it; do those on the habits inside. Sharing a group or a routine as a template takes the habits inside it along (see [Templates](templates.md#share-a-habit)).
 
-Groups can sit inside other groups, but not inside routines. Moving a habit into or out of a group or routine applies from that day on: past days keep the habits they had, so the holder's past days and streak don't change. Logging a day from before the move counts for the holder the habit was in that day.
+Groups can sit inside other groups, but not inside routines. Moving a habit into or out of a group or routine applies from that day on, unless you choose **Past days too** (see above): past days keep the habits they had, so the holder's past days and streak don't change. Logging a day from before the move counts for the holder the habit was in that day. A habit that follows its routine's days with **To past days too** counts in the routine on its past days as well.
 
 ## Routines
 

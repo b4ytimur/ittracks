@@ -130,14 +130,17 @@ export const parentsEver = (current: string | null, earlier: EarlierParent[] | n
  * The earlier parents after a move on `today` from `from` to `to`: it counts in `to` from today
  * on, and the days up to yesterday keep `from`. A habit with no past days yet keeps nothing.
  * Moving back on the same day leaves no trace, and entries that say the same thing merge.
+ * A move for past days too (`applies` 'past') keeps nothing: it sits in `to` on every day.
  */
 export function keepParent(
 	earlier: EarlierParent[] | null | undefined,
 	from: string | null,
 	to: string | null,
 	startDate: ISODate,
-	today: ISODate
+	today: ISODate,
+	applies: 'today' | 'past' = 'today'
 ): EarlierParent[] | null {
+	if (applies === 'past') return null;
 	const list = [...(earlier ?? [])];
 	const yesterday = addDays(today, -1);
 	const last = list.at(-1)?.until;

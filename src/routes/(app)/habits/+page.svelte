@@ -14,6 +14,7 @@
 	import BulkBar from '$lib/bulk/BulkBar.svelte';
 	import { moveKey, reorderFrom, type Mode, type Move } from '$lib/ui/list';
 	import { isFollow, isGroup } from '$lib/engine/schedule';
+	import { consistencyText } from '$lib/engine/stats';
 	import { saveLayout, viewOp } from '$lib/viewclient';
 	import { runAction, showToast, undoWith } from '$lib/toast.svelte';
 	import { HABIT_LINES, groupBy, manualOrder, passes, type HabitLineKey } from '$lib/views';
@@ -112,7 +113,7 @@
 	 * Indent and outdent: put a habit inside another (at the end of what it holds) or out to the
 	 * level of the habit that held it (just after it). Saved at once, with Undo.
 	 */
-	async function moveTo(id: string, parentId: string | null, after: string, done: string) {
+	async function moveTo(id: string, parentId: string | null, after: string, done: string, also?: { label: string; run: () => unknown }) {
 		const h = byId(id);
 		if (!h) return;
 		const was = { parentId: h.parentId, order: views.today.order };
@@ -126,17 +127,36 @@
 			return showToast(r.error ?? "Couldn't move it. Are you online?");
 		}
 		saveLayout({ op: 'patch', today: { order } }, () => (views.today = { ...views.today, order: was.order }));
-		showToast(done, async () => {
-			if (!(await runAction('/habits?/move', { id, parent: was.parentId ?? '' })).ok) return false;
-			views.today = { ...views.today, order: was.order };
-			viewOp({ op: 'patch', today: { order: was.order } });
-			await invalidateAll();
-		});
+		showToast(
+			done,
+			async () => {
+				if (!(await runAction('/habits?/move', { id, parent: was.parentId ?? '' })).ok) return false;
+				views.today = { ...views.today, order: was.order };
+				viewOp({ op: 'patch', today: { order: was.order } });
+				await invalidateAll();
+			},
+			undefined,
+			also
+		);
 	}
 	function indent(id: string, into: string) {
+		const h = byId(id);
+		const g = byId(into);
 		const last = mine(habits.filter((x) => x.parentId === into && x.id !== id)).at(-1);
-		moveTo(id, into, last?.id ?? into, `Moved ${byId(id)?.name} into ${byId(into)?.name}.`);
+		// A habit with past days: the move counts from today on, or, asked here, from its start.
+		const past = !!h && h.startDate < data.today;
+		moveTo(id, into, last?.id ?? into, `Moved ${h?.name} into ${g?.name}${past ? ', from today on' : ''}.`, past ? { label: 'Past days too', run: () => pastToo(id, into) } : undefined);
 	}
+	/** The move counts on the habit's past days too, with an Undo back to from today on. */
+	async function pastToo(id: string, into: string) {
+		const r = await runAction<{ undo: string | null; groupStart: string | null }>('/habits?/move', { id, parent: into, applies: 'past' });
+		if (!r.ok) return r.error ?? false;
+		const undo = r.data?.undo;
+		const g = byId(into);
+		const start = r.data?.groupStart ? ` ${g?.name} now starts ${new Date(r.data.groupStart + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}.` : '';
+		showToast(`${byId(id)?.name} counts in ${g?.name} on its past days too.${start}`, undo ? () => undoTo(undo) : undefined);
+	}
+	const undoTo = async (token: string) => (await fetch('/api/undo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: token }) }).catch(() => null))?.ok ?? false;
 	function outdent(id: string, from: Habit) {
 		moveTo(id, from.parentId, from.id, `Moved ${byId(id)?.name} out of ${from.name}.`);
 	}
@@ -190,7 +210,7 @@
 			show('schedule') ? (h.direction === 'break' ? 'Break habit' : (isGroup(h.schedule) || !h.holds || !habits.some((x) => x.parentId === h.id) ? '' : 'Routine · ') + describeSchedule(h.schedule, data.habits.find((x) => x.id === h.parentId), h.variants)) : null,
 			show('cue') ? cueText(h.cue) : null,
 			show('area') && a && view.group !== 'area' ? `${a.name}` : null,
-			show('consistency') && h.consistency !== null ? `${h.consistency}% in 30 days` : null,
+			show('consistency') && h.consistency !== null ? consistencyText({ consistency: h.consistency, days: h.consistencyDays }) : null,
 			show('last') && h.direction !== 'break' ? (h.lastDone ? `last done ${ago(h.lastDone)}` : 'not done yet') : null
 		]
 			.filter(Boolean)
