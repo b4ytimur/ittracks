@@ -482,7 +482,8 @@
 		const s = places[placeKey(data.items[j])];
 		if (isYesNo(data.items[j])) s.tick = on;
 		for (const x of s.sets) x.done = on;
-		if (!inRows(data.items[j])) s.kept = on;
+		// Its once-only values go with its tick, beside its rows too.
+		if (data.items[j].task?.metrics.some((m) => !m.repeats)) s.kept = on;
 	}
 	/** One press for a whole round. A number changed in it goes on to the rounds still to do. */
 	function markRound(c: Circuit, r: number, on: boolean) {
