@@ -96,11 +96,10 @@
 	}
 	async function remove(item: Item, title: string) {
 		const index = items.indexOf(item);
-		const r = await op({ op: 'card.delete', where, id: item.card.id });
-		if (r)
-			showToast(`Removed “${title}”`, async () => {
-				await op({ op: 'card.save', where, card: item.card, index });
-			});
+		const at = where; // The band outlives this board, so its Undo keeps where it was.
+		const card = $state.snapshot(item.card);
+		const r = await op({ op: 'card.delete', where: at, id: card.id });
+		if (r) showToast(`Removed “${title}”`, async () => !!(await op({ op: 'card.save', where: at, card, index })));
 	}
 	async function reorder(order: string[]) {
 		const before = shown;
@@ -110,8 +109,9 @@
 	/** Change a card at once; the band has its Undo. */
 	async function change(item: Item, card: StatCard, said: string) {
 		const before = $state.snapshot(item.card) as StatCard;
-		const r = await op({ op: 'card.save', where, card });
-		if (r) showToast(said, async () => !!(await op({ op: 'card.save', where, card: before })));
+		const at = where;
+		const r = await op({ op: 'card.save', where: at, card });
+		if (r) showToast(said, async () => !!(await op({ op: 'card.save', where: at, card: before })));
 	}
 	function pickWord(item: Item, key: SlotKey, v: string) {
 		const r = fit($state.snapshot(item.card) as StatCard, key, v, offer);

@@ -63,7 +63,7 @@
 			await goto('/stats');
 			showToast(`Deleted the board “${copy.name}”`, async () => {
 				await statsOp({ op: 'board.restore', board: copy, index });
-				await goto(`?board=${copy.id}`);
+				await goto(`/stats?board=${copy.id}`);
 			});
 		}
 	}
