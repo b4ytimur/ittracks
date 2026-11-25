@@ -1,4 +1,5 @@
 // Browser side of views: send changes to /api/views.
+import { showError } from './toast.svelte';
 import type { Page, ViewSettings, ViewState } from './views';
 
 export async function viewOp(body: Record<string, unknown>): Promise<{ views: ViewSettings; id?: string; previous?: ViewSettings } | null> {
@@ -13,6 +14,16 @@ export async function viewOp(body: Record<string, unknown>): Promise<{ views: Vi
 		// Offline: the view still works on this screen; it just isn't remembered.
 		return null;
 	}
+}
+
+/** Save a layout change. When that fails, what it did is put back and the band says so. */
+export async function saveLayout(body: Record<string, unknown>, rollback: () => void, again?: () => void) {
+	const r = await viewOp(body);
+	if (!r) {
+		rollback();
+		showError('Not saved. It is back as it was.', again);
+	}
+	return r;
 }
 
 const timers = new Map<Page, ReturnType<typeof setTimeout>>();

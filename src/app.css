@@ -4,6 +4,15 @@
 @import './styles/list-row.css';
 @import './styles/drag-handle.css';
 @import './styles/nested-row.css';
+@import './styles/inline-editor.css';
+@import './styles/empty-state.css';
+@import './styles/edit-chrome.css';
+@import './styles/segmented.css';
+@import './styles/group-heading.css';
+@import './styles/disclosure.css';
+@import './styles/swatch.css';
+@import './styles/tab.css';
+@import './styles/echo-shelf.css';
 
 /* The names from before the design system's tokens. Screens move off them one by one. */
 :root {
@@ -22,6 +31,7 @@ body {
 	color: var(--text);
 	font: 1rem/1.5rem var(--font-sans);
 }
+p.meta-line, p.hint-line { margin-block: 0; }
 h1 { font-size: var(--font-size-page-title); line-height: 2rem; margin: 0; overflow-wrap: anywhere; }
 h2 { font-size: var(--font-size-section-title); line-height: 1.5rem; margin: var(--space-section) 0 var(--space-inline); }
 a { color: var(--accent); }
@@ -52,6 +62,10 @@ button.danger { color: var(--danger); }
 button.link { border: none; background: none; color: var(--accent); padding: 0; min-height: 0; }
 button.small { padding: 0.25rem 0.6rem; font-size: 0.85rem; }
 
+.num { font-variant-numeric: tabular-nums; }
+/* Room for the widest label (bold), so a change of weight or words never resizes the box. */
+[data-reserve]::after { content: attr(data-reserve); display: block; height: 0; overflow: hidden; visibility: hidden; font-weight: 600; }
+.focus-inset:focus-visible { outline-offset: calc(-1 * var(--focus-width)); }
 .hit { position: relative; }
 @media (pointer: coarse) {
 	/* A 44px hit area, grown by a pseudo-element so the drawn box stays. */
@@ -75,15 +89,9 @@ button.small { padding: 0.25rem 0.6rem; font-size: 0.85rem; }
 }
 
 .app { min-height: 100dvh; display: flex; flex-direction: column; }
-.main { flex: 1; width: 100%; max-width: 640px; margin: 0 auto; padding: 1rem 1rem 5.5rem; }
-.tabs {
-	position: fixed; bottom: 0; left: 0; right: 0;
-	display: flex; justify-content: space-around;
-	background: var(--surface); border-top: 1px solid var(--border);
-	padding: 0.4rem 0 calc(0.4rem + env(safe-area-inset-bottom));
-}
-.tabs a { flex: 1; min-width: 0; text-align: center; padding: 0.5rem 0.15rem; text-decoration: none; color: var(--muted); font-size: 0.9rem; }
-.tabs a[aria-current='page'] { color: var(--accent); font-weight: 600; }
+.main { flex: 1; width: 100%; max-width: 640px; margin: 0 auto; padding: var(--space-group) var(--space-group) var(--tabbar-clear, var(--space-tabbar-clear)); }
+.tabbar > .tab { font-size: var(--font-size-label); line-height: 1.25rem; }
+.echo-text { font-size: var(--font-size-label); line-height: 1.25rem; }
 
 .bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
 .bar > div { min-width: 0; }

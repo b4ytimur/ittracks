@@ -38,6 +38,7 @@
 		removeLabel = 'Remove',
 		onadd,
 		addLabel = 'Add',
+		addInUse = false,
 		row,
 		rowCard = false,
 		href,
@@ -78,8 +79,10 @@
 		onremove?: (item: T) => void;
 		/** The remove button's word: Remove, Archive, Hide... or one per item. */
 		removeLabel?: string | ((item: T) => string);
-		/** Shows an add button under the list while editing. */
-		onadd?: () => void;
+		/** Adds to the list. With `rowCard`, an empty slot at the end of the list takes the new one's name. */
+		onadd?: (name?: string) => void;
+		/** The slot shows in use too (a page whose list is there to be added to). */
+		addInUse?: boolean;
 		addLabel?: string;
 		row: Snippet<[T, RowContext]>;
 		/** The list draws the card: the handle and the verb sit inside it, and `row` renders its content only. */
@@ -292,6 +295,16 @@
 		commit(m, true);
 	}
 
+	// ----- Adding -----
+
+	let naming = $state<string | null>(null);
+	/** Enter adds it and is ready for the next one; leaving the slot adds what was typed. */
+	function add(again: boolean) {
+		const name = naming?.trim();
+		naming = again && name ? '' : null;
+		if (name) onadd?.(name);
+	}
+
 	// ----- Selecting -----
 
 	let anchor: string | null = null;
@@ -432,9 +445,38 @@
 	{:else}
 		{#if empty}<li class="empty">{@render empty()}</li>{/if}
 	{/each}
+	{#if rowCard && onadd && (editing || (addInUse && mode === 'use'))}
+		<li class="ghost">
+			{#if naming === null}
+				<button type="button" class="ghost-slot" onclick={() => (naming = '')}><span aria-hidden="true">+</span><span>{addLabel}</span></button>
+			{:else}
+				<div class="ghost-slot">
+					<span aria-hidden="true">+</span>
+					<!-- svelte-ignore a11y_autofocus -->
+					<input
+						class="inline-text name"
+						aria-label={addLabel}
+						maxlength="120"
+						autofocus
+						bind:value={naming}
+						onkeydown={(e) => {
+							if (e.key === 'Enter') {
+								e.preventDefault();
+								add(true);
+							} else if (e.key === 'Escape') {
+								e.preventDefault();
+								naming = null;
+							}
+						}}
+						onblur={() => add(false)}
+					/>
+				</div>
+			{/if}
+		</li>
+	{/if}
 </ul>
-{#if editing && onadd}
-	<button type="button" class="small add" onclick={onadd}>+ {addLabel}</button>
+{#if !rowCard && editing && onadd}
+	<button type="button" class="small add" onclick={() => onadd()}>+ {addLabel}</button>
 {/if}
 {#if editing && onmove}
 	<span id="{uid}-hint" class="sr-only"

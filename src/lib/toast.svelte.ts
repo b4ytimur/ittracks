@@ -1,32 +1,28 @@
-// One short message at a time at the bottom of the screen, with an optional Undo.
-// Quick actions happen at once and offer Undo, instead of asking "Are you sure?".
+// The band above the tab bar: every recent change keeps its Undo, with no timer, and nothing
+// covers the end of a list. Quick actions happen at once and offer Undo, instead of asking first.
+import type { Snippet } from 'svelte';
 import { deserialize } from '$app/forms';
+import { dropEntry, pushEntry, setHeld, type Entry } from './echo';
 
-export interface Toast {
-	id: number;
-	text: string;
-	undo?: () => void | Promise<void>;
-}
-
-const UNDO_MS = 5000;
 let next = 1;
-let timer: ReturnType<typeof setTimeout> | undefined;
 
-export const toast = $state<{ current: Toast | null }>({ current: null });
+/** `select` is what a page's select mode shows in the band instead. */
+export const band = $state<{ entries: Entry[]; select: Snippet | null }>({ entries: [], select: null });
 
-export function showToast(text: string, undo?: Toast['undo'], ms = undo ? UNDO_MS : 3000) {
-	clearTimeout(timer);
-	const t = { id: next++, text, undo };
-	toast.current = t;
-	timer = setTimeout(() => {
-		if (toast.current?.id === t.id) toast.current = null;
-	}, ms);
-}
+const post = (e: Omit<Entry, 'id'>) => {
+	const id = next++;
+	band.entries = pushEntry(band.entries, { id, ...e });
+	return id;
+};
 
-export function dismissToast() {
-	clearTimeout(timer);
-	toast.current = null;
-}
+/** Say what changed, with how to take it back. Returns the entry, for `hold` and `release`. */
+export const showToast = (text: string, undo?: Entry['undo']) => post({ text, undo });
+/** A save that failed, and how to send it again. */
+export const showError = (text: string, retry?: Entry['retry']) => post({ text, error: true, retry });
+export const dismiss = (id: number) => (band.entries = dropEntry(band.entries, id));
+/** The row shows its own way back for now, so the band doesn't. */
+export const hold = (id: number) => (band.entries = setHeld(band.entries, id, true));
+export const release = (id: number) => (band.entries = setHeld(band.entries, id, false));
 
 /** Post a form action from code, as SvelteKit's enhance would. */
 export async function postAction(action: string, fields: Record<string, string>) {

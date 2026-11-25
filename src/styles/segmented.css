@@ -1,0 +1,85 @@
+/* Segmented: one choice among a few short options that applies at once. Any number of segments, any meaning: a mode
+   (Use, Edit, Select: EditChrome places it on the title line), a view (Write, Preview), a size, a two-way setting.
+   Markup:
+     <div class="segmented" role="radiogroup" aria-label="Mode" | aria-labelledby="…" [aria-describedby="…"]>
+       <label data-reserve="Use"><input class="vh" type="radio" name="…" value="use" checked>Use</label>
+       …one label per option, in order, any number; exactly one radio is checked
+       <label data-reserve="Select"><input class="vh" type="radio" name="…" value="select" disabled>Select</label>
+     </div>                                     [disabled]: can't be chosen now; BlockedReason's line says why
+   data-reserve is base's utility: a hidden 600 copy of the label, so a segment never widens when it is chosen. */
+
+/* ---------- Track: equal segments on a sunken track, corners nested ---------- */
+.segmented {
+	--seg-pad: calc(var(--radius-control) - var(--radius-inset)); /* 2px: concentric corners */
+	position: relative; display: inline-grid; grid-auto-flow: column;
+	grid-auto-columns: minmax(0, 1fr); /* equal even when squeezed: every segment is the widest label's width */
+	padding: var(--seg-pad); border-radius: var(--radius-control); background: var(--surface-sunken);
+	box-shadow: inset 0 0 0 1px var(--line); /* decorative contour: the dark track is 1.06:1 on the page without it */
+}
+/* On a shelf or the band the track is the ground's own colour and line is 1.05:1 on it. */
+.shelf .segmented, .band .segmented { box-shadow: inset 0 0 0 1px var(--line-inset); }
+
+/* ---------- Thumb: the one chosen look (R1.1), travelling to whichever segment is checked ----------
+   The checked segment names itself the anchor and the thumb takes its box, so there is no count and no index to keep
+   (the old --seg-n / --seg-i stopped at three). The track is the thumb's containing block, so each track's thumb finds
+   only its own segments. */
+.segmented > label:has(:checked) { anchor-name: --seg-chosen; font-weight: 600; }
+.segmented::before {
+	content: ''; position: absolute; position-anchor: --seg-chosen;
+	inset: anchor(top) anchor(right) anchor(bottom) anchor(left); width: auto;
+	border-radius: var(--radius-inset); background: var(--surface-raised); box-shadow: var(--chosen-shadow);
+}
+
+/* ---------- Segment ---------- */
+.segmented > label {
+	/* align-content: the text row and the 0px reserve copy centre together, at 24 and at 44px; justify-content: words wider
+	   than a squeezed segment pass its padding on both sides alike */
+	position: relative; z-index: 1; display: grid; place-items: center; place-content: center;
+	min-height: max(var(--control-sm), var(--target-min)); /* 24px, growing with text, never under the target */
+	padding-inline: calc(var(--space-inline) + var(--space-tight));
+	border-radius: var(--radius-inset); color: var(--ink); font-size: var(--font-size-meta); line-height: 1.25rem;
+	/* nowrap: squeezed (200% text on a phone), the equal columns eat the padding first and the words stay whole */
+	cursor: pointer; user-select: none; white-space: nowrap;
+}
+/* Hover: a 1px ink edge, half the chosen 2px, as on a toggle chip. Never a fill. .hover is the preview's stand-in. */
+.segmented > label.hover:not(:has(:checked, :disabled)) { box-shadow: inset 0 0 0 1px var(--ink); }
+@media (hover: hover) {
+	.segmented > label:hover:not(:has(:checked, :disabled)) { box-shadow: inset 0 0 0 1px var(--ink); }
+}
+.segmented > label:has(:focus-visible) { outline: var(--focus-width) solid var(--focus-ring); outline-offset: var(--focus-width); }
+/* Blocked: the radio is native disabled, so the arrow keys skip it (D3.6); the words step back; BlockedReason's line says why. */
+.segmented > label:has(:disabled) { color: var(--ink-muted); cursor: not-allowed; }
+
+/* ---------- Touch: the segment itself grows to 44px (its ::after is the reserve, so no .hit) ---------- */
+@media (pointer: coarse) {
+	.segmented > label { min-height: var(--target-touch); }
+}
+
+/* ---------- Motion: the thumb travels; reduced motion cross-fades the chosen look between segments ---------- */
+@media (prefers-reduced-motion: no-preference) {
+	.segmented::before { transition: inset var(--duration-settle) var(--ease-settle); }
+}
+@media (prefers-reduced-motion: reduce) {
+	.segmented::before { display: none; }
+	.segmented > label { transition: background-color var(--duration-quick) linear, box-shadow var(--duration-quick) linear; }
+	.segmented > label:has(:checked) { background: var(--surface-raised); box-shadow: var(--chosen-shadow); }
+}
+/* A browser without anchor positioning draws the chosen look on the segment itself, as under reduced motion, with no travel (D3.6). */
+@supports not (anchor-name: --seg-chosen) {
+	.segmented::before { display: none; }
+	.segmented > label:has(:checked) { background: var(--surface-raised); box-shadow: var(--chosen-shadow); }
+}
+
+/* ---------- Forced colours: fills and shadows vanish, so the track gets an edge and chosen gets Highlight ---------- */
+@media (forced-colors: active) {
+	.segmented { border: 1px solid CanvasText; }
+	.segmented::before { display: none; }
+	.segmented > label:has(:checked) { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+	/* forced-color-adjust: none keeps the authored ring colour on the chosen (focused) segment, so name a system one */
+	.segmented > label:is(.focus, :has(:focus-visible)) { outline-color: CanvasText; }
+	.segmented > label.hover:not(:has(:checked, :disabled)) { outline: 1px solid CanvasText; outline-offset: -1px; }
+	.segmented > label:has(:disabled:not(:checked)) { color: GrayText; } /* a locked chosen one keeps HighlightText */
+}
+@media (forced-colors: active) and (hover: hover) {
+	.segmented > label:hover:not(:has(:checked, :disabled)) { outline: 1px solid CanvasText; outline-offset: -1px; }
+}

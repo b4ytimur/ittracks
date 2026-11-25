@@ -848,7 +848,7 @@
 	.elsewhere {
 		/* In view wherever you type, without moving what you type in. */
 		position: sticky;
-		bottom: calc(4.2rem + env(safe-area-inset-bottom));
+		bottom: var(--tabbar-clear);
 		z-index: 4;
 		margin-top: 0.75rem;
 		border-color: var(--danger);
