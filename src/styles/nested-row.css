@@ -1,0 +1,143 @@
+/* NestedRow: a holder is one unit with one outline; what it holds sits on a shelf as plain rows.
+   Owns .holder, .shelf, plain rows on a shelf (.shelf .card …), the --depth indent, holder states and where the
+   "N inside" row sits (Disclosure's .shelf-fold: the divider under it, its drop line, the hidden list). Row layout,
+   .slot, .meta-line and row states are ListRow's; the handle, .dragging and the drop line are DragHandle's; .ghost
+   is EmptyState's; the verb slot's div.verb > div.log-control is LogControl's, placed by ListRow at every depth. */
+
+/* ---------- The holder: one outline around the card and its shelf (F.9) ---------- */
+/* No overflow: clip on the li. It would clip DragHandle's drop line (drawn on the li, outside its box)
+   and the card's focus ring, so the card and the shelf take the inner radius instead. */
+.elist > .holder { border: 1px solid var(--line); border-radius: var(--radius-card); }
+/* The seam and the outline's bottom edge both count toward the pitch: 1 + 15 + 44 + 14 + 1 = 75 above the shelf,
+   + 1 below it, so a holder is 76 + 52n (whole pitches) and the parent's text keeps a ListRow card's y. */
+.elist > .holder > .card {
+	border: 0; border-bottom: 1px solid var(--line);
+	border-radius: calc(var(--radius-card) - 1px) calc(var(--radius-card) - 1px) 0 0;
+	padding-block-end: calc(var(--space-group) - 2px);
+}
+.elist[data-density='compact'] > .holder > .card { min-height: calc(var(--target-touch) - 2px); } /* 44 + 44n */
+/* A holder rendered without a shelf (every row it holds hidden by the view, or TodayLayouts' folded Not today block)
+   is one card: no seam, the card's bottom padding and its inner radius back, 1 + 15 + 44 + 15 + 1 = 76 (ListRow's
+   pitch). :has, not :last-child: DragHandle's Move menu opens as the li's next child after the card. :where keeps
+   this at the holder card's weight, so compact's padding (and its 1 + 42 + 1 = 44) still wins. */
+.elist > .holder:where(:not(:has(> .shelf))) > .card {
+	border-bottom: 0; border-radius: calc(var(--radius-card) - 1px);
+	padding-block-end: calc(var(--space-group) - 1px);
+}
+
+/* ---------- The shelf: one band per top-level holder, at every depth ---------- */
+.shelf {
+	background: var(--surface-sunken);
+	border-radius: 0 0 calc(var(--radius-card) - 1px) calc(var(--radius-card) - 1px);
+}
+/* Rows on a shelf are divided, not spaced. --depth defaults to 1; a deeper list sets its own inline. */
+.shelf > .elist { --depth: 1; --gap: 0px; }
+/* Depth 2 and deeper share the band: a nested shelf and a holder on a shelf draw nothing of their own. */
+.shelf .shelf { background: none; border-radius: 0; }
+.shelf .elist > .holder { border: 0; border-radius: 0; }
+.shelf .elist > .holder > .card { border: 0; border-radius: 0; }
+
+/* ---------- Plain rows: no fill, no edge, one line-inset divider inset to the name column ---------- */
+/* Every li on a shelf spans the band's full width at every depth; the indent is the row's own padding,
+   so --drop-depth is the absolute depth measured from the band's edge. Right padding equals the card's,
+   so verbs line up at every depth. --row-slot is the slot's width where it stays open (select mode). */
+.shelf .elist > li > .card {
+	--indent-x: calc(var(--space-group) + (var(--depth) - 1) * var(--space-indent));
+	/* Grip and pick stay on the name's line (flex-start, as ListRow); align-content centres a one-line row in its 44px. */
+	align-items: flex-start; align-content: center;
+	min-height: var(--target-touch);
+	/* space-tight above and below: a one-line row stays 44px, a name + meta row becomes 52px (13 pitches),
+	   so rows keep air between them when edit mode hides the dividers (R1.5). */
+	padding-block: var(--space-tight); padding-inline: var(--indent-x) var(--space-group);
+	border: 0; border-radius: 0;
+	background: transparent;
+}
+/* The content's basis is ListRow's (10rem, capped beside the slot), so only the verb wraps: at depth 2 a Done + ⋯ pair
+   (105px) stays on the name line while the holder is 324px wide (2 + 32 + 160 + 8 + 105 + 16) and wraps under it,
+   still trailing, below that (a 320px phone). */
+/* Dividers sit only between rows: none under the card's own bottom line, one above a grandchild's first row,
+   where the shorter line marks the subtree (F.36), and one under an open "N inside" row; the next row at depth 1
+   brings the longer line back. */
+.shelf .elist > li + li > .card,
+.shelf .shelf > .elist > li:first-child > .card,
+.shelf > .shelf-fold + .elist > li:first-child > .card {
+	background: linear-gradient(var(--divider, var(--line-inset)), var(--divider, var(--line-inset)))
+		no-repeat var(--divider-at, right) top / calc(100% - var(--indent-x) - var(--row-slot, 0px)) 1px;
+}
+[dir='rtl'] .shelf { --divider-at: left; }
+.shelf > .elist[data-mode='edit'] { --divider: transparent; --divider-width: 0px; } /* R1.5: no lines on lines */
+.shelf > .elist[data-mode='select'] { --row-slot: var(--handle-slot); }
+
+/* Weight: a child is ground (400); a holder on a shelf is the figure of its own level (600). Meta is ink:
+   ink-muted on surface-sunken is 4.03:1 in light. */
+.shelf .card .name { font-weight: 400; }
+/* A finished nested holder drops to 400 like any finished row; a finished parent never reaches it (ListRow's
+   row states use child combinators, so a holder's state stays on its own card). */
+.shelf .elist > .holder:not(.done, .skipped) > .card > .content > .name { font-weight: 600; }
+.shelf .meta-line { color: var(--ink); }
+.shelf .elist > li.struck > .card > .content > .name { color: var(--ink); } /* the line-through and the Archived tag carry it */
+/* surface-tint is surface-sunken in light (#ecebe9), so a tag on a shelf row keeps its shape with a hairline. */
+.shelf .tag:not(.strong, .pending) { box-shadow: inset 0 0 0 1px var(--line-inset); }
+
+/* ---------- The "N inside" row (Disclosure's .shelf-fold): NestedRow keeps the hidden list ---------- */
+/* The nested list stays in the DOM with hidden while folded, so aria-controls always resolves. .elist's display
+   would beat the UA's [hidden] rule, so it is restated. */
+.shelf > .elist[hidden] { display: none; }
+
+/* ---------- An empty shelf (edit mode only): EmptyState's ghost slot in the child columns ---------- */
+/* The li puts the slot's box 8px inside the band; EmptyState's .shelf .ghost-slot padding then puts its + on the
+   grip column and its words on the name column. */
+.shelf .ghost { padding-block: var(--space-inline); padding-inline: calc(var(--space-inline) + (var(--depth) - 1) * var(--space-indent)) var(--space-inline); }
+
+/* ---------- Holder states point at the whole unit (F.9) ---------- */
+.elist > .holder.hover { border-color: var(--line-control); } /* .hover: the previews' stand-in (States) */
+@media (hover: hover) {
+	.elist > .holder:has(> a.card:hover, > .card > .content > a.name:hover) { border-color: var(--line-control); }
+}
+/* A move into it: inside (at any depth in its band), or between two rows of its shelf from another holder where
+   canDrop allows (Area blocks: a habit into another Area). A reorder or an outdent never lights it. */
+.elist > .holder.drop-target { border-color: var(--line-control); }
+.elist > .holder.dragging { border-color: var(--line-control); box-shadow: var(--shadow-lifted); }
+.elist > .holder.dragging > .card { background: var(--surface-lifted); box-shadow: none; }
+/* A row (or a holder with its subtree) lifted off a shelf becomes a card while it is carried. */
+.shelf .elist > li.dragging {
+	background: var(--surface-lifted); border-radius: var(--radius-card);
+	box-shadow: 0 0 0 1px var(--line-control), var(--shadow-lifted);
+}
+.shelf .elist > li.dragging > .card { box-shadow: none; }
+/* The band's last slot (its last row, or the "N inside" row of a folded shelf): the line and its ring cap sit
+   inside the band, never on the holder's outline. */
+.shelf .elist > li.drop-after:last-child::after,
+.shelf > .shelf-fold.drop-after::after { bottom: calc((var(--drop-cap) - var(--drop-line)) / 2); }
+.shelf .elist > li.drop-after:last-child::before,
+.shelf > .shelf-fold.drop-after::before { bottom: 0; }
+
+/* selectScope from data. 'unit': the one outline turns chosen and the card's own ring gives way. The 2px edge
+   is drawn inset like every chosen edge (R1.1): the li's ::after over the 1px border and 1px inside it, since the
+   card and the shelf would cover an inset shadow and the rows' dividers an outline (a row is positioned, so it paints
+   over the li's own). 'item': ListRow's ring on the card alone, and the shared outline never changes. */
+.elist > .holder.picked[data-select-scope='unit']::after {
+	content: ''; position: absolute; inset: -1px; pointer-events: none;
+	border: var(--chosen-width) solid var(--line-chosen); border-radius: var(--radius-card);
+}
+.elist > .holder.picked[data-select-scope='unit'] > .card { box-shadow: none; }
+/* An item-scope pick on the band's last row is a square ring; the shelf clips it to the outline's corners.
+   Select mode only: nothing is dragged there, so no drop line or lifted row needs to leave the band. */
+.elist[data-mode='select'] > .holder > .shelf { overflow: clip; }
+
+@media (prefers-reduced-motion: no-preference) {
+	.elist > .holder { transition: border-color var(--duration-quick) var(--ease-standard); }
+}
+@media (forced-colors: active) {
+	/* The band and the gradient dividers vanish, so the outline and the row separators become borders.
+	   DragHandle outlines every lifted li and ListRow outlines an item-scope pick; these cover the rest. */
+	.elist > .holder, .elist > .holder > .card { border-color: CanvasText; }
+	.shelf .elist > li + li > .card, .shelf .shelf > .elist > li:first-child > .card,
+	.shelf > .shelf-fold + .elist > li:first-child > .card { border-top: var(--divider-width, 1px) solid CanvasText; }
+	.elist > .holder.drop-target { border-color: Highlight; }
+	.elist > .holder.picked[data-select-scope='unit']::after { border-color: Highlight; }
+	.elist > .holder.picked[data-select-scope='unit'] > .card { outline: none; }
+}
+
+/* Day marks on a shelf: good is 2.82:1 on light surface-sunken, so every good mark takes DayTile's line-control edge (3.10 light, 3.90 dark). */
+.shelf .week { --day-edge: var(--line-control); }

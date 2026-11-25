@@ -1,0 +1,101 @@
+/* Checkbox: the checkbox and the radio as one drawn atom with three uses, each with its own look.
+   Owns .pick (select, and every on/off setting), .tick (done), .choice (a radio drawn as a circle), the partly
+   state (:indeterminate, and .mixed, the preview's stand-in for a property that has no attribute) and label.check
+   (a box and its words: the label is the target).
+   Markup:
+     select in a row's slot (ListRow):  <label class="pick-hit hit"><input type="checkbox" class="pick" aria-label="Select Gym"></label>
+     a setting:                         <label class="check"><input type="checkbox" class="pick"> Show logged values</label>
+     a tick:                            <label class="check"><input type="checkbox" class="tick"> Lay out gym clothes</label>
+     a tick alone (a set row):          <input type="checkbox" class="tick hit" aria-label="Set 2 done" [data-mode="edit|select"]>
+     a choice:                          <div role="radiogroup" aria-labelledby="…"> <label class="check"><input type="radio" class="choice" name="type" checked> Build</label> …</div>
+                                        (or a fieldset with its legend)
+   Native inputs drawn with appearance: none: the element keeps its role, keyboard, form value and label click, and the
+   box is the system's in both themes (F.13). The mark is ::after, so base's .hit (::before) can sit on the box itself.
+   Selectors are spelled out (no lists inside :is or :has), so each reads, and lints, on its own. */
+
+/* ---------- The box: 1px line-control edge (≥ 3:1 on page, raised and sunken), raised like every control (S.1) ---------- */
+.pick, .tick, .choice {
+	--box: 1rem;
+	appearance: none; flex: none; position: relative; display: inline-grid; place-content: center;
+	width: var(--box); height: var(--box); margin: 0; vertical-align: middle;
+	border: 1px solid var(--box-edge, var(--line-control)); border-radius: var(--radius-mark);
+	background: var(--surface-raised);
+	color: var(--surface-raised); /* the mark's colour: the box's own hole, so it reads on ink and on good */
+	cursor: pointer;
+}
+.tick { --box: var(--control-sm); } /* 24px: a tick is the act on its line, and never the 16px select box (R1.6) */
+.choice { border-radius: var(--radius-pill); }
+
+/* ---------- Ticked ---------- */
+/* Select and settings: ink, the one chosen colour (R1.1, P.13). */
+.pick:checked { background: var(--ink); border-color: var(--ink); }
+/* Done: good, the colour of a done day (data, not chosen, not act). good is 2.82:1 on light sunken, so on a shelf the
+   box keeps its line-control edge round the fill (3.10:1), as NestedRow's done week tiles do. */
+.tick:checked { background: var(--good); border-color: var(--good); }
+.shelf .tick:checked { border-color: var(--line-control); }
+/* The ✓: two borders of a rotated box, sized from the box so it scales with text. Borders survive forced colours. */
+.pick:checked::after, .tick:checked::after {
+	--stroke: max(2px, calc(var(--box) / 8));
+	content: ''; width: calc(var(--box) * 5 / 16); height: calc(var(--box) * 9 / 16);
+	border: solid currentColor; border-width: 0 var(--stroke) var(--stroke) 0;
+	translate: 0 -12%; rotate: 45deg;
+}
+/* Partly: a box that stands for other boxes, some of them ticked. Ink like ticked, a bar for the ✓; wins over :checked. */
+.pick:indeterminate, .pick.mixed { background: var(--ink); border-color: var(--ink); }
+.pick:indeterminate::after, .pick.mixed::after {
+	content: ''; width: calc(var(--box) / 2); height: 0;
+	border: solid currentColor; border-width: 2px 0 0; translate: none; rotate: none;
+}
+/* Chosen radio: an ink ring and an ink dot. */
+.choice:checked { border-color: var(--ink); }
+.choice:checked::after { content: ''; width: calc(var(--box) / 2); height: calc(var(--box) / 2); border-radius: var(--radius-pill); background: var(--ink); }
+
+/* ---------- label.check: a box and its words, one target ---------- */
+.check {
+	--check-h: var(--target-min); /* one line of the label is the target: 24px, 44px under a coarse pointer */
+	display: flex; align-items: flex-start; gap: var(--space-inline);
+	padding-block: max(0px, calc((var(--check-h) - 1lh) / 2));
+	color: var(--ink); overflow-wrap: anywhere; cursor: pointer;
+}
+.check:has(> .tick) { --check-h: var(--control-md); } /* 32px, so stacked 24px ticks keep 8px apart (S.6) */
+/* The box centres on the first line however the words wrap (a 24px tick overhangs a 20px line by 2px each way). */
+.check > .pick, .check > .tick, .check > .choice { font: inherit; margin-block: calc((1lh - var(--box)) / 2); }
+.check:has(> .choice:checked) { font-weight: 600; } /* the chosen option, as a chosen segment (R1.1) */
+.check:has(> :disabled), .check:has(> [aria-disabled='true']) { color: var(--ink-muted); cursor: not-allowed; }
+@media (pointer: coarse) {
+	.check, .check:has(> .tick) { --check-h: var(--target-touch); } /* stacked options meet at 44px and never overlap */
+}
+
+/* ---------- Hover: the edge turns ink, never a fill (README States); a ticked box's own edge wins ---------- */
+@media (hover: hover) {
+	.check:hover, .pick:hover, .tick:hover, .choice:hover { --box-edge: var(--ink); }
+}
+
+/* ---------- Blocked (disabled, or aria-disabled with BlockedReason's line) ----------
+   The box keeps its edge and its mark, so a locked setting that is on still reads on, and takes no hover; the words step
+   back (above) and the reason line says why. After the hover rule, so it wins on the box itself. */
+.pick:disabled, .tick:disabled, .choice:disabled,
+.pick[aria-disabled='true'], .tick[aria-disabled='true'], .choice[aria-disabled='true'] { --box-edge: var(--line-control); cursor: not-allowed; }
+
+/* ---------- Edit and Select: a tick is a use action, so it hides in place and its words keep their column (S.11, F.6) ---------- */
+/* data-mode on the tick itself (D4.13), never read from an ancestor: a form's tick stays live inside a list in Edit. */
+.tick[data-mode='edit'], .tick[data-mode='select'] { visibility: hidden; }
+.check:has(> .tick[data-mode='edit']), .check:has(> .tick[data-mode='select']) { pointer-events: none; } /* or the label would still tick it */
+
+@media (prefers-reduced-motion: no-preference) {
+	.pick, .tick, .choice { transition: background-color var(--duration-quick) var(--ease-standard), border-color var(--duration-quick) var(--ease-standard); }
+}
+
+/* ---------- Forced colours: every state drawn in system colours (fills would be dropped) ---------- */
+@media (forced-colors: active) {
+	.pick, .tick, .choice { forced-color-adjust: none; background: Canvas; border-color: CanvasText; color: HighlightText; }
+	.pick:checked, .tick:checked, .shelf .tick:checked, .pick:indeterminate, .pick.mixed { background: Highlight; border-color: Highlight; }
+	.choice:checked { border-color: Highlight; }
+	.choice:checked::after { background: Highlight; }
+	.pick:disabled, .tick:disabled, .choice:disabled,
+	.pick[aria-disabled='true'], .tick[aria-disabled='true'], .choice[aria-disabled='true'] { border-color: GrayText; color: Canvas; }
+	.pick:disabled:checked, .tick:disabled:checked,
+	.pick[aria-disabled='true']:checked, .tick[aria-disabled='true']:checked { background: GrayText; border-color: GrayText; }
+	.choice:disabled:checked::after { background: GrayText; }
+	.check:has(> :disabled), .check:has(> [aria-disabled='true']) { color: GrayText; }
+}

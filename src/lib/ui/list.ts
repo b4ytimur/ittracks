@@ -3,8 +3,11 @@
 // Lists work on keys (strings), never on the items themselves, so any kind of row fits.
 
 /** What a list tells each row it renders. */
+export type Mode = 'use' | 'edit' | 'select';
+
 export interface RowContext {
 	index: number;
+	mode: Mode;
 	editing: boolean;
 	selecting: boolean;
 	selected: boolean;
@@ -31,6 +34,11 @@ export function dropPosition(y: number, rect: { top: number; height: number }, n
 	if (at < 0.25) return 'before';
 	if (at > 0.75) return 'after';
 	return 'inside';
+}
+
+/** A row's key and every key inside it, however deep (for ticking a holder as one). */
+export function withDescendants(key: string, childrenOf: (key: string) => string[]): string[] {
+	return [key, ...childrenOf(key).flatMap((k) => withDescendants(k, childrenOf))];
 }
 
 /** The order after putting `key` right before or after `target`. Unknown keys change nothing. */

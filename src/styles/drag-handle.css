@@ -1,0 +1,141 @@
+/* DragHandle: the grip, the held card and the drop line with its ring cap.
+   Owns .handle, .dragging, .drop-before, .drop-after, .drop-target, html.el-dragging and the Move menu's anchor (.menu.move-menu).
+   A row li's ::before and ::after belong to the drop line; no other fragment draws on them.
+   --gap (set by every list, with a unit) places the line; --drop-depth (on the li) says where it starts. */
+
+/* ---------- The grip ---------- */
+/* The button covers the 16px slot and reaches 8px (space-inline) into the card's leading padding, so it is
+   24px at default text size. The glyph is centred in that box (x = 20, the slot's checkbox centre: Checkbox), so edit
+   and select share one leading mark and it keeps 4px clear of the name. Sizes are in rem and px together,
+   so the box grows with 200% text and never drops under target-min. */
+.handle {
+	--grip-w: max(var(--target-min), calc(var(--handle-slot) + var(--space-inline)));
+	--grip-h: max(var(--target-min), 1.5rem);
+	--grip-hit: var(--target-min);
+	position: relative; flex: none;
+	width: var(--grip-w); height: var(--grip-h);
+	margin-inline-start: calc(var(--handle-slot) - var(--grip-w));
+	padding: 0; /* Button's box centres the glyph */
+	border: 0; border-radius: var(--radius-inset); background: none;
+	color: var(--ink-muted); font-size: var(--glyph-lg); line-height: 1.5rem;
+	cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none;
+}
+/* The hit area: the button itself on a fine pointer; 44px under pointer: coarse, grown toward the card's
+   outer edge so it never takes taps from the name, and the slide stays 16px. Base .hit grows both ways,
+   so the grip keeps its own one-sided ::before. */
+.handle::before {
+	content: ''; position: absolute;
+	inset-block: min(0px, calc((var(--grip-h) - var(--grip-hit)) / 2));
+	inset-inline: min(0px, calc(var(--grip-w) - var(--grip-hit))) 0;
+}
+@media (pointer: coarse) { .handle { --grip-hit: var(--target-touch); } }
+/* Hover only where a pointer hovers (States); an open Move menu is a state, so it stays outside the query. */
+.handle.hover, .handle[aria-expanded='true'] { color: var(--ink); }
+@media (hover: hover) { .handle:hover { color: var(--ink); } }
+/* Drawn inside the button (base .focus-inset's offset), so the ring never covers the name that starts where the
+   slot ends. Every grip needs it, so it rides on .handle rather than a class each grip would have to carry. */
+.handle:focus-visible, .handle.focus { outline-offset: calc(-1 * var(--focus-width)); }
+/* Preview helpers: .coarse shows the coarse-pointer hit area; .show-hit outlines it with ::before alone
+   (base .show-hit would draw the 24px button as a second box inside it). */
+.handle.coarse { --grip-hit: var(--target-touch); }
+.handle.show-hit { box-shadow: none; }
+.handle.show-hit::before { box-shadow: inset 0 0 0 1px var(--ink); }
+
+/* ---------- The Move menu: the single-pointer path (WCAG 2.5.7) ---------- */
+/* A tap on the grip without movement, or Enter or Space, opens the moves the keys make, by name. It is the shared menu
+   box (.menu.move-menu, R2.13): box, items, the hr before "Move to {Area}", hover, focus, coarse targets, forced
+   colours and [data-side='up'] all live in Menu's fragment, and so does Placement (R2.6). This only
+   anchors it. The menu is the li's next child after the card, so with top auto it takes its static place under the
+   card (on a holder, between the card and its shelf), 4px down, on the card's leading edge under the grip. Upward,
+   .menu[data-side='up'] measures from the li (positioned, ListRow), which puts it above the card on a holder too. */
+.menu.move-menu { inset-inline: 0 auto; top: auto; margin-block-start: var(--space-tight); }
+
+/* ---------- The held card ---------- */
+/* The li moves by --drag-x/--drag-y (or the list's inline transform) and its origin slot closes: the list
+   sets --held-h to the li's height on lift. --drag-y follows the pointer; --drag-x snaps to the target's
+   column minus the origin's column, column(d) = max(0, d - 1) x space-indent (depth 0 and 1 share columns),
+   never below 0 in reading direction (mirrored in RTL): every shelf li already starts at the band's edge,
+   so the card never leaves the list on the leading side, and a shallower drop shows only in the line.
+   The default --held-h (minus the gap) leaves the slot open when nobody measured. */
+.dragging {
+	--held-h: calc(-1 * var(--gap, 0px)); --drag-x: 0px; --drag-y: 0px;
+	position: relative; z-index: var(--z-raised);
+	translate: var(--drag-x) var(--drag-y);
+	margin-block-end: calc(-1 * (var(--held-h) + var(--gap, 0px)));
+}
+/* The lifted card. A holder lifts as one unit and a shelf row becomes a card while carried: NestedRow draws
+   those under .holder and .shelf (its scopes), and its plain-row rule outranks this one on a shelf. */
+.elist > .dragging > .card {
+	background: var(--surface-lifted); border: 1px solid var(--line-control); border-radius: var(--radius-card);
+	box-shadow: var(--shadow-lifted);
+}
+/* shadow-lifted is invisible on the near-black page, so dark swaps in shadow-lifted-dark. The 1px line-control
+   border is the edge in both themes; a ring on top would make it 2px, the chosen width. */
+.dragging .verb { visibility: hidden; }
+/* Dark surface-tint and surface-lifted are one colour, so a held row's tags step down to sunken (ink 17.13:1). */
+.dragging .tag:not(.strong):not(.pending) { background: var(--surface-sunken); }
+
+/* A deeper step moves the card toward the trailing edge; the page never scrolls sideways mid-drag. */
+html.el-dragging { overflow-x: clip; }
+html.el-dragging, html.el-dragging * { cursor: grabbing; user-select: none; -webkit-user-select: none; }
+/* Dashes mean "type here"; nothing is typed mid-drag, so the ruled name lines step back. */
+html.el-dragging .inline-text { border-bottom-color: transparent; }
+
+/* ---------- The drop line ---------- */
+/* One accent line, centred in the gap, starting at --drop-depth x space-indent from the list's outer edge.
+   It draws over the held card (z-drop, one above z-raised), so the card never hides where it lands; it stays under
+   the stuck heading (z-heading) and the title line (z-sticky). */
+.drop-before, .drop-after { --drop-depth: 0; --drop-edge: 0px; position: relative; }
+/* A top-level holder has a 1px outline (NestedRow), and an absolute box is placed from the padding edge,
+   so its line and ring step out by that pixel to line up with every other depth-0 line. */
+.elist > .holder.drop-before, .elist > .holder.drop-after { --drop-edge: 1px; }
+.shelf .elist > .holder.drop-before, .shelf .elist > .holder.drop-after { --drop-edge: 0px; }
+.drop-before::before, .drop-after::after,
+.drop-before::after, .drop-after::before { content: ''; position: absolute; z-index: var(--z-drop); pointer-events: none; }
+.drop-before::before, .drop-after::after {
+	inset-inline: calc(var(--drop-depth) * var(--space-indent) + var(--drop-cap) / 2 - var(--drop-edge)) calc(-1 * var(--drop-edge));
+	height: var(--drop-line); border-radius: var(--radius-indicator); background: var(--accent);
+}
+/* The ring cap: hollow, centred on the line's start, so its x says the depth and the line never reads as an edge.
+   Base box-sizing skips pseudo-elements, so it is set here: the stroke stays inside the 8px. */
+.drop-before::after, .drop-after::before {
+	box-sizing: border-box;
+	inset-inline-start: calc(var(--drop-depth) * var(--space-indent) - var(--drop-cap) / 2 - var(--drop-edge));
+	width: var(--drop-cap); height: var(--drop-cap);
+	border: 2px solid var(--accent); border-radius: var(--radius-pill);
+}
+.drop-before::before { top: calc(-0.5 * var(--gap, 0px) - var(--drop-line) / 2 - var(--drop-edge)); }
+.drop-before::after { top: calc(-0.5 * var(--gap, 0px) - var(--drop-cap) / 2 - var(--drop-edge)); }
+.drop-after::after { bottom: calc(-0.5 * var(--gap, 0px) - var(--drop-line) / 2 - var(--drop-edge)); }
+.drop-after::before { bottom: calc(-0.5 * var(--gap, 0px) - var(--drop-cap) / 2 - var(--drop-edge)); }
+/* In a grid the line stands in the column gap beside the cell; depth doesn't apply, so no cap. */
+.grid > .drop-before::before, .grid > .drop-after::after { inset-block: 0; inset-inline: auto; width: var(--drop-line); height: auto; }
+.grid > .drop-before::before { inset-inline-start: calc(-0.5 * var(--space-group) - var(--drop-line) / 2); }
+.grid > .drop-after::after { inset-inline-end: calc(-0.5 * var(--space-group) - var(--drop-line) / 2); }
+.grid > .drop-before::after, .grid > .drop-after::before { content: none; }
+/* A held grid cell keeps its origin cell open, so no card jumps columns mid-drag. */
+.grid > .dragging { margin-block-end: 0; }
+/* .drop-target goes on the top-level holder whose band receives the drop (holders on a shelf have no outline
+   of their own); NestedRow turns that outline line-control (.elist > .holder.drop-target). Into an empty list
+   or shelf it goes on the .ghost li instead and EmptyState lights the slot; the holder doesn't get it then.
+   No dashes on a holder, no second marker. */
+
+/* ---------- Motion, forced colours ---------- */
+/* On lift the origin slot closes and the lifted look fades in, both over duration-quick. Holders and shelf
+   rows draw their lift on the li (NestedRow), so the li fades it too; li.dragging outranks NestedRow's
+   holder transition, which is why border-color is listed. Every later settle is one FLIP pass in script. */
+@media (prefers-reduced-motion: no-preference) {
+	.elist > li.dragging {
+		transition: margin-block-end var(--duration-quick) var(--ease-standard), box-shadow var(--duration-quick) var(--ease-standard),
+			background-color var(--duration-quick) var(--ease-standard), border-color var(--duration-quick) var(--ease-standard);
+	}
+	.elist > .dragging > .card {
+		transition: box-shadow var(--duration-quick) var(--ease-standard), background-color var(--duration-quick) var(--ease-standard),
+			border-color var(--duration-quick) var(--ease-standard);
+	}
+}
+@media (forced-colors: active) {
+	.drop-before::before, .drop-after::after { forced-color-adjust: none; background: Highlight; }
+	.drop-before::after, .drop-after::before { forced-color-adjust: none; border-color: Highlight; }
+	.elist > .dragging { outline: var(--focus-width) solid CanvasText; } /* every held li: rows, holders and shelf rows */
+}
