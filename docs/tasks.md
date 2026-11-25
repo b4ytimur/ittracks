@@ -80,7 +80,7 @@ Under a field's **When logging**:
 
 **Settings → Groupings** holds what your tags are members of. An account starts with one; you can rename it, and add others ("Skills", "Rooms").
 
-- **Members** are tags. Add one before any Task has it, remove one no Task has, and move one to another grouping.
+- **Members** are tags. Add one before any Task has it, rename one (the rules, Collections, views and cards that name it follow), remove one no Task has, and move one to another grouping.
 - **Levels** have a name and a weight, strongest first. Rename them, weigh them, add your own. A level Tasks have can come off your list; those Tasks keep it. Their order is what "at least" and "at most" compare in an auto-filled slot.
 - **One is called** is the word used in card titles ("Hard sets per muscle group").
 
