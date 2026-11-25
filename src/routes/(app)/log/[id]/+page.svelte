@@ -9,6 +9,7 @@
 	import { enqueue, isOffline, save } from '$lib/outbox.svelte';
 	import { postAction, showToast } from '$lib/toast.svelte';
 	import { differs, revOf, type LogContent } from '$lib/logrev';
+	import { fromDraft, placeKey } from '$lib/logplaces';
 	import NoteBox from '$lib/NoteBox.svelte';
 	import Markdown from '$lib/Markdown.svelte';
 	import { starterFor, untouched } from '$lib/journal';
@@ -86,35 +87,34 @@
 	}
 
 	/**
-	 * Build the editable state for each place. A finished log shows what was saved. A log
+	 * Build the editable state for a place. A finished log shows what was saved. A log
 	 * that is still due shows the saved (ticked) sets first, then the planned sets not
 	 * logged yet, so leaving half way through a workout loses nothing.
 	 */
-	function initial(): ItemState[] {
-		return data.items.map((it) => {
-			const t = it.task;
-			if (!t) return { sets: [], summary: {} };
-			// Sets are Entries with per-set fields; a Yes or no tick is not a set.
-			const perSet = t.metrics.some((m) => m.repeats);
-			const savedSets = perSet ? it.saved.filter((v) => !isSummary(v) && !isTick(v)) : [];
-			const savedSummary = it.saved.find(isSummary) ?? {};
-			// Not finished: due today, or a past day that was missed, skipped or never logged.
-			const due = data.occurrence.status !== 'done';
-			if (due && !it.saved.length) return planned(it);
-			const sets = savedSets.map((values) => ({ done: true, values: { ...values } }));
-			if (due) sets.push(...planned(it).sets.slice(sets.length));
-			return {
-				sets,
-				// Still open: fields not saved yet show their suggestion again (it is saved only once touched or confirmed).
-				summary: due ? { ...planned(it).summary, ...savedSummary } : { ...savedSummary },
-				tick: isYesNo(it) && it.saved.some((v) => v.done === true)
-			};
-		});
+	function initial(it: Item): ItemState {
+		const t = it.task;
+		if (!t) return { sets: [], summary: {} };
+		// Sets are Entries with per-set fields; a Yes or no tick is not a set.
+		const perSet = t.metrics.some((m) => m.repeats);
+		const savedSets = perSet ? it.saved.filter((v) => !isSummary(v) && !isTick(v)) : [];
+		const savedSummary = it.saved.find(isSummary) ?? {};
+		// Not finished: due today, or a past day that was missed, skipped or never logged.
+		const due = data.occurrence.status !== 'done';
+		if (due && !it.saved.length) return planned(it);
+		const sets = savedSets.map((values) => ({ done: true, values: { ...values } }));
+		if (due) sets.push(...planned(it).sets.slice(sets.length));
+		return {
+			sets,
+			// Still open: fields not saved yet show their suggestion again (it is saved only once touched or confirmed).
+			summary: due ? { ...planned(it).summary, ...savedSummary } : { ...savedSummary },
+			tick: isYesNo(it) && it.saved.some((v) => v.done === true)
+		};
 	}
 
 	const DRAFT = untrack(() => `log-draft:${data.occurrence.id}`);
 	interface Draft {
-		log: ItemState[];
+		/** By place; drafts from before this are a list. */
+		log: Record<string, ItemState> | ItemState[];
 		notes: string;
 		level: 'minimum' | 'target' | 'stretch';
 		synced: boolean;
@@ -129,9 +129,24 @@
 		}
 	};
 
-	let log = $state<ItemState[]>(untrack(initial));
+	/** What is being logged, by place. A place that goes keeps its values here, in case it comes back. */
+	const places = $state<Record<string, ItemState>>(untrack(() => Object.fromEntries(data.items.map((it) => [placeKey(it), initial(it)]))));
 	/** The prefill, to show which values differ from it. */
-	let base = $state.raw<ItemState[]>(untrack(() => structuredClone($state.snapshot(log))));
+	let base = $state.raw<Record<string, ItemState>>(untrack(() => structuredClone($state.snapshot(places))));
+	// A place that comes into the log (a swap, a reroll, a part added) starts as the log does.
+	$effect.pre(() => {
+		const fresh = data.items.filter((it) => untrack(() => !places[placeKey(it)]));
+		untrack(() => {
+			for (const it of fresh) {
+				const s = initial(it);
+				base = { ...base, [placeKey(it)]: structuredClone(s) };
+				places[placeKey(it)] = s;
+			}
+		});
+	});
+	/** The same, in the order the log shows them. */
+	const log = $derived(data.items.map((it) => places[placeKey(it)] ?? initial(it)));
+	const baseOf = (i: number): ItemState | undefined => base[placeKey(data.items[i])];
 	let notes = $state(untrack(() => data.occurrence.notes));
 	let level = $state<'minimum' | 'target' | 'stretch'>(untrack(() => data.occurrence.level));
 	let problem = $state('');
@@ -169,8 +184,8 @@
 	onMount(() => {
 		// Restore work that never reached the server (a reload while offline, a crash).
 		const d = readDraft();
-		if (d && !d.synced && data.occurrence.status !== 'done' && d.log.length === log.length) {
-			log = d.log;
+		if (d && !d.synced && data.occurrence.status !== 'done') {
+			Object.assign(places, fromDraft(d.log, data.items));
 			notes = d.notes;
 			level = d.level;
 			// Not what is on the server now: if that changed since, the save says so.
@@ -198,7 +213,7 @@
 
 	function writeDraft(synced: boolean) {
 		try {
-			localStorage.setItem(DRAFT, JSON.stringify({ log: $state.snapshot(log), notes, level, synced, bases }));
+			localStorage.setItem(DRAFT, JSON.stringify({ log: $state.snapshot(places), notes, level, synced, bases }));
 		} catch {
 			/* storage blocked */
 		}
@@ -265,7 +280,7 @@
 	const ASIDE = untrack(() => `log-aside:${data.occurrence.id}`);
 	function useTheirs() {
 		try {
-			localStorage.setItem(ASIDE, JSON.stringify({ log: $state.snapshot(log), notes, level }));
+			localStorage.setItem(ASIDE, JSON.stringify({ log: $state.snapshot(places), notes, level }));
 		} catch {
 			/* storage blocked: there is nothing to have back */
 		}
@@ -281,10 +296,10 @@
 		} catch {
 			/* storage blocked */
 		}
-		if (!d || d.log.length !== log.length) return;
+		if (!d) return;
 		const mine = d;
 		showToast('Showing what the other device saved.', () => {
-			log = mine.log;
+			Object.assign(places, fromDraft(mine.log, data.items));
 			notes = mine.notes;
 			level = mine.level;
 		});
@@ -456,24 +471,16 @@
 		log[i].sets.push({ done: false, values: { ...(last?.values ?? {}) } });
 	}
 
-	function resetItem(i: number) {
-		log[i] = initial()[i];
-		const b = [...base];
-		b[i] = structuredClone($state.snapshot(log[i]));
-		base = b;
-	}
-
 	const changedSet = (i: number, j: number, id: string) =>
-		isOpen && base[i]?.sets[j] !== undefined && (base[i].sets[j].values[id] ?? null) !== (log[i].sets[j].values[id] ?? null);
+		isOpen && baseOf(i)?.sets[j] !== undefined && (baseOf(i)!.sets[j].values[id] ?? null) !== (log[i].sets[j].values[id] ?? null);
 	const changedSummary = (i: number, id: string) =>
-		isOpen && (base[i]?.summary[id] ?? null) !== (log[i].summary[id] ?? null);
+		isOpen && (baseOf(i)?.summary[id] ?? null) !== (log[i].summary[id] ?? null);
 	/**
 	 * The value is still the prefill (last time or the target), not something logged now. It is
 	 * compared with the prefill itself, so an autosave and a reload don't turn it into time logged.
 	 */
-	const prefills = untrack(() => data.items.map((it) => planned(it).summary));
 	const isPrefill = (i: number, id: string) =>
-		isOpen && prefills[i]?.[id] != null && (log[i].summary[id] ?? null) === prefills[i][id];
+		isOpen && starts[i]?.prefill[id] != null && (log[i].summary[id] ?? null) === starts[i].prefill[id];
 
 	/** Something is logged already: Same as last fills in only the rest. */
 	const started = $derived(data.items.some((it, i) => it.saved.length || log[i]?.sets.some((x) => x.done) || log[i]?.tick));
@@ -577,7 +584,7 @@
 	</fieldset>
 {/if}
 
-{#each data.items as it, i (it.path)}
+{#each data.items as it, i (placeKey(it))}
 	{@const t = it.task}
 	{#if it.roundHead && !quickMode}
 		<h3 class="round" style:margin-left="{it.depth - 1}rem">{it.roundHead}</h3>
@@ -596,7 +603,7 @@
 				<h2 class="grow" style="margin: 0">{t?.name ?? 'No matching Task'}</h2>
 			{/if}
 			{#if it.open && !quickMode}
-				<form method="POST" action="?/reroll" use:enhance={() => async ({ update }) => { await update(); resetItem(i); }}>
+				<form method="POST" action="?/reroll" use:enhance>
 					<input type="hidden" name="slot" value={it.slotId} />
 					<button class="small" title="Pick another Task">Reroll</button>
 				</form>
@@ -604,7 +611,7 @@
 			{#if !quickMode && it.depth === 0}
 				<details class="swap">
 					<summary class="small-text">Swap</summary>
-					<form method="POST" action="?/swap" class="row" use:enhance={() => async ({ update }) => { await update(); resetItem(i); }}>
+					<form method="POST" action="?/swap" class="row" use:enhance>
 						<input type="hidden" name="slot" value={it.slotId} />
 						<select name="task" aria-label="Task to use">
 							{#each data.library as l (l.id)}<option value={l.id} selected={l.id === t?.id}>{l.name}</option>{/each}
