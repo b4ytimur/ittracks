@@ -33,6 +33,7 @@
 .su-text :is(a, button, textarea, input) { position: relative; z-index: 1; pointer-events: auto; }
 .su-text > .su-lab, .su-row > .card:not(.link) > .content > .name { position: relative; z-index: 1; } /* over the turned ›, whose backplate forced colours draws */
 .su-lab { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-inline); min-height: 1.25rem; }
+.su-always > .su-said .su-label { color: var(--ink); font-weight: 600; } /* always open: the name leads, the words say what it is set to */
 .su-lab > .tag { margin-block: -1px; }
 .su-label { color: var(--ink-muted); }
 .su-step { margin-inline-start: auto; color: var(--ink-muted); }

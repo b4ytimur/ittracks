@@ -3,7 +3,7 @@
 	import { tick, untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { page } from '$app/state';
-	import { invalidateAll } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { deserialize } from '$app/forms';
 	import SaidLine from '$lib/detail/SaidLine.svelte';
 	import { PAST_DAYS_CHOICES } from '$lib/engine/backfill';
@@ -61,43 +61,37 @@
 	const elsewhere = $derived(q.trim() ? ELSEWHERE.filter((e) => matches(q.trim(), e.label, e.place, e.also)) : ELSEWHERE);
 	const found = $derived(shown.reduce((n, g) => n + g.lines.length, 0) + elsewhere.length);
 
-	// Folded groups, on this device. A search opens every match.
-	const FOLDED = 'ittracks-settings-folded';
-	let folded = $state<string[]>([]);
-	$effect(() => {
-		try {
-			folded = JSON.parse(localStorage.getItem(FOLDED) ?? '[]');
-		} catch {
-			// Nothing remembered.
-		}
-	});
-	const isFolded = (id: string) => !q.trim() && folded.includes(id);
+	// ----- Which group shows (TS.15) -----
+	// One group at a time, every line open. ?g= names it; a link to a line (#past) shows the line's group. On a wide
+	// screen the first group shows until another is pressed; on a phone the list of groups shows instead.
 	const wide = new MediaQuery('min-width: 64rem');
-	function fold(id: string) {
-		folded = folded.includes(id) ? folded.filter((x) => x !== id) : [...folded, id];
-		try {
-			localStorage.setItem(FOLDED, JSON.stringify(folded));
-		} catch {
-			// Not remembered.
-		}
-	}
+	const ofLine = (id: string) => groups.find((g) => g.lines.some((l) => l.id === id))?.id;
+	const chosen = $derived.by(() => {
+		const g = page.url.searchParams.get('g');
+		if (g === 'elsewhere' || groups.some((x) => x.id === g)) return g;
+		return ofLine(page.url.hash.slice(1)) ?? (wide.current ? groups[0].id : null);
+	});
+	const group = $derived(groups.find((g) => g.id === chosen));
+	const searching = $derived(!!q.trim());
 
-	let open = $state<Record<string, boolean>>({});
 	let problem = $state<Record<string, string>>({});
-	async function go(id: string) {
-		const g = groups.find((x) => x.lines.some((l) => l.id === id));
-		if (!g) return;
-		q = '';
-		folded = folded.filter((x) => x !== g.id);
-		open[id] = true;
+	/** A line in view, and focus on its first control. */
+	async function show(id: string) {
 		await tick();
 		document.getElementById(`line-${id}`)?.scrollIntoView({ block: 'center' });
-		document.querySelector<HTMLElement>(`#line-${id} .fold`)?.focus({ preventScroll: true });
+		document.querySelector<HTMLElement>(`#line-${id} > .su-body :is(input, select, button, a)`)?.focus({ preventScroll: true });
 	}
-	// A link to a line opens it.
+	/** A link from one line to another: the other's group, then the line. */
+	function go(id: string) {
+		const g = ofLine(id);
+		if (!g) return;
+		q = '';
+		void goto(`?g=${g}#${id}`);
+	}
+	// A link to a line shows it.
 	$effect(() => {
 		const id = page.url.hash.slice(1);
-		if (id) untrack(() => void tick().then(() => go(id)));
+		if (id) untrack(() => void show(id));
 	});
 
 	// ----- Saving -----
@@ -168,58 +162,76 @@
 	}
 </script>
 
-<svelte:head><title>Settings · ittracks</title></svelte:head>
+<svelte:head><title>{chosen && !wide.current ? `${group?.title ?? 'Set where they act'} · Settings` : 'Settings'} · ittracks</title></svelte:head>
 
-<EditChrome title="Settings" modes={['use']} hints={{ use: `Signed in as ${data.username}. ${Object.keys(FEATURES).length - views.hidden.length} of ${Object.keys(FEATURES).length} features in use.` }} />
-
-<div class="search se-find page-wide" role="search">
-	<label class="vh" for="se-q">Find a setting</label>
-	<input id="se-q" type="search" placeholder="Find a setting" bind:value={q} autocomplete="off" />
-	{#if q}<button type="button" class="quiet search-clear" aria-label="Clear search" onclick={() => ((q = ''), document.getElementById('se-q')?.focus())}>×</button>{/if}
-	{#if q.trim()}<p class="result-line meta" role="status">{found} {found === 1 ? 'setting' : 'settings'}</p>{/if}
-</div>
+{#if chosen && !wide.current}
+	<!-- A phone: a group is a page of its own. -->
+	<EditChrome title={group?.title ?? 'Set where they act'} modes={['use']} back={{ href: '/settings', label: 'Settings' }} hints={{ use: group ? `${group.lines.length} ${group.lines.length === 1 ? 'setting' : 'settings'}` : `${ELSEWHERE.length} places, each on its own page` }} />
+{:else}
+	<EditChrome title="Settings" modes={['use']} hints={{ use: `Signed in as ${data.username}. ${Object.keys(FEATURES).length - views.hidden.length} of ${Object.keys(FEATURES).length} features in use.` }} />
+	<div class="search se-find page-wide" role="search">
+		<label class="vh" for="se-q">Find a setting</label>
+		<input id="se-q" type="search" placeholder="Find a setting" bind:value={q} autocomplete="off" />
+		{#if q}<button type="button" class="quiet search-clear" aria-label="Clear search" onclick={() => ((q = ''), document.getElementById('se-q')?.focus())}>×</button>{/if}
+		{#if searching}<p class="result-line meta" role="status">{found} {found === 1 ? 'setting' : 'settings'}</p>{/if}
+	</div>
+{/if}
 
 <div class="page-cols">
 	<div class="page-main">
-		{#each shown as g (g.id)}
-			<section class="se-sec su-sec" id="g-{g.id}" aria-label={g.title}>
-				<GroupHeading title={g.title} count={String(g.lines.length)} folded={isFolded(g.id)} onfold={() => fold(g.id)} />
-				{#if !isFolded(g.id)}
-					<div class="card su-lines">
-						{#each g.lines as l (l.id)}
-							<SaidLine id={l.id} label={l.label} words={l.words} bind:open={() => !!open[l.id], (v) => (open[l.id] = v)} problem={problem[l.id]}>
-								{#if l.id !== 'password'}<p class="field-hint meta">{l.says}</p>{/if}
-								{#key drawn[l.id]}{@render body(l.id)}{/key}
-							</SaidLine>
-						{/each}
-					</div>
-				{/if}
-			</section>
-		{/each}
-
-		{#if elsewhere.length}
-			<section class="se-sec su-sec" id="g-elsewhere" aria-label="Set where they act">
-				<GroupHeading title="Set where they act" count={String(elsewhere.length)} folded={isFolded('elsewhere')} onfold={() => fold('elsewhere')} />
-				{#if !isFolded('elsewhere')}
-					<ul class="card places">
-						{#each elsewhere as e (e.label)}<li><a href={e.href}>{e.label}</a> <span class="meta muted">{e.place}</span></li>{/each}
-					</ul>
-				{/if}
-			</section>
+		{#if searching}
+			<!-- A search lists the matching lines from every group, open. -->
+			{#each shown as g (g.id)}{@render groupLines(g.title, g.lines, true)}{/each}
+			{#if elsewhere.length}{@render places(elsewhere, true)}{/if}
+			{#if !found}<EmptyState kind="filtered" text="No setting matches “{q.trim()}”." clearLabel="Clear search" onclear={() => (q = '')} />{/if}
+		{:else if chosen === 'elsewhere'}
+			{@render places(ELSEWHERE, wide.current)}
+		{:else if group}
+			{@render groupLines(group.title, group.lines, wide.current)}
+		{:else}
+			<!-- A phone: the groups, each with what it is set to. -->
+			<nav class="card se-groups" aria-label="Settings groups">
+				{#each groups as g (g.id)}
+					<a class="se-group" href="?g={g.id}"><span class="se-group-text"><span class="se-group-name">{g.title}</span><span class="se-group-says meta">{g.lines.map((l) => l.words).join(' ')}</span></span><span class="chev" aria-hidden="true">›</span></a>
+				{/each}
+				<a class="se-group" href="?g=elsewhere"><span class="se-group-text"><span class="se-group-name">Set where they act</span><span class="se-group-says meta">{ELSEWHERE.map((e) => e.label).join(', ')}.</span></span><span class="chev" aria-hidden="true">›</span></a>
+			</nav>
 		{/if}
-		{#if q.trim() && !found}<EmptyState kind="filtered" text="No setting matches “{q.trim()}”." clearLabel="Clear search" onclear={() => (q = '')} />{/if}
 	</div>
-	<!-- From 64rem, an index of the groups beside them; pressing a folded one opens it (TS.15). -->
+	<!-- From 64rem, the groups beside the one shown: the way around Settings, in view while it scrolls (TS.15). -->
 	{#if wide.current}
-		<aside class="page-side" aria-label="On this page">
-			<GroupHeading title="On this page" />
+		<aside class="page-side se-index" aria-label="Settings groups">
+			<GroupHeading title="Groups" />
 			<nav class="side-card side-list" aria-label="Settings groups">
-				{#each shown as g (g.id)}<a class="side-row" href="#g-{g.id}" onclick={() => isFolded(g.id) && fold(g.id)}>{g.title}<span class="num">{g.lines.length}</span></a>{/each}
-				{#if elsewhere.length}<a class="side-row" href="#g-elsewhere" onclick={() => isFolded('elsewhere') && fold('elsewhere')}>Set where they act<span class="num">{elsewhere.length}</span></a>{/if}
+				{#each groups as g (g.id)}<a class="side-row" href="?g={g.id}" aria-current={!searching && chosen === g.id ? 'page' : undefined} onclick={() => (q = '')}>{g.title}<span class="num">{g.lines.length}</span></a>{/each}
+				<a class="side-row" href="?g=elsewhere" aria-current={!searching && chosen === 'elsewhere' ? 'page' : undefined} onclick={() => (q = '')}>Set where they act<span class="num">{ELSEWHERE.length}</span></a>
 			</nav>
 		</aside>
 	{/if}
 </div>
+
+{#snippet groupLines(title: string, ls: Line[], head: boolean)}
+	<section class="se-sec su-sec" aria-label={title}>
+		{#if head}<GroupHeading {title} count={String(ls.length)} />{/if}
+		<div class="card su-lines">
+			{#each ls as l (l.id)}
+				<SaidLine id={l.id} label={l.label} words={l.words} always problem={problem[l.id]}>
+					{#if l.id !== 'password'}<p class="field-hint meta">{l.says}</p>{/if}
+					{#key drawn[l.id]}{@render body(l.id)}{/key}
+				</SaidLine>
+			{/each}
+		</div>
+	</section>
+{/snippet}
+
+{#snippet places(list: typeof ELSEWHERE, head: boolean)}
+	<section class="se-sec su-sec" aria-label="Set where they act">
+		{#if head}<GroupHeading title="Set where they act" count={String(list.length)} />{/if}
+		<ul class="card places">
+			{#each list as e (e.label)}<li><a href={e.href}>{e.label}</a> <span class="meta muted">{e.place}</span></li>{/each}
+		</ul>
+	</section>
+{/snippet}
 
 {#snippet body(id: string)}
 	{#if id === 'daystart'}
