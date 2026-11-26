@@ -1,0 +1,80 @@
+/* Days: the days block (DaysBlock.svelte) and History's year strip (YearStrip.svelte).
+     the block       section.days > .days-head (title, ‹ › ⋯) + .days-card (a .day-week, a .days-month, or .days-heat over a .day-week) + .days-foot
+     the month       .days-month: week number, seven 28px tiles (a.days-tile > i[data-day]), the row's dates; on an even 6px grid
+     a heat cell     i[data-heat]: the last 12 months, colour by how much got done (the block's 5px columns, History's strip) */
+
+/* In Today's and a day's side column it opens where a section heading would, level with the list's first heading.
+   Elsewhere (under the hint line on a phone, first in History's side) what is above it owns the gap. */
+.today-side .days { margin-block-start: var(--space-section); }
+/* The title where GroupHeading's foldColumn puts it, on the rows' name column; .slotted is its slotOpen. */
+.days-head { position: relative; display: flex; align-items: center; gap: var(--space-tight); margin-block-end: var(--space-inline); padding-inline-start: calc(1px + var(--space-indent)); }
+.days-head.slotted { padding-inline-start: calc(1px + var(--space-indent) + var(--handle-slot)); }
+.days-name { flex: 1 1 auto; min-inline-size: 0; }
+.days-title { position: relative; margin: 0; }
+.days-sub { margin: 0; }
+/* The title is the picker: a word, not a box. */
+.days-pick { min-height: 0; padding: 0; border: 0; background: none; font: inherit; gap: var(--space-tight); }
+.days-pick > .chev { rotate: 90deg; color: var(--ink-muted); }
+.days-pick[aria-expanded='true'] > .chev { rotate: -90deg; }
+.days-step { inline-size: var(--control-md); min-height: var(--control-md); padding: 0; }
+.days-step:disabled { opacity: 0.4; cursor: default; }
+.days-card { padding: var(--space-inline); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface-raised); }
+.days-foot { display: flex; justify-content: space-between; gap: var(--space-inline); margin: var(--space-tight) 0 0; }
+
+/* The days in a line: today's words in ink and 600, days to come and before the first quieter, the day you are on ringed. */
+.days .day-cell:has(> i[aria-current='date']) > .note { color: var(--ink); font-weight: 600; }
+.days .day-cell.later > .note { color: var(--ink-muted); }
+.days .day-cell.chosen { border-radius: var(--radius-inset); box-shadow: inset 0 0 0 var(--chosen-width) var(--line-chosen, var(--ink)); }
+.days .day-cell.chosen > .note { color: var(--ink); font-weight: 600; }
+
+/* ---------- The month: tiles, not cells, so the rows and columns line up ---------- */
+.days-month { display: grid; grid-template-columns: 2rem repeat(7, 1.75rem) minmax(0, 1fr); gap: 6px; align-items: center; }
+.days-wd { text-align: center; }
+.days-wk { justify-self: start; min-height: 0; padding: 0; border: 0; background: none; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.days-wk.now { color: var(--ink); font-weight: 600; }
+.days-dates { text-align: end; white-space: nowrap; }
+.days-tile { display: block; inline-size: 1.75rem; block-size: 1.75rem; border-radius: var(--radius-indicator); }
+.days-tile > i[data-day] { display: block; inline-size: 100%; block-size: 100%; border-radius: inherit; }
+/* DayTile's shapes over a quiet tile for every day: nothing due is the quiet tile alone; days to come and before the
+   first an outline. Today keeps its bar, 2px under the tile, in the 6px gap. */
+.days-tile > i[data-day='rest'] { background: var(--surface-tint); }
+.days-tile > i[data-day='due'] { background: linear-gradient(var(--line-control), var(--line-control)) center / calc(100% / 3) calc(100% / 3) no-repeat, var(--surface-tint); }
+.days-tile > i:is([data-day='future'], [data-day='before']) { box-shadow: inset 0 0 0 1px var(--line); }
+.days-tile.chosen { outline: var(--chosen-width) solid var(--line-chosen, var(--ink)); outline-offset: 2px; }
+@media (hover: hover) { a.days-tile:hover:not(.chosen) { outline: 1px solid var(--ink-muted); outline-offset: 2px; } }
+
+/* ---------- The last 12 months: a column a week ---------- */
+i[data-heat] { display: block; aspect-ratio: 1; border-radius: 1px; }
+i[data-heat='done'] { background: var(--good); }
+i[data-heat='partial'] { background: color-mix(in srgb, var(--good) 45%, transparent); }
+i:is([data-heat='missed'], [data-heat='due']) { background: var(--line-control); }
+i[data-heat='rest'] { background: var(--surface-tint); }
+.days-heat, .days-heat-months { display: grid; grid-template-columns: repeat(52, minmax(0, 1fr)); gap: 1px; }
+.days-heat-months { font-size: var(--font-size-note); line-height: 1rem; color: var(--ink-muted); }
+.days-heat-months > span { white-space: nowrap; overflow: visible; }
+.days-heat { margin-block: 2px var(--space-inline); }
+.days-col { display: grid; gap: 1px; min-height: 0; padding: 0; border: 0; border-radius: 1px; background: none; }
+.days-col[aria-pressed='true'] { outline: 1px solid var(--ink); outline-offset: 1px; }
+
+@media (forced-colors: active) {
+	i[data-heat] { forced-color-adjust: none; --good: CanvasText; --line-control: GrayText; --surface-tint: Canvas; border: 1px solid CanvasText; }
+}
+
+/* ---------- History's year strip: the same heat, a tile a day, across the page ---------- */
+.year { margin-block-start: var(--space-inline); padding: var(--space-tight) var(--space-inline); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface-raised); }
+.year-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-inline); }
+.year-fold { gap: var(--space-tight); padding: 0; border: 0; background: none; font-weight: 600; }
+.year-fold[aria-expanded='true'] > .chev { rotate: 90deg; }
+.year-months, .year-grid { display: grid; grid-template-columns: 1rem repeat(52, minmax(0, 1fr)); gap: 2px; }
+.year-months { font-size: var(--font-size-note); line-height: 1rem; color: var(--ink-muted); }
+.year-months > span { white-space: nowrap; overflow: visible; }
+.year-col { display: grid; gap: 2px; }
+.year-col > * { display: block; border-radius: 2px; }
+.year-col i[data-heat] { aspect-ratio: 4 / 3; border-radius: 2px; }
+.year-wd > span { font-size: 0.625rem; line-height: 1; align-self: center; color: var(--ink-muted); }
+.year-col > [aria-current='date'] > i { box-shadow: inset 0 -2px var(--ink); }
+@media (hover: hover) { .year-col > a:hover > i { outline: 1px solid var(--ink); outline-offset: 1px; } }
+.year-key { display: flex; flex-wrap: wrap; gap: var(--space-inline) var(--space-group); margin: var(--space-tight) 0 0; }
+.year-key i[data-heat] { display: inline-block; inline-size: 0.625rem; margin-inline-end: var(--space-tight); vertical-align: -1px; }
+/* A phone: 52 columns in the width, so the gaps go to 1px. */
+@media (max-width: 40rem) { .year-months, .year-grid, .year-col { gap: 1px; } .year-wd { display: none; } .year-months, .year-grid { grid-template-columns: repeat(52, minmax(0, 1fr)); } .year-months > span:first-child { display: none; } }

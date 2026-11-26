@@ -17,6 +17,7 @@
 	import LogControl, { type Way } from '$lib/ui/LogControl.svelte';
 	import { dayCount } from '$lib/history/day';
 	import { usualWay } from '$lib/log/usual';
+	import DaysBlock from '$lib/days/DaysBlock.svelte';
 
 	let { data, form } = $props();
 
@@ -211,7 +212,7 @@
 
 </div>
 <div class="today-side">
-{#if wide.current}<GroupHeading title="Last seven days" foldColumn />{@render seven()}{/if}
+{#if wide.current}{@render seven()}{/if}
 {#if data.breaking.length}
 	<GroupHeading title={data.breaking.some((b) => b.limit) ? 'Breaking and limiting' : 'Breaking'} foldColumn />
 	<EditableList items={data.breaking} key={(b) => b.habitId} label={(b) => b.name} rowCard ariaLabel="Breaking">
@@ -252,15 +253,7 @@
 
 {#snippet seven()}
 	<div class="seven">
-		<div class="day-week" role="group" aria-label="Seven days around {short(data.date)}">
-			{#each data.week as d (d.date)}
-				{@const mark = d.of ? (d.done >= d.of ? 'done' : d.done ? 'partial' : d.date === data.today ? 'due' : 'missed') : null}
-				{@const words = `${short(d.date)}: ${d.of ? `${d.done} of ${d.of} done` : 'nothing due'}`}
-				<a class="day-cell" class:chosen={d.date === data.date} href={d.date === data.today ? '/' : `/day/${d.date}`} aria-current={d.date === data.date ? 'page' : undefined} aria-label={d.date === data.date ? `${words}, the day you are on` : d.date === data.today ? `${words}. Back to today.` : words}
-					><span class="note">{nice(d.date, { weekday: 'narrow' })}</span><i data-day={mark} aria-current={d.date === data.today ? 'date' : undefined}></i><span class="note num">{Number(d.date.slice(8))}</span></a
-				>
-			{/each}
-		</div>
+		<DaysBlock {...data.block} chosen={data.date} href={(d) => (d === data.today ? '/' : `/day/${d}`)} />
 		<label class="another meta">Another day <input type="date" value={data.date} max={yesterday} min={data.earliest ?? undefined} onchange={(e) => jump(e.currentTarget.value)} /></label>
 	</div>
 {/snippet}
@@ -330,19 +323,6 @@
 	}
 	.seven {
 		margin-block: var(--space-inline) var(--space-group);
-		padding: var(--space-inline);
-		border: 1px solid var(--line);
-		border-radius: var(--radius-card);
-		background: var(--surface-raised);
-	}
-	/* The day you are on: the chosen look (ink inset, 600), as every chooser has it. */
-	.seven .day-cell.chosen {
-		border-radius: var(--radius-inset);
-		box-shadow: inset 0 0 0 var(--chosen-width) var(--line-chosen, var(--ink));
-	}
-	.seven .day-cell.chosen > .note {
-		color: var(--ink);
-		font-weight: 600;
 	}
 	.another {
 		display: flex;

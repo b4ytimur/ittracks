@@ -28,6 +28,8 @@ export const STATUSES = { all: 'Any status', done: 'Done', skipped: 'Skipped', m
 export const TODAY_STATUSES = { all: 'Any status', due: 'Still due', done: 'Done or skipped' } as const;
 
 const str = (n = 200) => z.string().max(n);
+/** What the days block can show: a calendar week, the last seven days, a month, the last 12 months. */
+export const DAYS_SHOWS = ['week', 'seven', 'month', 'year'] as const;
 
 const keysOf = <T extends Record<string, string>>(o: T) => Object.keys(o) as [keyof T & string, ...(keyof T & string)[]];
 
@@ -177,13 +179,16 @@ export const viewSettings = z.object({
 			/** Habit ids in the user's own order, for the "My order" sort. */
 			order: z.array(str(64)).max(500).default([]),
 			/** Section and group keys that are folded. */
-			folded: z.array(str(64)).max(100).default(['done', 'focus:later', 'blocks:later'])
+			folded: z.array(str(64)).max(100).default(['done', 'focus:later', 'blocks:later']),
+			/** The days block on Today, the Day page and History: what it shows, and one habit or all (null). */
+			days: z.object({ show: z.enum(DAYS_SHOWS).default('week'), habit: str(64).nullable().default(null) }).prefault({})
 		})
 		.prefault({}),
 	habits: z
 		.object({ lines: z.array(z.enum(keysOf(HABIT_LINES))).default(['schedule', 'cue', 'area']) })
 		.prefault({}),
-	history: z.object({ values: z.boolean().default(false) }).prefault({}),
+	/** `year`: History's last 12 months across the top, shown or folded to its heading. */
+	history: z.object({ values: z.boolean().default(false), year: z.boolean().default(true) }).prefault({}),
 	hidden: z.array(z.enum(keysOf(FEATURES))).default([]),
 	/**
 	 * Your own changes on top of the template (see `Own`), kept when you switch template.
@@ -569,7 +574,8 @@ export function switchTemplate(current: ViewSettings, id: string, opts: { keep?:
 		open: current.open,
 		active: current.active,
 		last: current.last,
-		today: { ...next.today, order: current.today.order, folded: current.today.folded, headlineFor: current.today.headlineFor },
+		today: { ...next.today, order: current.today.order, folded: current.today.folded, headlineFor: current.today.headlineFor, days: current.today.days },
+		history: { ...next.history, year: current.history.year },
 		own: {}
 	};
 	if (!keep) return out;

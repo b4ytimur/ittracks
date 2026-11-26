@@ -5,6 +5,10 @@
 	import { goto } from '$app/navigation';
 	import { enhance } from '$app/forms';
 	import ViewSentence from '$lib/ViewSentence.svelte';
+	import DaysBlock from '$lib/days/DaysBlock.svelte';
+	import YearStrip from '$lib/days/YearStrip.svelte';
+	import { daysBetween } from '$lib/engine/dates';
+	import type { Count } from '$lib/days/days';
 	import { historyWords } from '$lib/view-words';
 	import { showToast } from '$lib/toast.svelte';
 	import EditableList from '$lib/ui/EditableList.svelte';
@@ -14,7 +18,7 @@
 	import BulkBar from '$lib/bulk/BulkBar.svelte';
 	import DayNote from '$lib/DayNote.svelte';
 	import Markdown from '$lib/Markdown.svelte';
-	import { dayCount, dayMark, dayTitle, placeNotes, type DayLog } from '$lib/history/day';
+	import { dayCount, dayTitle, placeNotes, type DayLog } from '$lib/history/day';
 	import { counts } from '$lib/engine/scoring';
 	import { dayExcerpt } from '$lib/journal';
 	import { saveLayout } from '$lib/viewclient';
@@ -92,6 +96,9 @@
 		const s = p.toString().replace(/notes=(&|$)/, 'notes$1');
 		return `/history${s ? `?${s}` : ''}`;
 	}
+	/** A day with something due opens in the list, loaded back that far; one without, on its own page. */
+	const dayHref = (d: string, c: Count | undefined) =>
+		c?.[1] ? `${daysBetween(d, data.today) < data.days ? '' : at({ days: daysBetween(d, data.today) + 1 })}#d-${d}` : d === data.today ? '/' : `/day/${d}`;
 	const find = (e: Event) => {
 		e.preventDefault();
 		goto(at({ q: q.trim() }), { keepFocus: true, noScroll: true });
@@ -142,23 +149,11 @@
 	/>
 {/if}
 
-<!-- The last seven days: at the top of the side column from 64rem, over the days on a phone (TS.15). -->
-{#snippet week()}
-	{#each data.strip as d (d)}
-		{@const logs = logsOf.get(d) ?? (d === data.today ? data.openToday : [])}
-		{@const c = dayCount(logs)}
-		{@const mark = dayMark(logs, d === data.today)}
-		<a class="day-cell" href={logsOf.has(d) ? `#d-${d}` : d === data.today ? '/' : `/day/${d}`} aria-current={d === data.today ? 'date' : undefined} aria-label="{title(d)}: {c.of ? `${c.done} of ${c.of} done` : 'nothing due'}">
-			<span class="note">{new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'narrow' })}</span>
-			<i data-day={mark === 'none' ? null : mark}></i>
-			<span class="note num">{Number(d.slice(8))}</span>
-		</a>
-	{/each}
-{/snippet}
+<!-- The last 12 months across the top, folding to its heading; the days block at the top of the side column. -->
+{#if !data.notesOnly && !data.q}<YearStrip today={data.today} first={data.block.first} counts={data.year.counts} open={data.year.open} href={dayHref} />{/if}
 
 <div class="page-cols">
 	<div class="page-main">
-		{#if !data.notesOnly && !data.q && !wide.current}<div class="day-week hi-strip" role="group" aria-label="The last seven days">{@render week()}</div>{/if}
 		{#if selecting}
 			<BulkBar kind="day" {selected} bind:outcome visible={days.flatMap((d) => d.occurrences.map((o) => o.id))} today={data.today} />
 		{/if}
@@ -260,10 +255,7 @@
 		{/if}
 	</div>
 	{#if !data.notesOnly && !data.q && wide.current}
-		<aside class="page-side" aria-label="The last seven days">
-			<GroupHeading title="Last seven days" foldColumn />
-			<div class="day-week side-card" role="group" aria-label="The last seven days">{@render week()}</div>
-		</aside>
+		<aside class="page-side" aria-label="Days"><DaysBlock {...data.block} href={(d) => dayHref(d, data.year.counts[d])} /></aside>
 	{/if}
 </div>
 

@@ -34,6 +34,7 @@
 	import { keepFocus, rowOf } from '$lib/ui/focus';
 	import { mergeOrder } from '$lib/ui/list';
 	import { usualWay } from '$lib/log/usual';
+	import DaysBlock from '$lib/days/DaysBlock.svelte';
 	import {
 		STARTERS,
 		STATS,
@@ -233,8 +234,9 @@
 	let retired = $state<string[]>([]);
 	function retire(id: HintId) {
 		if (retired.includes(id)) return;
+		const was = [...data.hints, ...retired.filter((h) => !data.hints.includes(h))];
 		retired = [...retired, id];
-		void fetch('/api/settings', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ set: { hints: [...data.hints, id] }, was: { hints: data.hints } }) }).catch(() => null);
+		void fetch('/api/settings', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ set: { hints: [...was, id] }, was: { hints: was } }) }).catch(() => null);
 	}
 	$effect(() => {
 		if (anyDone && !data.hints.includes('done')) untrack(() => retire('done'));
@@ -411,18 +413,10 @@
 	/** The view lets nothing through though there is something today. */
 	const nothingShown = $derived(!shownBuild.length && !doneFolded.length && !breakingShown.length && !timeHidden.size && !allDone);
 
-	// ----- The date opens the last seven days (TS.5), History's strip -----
+	// ----- The date opens the days block (TS.5) -----
 	let strip = $state(false);
-	/** From 64rem the side column holds the seven days, always shown (TS.11). */
+	/** From 64rem the side column holds the days block, always shown (TS.11). */
 	const wide = new MediaQuery('min-width: 64rem');
-	const weekdayShort = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'narrow' });
-	const markOf = (d: { date: string; done: number; of: number }) => {
-		const today = d.date === data.today;
-		const done = today ? doneCount : d.done;
-		const of = today ? dueLeaves.length : d.of;
-		if (!of) return null;
-		return done >= of ? 'done' : done > 0 ? 'partial' : today ? 'due' : 'missed';
-	};
 	/** Prepare for tomorrow, Paused and Not due today: one folded line at the end (TS.7). */
 	const laterSays = $derived(
 		[
@@ -576,19 +570,11 @@
 </TitleLine>
 
 {#if strip && !wide.current}
-	<div class="day-week today-strip" id="today-strip" role="group" aria-label="The last seven days">{@render sevenDays()}</div>
+	<div class="today-strip" id="today-strip">{@render days()}</div>
 {/if}
 
-{#snippet sevenDays()}
-	{#each data.week as d (d.date)}
-		{@const mark = markOf(d)}
-		{@const words = `${shortDate(d.date)}: ${d.of ? `${d.date === data.today ? doneCount : d.done} of ${d.date === data.today ? dueLeaves.length : d.of} done` : 'nothing due'}`}
-		{#if d.date < data.today && data.canBackfill}
-			<a class="day-cell" href="/day/{d.date}" aria-label="{words}. Go to that day."><span class="note">{weekdayShort(d.date)}</span><i data-day={mark}></i><span class="note num">{Number(d.date.slice(8))}</span></a>
-		{:else}
-			<span class="day-cell" aria-current={d.date === data.today ? 'date' : undefined} aria-label={words} role="img"><span class="note">{weekdayShort(d.date)}</span><i data-day={mark}></i><span class="note num">{Number(d.date.slice(8))}</span></span>
-		{/if}
-	{/each}
+{#snippet days()}
+	<DaysBlock {...data.block} todayCount={[doneCount, dueLeaves.length]} href={(d) => (d < data.today ? `/day/${d}` : null)} hint={!data.hints.includes('days') && !retired.includes('days')} onused={() => retire('days')} slotOpen={gripped && wide.current} />
 {/snippet}
 
 {#if data.askDay}
@@ -653,8 +639,7 @@
 		</div>
 		<div class="today-side">
 			{#if wide.current}
-				<GroupHeading title="Last seven days" slotOpen={gripped} foldColumn />
-				<div class="day-week week-side" role="group" aria-label="The last seven days">{@render sevenDays()}</div>
+				{@render days()}
 			{/if}
 			{#if !view.first && breakingShown.length}{@render breaking()}{/if}
 			{#if trackingShown.length}
@@ -1030,13 +1015,6 @@
 	   a phone the side column comes under the day, a section below it. */
 	.today-side:not(:empty) {
 		margin-block-start: var(--space-section);
-	}
-	/* The seven days as a block at the top of the side column: as wide as the column, one card. */
-	.week-side {
-		padding: var(--space-inline);
-		border: 1px solid var(--line);
-		border-radius: var(--radius-card);
-		background: var(--surface-raised);
 	}
 	@media (min-width: 64rem) {
 		.today-side:not(:empty) {

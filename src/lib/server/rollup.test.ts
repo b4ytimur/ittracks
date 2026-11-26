@@ -9,6 +9,7 @@ import { habit, occurrence } from './db/schema';
 import { createAccount } from './auth';
 import { saveSettings } from './settings';
 import { loadToday, settleAll, userToday } from './today';
+import { dayCounts } from './days';
 import { checkHabitEdit, checkLinks, deleteHabit, getHabitForm, saveHabit } from './repo/habits';
 import { habitForm, type HabitForm } from '$lib/forms';
 import { addDays } from '$lib/engine/dates';
@@ -68,8 +69,8 @@ describe('a group gets its days from the habits inside it', () => {
 		run('log_done', { habit: b });
 		t = loadToday(me, today);
 		expect(t.build.find((x) => x.habitId === g)?.occurrence?.status).toBe('done');
-		// The week strip counts habits, not the group on top of them.
-		expect(t.week.find((d) => d.date === today)?.of).toBe(
+		// The days block counts habits, not the group on top of them.
+		expect(dayCounts(me, today, today)[today][1]).toBe(
 			db.select().from(occurrence).innerJoin(habit, eq(occurrence.habitId, habit.id)).where(and(eq(habit.accountId, me), eq(occurrence.date, today))).all().filter((r) => r.occurrence.rollup === null && r.occurrence.status !== 'skipped').length
 		);
 	});
