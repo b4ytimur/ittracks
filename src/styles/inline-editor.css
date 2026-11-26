@@ -70,8 +70,8 @@ select.inline-text { appearance: none; } /* no native padding or arrow, so the t
 .inline-text[aria-invalid='true'] { background-image: linear-gradient(var(--danger), var(--danger)); }
 
 /* ---------- Touch: a 44px hit area grown by a pseudo-element, so the line never grows ---------- */
-/* Not base's .hit: that needs the class in every host's markup (ListRow, NestedRow, GroupHeading); this travels with
-   .inline-text. */
+/* Height only, so this ::before takes the place of Button's centred one: a short ruled number would grow sideways over
+   its neighbours on the line. */
 @media (pointer: coarse) {
 	button.inline-text::before {
 		content: ''; position: absolute; inset-inline: 0; top: 50%;

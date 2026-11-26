@@ -61,7 +61,7 @@
 .content > .row-line.warn { color: var(--warn); }
 .shelf .content > .row-line.warn { color: var(--ink); }
 
-/* The verb slot: one quiet verb in edit mode (Button's quiet, button.quiet.verb.hit). In use mode on Today a due row's
+/* The verb slot: one quiet verb in edit mode (Button's quiet, button.quiet.verb). In use mode on Today a due row's
    div.verb > div.log-control (R2.19; LogControl draws the joined control and its menu, this only places it);
    during a celebration Undo (button.quiet.verb) takes its place; a finished row with Slots shows a quiet View
    (a.button.quiet.verb: .button drops the link underline, Button's quiet hover brings it back) and a not-due row
@@ -130,9 +130,9 @@
 
 /* ---------- Coarse pointers: 44px hit areas grown by pseudo-elements, never min-width ---------- */
 @media (pointer: coarse) {
-	/* The checkbox's slot box and the quiet verb (edit's verb, Undo, View, Start early) take base's .hit in the markup.
-	   A name link on a card that isn't .link (a .link card is the target already) grows here instead: .hit's
-	   position: relative would shrink a .link card's stretched cover to the name. LogControl grows its own two
+	/* The checkbox's slot box takes .hit in the markup; the quiet verb (edit's verb, Undo, View, Start early) is Button's,
+	   so Button grows it. A name link on a card that isn't .link (a .link card is the target already) grows here: a
+	   relative position on every name would shrink a .link card's stretched cover to the name. LogControl grows its own two
 	   buttons: a 44px box on each would overlap at the seam. */
 	.elist > li > .card:not(.link) > .content > a.name { position: relative; }
 	.elist > li > .card:not(.link) > .content > a.name::before {

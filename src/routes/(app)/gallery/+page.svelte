@@ -59,7 +59,7 @@
 <div class="search" role="search">
 	<label class="vh" for="gallery-q">Search the Gallery</label>
 	<input id="gallery-q" type="search" bind:value={q} placeholder="Search: running, reading, quit…" autocomplete="off" />
-	{#if q}<button type="button" class="quiet glyph search-clear hit focus-inset" aria-label="Clear search" onclick={() => (q = '')}>×</button>{/if}
+	{#if q}<button type="button" class="quiet glyph search-clear focus-inset" aria-label="Clear search" onclick={() => (q = '')}>×</button>{/if}
 </div>
 <div class="l-cluster filters">
 	<select bind:value={days} aria-label="Days per week"><option value="">Any days</option><option value="few">3 days or fewer</option><option value="most">4 days or more</option></select>
@@ -79,7 +79,7 @@
 							<a class="name" href="/gallery/{i.slug}">{i.name}</a>
 							<p class="meta-line meta muted">{facts(i) || i.description}</p>
 						</div>
-						<span class="verb"><button type="button" class="quiet hit" aria-label="Add {i.name}" aria-disabled={!!busy} onclick={() => add(i)}>{busy === i.slug ? 'Adding…' : 'Add'}</button></span>
+						<span class="verb"><button type="button" class="quiet" aria-label="Add {i.name}" aria-disabled={!!busy} onclick={() => add(i)}>{busy === i.slug ? 'Adding…' : 'Add'}</button></span>
 					</div>
 				</li>
 			{/each}

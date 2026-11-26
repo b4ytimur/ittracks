@@ -18,7 +18,7 @@
 
 <div class="copy-field">
 	<pre class="copy-value" class:lines bind:this={box}>{text}</pre>
-	<button type="button" class="hit" aria-label="Copy {label}" data-reserve="Selected" onclick={copy}>{said || 'Copy'}</button>
+	<button type="button" aria-label="Copy {label}" data-reserve="Selected" onclick={copy}>{said || 'Copy'}</button>
 </div>
 
 <style>

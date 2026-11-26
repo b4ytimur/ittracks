@@ -195,7 +195,7 @@
 							></span
 						></label
 					>
-					<button type="button" class="quiet hit" onclick={() => f.numbers.splice(i, 1)}>Remove this question</button>
+					<button type="button" class="quiet" onclick={() => f.numbers.splice(i, 1)}>Remove this question</button>
 				</fieldset>
 			{/each}
 			{#if data.metrics.length}
@@ -215,8 +215,8 @@
 	{/if}
 	{#if form?.error}<p class="error">{form.error}</p>{/if}
 	<div class="l-cluster">
-		<button class="primary hit" aria-disabled={blocking.length > 0}>Download the template</button>
-		<button class="hit" formaction="?/save" aria-disabled={blocking.length > 0}>Save to my Gallery</button>
+		<button class="primary" aria-disabled={blocking.length > 0}>Download the template</button>
+		<button formaction="?/save" aria-disabled={blocking.length > 0}>Save to my Gallery</button>
 	</div>
 </form>
 

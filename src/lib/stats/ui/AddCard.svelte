@@ -26,7 +26,7 @@
 <section class="card add">
 	<div class="bar">
 		<h2>Add a card</h2>
-		<button type="button" class="quiet hit" onclick={oncancel}>Close</button>
+		<button type="button" class="quiet" onclick={oncancel}>Close</button>
 	</div>
 	<!-- The other way to add, first in the body and over the tabs: a secondary, since the view's one primary is elsewhere. -->
 	<button type="button" class="build" onclick={() => onbuild(makeCard({ look: { chart: 'bars', size: 'wide' }, overTime: 'sum' }))}>Build your own</button>
@@ -46,8 +46,8 @@
 							<div>{c.title}</div>
 							<div class="muted meta">{CHARTS[c.look.chart]}</div>
 						</div>
-						<button type="button" class="quiet hit" onclick={() => onbuild(fresh(c))}>Change first</button>
-						<button type="button" class="quiet hit" onclick={() => onadd(fresh(c))}>Add</button>
+						<button type="button" class="quiet" onclick={() => onbuild(fresh(c))}>Change first</button>
+						<button type="button" class="quiet" onclick={() => onadd(fresh(c))}>Add</button>
 					</li>
 				{/each}
 			</ul>

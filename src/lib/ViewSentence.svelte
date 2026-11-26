@@ -293,8 +293,8 @@
 	{/if}
 	{#if mode === 'edit' && (changed || active !== DEFAULT_VIEW)}
 		<p class="hint meta l-cluster">
-			{#if changed}<button type="button" class="quiet hit" onclick={resetDefault}>Reset view</button>{/if}
-			{#if active !== DEFAULT_VIEW}<button type="button" class="quiet hit" onclick={remove}>Delete view</button>{/if}
+			{#if changed}<button type="button" class="quiet" onclick={resetDefault}>Reset view</button>{/if}
+			{#if active !== DEFAULT_VIEW}<button type="button" class="quiet" onclick={remove}>Delete view</button>{/if}
 		</p>
 	{/if}
 </div>
@@ -364,6 +364,13 @@
 		color: var(--ink);
 		font: inherit;
 		cursor: pointer;
+	}
+	/* Under a coarse pointer a ruled word's hit area is its 2rem line, not Button's 44px: lines are 2rem apart, so a
+	   taller area would take the bottom of the word (or the date) above it. */
+	@media (pointer: coarse) {
+		.view-sentence :global(.word-button)::before {
+			inset-block: calc((100% - 2rem) / 2);
+		}
 	}
 	.naming {
 		width: auto;

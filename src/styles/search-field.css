@@ -5,7 +5,7 @@
        <label class="label" for="s-tasks">Find Tasks</label>
        <div class="search">
          <input id="s-tasks" type="search" placeholder="Name or tag" autocomplete="off" autocorrect="off" enterkeyhint="search">
-         <button type="button" class="quiet glyph search-clear hit focus-inset" aria-label="Clear search">×</button>
+         <button type="button" class="quiet glyph search-clear focus-inset" aria-label="Clear search">×</button>
        </div>
      </div>
      in a FilterBar the label is hidden and wraps the input (a hidden label can't grow its hit area: .vh clips it):

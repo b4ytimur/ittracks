@@ -106,7 +106,7 @@
 				{/if}
 			{/each}
 		</div>
-		<span class="board-more"><MenuButton class="hit" label="Boards" items={boardMenu} /></span>
+		<span class="board-more"><MenuButton label="Boards" items={boardMenu} /></span>
 	</nav>
 
 	{#if newBoard}

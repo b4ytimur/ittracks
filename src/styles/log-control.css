@@ -37,8 +37,8 @@
 
 /* ---------- Coarse pointers: 44px targets ---------- */
 /* ⋯ widens to 44 (a seam can't share a grown hit area); both halves grow to 44 tall through a pseudo-element,
-   so a compact row stays 44 and the name line stays 24. Height only, so not base .hit: that also widens a narrow
-   half (a small +1) to 44, across the seam into ⋯. */
+   so a compact row stays 44 and the name line stays 24. Height only, so this ::before takes the place of Button's
+   centred one, which also widens a narrow half (a small +1) to 44, across the seam into ⋯. */
 @media (pointer: coarse) {
 	.log-control > .log-more { min-inline-size: var(--target-touch); }
 	.log-control > :is(.log-act, .log-more) { position: relative; }

@@ -32,7 +32,7 @@
 
 /* ---------- Segment ---------- */
 .segmented > label {
-	/* align-content: the text row and the 0px reserve copy centre together, at 28 and at 44px; justify-content: words wider
+	/* align-content: the text row and the 0px reserve copy centre together, at 28px and when text zoom grows it; justify-content: words wider
 	   than a squeezed segment pass its padding on both sides alike */
 	position: relative; z-index: 1; display: grid; place-items: center; place-content: center;
 	min-height: max(calc(var(--control-md) - 2 * var(--seg-pad)), var(--target-min)); /* 28px, so the track is 32; growing with text */
@@ -50,9 +50,14 @@
 /* Blocked: the radio is native disabled, so the arrow keys skip it (D3.6); the words step back; BlockedReason's line says why. */
 .segmented > label:has(:disabled) { color: var(--ink-muted); cursor: not-allowed; }
 
-/* ---------- Touch: the segment itself grows to 44px (its ::after is the reserve, so no .hit) ---------- */
+/* ---------- Touch: the hit area grows to 44px, the box stays 32 (Button's way; ::after is the reserve, so ::before) ---------- */
+/* Up and down only: segments touch, so a wider area would take its neighbour's taps. 8px past the 28px segment is
+   6px past the track, as a 32px button's. */
 @media (pointer: coarse) {
-	.segmented > label { min-height: var(--target-touch); }
+	.segmented > label::before {
+		content: ''; position: absolute; inset-inline: 0;
+		inset-block: min(0px, calc((100% - var(--target-touch)) / 2));
+	}
 }
 
 /* ---------- Motion: the thumb travels; reduced motion cross-fades the chosen look between segments ---------- */

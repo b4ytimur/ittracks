@@ -61,7 +61,7 @@
 		<strong>Copy the key “{created.name}” now</strong>
 		<p class="meta">It is shown only once. Anyone who has it can do what it allows, so keep it like a password. The examples under Quick-log links, AI assistants and Scripts use it until you close this.</p>
 		<Copy text={created.secret} label="the key {created.name}" />
-		<div><button type="button" class="hit" onclick={() => (created = null)}>I've copied it</button></div>
+		<div><button type="button" onclick={() => (created = null)}>I've copied it</button></div>
 	</div>
 {/if}
 {#if keys.length}
@@ -103,10 +103,10 @@
 			{/if}
 		</fieldset>
 		<p class="field-hint meta">For a Shortcut, Read and Log are enough. For an AI assistant, Read lets it analyse; add Log if it may log for you, and Notes only if it may read your notes and journal. A key limited to some habits can't download an export.</p>
-		<div class="l-cluster"><button class="hit" aria-disabled={busy}>Make the key</button><button type="button" class="quiet hit" onclick={() => ((adding = false), (problem = ''))}>Cancel</button></div>
+		<div class="l-cluster"><button aria-disabled={busy}>Make the key</button><button type="button" class="quiet" onclick={() => ((adding = false), (problem = ''))}>Cancel</button></div>
 	</form>
 {:else}
-	<div><button type="button" class="hit" onclick={() => (adding = true)}>+ Key</button></div>
+	<div><button type="button" onclick={() => (adding = true)}>+ Key</button></div>
 {/if}
 
 <style>

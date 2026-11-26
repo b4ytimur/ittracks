@@ -574,14 +574,14 @@
 {#if data.askDay}
 	<div class="notice" role="note">
 		<span class="notice-text">It is past midnight. Is it still {yesterdayName} for you? What you log now counts for that day then.{#if problem} <span class="error">{problem}</span>{/if}</span>
-		<span class="notice-acts"><button type="button" class="hit" onclick={() => startDay('04:00')}>Yes, until 04:00</button><button type="button" class="quiet hit" onclick={() => startDay('00:00')}>No, days start at midnight</button></span>
+		<span class="notice-acts"><button type="button" onclick={() => startDay('04:00')}>Yes, until 04:00</button><button type="button" class="quiet" onclick={() => startDay('00:00')}>No, days start at midnight</button></span>
 	</div>
 {/if}
 
 {#if notDue}
 	<div class="notice" role="status">
 		<span class="notice-text">{notDue.text}</span>
-		<span class="notice-acts">{#if notDue.habit}<a class="button hit" href="/q/{notDue.habit}?go=1&extra=1" data-sveltekit-preload-data="off" onclick={() => (notDue = null)}>Log it anyway</a>{/if}<button type="button" class="quiet hit" onclick={() => (notDue = null)}>Close</button></span>
+		<span class="notice-acts">{#if notDue.habit}<a class="button" href="/q/{notDue.habit}?go=1&extra=1" data-sveltekit-preload-data="off" onclick={() => (notDue = null)}>Log it anyway</a>{/if}<button type="button" class="quiet" onclick={() => (notDue = null)}>Close</button></span>
 	</div>
 {/if}
 
@@ -592,8 +592,8 @@
 				.slice(0, 3)
 				.join(', ')}{data.unlogged.length > 3 ? ' and more' : ''}. Did you do {data.unlogged.length === 1 ? 'it' : 'them'}?</span
 		>
-		<a class="quiet hit" href="/day/{yesterday}">Log yesterday</a>
-		<button class="quiet hit" onclick={hideNudge} aria-label="Hide this until tomorrow">Hide</button>
+		<a class="quiet" href="/day/{yesterday}">Log yesterday</a>
+		<button class="quiet" onclick={hideNudge} aria-label="Hide this until tomorrow">Hide</button>
 	</div>
 {/if}
 
@@ -604,12 +604,12 @@
 		<div class="chips">
 			{#each PACKS.filter((p) => !data.packs.includes(p.id)) as p (p.id)}<button type="button" class="toggle" onclick={() => packIn(p.id, p.name)}>{p.name}</button>{/each}
 		</div>
-		<div class="l-cluster"><a class="button hit" href="/gallery">Gallery</a><a class="button hit" href="/habits/import">Add a file</a><a class="quiet hit" href="/habits/new">Step by step</a></div>
+		<div class="l-cluster"><a class="button" href="/gallery">Gallery</a><a class="button" href="/habits/import">Add a file</a><a class="quiet" href="/habits/new">Step by step</a></div>
 	</section>
 {:else}
 	<ViewSentence bind:this={sentenceBar} page="today" bind:views bind:current={view} {words} starters={STARTERS()} {mode} reset={fromTemplate(views.template).defaults.today} say={(s) => sentence(todayWords(s, wordsCtx))} />
 	{#if hint && !retired.includes(hint) && mode === 'use'}
-		<div class="ob-hint" role="note"><span class="meta">{HINTS[hint]}</span><button type="button" class="quiet hit" onclick={() => hint && retire(hint)}>Got it</button></div>
+		<div class="ob-hint" role="note"><span class="meta">{HINTS[hint]}</span><button type="button" class="quiet" onclick={() => hint && retire(hint)}>Got it</button></div>
 	{/if}
 
 	<div class="today-cols">
@@ -663,7 +663,7 @@
 
 {#snippet breaking()}
 	<GroupHeading title={limiting ? 'Breaking and limiting' : 'Breaking'} {mode} verb={editing ? moveBreaking : undefined} />
-	{#snippet moveBreaking()}<button type="button" class="quiet verb hit" onclick={() => sentenceBar?.change({ ...view, first: !view.first }, view.first ? 'puts breaking after the day' : 'puts breaking first', 'Breaking first')}>{view.first ? 'Move last' : 'Move first'}</button>{/snippet}
+	{#snippet moveBreaking()}<button type="button" class="quiet verb" onclick={() => sentenceBar?.change({ ...view, first: !view.first }, view.first ? 'puts breaking after the day' : 'puts breaking first', 'Breaking first')}>{view.first ? 'Move last' : 'Move first'}</button>{/snippet}
 	{@render breakingSection()}
 {/snippet}
 
@@ -677,7 +677,7 @@
 
 {#snippet lineOf(l: { k: LineKey; text: string; warn?: boolean })}
 	<p class="row-line meta" class:warn={l.warn} class:line-off={editing && view.hide.includes(l.k)}>
-		<span>{l.text}</span>{#if editing}<button type="button" class="quiet hit line-verb" aria-label="{view.hide.includes(l.k) ? 'Show' : 'Hide'} {LINE_SAID[l.k]} in this view" onclick={() => flipLine(l.k)}>{view.hide.includes(l.k) ? 'Show' : 'Hide'}</button>{/if}
+		<span>{l.text}</span>{#if editing}<button type="button" class="quiet line-verb" aria-label="{view.hide.includes(l.k) ? 'Show' : 'Hide'} {LINE_SAID[l.k]} in this view" onclick={() => flipLine(l.k)}>{view.hide.includes(l.k) ? 'Show' : 'Hide'}</button>{/if}
 	</p>
 {/snippet}
 
@@ -722,9 +722,9 @@
 				>You've hit your targets {p.hits} times in a row. Raise them by {p.by}{p.unit === 'percent' ? '%' : p.by === 1 ? ' step' : ' steps'}? {p.changes.join(' · ')}</span
 			>
 			<span class="notice-acts">
-				{#if editing}<button type="button" class="quiet hit" onclick={() => flipLine('progression')}>{view.hide.includes('progression') ? 'Show' : 'Hide'}</button>{:else}
-					<form method="POST" action="?/raise" use:enhance><input type="hidden" name="habit" value={item.habitId} /><button class="quiet hit" aria-label="Raise the targets of {item.name}">Raise</button></form>
-					<form method="POST" action="?/notYet" use:enhance><input type="hidden" name="habit" value={item.habitId} /><button class="quiet hit" aria-label="Not yet for {item.name}">Not yet</button></form>
+				{#if editing}<button type="button" class="quiet" onclick={() => flipLine('progression')}>{view.hide.includes('progression') ? 'Show' : 'Hide'}</button>{:else}
+					<form method="POST" action="?/raise" use:enhance><input type="hidden" name="habit" value={item.habitId} /><button class="quiet" aria-label="Raise the targets of {item.name}">Raise</button></form>
+					<form method="POST" action="?/notYet" use:enhance><input type="hidden" name="habit" value={item.habitId} /><button class="quiet" aria-label="Not yet for {item.name}">Not yet</button></form>
 				{/if}
 			</span>
 		</div>
@@ -742,16 +742,16 @@
 		{@const w = waysOf(item)}
 		<LogControl name={item.name} act={w.act} ways={w.ways} primary={item.habitId === upNext} />
 	{:else if !pending[o.id]}
-		{#if item.group || o.slotCount > 0}<a class="quiet hit" href="/log/{o.id}" aria-label="View {item.name}">View</a>{/if}
+		{#if item.group || o.slotCount > 0}<a class="quiet" href="/log/{o.id}" aria-label="View {item.name}">View</a>{/if}
 		{@const undo = just.get(item.habitId)?.undo}
 		{#if undo}
-			<button type="button" class="quiet hit" aria-label="Undo {item.name}" onclick={undo}>Undo</button>
+			<button type="button" class="quiet" aria-label="Undo {item.name}" onclick={undo}>Undo</button>
 		{:else if !undoShows(band.entries, o.id) && (!item.group || item.group.undoable)}
 			<!-- One Undo at a time: the band's while its line is this one, else the row's (after a reload too).
 			     A routine done only through the habits inside it has nothing of its own to undo. -->
 			<form method="POST" action="?/undo" use:enhance={() => async ({ result, update }) => { await update(); if (result.type === 'success') reopened(item); }}>
 				<input type="hidden" name="occurrence" value={o.id} />
-				<button class="quiet hit" aria-label="Undo {item.name}">Undo</button>
+				<button class="quiet" aria-label="Undo {item.name}">Undo</button>
 			</form>
 		{/if}
 	{/if}
@@ -890,7 +890,7 @@
 			<span class="name">{item.name}</span>
 			<p class="meta-line">Paused until {shortDate(item.pausedUntil!)}. Streak is safe.</p>
 		{/snippet}
-		{#snippet actions(item)}<a class="quiet hit" href="/habits/{item.habitId}#pause" aria-label="Change the pause of {item.name}">Change</a>{/snippet}
+		{#snippet actions(item)}<a class="quiet" href="/habits/{item.habitId}#pause" aria-label="Change the pause of {item.name}">Change</a>{/snippet}
 	</EditableList>
 {/snippet}
 
@@ -902,7 +902,7 @@
 			{#if editing}{@render headlinePick(item)}{/if}
 		{/snippet}
 		{#snippet actions(item)}
-			<a class="quiet hit" href="/q/{item.habitId}" data-sveltekit-preload-data="off" aria-label="Log {item.name}">Log</a>
+			<a class="quiet" href="/q/{item.habitId}" data-sveltekit-preload-data="off" aria-label="Log {item.name}">Log</a>
 		{/snippet}
 	</EditableList>
 {/snippet}
@@ -918,7 +918,7 @@
 				<form method="POST" action="?/early" use:enhance>
 					<input type="hidden" name="habit" value={item.habitId} />
 					<input type="hidden" name="variant" value={item.earlyVariant.id} />
-					<button class="quiet hit" aria-label="Start early: {item.multiVariant ? item.earlyVariant.name : item.name}">Start early</button>
+					<button class="quiet" aria-label="Start early: {item.multiVariant ? item.earlyVariant.name : item.name}">Start early</button>
 				</form>
 			{/if}
 		{/snippet}

@@ -25,13 +25,13 @@
 <form onsubmit={add}>
 	<TemplateSentence tpl={data.template} today={data.today} libraryNames={data.libraryNames} habitNames={data.habitNames} areaNames={data.areaNames} brings={data.brings} />
 	{#if problem}<p class="error" role="alert">{problem}</p>{/if}
-	<div class="ob-add l-cluster"><button class="primary hit" aria-disabled={busy}>{busy ? 'Adding…' : inside ? `Add these ${inside + 1} habits` : 'Add this habit'}</button><span class="meta muted">Anything can be changed on its page afterwards.</span></div>
+	<div class="ob-add l-cluster"><button class="primary" aria-disabled={busy}>{busy ? 'Adding…' : inside ? `Add these ${inside + 1} habits` : 'Add this habit'}</button><span class="meta muted">Anything can be changed on its page afterwards.</span></div>
 </form>
 
 {#if data.mine}
 	<div class="l-cluster mine">
-		<a class="button hit" href="/gallery/{data.slug}/template.json" download>Download the file</a>
-		<form method="POST" action="?/delete"><button class="quiet hit">Remove from my Gallery</button></form>
+		<a class="button" href="/gallery/{data.slug}/template.json" download>Download the file</a>
+		<form method="POST" action="?/delete"><button class="quiet">Remove from my Gallery</button></form>
 		<span class="meta muted">Removing it keeps the habits you added from it.</span>
 	</div>
 {/if}

@@ -40,14 +40,14 @@
 
 <DeviceReminders {vapidKey} bind:problem />
 {#if devices}
-	<div class="act-row"><span class="status-text">{devices} {devices === 1 ? 'device' : 'devices'} set up.</span><button type="button" class="hit" onclick={test}>Send a test</button></div>
+	<div class="act-row"><span class="status-text">{devices} {devices === 1 ? 'device' : 'devices'} set up.</span><button type="button" onclick={test}>Send a test</button></div>
 {/if}
 
 {#if reminders.length}
 	<div class="field">
 		<span class="label">Habits</span>
 		{#each reminders as h (h.id)}
-			<div class="act-row"><span class="status-text"><a href="/habits/{h.id}">{h.name}</a> <span class="meta muted">· {at(h.when)}, {h.remind ? 'on' : 'off'}</span></span><button type="button" class="quiet hit" aria-label="{h.remind ? 'Turn off' : 'Turn on'} the reminder of {h.name}" onclick={() => toggle(h)}>{h.remind ? 'Turn off' : 'Turn on'}</button></div>
+			<div class="act-row"><span class="status-text"><a href="/habits/{h.id}">{h.name}</a> <span class="meta muted">· {at(h.when)}, {h.remind ? 'on' : 'off'}</span></span><button type="button" class="quiet" aria-label="{h.remind ? 'Turn off' : 'Turn on'} the reminder of {h.name}" onclick={() => toggle(h)}>{h.remind ? 'Turn off' : 'Turn on'}</button></div>
 		{/each}
 	</div>
 {:else}<p class="meta muted">A habit can remind you once it has a time or a part of the day, on its page.</p>{/if}

@@ -64,15 +64,7 @@ label > input, label > select, label > textarea { margin-top: 0.25rem; color: va
 /* Room for the widest label (bold), so a change of weight or words never resizes the box. */
 [data-reserve]::after { content: attr(data-reserve); display: block; height: 0; overflow: hidden; visibility: hidden; font-weight: 600; }
 .focus-inset:focus-visible { outline-offset: calc(-1 * var(--focus-width)); }
-.hit { position: relative; }
-@media (pointer: coarse) {
-	/* A 44px hit area, grown by a pseudo-element so the drawn box stays. */
-	.hit::before {
-		content: ''; position: absolute;
-		inset-block: min(0px, calc((100% - var(--target-touch)) / 2));
-		inset-inline: min(0px, calc((100% - var(--target-touch)) / 2));
-	}
-}
+/* The 44px touch area (.hit, and every button without it) is Button's. */
 /* Layout: one under another, and a row that wraps. */
 .l-stack { --gap: var(--space-group); display: flex; flex-direction: column; gap: var(--gap); }
 .l-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-inline); }

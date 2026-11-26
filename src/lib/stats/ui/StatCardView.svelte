@@ -91,7 +91,7 @@
 			{#if offer && onpick}<Sentence {card} {offer} named={!!card.title} rangeWords={rangeLabel(boardRange).toLowerCase()} {onpick} />
 			{:else}<div class="muted meta">{r?.chart === 'streak' ? 'Now and best' : rangeLabel(rangeKey)}</div>{/if}
 		</div>
-		{#if items.length}<span class="more"><MenuButton class="quiet glyph hit lg-more" label="More for {title}" {items} /></span>{/if}
+		{#if items.length}<span class="more"><MenuButton class="quiet glyph lg-more" label="More for {title}" {items} /></span>{/if}
 	</header>
 
 	{#if !r}
@@ -105,7 +105,7 @@
 
 	{#if logs}
 		<section class="logs" aria-label="The logs: {logs.title}">
-			<div class="logs-head"><strong class="meta">{logs.title}</strong><button type="button" class="quiet hit" onclick={onclose}>Close</button></div>
+			<div class="logs-head"><strong class="meta">{logs.title}</strong><button type="button" class="quiet" onclick={onclose}>Close</button></div>
 			{#if !logs.rows}<p class="meta muted" role="status">Finding the logs…</p>
 			{:else if !logs.rows.length}<p class="meta muted">No logs here.</p>
 			{:else}
@@ -117,7 +117,7 @@
 						</li>
 					{/each}
 				</ul>
-				{#if logs.rows.length > FEW}<button type="button" class="quiet hit" onclick={onall}>All {logs.rows.length}{logs.rows.length === 200 ? '+' : ''} logs</button>{/if}
+				{#if logs.rows.length > FEW}<button type="button" class="quiet" onclick={onall}>All {logs.rows.length}{logs.rows.length === 200 ? '+' : ''} logs</button>{/if}
 			{/if}
 		</section>
 	{/if}

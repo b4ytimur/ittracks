@@ -3,8 +3,8 @@
      <button type="button">Archive</button>                 <a class="button" href="/identities">Identities</a>
      <a class="button primary" href="/habits/new">New habit</a> (one per view, C.9)
      <button class="small">Undo</button>   <button class="danger">Replace my data</button> (can't be undone, C.7)
-     <button class="quiet hit">Hide</button> (the trailing verb)   <button class="quiet glyph" aria-label="Remove Chest">×</button> (a glyph alone)
-     <p class="meta">Nothing matches. <button class="link hit">Clear filters</button></p> (in a sentence: underlined, D3.29)
+     <button class="quiet">Hide</button> (the trailing verb)   <button class="quiet glyph" aria-label="Remove Chest">×</button> (a glyph alone)
+     <p class="meta">Nothing matches. <button class="link">Clear filters</button></p> (in a sentence: underlined, D3.29)
      <button class="link meta">Select all 12</button> (stands alone, with its own type class: no underline)
      busy     <button class="primary" aria-busy="true" aria-disabled="true" data-reserve="Apply 2 changes">Applying…</button>
      pressed  <button aria-pressed="true" data-reserve="Preview">Preview</button>
@@ -86,6 +86,25 @@ button, .button {
 /* Base's data-reserve copy (600, 0px tall) takes a second grid row under the label, so busy words and the bold of
    pressed never resize the button. Text-only labels: each child would take a row of its own. */
 :where(button, .button)[data-reserve] { display: inline-grid; justify-items: center; row-gap: 0; }
+
+/* ---------- Touch: every button's hit area is 44px under a coarse pointer, and its drawn box stays as it is ---------- */
+/* One rule, so no button opts in: a ::before centred on the box grows it to target-touch where the box is smaller
+   (10px each way on a 24px quiet verb, 6px on a 32px button, nothing on the 56px act). .hit gives the same area to the
+   pressables that aren't buttons: a tick alone (input.tick) and a row's select box (label.pick-hit).
+   Left out: parts whose ::before draws something (Chip's ✓ on .toggle, Tab's bar, Disclosure's fold ring, the selection
+   bar's dot before each head link), the shelf's fold row (44px already; its ::before is the drop cap) and the log's
+   .lg-fold and .lg-press, which stretch over their card and so must stay unpositioned. A part that grows its own way
+   (DragHandle's grip, LogControl, InlineEditor, GroupHeading's verb, EchoShelf's acts, EditChrome's tools) sets its
+   own ::before, which wins: :where keeps this rule at the weight of the pseudo-element alone. Menus hang from a
+   button's positioned wrapper, never from the button, so position: relative here moves none of them. */
+:where(button, .button, a.quiet, .hit):where(:not(.toggle, .tab, .fold, .shelf-fold, .lg-fold, .lg-press, .selbar-head > button)) { position: relative; }
+@media (pointer: coarse) {
+	:where(button, .button, a.quiet, .hit):where(:not(.toggle, .tab, .fold, .shelf-fold, .lg-fold, .lg-press, .selbar-head > button))::before {
+		content: ''; position: absolute;
+		inset-block: min(0px, calc((100% - var(--target-touch)) / 2));
+		inset-inline: min(0px, calc((100% - var(--target-touch)) / 2));
+	}
+}
 
 /* ---------- Motion, forced colours ---------- */
 @media (prefers-reduced-motion: no-preference) {

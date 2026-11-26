@@ -6,10 +6,10 @@
      <div class="field">
        <label class="label" for="w2">Weight (kg)</label>
        <div class="stepper" [data-mode="edit|select"]>
-         <button type="button" class="hit" tabindex="-1" aria-label="2.5 kg less, Weight, set 2 of Bench press">−</button>
+         <button type="button" tabindex="-1" aria-label="2.5 kg less, Weight, set 2 of Bench press">−</button>
          <input id="w2" class="num" type="text" inputmode="decimal" enterkeyhint="next" autocomplete="off" value="62.5"
            aria-label="Weight (kg), set 2 of Bench press" aria-describedby="w2-m">          a plain text box (D4.28)
-         <button type="button" class="hit" tabindex="-1" aria-label="2.5 kg more, Weight, set 2 of Bench press">+</button>
+         <button type="button" tabindex="-1" aria-label="2.5 kg more, Weight, set 2 of Bench press">+</button>
        </div>
        <p class="value-caption meta" id="w2-m">Last time</p>      one slot: the message, the reason, the reading or the caption
      </div>
@@ -18,7 +18,7 @@
 
 /* ---------- The Stepper part: −, the value, + ---------- */
 /* Three control-md boxes, 8px apart (space-inline, separate targets, S.6): the value's focus ring (2 out, 2 wide) fits in
-   the gap, and under a coarse pointer each button's 44px area (base's .hit, 6px out) stops 2px short of the value.
+   the gap, and under a coarse pointer each button's 44px area (Button's, 6px out) stops 2px short of the value.
    No wider than twelve controls (24rem): a phone's card gives it less, so there it ends on the form's edge, and on a wide
    screen − and + stay by the number. A container, so it must take its width from its parent (Field's frame does). */
 .stepper {

@@ -133,12 +133,12 @@
 								<label class="vh" for="gm-{t.id}">Grouping of {t.name}</label>
 								<select id="gm-{t.id}" class="move" value={g.id} onchange={(e) => moveMember(t, e.currentTarget.value)}>{#each groupings as x (x.id)}<option value={x.id}>{x.name}</option>{/each}</select>
 							{/if}
-							{#if !t.levels.length}<button type="button" class="quiet glyph hit" aria-label="Remove {t.name}" onclick={() => removeMember(g, t)}>×</button>{/if}
+							{#if !t.levels.length}<button type="button" class="quiet glyph" aria-label="Remove {t.name}" onclick={() => removeMember(g, t)}>×</button>{/if}
 						</div>
 					{/each}
 					<form class="se-unit" onsubmit={(e) => (e.preventDefault(), addMember(g))}>
 						<input bind:value={adding[g.id]} maxlength="40" placeholder="New {g.one || 'member'}" aria-label="New member of {g.name}" />
-						<button class="hit">+ Add</button>
+						<button>+ Add</button>
 					</form>
 				</div>
 			{/if}
@@ -148,19 +148,19 @@
 					<div class="se-unit">
 						<input value={l.name} maxlength="30" placeholder="main, also, a little…" aria-label="Name of {l.name ? `the level ${l.name}` : 'the new level'}" onchange={(e) => renameLevel(g, l, e.currentTarget.value.trim())} />
 						<span class="meta muted se-eq">counts</span><input class="num se-to" inputmode="decimal" value={l.weight} aria-label="{l.name || 'The new level'} counts" onchange={(e) => weigh(g, l, e.currentTarget)} />
-						{#if shown(g).length > 1 || !l.name}<button type="button" class="quiet glyph hit" aria-label="Remove {l.name || 'the new level'}" onclick={() => removeLevel(g, l)}>×</button>{/if}
+						{#if shown(g).length > 1 || !l.name}<button type="button" class="quiet glyph" aria-label="Remove {l.name || 'the new level'}" onclick={() => removeLevel(g, l)}>×</button>{/if}
 					</div>
 				{/each}
 			</div>
 			<div class="l-cluster">
-				<button type="button" class="hit" onclick={() => addLevel(g)}>+ Level</button>
-				{#if rows.length > 1 && !used(g)}<button type="button" class="quiet hit se-del" onclick={() => save(rows.filter((x) => x.id !== g.id).map((x) => $state.snapshot(x) as Grouping), `Deleted ${g.name || 'a grouping'}.`, g.id)}>Delete {g.name || 'it'}</button>{/if}
+				<button type="button" onclick={() => addLevel(g)}>+ Level</button>
+				{#if rows.length > 1 && !used(g)}<button type="button" class="quiet se-del" onclick={() => save(rows.filter((x) => x.id !== g.id).map((x) => $state.snapshot(x) as Grouping), `Deleted ${g.name || 'a grouping'}.`, g.id)}>Delete {g.name || 'it'}</button>{/if}
 			</div>
 			{#if rows.length > 1 && used(g)}<p class="meta muted">Tasks have its members, so it can't be deleted. Move them to another grouping first.</p>{/if}
 		</SaidLine>
 	{/each}
 </div>
-<div><button type="button" class="hit" onclick={addGrouping}>+ Grouping</button></div>
+<div><button type="button" onclick={addGrouping}>+ Grouping</button></div>
 
 <style>
 	/* A member's name and its count share a line: the rule is as wide as the name. */

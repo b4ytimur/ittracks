@@ -58,7 +58,7 @@
 {:else}
 	<div class="act-row">
 		<span class="status-text" role="status">{push === 'on' ? 'On for this device.' : push === 'busy' ? 'Checking…' : 'Off for this device.'}</span>
-		{#if push !== 'busy'}<button type="button" class="hit" onclick={push === 'on' ? disable : enable}>{push === 'on' ? 'Turn off' : 'Turn on'}</button>{/if}
+		{#if push !== 'busy'}<button type="button" onclick={push === 'on' ? disable : enable}>{push === 'on' ? 'Turn off' : 'Turn on'}</button>{/if}
 	</div>
 {/if}
 

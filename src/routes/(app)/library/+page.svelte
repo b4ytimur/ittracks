@@ -177,7 +177,7 @@
 <div class="search page-wide" role="search">
 	<label class="vh" for="li-q">Search Tasks and tags</label>
 	<input id="li-q" type="search" bind:value={view.query} placeholder="Search Tasks and tags" autocomplete="off" />
-	{#if view.query}<button type="button" class="quiet glyph search-clear hit focus-inset" aria-label="Clear search" onclick={() => ((view.query = ''), document.getElementById('li-q')?.focus())}>×</button>{/if}
+	{#if view.query}<button type="button" class="quiet glyph search-clear focus-inset" aria-label="Clear search" onclick={() => ((view.query = ''), document.getElementById('li-q')?.focus())}>×</button>{/if}
 </div>
 
 <ViewSentence page="library" bind:views bind:current={view} {mode} words={libraryWords(view, { areas: data.areas.length > 0 })} />

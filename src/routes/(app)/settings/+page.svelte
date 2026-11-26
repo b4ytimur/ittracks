@@ -174,7 +174,7 @@
 	<div class="search se-find page-wide" role="search">
 		<label class="vh" for="se-q">Find a setting</label>
 		<input id="se-q" type="search" placeholder="Find a setting" bind:value={q} autocomplete="off" />
-		{#if q}<button type="button" class="quiet glyph search-clear hit focus-inset" aria-label="Clear search" onclick={() => ((q = ''), document.getElementById('se-q')?.focus())}>×</button>{/if}
+		{#if q}<button type="button" class="quiet glyph search-clear focus-inset" aria-label="Clear search" onclick={() => ((q = ''), document.getElementById('se-q')?.focus())}>×</button>{/if}
 		{#if searching}<p class="result-line meta" role="status">{found} {found === 1 ? 'setting' : 'settings'}</p>{/if}
 	</div>
 {/if}
@@ -290,20 +290,20 @@
 	{:else if id === 'reminders'}
 		<Reminders vapidKey={data.vapidKey} devices={data.devices} reminders={data.reminders} bind:problem={() => problem.reminders ?? '', (v) => (problem.reminders = v)} />
 	{:else if id === 'download'}
-		<div class="l-cluster"><a class="button hit" href="/api/v1/export?format=json" download>Everything (JSON)</a><a class="button hit" href="/api/v1/export?format=csv" download>Tables (CSV)</a></div>
+		<div class="l-cluster"><a class="button" href="/api/v1/export?format=json" download>Everything (JSON)</a><a class="button" href="/api/v1/export?format=csv" download>Tables (CSV)</a></div>
 	{:else if id === 'backups'}
 		<Backups plan={data.backup.plan} last={data.backup.state} container={data.backup.container} bind:problem={() => problem.backups ?? '', (v) => (problem.backups = v)} />
 	{:else if id === 'restore'}
 		<Restore bind:problem={() => problem.restore ?? '', (v) => (problem.restore = v)} />
 	{:else if id === 'journal'}
 		{#if views.hidden.includes('journal')}<p class="meta">Turn the Journal on in <button type="button" class="link" onclick={() => go('features')}>Features</button> to download it.</p>
-		{:else}<div><a class="button hit" href="/journal/export" download>Download the journal</a></div>{/if}
+		{:else}<div><a class="button" href="/journal/export" download>Download the journal</a></div>{/if}
 	{:else if id === 'templates'}
-		<div class="l-cluster"><a class="button hit" href="/habits/import">Add a template file</a><a class="button hit" href="/gallery">Gallery</a></div>
+		<div class="l-cluster"><a class="button" href="/habits/import">Add a template file</a><a class="button" href="/gallery">Gallery</a></div>
 		{#if data.habits.length}
 			<ul class="habits">
 				{#each data.habits as h (h.id)}
-					<li class="act-row"><span class="status-text">{h.name}</span><span class="l-cluster"><a class="quiet hit" href="/habits/{h.id}/template.json" download aria-label="Save {h.name} as a file">Save as a file</a><a class="quiet hit" href="/habits/{h.id}/share" aria-label="Share {h.name}">Share…</a></span></li>
+					<li class="act-row"><span class="status-text">{h.name}</span><span class="l-cluster"><a class="quiet" href="/habits/{h.id}/template.json" download aria-label="Save {h.name} as a file">Save as a file</a><a class="quiet" href="/habits/{h.id}/share" aria-label="Share {h.name}">Share…</a></span></li>
 				{/each}
 			</ul>
 		{/if}
@@ -330,7 +330,7 @@
 			<input class="vh" name="username" value={data.username} autocomplete="username" tabindex="-1" aria-hidden="true" readonly />
 			<div class="field"><label class="label" for="pw-now">Current password</label><input id="pw-now" name="current" type="password" autocomplete="current-password" required /></div>
 			<div class="field"><label class="label" for="pw-new">New password</label><p class="field-hint meta" id="pw-h">{groups.at(-1)!.lines[0].says}</p><input id="pw-new" name="next" type="password" autocomplete="new-password" minlength="8" required aria-describedby="pw-h" /></div>
-			<div><button class="hit" aria-disabled={busy}>Change password</button></div>
+			<div><button aria-disabled={busy}>Change password</button></div>
 		</form>
 	{:else if id === 'logout'}
 		<LogOut />

@@ -370,6 +370,10 @@
 		text-align: left;
 		font-size: var(--font-size-meta);
 	}
+	/* The bars touch, so Button's grown touch area would take the next bar's taps: each bar is its own target. */
+	.hrow::before {
+		content: none;
+	}
 	@media (hover: hover) {
 		.hrow:hover .htrack {
 			background: var(--chart-grid);

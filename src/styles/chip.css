@@ -87,7 +87,7 @@
 		--toggle-pad-block: calc(var(--space-inline) - 1px);
 		position: relative; min-height: var(--control-md);
 	}
-	/* ::after, not base's .hit: a pill's ::before is the ✓. inset counts from the padding edge, so the edge (1px, 2px
+	/* ::after, not Button's touch area (Button leaves .toggle out): a pill's ::before is the ✓. inset counts from the padding edge, so the edge (1px, 2px
 	   when on under forced colours) is taken off too: the area is 44px tall and reaches 6px over and under the pill and
 	   4px to each side. */
 	.toggle::after {

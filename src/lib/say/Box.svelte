@@ -75,7 +75,7 @@
 		</p>
 	{:else if hint}<p class="field-hint meta" id="{id}-h">{hint}</p>{/if}
 	{#if problem}<p class="error meta" role="alert">{problem}</p>{/if}
-	<div><button class="hit" class:primary={!!read} aria-disabled={busy || !read}>{busy ? 'Starting…' : 'Start tracking'}</button></div>
+	<div><button class:primary={!!read} aria-disabled={busy || !read}>{busy ? 'Starting…' : 'Start tracking'}</button></div>
 </form>
 
 <style>

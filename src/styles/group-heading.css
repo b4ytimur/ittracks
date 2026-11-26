@@ -137,8 +137,8 @@ li:has(> .group-heading:focus-within) > * .group-heading.stuck { z-index: calc(v
 /* ---------- Coarse pointers: 44px tall hit areas from pseudo-elements; widths stay 24 so targets never overlap ---------- */
 /* Every area runs from 4px above the heading (the space-tight under EditChrome's hint line, which a list's first
    heading sits on) to 8px below it (its first row's edge, whose own areas start there), never centred: centred, the
-   first heading's areas reached 2px into the hint line, onto Reset layout and the layout chooser. So not base's
-   centred .hit. */
+   first heading's areas reached 2px into the hint line, onto Reset layout and the layout chooser. So these ::before
+   rules take the place of Button's centred one. */
 @media (pointer: coarse) {
 	.group-heading:not([data-mode='edit']) > .fold::after { /* 31px padding box: -4 above, -9 below → 44 */
 		inset-block: calc(-1 * var(--space-tight)) calc(var(--target-min) + 3 * var(--space-tight) - 1px - var(--target-touch));

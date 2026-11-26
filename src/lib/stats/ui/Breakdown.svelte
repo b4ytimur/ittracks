@@ -62,6 +62,10 @@
 		padding: 0.2rem 0;
 		text-align: left;
 	}
+	/* The lines touch, so Button's grown touch area would take the next line's taps: each line is its own target. */
+	button::before {
+		content: none;
+	}
 	i {
 		width: 10px;
 		height: 10px;

@@ -861,7 +861,7 @@
 						<div class="slot">{@render ctx.grip?.()}</div>
 						<div class="content"><input class="grow" aria-label="Name of the Variant" bind:value={v.name} required maxlength="120" /></div>
 						<div class="verb">
-							<MenuButton class="hit" label="More for {v.name}" items={[{ label: 'Duplicate', onselect: () => duplicateVariant(h.variants.indexOf(v)) }, { label: usedVariant(v.id) ? 'Archive' : 'Remove', value: usedVariant(v.id) ? 'Past days keep it.' : undefined, onselect: () => removeVariant(v) }]} />
+							<MenuButton label="More for {v.name}" items={[{ label: 'Duplicate', onselect: () => duplicateVariant(h.variants.indexOf(v)) }, { label: usedVariant(v.id) ? 'Archive' : 'Remove', value: usedVariant(v.id) ? 'Past days keep it.' : undefined, onselect: () => removeVariant(v) }]} />
 						</div>
 					</div>
 				{/if}
@@ -880,8 +880,8 @@
 								<div class="su-slot-head">
 									<span class="slot">{@render sctx.grip?.()}</span>
 									<strong class="grow">{slotName(s)}</strong>
-									<button type="button" class="quiet hit" aria-expanded={!!openSlots[s.id]} aria-label="{openSlots[s.id] ? 'Close' : 'Change'} {slotName(s)}" onclick={() => (openSlots[s.id] = !openSlots[s.id])}>{openSlots[s.id] ? 'Close' : 'Change'}</button>
-									<button type="button" class="quiet hit" aria-label="Remove {slotName(s)}" onclick={() => (v.slots = v.slots.filter((x) => x !== s))}>Remove</button>
+									<button type="button" class="quiet" aria-expanded={!!openSlots[s.id]} aria-label="{openSlots[s.id] ? 'Close' : 'Change'} {slotName(s)}" onclick={() => (openSlots[s.id] = !openSlots[s.id])}>{openSlots[s.id] ? 'Close' : 'Change'}</button>
+									<button type="button" class="quiet" aria-label="Remove {slotName(s)}" onclick={() => (v.slots = v.slots.filter((x) => x !== s))}>Remove</button>
 								</div>
 								{#if !openSlots[s.id]}
 									{#if slotWords(s)}<p class="meta su-slot-words">{slotWords(s)}</p>{/if}
@@ -1007,7 +1007,7 @@
 	</EditableList>
 	<button type="button" onclick={addVariant}>{h.variants.length > 1 ? '+ Variant' : '+ Another Variant (for A/B plans)'}</button>
 	{#each archivedVariants as v (v.id)}
-		<p class="meta muted archived">{v.name} is archived. <button type="button" class="quiet hit" aria-label="Bring back {v.name}" onclick={() => bringBack(v)}>Bring back</button></p>
+		<p class="meta muted archived">{v.name} is archived. <button type="button" class="quiet" aria-label="Bring back {v.name}" onclick={() => bringBack(v)}>Bring back</button></p>
 	{/each}
 {/snippet}
 
@@ -1578,7 +1578,7 @@
 		{#each h.prep as item, pi (item)}
 			<div class="row">
 				<span class="grow">{item}</span>
-				<button type="button" class="quiet hit" onclick={() => h.prep.splice(pi, 1)}>Remove</button>
+				<button type="button" class="quiet" onclick={() => h.prep.splice(pi, 1)}>Remove</button>
 			</div>
 		{/each}
 		<div class="row">
@@ -1799,17 +1799,17 @@
 {#if data.archived}
 	<form method="POST" action="?/unarchive" class="notice" use:enhance>
 		<span class="notice-text">{data.deleteAfter ? `Deleted. It goes for good with its logs on ${goneAt(data.deleteAfter)}.` : 'This habit is archived: hidden from Today, with its history kept.'}</span>
-		<span class="notice-acts"><button class="quiet hit">{data.deleteAfter ? 'Put back' : 'Unarchive'}</button></span>
+		<span class="notice-acts"><button class="quiet">{data.deleteAfter ? 'Put back' : 'Unarchive'}</button></span>
 	</form>
 {/if}
 {#if elsewhere}
 	<div class="notice" data-tone="warn" role="alert">
 		<span class="notice-text">{LINES[elsewhere.id].label} changed on another device{Object.keys(elsewhere.moved).length ? `: ${say({ ...base, ...elsewhere.moved } as HabitForm)[elsewhere.id] ?? ''}` : ''}. Yours isn't saved.</span>
-		<span class="notice-acts"><button type="button" class="quiet hit" onclick={showTheirs}>Show it</button><button type="button" class="quiet hit" onclick={keepMine}>Keep mine</button></span>
+		<span class="notice-acts"><button type="button" class="quiet" onclick={showTheirs}>Show it</button><button type="button" class="quiet" onclick={keepMine}>Keep mine</button></span>
 	</div>
 {/if}
 {#if cameBack && heldIds.length}
-	<div class="notice"><span class="notice-text">Your change from {cameBack} is back. It isn't saved yet.</span><span class="notice-acts"><button type="button" class="quiet hit" onclick={() => (forgetHeld(), onreset())}>Discard</button></span></div>
+	<div class="notice"><span class="notice-text">Your change from {cameBack} is back. It isn't saved yet.</span><span class="notice-acts"><button type="button" class="quiet" onclick={() => (forgetHeld(), onreset())}>Discard</button></span></div>
 {/if}
 {#if data.fixed.length}
 	<div class="notice"><span class="notice-text">Some options on this habit blocked each other, so they read differently here: {data.fixed.join('; ')}.</span></div>
@@ -1909,7 +1909,7 @@
 			<form method="POST" action="?/unpause" class="row" style="align-items: center" use:enhance>
 				<input type="hidden" name="id" value={p.id} />
 				<span class="grow">{shortDate(p.start)} to {shortDate(p.end)}{p.note ? ` · ${p.note}` : ''}{p.end < data.today ? ' (past)' : ''}</span>
-				<button class="quiet hit">Remove</button>
+				<button class="quiet">Remove</button>
 			</form>
 		{/each}
 		<form method="POST" action="?/pause" class="row" use:enhance>

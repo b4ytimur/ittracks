@@ -402,7 +402,7 @@
 				</div>
 				<div class="content">{@render row(item, ctx)}</div>
 				{#if editing && onremove}
-					<button type="button" class="quiet verb hit" aria-label="{removeOf(item)} {nameOf(item)}" onclick={() => onremove(item)}>{removeOf(item)}</button>
+					<button type="button" class="quiet verb" aria-label="{removeOf(item)} {nameOf(item)}" onclick={() => onremove(item)}>{removeOf(item)}</button>
 				{:else if mode === 'use' && actions}
 					<div class="verb">{@render actions(item, ctx)}</div>
 				{/if}
@@ -413,7 +413,7 @@
 				{#if editing && onmove}{@render grip()}{/if}
 				<div class="title">{@render title?.(item, ctx)}</div>
 				{#if editing && onremove}
-					<button type="button" class="quiet remove hit" aria-label="{removeOf(item)} {nameOf(item)}" onclick={() => onremove(item)}>{removeOf(item)}</button>
+					<button type="button" class="quiet remove" aria-label="{removeOf(item)} {nameOf(item)}" onclick={() => onremove(item)}>{removeOf(item)}</button>
 				{/if}
 			</div>
 			{/if}

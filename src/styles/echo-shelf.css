@@ -92,9 +92,10 @@ html:has(.tabbar) {
 .echo-acts { flex: none; display: flex; align-items: center; column-gap: var(--space-inline); }
 .echo-text + :is(.echo-acts, .echo-act) { margin-inline-start: auto; }
 /* Undo and Retry: Button's small (surface-raised, line-control edge 3.10:1 on light sunken) in accent text. */
-.echo-act { flex: none; position: relative; color: var(--accent-ink); }
-.echo-more { flex: none; position: relative; } /* Button's quiet: accent text, no edge (5.63:1 on light sunken) */
-.echo-act::after, .echo-more::after { content: ''; position: absolute; inset: 0 calc(var(--space-inline) / -2); }
+.echo-act { flex: none; color: var(--accent-ink); }
+.echo-more { flex: none; } /* Button's quiet: accent text, no edge (5.63:1 on light sunken) */
+/* Their areas meet in the 8px between them at every pointer, so this ::before takes the place of Button's centred one. */
+.echo-act::before, .echo-more::before { content: ''; position: absolute; inset: 0 calc(var(--space-inline) / -2); }
 
 /* ---------- History: the earlier entries, pulled up out of the band as one region ---------- */
 /* bottom: 100% lays the panel over the band's top line, so panel and band join as one region; a line-inset
@@ -124,7 +125,7 @@ html:has(.tabbar) {
 	html:has(.tabbar) { --tabbar-clear: calc(var(--space-tabbar-clear) + var(--target-touch)); }
 	.tabbar .band, .tabbar .history > li { min-height: var(--target-touch); }
 	.echo { min-height: calc(var(--target-touch) - 1px); }
-	.echo-act::after, .echo-more::after { inset-block: calc((var(--target-min) - var(--target-touch)) / 2); }
+	.echo-act::before, .echo-more::before { inset-block: calc((var(--target-min) - var(--target-touch)) / 2); }
 }
 
 /* ---------- Motion (F.12): a replacement leaves, then the new line enters; nothing times out ---------- */

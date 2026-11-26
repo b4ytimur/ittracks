@@ -28,9 +28,9 @@
 {/if}
 <form method="POST" action="/logout" class="l-cluster" bind:this={form}>
 	{#if left > refused}
-		{#if waiting}<button type="button" class="hit" onclick={() => (waiting = false)}>Stay logged in</button>{:else}<button type="button" class="hit" onclick={wait}>Save them, then log out</button>{/if}
+		{#if waiting}<button type="button" onclick={() => (waiting = false)}>Stay logged in</button>{:else}<button type="button" onclick={wait}>Save them, then log out</button>{/if}
 	{/if}
-	<button class="danger hit">{left ? 'Log out now' : 'Log out'}</button>
+	<button class="danger">{left ? 'Log out now' : 'Log out'}</button>
 </form>
 {#if left}<p class="meta muted">Logged out now, they stay on this device and are sent when you sign in here again.</p>{/if}
 

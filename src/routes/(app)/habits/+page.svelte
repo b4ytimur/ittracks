@@ -300,8 +300,8 @@
 			<div class="card added stack">
 				<span>This habit works well with the <strong>{sv.name}</strong> view. {sv.summary}</span>
 				<div class="row">
-					<button class="quiet hit" onclick={() => switchView(sv.id, sv.name)}>Switch to {sv.name}</button>
-					<button class="quiet hit" onclick={() => (viewDismissed = true)}>No thanks</button>
+					<button class="quiet" onclick={() => switchView(sv.id, sv.name)}>Switch to {sv.name}</button>
+					<button class="quiet" onclick={() => (viewDismissed = true)}>No thanks</button>
 				</div>
 			</div>
 		{/if}

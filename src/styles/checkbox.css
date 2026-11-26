@@ -10,7 +10,7 @@
      a choice:                          <div role="radiogroup" aria-labelledby="…"> <label class="check"><input type="radio" class="choice" name="type" checked> Build</label> …</div>
                                         (or a fieldset with its legend)
    Native inputs drawn with appearance: none: the element keeps its role, keyboard, form value and label click, and the
-   box is the system's in both themes (F.13). The mark is ::after, so base's .hit (::before) can sit on the box itself.
+   box is the system's in both themes (F.13). The mark is ::after, so .hit (Button's touch area, ::before) can sit on the box itself.
    Selectors are spelled out (no lists inside :is or :has), so each reads, and lints, on its own. */
 
 /* ---------- The box: 1px line-control edge (≥ 3:1 on page, raised and sunken), raised like every control (S.1) ---------- */

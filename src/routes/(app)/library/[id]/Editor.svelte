@@ -404,7 +404,7 @@
 			<select bind:value={g.level} aria-label="Level for {g.name}" style="width: auto">
 				{#each levelsOf(g.name, g.level) as l (l.id)}<option value={l.id}>{l.name}</option>{/each}
 			</select>
-			<button type="button" class="quiet hit" onclick={() => t.tags.splice(i, 1)}>Remove</button>
+			<button type="button" class="quiet" onclick={() => t.tags.splice(i, 1)}>Remove</button>
 		</div>
 	{/each}
 	<div class="row">
@@ -456,8 +456,8 @@
 				<div class="field-head">
 					<span class="slot">{@render ctx.grip?.()}</span>
 					<strong class="grow">{m.name || 'New field'}</strong>
-					<button type="button" class="quiet hit" aria-expanded={!!openFields[m.id]} aria-label="{openFields[m.id] ? 'Close' : 'Change'} {m.name || 'the new field'}" onclick={() => (openFields[m.id] = !openFields[m.id])}>{openFields[m.id] ? 'Close' : 'Change'}</button>
-					<button type="button" class="quiet hit" aria-label="{isLogged(m.id) ? 'Archive' : 'Remove'} {m.name || 'the new field'}" onclick={() => (t.metrics = t.metrics.filter((x) => x !== m))}>{isLogged(m.id) ? 'Archive' : 'Remove'}</button>
+					<button type="button" class="quiet" aria-expanded={!!openFields[m.id]} aria-label="{openFields[m.id] ? 'Close' : 'Change'} {m.name || 'the new field'}" onclick={() => (openFields[m.id] = !openFields[m.id])}>{openFields[m.id] ? 'Close' : 'Change'}</button>
+					<button type="button" class="quiet" aria-label="{isLogged(m.id) ? 'Archive' : 'Remove'} {m.name || 'the new field'}" onclick={() => (t.metrics = t.metrics.filter((x) => x !== m))}>{isLogged(m.id) ? 'Archive' : 'Remove'}</button>
 				</div>
 				{#if !openFields[m.id]}
 					<p class="meta field-words">{metricWords(m).replace(/^[^:]*: /, '')}</p>
@@ -651,7 +651,7 @@
 					{@const c = choiceOf(p.taskId)}
 					<a class="grow" href="/library/{p.taskId}">{c?.name ?? 'A Task'}</a>
 				{/if}
-					<button type="button" class="quiet hit" aria-label="{partLogged(p.id) ? 'Archive' : 'Remove'} {p.kind === 'step' ? p.name || 'the step' : (choiceOf(p.taskId)?.name ?? 'the Task')}" onclick={() => (t.parts = t.parts.filter((x) => x !== p))}>{partLogged(p.id) ? 'Archive' : 'Remove'}</button>
+					<button type="button" class="quiet" aria-label="{partLogged(p.id) ? 'Archive' : 'Remove'} {p.kind === 'step' ? p.name || 'the step' : (choiceOf(p.taskId)?.name ?? 'the Task')}" onclick={() => (t.parts = t.parts.filter((x) => x !== p))}>{partLogged(p.id) ? 'Archive' : 'Remove'}</button>
 				</div>
 				<div class="field-body">
 			{#if p.kind === 'task'}
@@ -721,13 +721,13 @@
 {#if data.archived}
 	<form method="POST" action="?/unarchive" class="notice" use:enhance>
 		<span class="notice-text">{data.deleteAfter ? `Deleted. It goes for good with its logs on ${goneAt(data.deleteAfter)}.` : 'This Task is archived: hidden from the Library and pickers, with its history kept.'}</span>
-		<span class="notice-acts"><button class="quiet hit">{data.deleteAfter ? 'Put back' : 'Unarchive'}</button></span>
+		<span class="notice-acts"><button class="quiet">{data.deleteAfter ? 'Put back' : 'Unarchive'}</button></span>
 	</form>
 {/if}
 {#if elsewhere}
 	<div class="notice" data-tone="warn" role="alert">
 		<span class="notice-text">{LINES[elsewhere.id].label} changed on another device: {say({ ...base, ...elsewhere.moved } as TaskForm)[elsewhere.id]}. Yours isn't saved.</span>
-		<span class="notice-acts"><button type="button" class="quiet hit" onclick={() => onreset([elsewhere!.id])}>Show it</button><button type="button" class="quiet hit" onclick={keepMine}>Keep mine</button></span>
+		<span class="notice-acts"><button type="button" class="quiet" onclick={() => onreset([elsewhere!.id])}>Show it</button><button type="button" class="quiet" onclick={keepMine}>Keep mine</button></span>
 	</div>
 {/if}
 

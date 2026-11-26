@@ -7,10 +7,10 @@
                                                                      where no band can be reached, a lost connection with Retry (D4.17)
        <div class="notice" data-tone="warn">…</div>                   true before the press: a risk, what won't be saved
        <div class="l-cluster">
-         <button class="primary hit" data-reserve="Save habit">Save habit</button>   first, at the leading edge
-         <button type="button" class="hit">Cancel</button>            only a form that opened in place; a wizard's Back
+         <button class="primary" data-reserve="Save habit">Save habit</button>   first, at the leading edge
+         <button type="button">Cancel</button>                        only a form that opened in place; a wizard's Back
          <p class="actions-note meta">…</p>                           optional: one line beside the buttons
-         <button class="danger hit" formaction="?/delete">Delete …</button>   a destroy of the whole record: last, trailing
+         <button class="danger" formaction="?/delete">Delete …</button>   a destroy of the whole record: last, trailing
        </div>
      </div>
    Every form ends here, and only here: [primary][secondary][Cancel], or a wizard's [Next][Back], 8 apart at the leading

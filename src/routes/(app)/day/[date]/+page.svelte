@@ -164,7 +164,7 @@
 				? 'Logging past days is off, so this day can only be looked at.'
 				: `You can log up to ${data.pastDays === 1 ? 'yesterday' : `${data.pastDays} days back`}, so this day can only be looked at. Slips can still be added.`}</span
 		>
-		<span class="notice-acts"><a class="quiet hit" href="/settings#past">Change it in Settings</a></span>
+		<span class="notice-acts"><a class="quiet" href="/settings#past">Change it in Settings</a></span>
 	</div>
 {/if}
 {#if form?.error && !form?.habit}<p class="error" role="alert">{form.error}</p>{/if}
@@ -200,7 +200,7 @@
 			{#if l.direction === 'break' || canLog}
 				<form method="POST" action="?/start" use:enhance={after}>
 					<input type="hidden" name="habit" value={l.habitId} />
-					<button class="quiet hit" aria-label="Start {l.name} from {short(data.date)}">Start from this day</button>
+					<button class="quiet" aria-label="Start {l.name} from {short(data.date)}">Start from this day</button>
 				</form>
 			{/if}
 		{/snippet}
@@ -224,7 +224,7 @@
 					<span class="meta">{b.limit ? `${s.count} logged` : `Slip${s.count !== 1 ? ` × ${s.count}` : ''}`}{s.time ? ` at ${s.time}` : ''}{s.feeling ? ` · ${s.feeling}` : ''}</span>
 					<form method="POST" action="?/unslip" use:enhance={after}>
 						<input type="hidden" name="id" value={s.id} />
-						<button class="quiet hit" aria-label="Remove this slip of {b.name}">Remove</button>
+						<button class="quiet" aria-label="Remove this slip of {b.name}">Remove</button>
 					</form>
 				</div>
 			{/each}
@@ -238,7 +238,7 @@
 			{/if}
 			{#if form?.habit === b.habitId && form?.error}<p class="row-line error meta">{form.error}</p>{/if}
 		{/snippet}
-		{#snippet actions(b)}<button type="button" class="quiet hit" aria-expanded={openSlip === b.habitId} aria-label="{b.limit ? 'Log one' : 'Log a slip'}: {b.name}" onclick={() => (openSlip = openSlip === b.habitId ? null : b.habitId)}>{b.limit ? 'Log one…' : 'Log a slip…'}</button>{/snippet}
+		{#snippet actions(b)}<button type="button" class="quiet" aria-expanded={openSlip === b.habitId} aria-label="{b.limit ? 'Log one' : 'Log a slip'}: {b.name}" onclick={() => (openSlip = openSlip === b.habitId ? null : b.habitId)}>{b.limit ? 'Log one…' : 'Log a slip…'}</button>{/snippet}
 	</EditableList>
 {/if}
 
@@ -292,12 +292,12 @@
 				{@const w = waysOf(item)}
 				<LogControl name="{item.name} on {short(data.date)}" act={w.act} ways={w.ways} />
 			{:else if o}
-				{#if item.slotCount > 0 && (o.status === 'done' || canLog)}<a class="quiet hit" href="/log/{o.id}?back={back}" aria-label="{o.status === 'done' ? (canLog ? 'Change' : 'View') : 'Log'} {item.name}">{o.status === 'done' ? (canLog ? 'Change' : 'View') : 'Log'}</a>{/if}
+				{#if item.slotCount > 0 && (o.status === 'done' || canLog)}<a class="quiet" href="/log/{o.id}?back={back}" aria-label="{o.status === 'done' ? (canLog ? 'Change' : 'View') : 'Log'} {item.name}">{o.status === 'done' ? (canLog ? 'Change' : 'View') : 'Log'}</a>{/if}
 				{#if canLog}
 					<form method="POST" action="?/clear" use:enhance={after}>
 						<input type="hidden" name="habit" value={item.habitId} />
 						<input type="hidden" name="variant" value={variantOf(item)} />
-						<button class="quiet hit" aria-label="Clear {item.name} on {short(data.date)}">Clear</button>
+						<button class="quiet" aria-label="Clear {item.name} on {short(data.date)}">Clear</button>
 					</form>
 				{/if}
 			{/if}

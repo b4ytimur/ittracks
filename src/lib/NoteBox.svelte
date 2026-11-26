@@ -117,6 +117,13 @@
 		resize: vertical;
 		line-height: 1.4;
 	}
+	/* Under a coarse pointer the tools' and the switch's hit areas reach 6px under their 32px line, so the box starts
+	   8px under it, where taps are its own. */
+	@media (pointer: coarse) {
+		textarea {
+			margin-top: var(--space-inline);
+		}
+	}
 	.preview {
 		margin-top: 0.25rem;
 		min-height: 3.2rem;

@@ -150,6 +150,10 @@
 		border: 0;
 		background: none;
 	}
+	/* Cells are 2px apart, so Button's grown touch area would take a neighbour's taps: each cell is its own target. */
+	.cell::before {
+		content: none;
+	}
 	.cell > i {
 		width: 16px;
 		height: 16px;
