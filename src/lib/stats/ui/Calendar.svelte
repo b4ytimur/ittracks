@@ -11,7 +11,7 @@
 	const days = $derived(r.days ?? []);
 	const lead = $derived(days.length ? weekday(days[0].date) : 0);
 	const weeks = $derived(Math.ceil((lead + days.length) / 7));
-	const cell = $derived(Math.max(6, Math.min(16, Math.floor((w - 24) / Math.max(weeks, 1)) - 2)));
+	const cell = $derived(Math.max(6, Math.min(28, Math.floor((w - 24) / Math.max(weeks, 1)) - 2)));
 	const max = $derived(Math.max(0, ...days.map((d) => d.value ?? 0)));
 	const ROWS = ['M', '', 'W', '', 'F', '', ''];
 	const months = $derived(

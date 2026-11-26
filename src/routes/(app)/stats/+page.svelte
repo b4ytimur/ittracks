@@ -225,9 +225,6 @@
 </div>
 
 <style>
-	:global(.content:has(.stats-page)) {
-		max-width: 1080px;
-	}
 	.new,
 	.new h2 {
 		margin-top: 0;
