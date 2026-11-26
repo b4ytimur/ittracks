@@ -62,8 +62,8 @@
 <section class="card daynote" aria-label="Day note">
 	<NoteBox bind:value label="Day note" rows={3} placeholder="Anything about today. Markdown works." />
 	<div class="foot">
-		<span class="muted small-text" role="status">{statusText}</span>
-		{#if link}<a class="small-text" href="/history?notes">Journal</a>{/if}
+		<span class="muted meta" role="status">{statusText}</span>
+		{#if link}<a class="meta" href="/history?notes">Journal</a>{/if}
 	</div>
 </section>
 

@@ -83,7 +83,7 @@
 		<label>Template name <input bind:value={f.name} maxlength="120" required /></label>
 		<label>Description <textarea bind:value={f.description} rows="3" maxlength="2000" placeholder="Who it's for and how it works"></textarea></label>
 		<details>
-			<summary class="small-text">Gallery details (optional)</summary>
+			<summary class="meta">Gallery details (optional)</summary>
 			<div class="stack" style="margin-top: 0.5rem">
 				<label>Category <input bind:value={f.category} maxlength="40" placeholder="Gym, Learning, Health…" /></label>
 				<div class="row">
@@ -106,27 +106,27 @@
 		{#if data.inside.length}
 			<div>
 				<span>{data.inside.length === 1 ? 'The habit inside it' : `The ${data.inside.length} habits inside it`}, with their schedules and Tasks</span>
-				<ul class="inside muted small-text">
+				<ul class="inside muted meta">
 					{#each data.inside as h, i (i)}<li style:margin-left="{(h.depth - 1) * 1}rem">{h.name}</li>{/each}
 				</ul>
 			</div>
 		{/if}
 		<label class="opt check"
 			><input type="checkbox" class="pick" bind:checked={f.includeArea} disabled={!!why('includeArea')} />
-			<span>Area{ctx.area ? ` "${ctx.area}"` : ''}, and the Areas of its Tasks{#if why('includeArea')}<br /><span class="muted small-text">{why('includeArea')}</span>{/if}</span></label
+			<span>Area{ctx.area ? ` "${ctx.area}"` : ''}, and the Areas of its Tasks{#if why('includeArea')}<br /><span class="muted meta">{why('includeArea')}</span>{/if}</span></label
 		>
 		<label class="opt check"
 			><input type="checkbox" class="pick" bind:checked={f.includePool} disabled={!!why('includePool')} />
 			<span
-				>{ctx.pool === 1 ? 'The Task' : ctx.pool ? `The ${ctx.pool} Tasks` : 'Tasks'} the auto-filled slots pick from{#if data.poolNames.length}<br /><span class="muted small-text"
+				>{ctx.pool === 1 ? 'The Task' : ctx.pool ? `The ${ctx.pool} Tasks` : 'Tasks'} the auto-filled slots pick from{#if data.poolNames.length}<br /><span class="muted meta"
 						>{data.poolNames.slice(0, 6).join(', ')}{data.poolNames.length > 6 ? ` and ${data.poolNames.length - 6} more` : ''}</span
-					>{:else if why('includePool')}<br /><span class="muted small-text">{why('includePool')}</span>{/if}</span
+					>{:else if why('includePool')}<br /><span class="muted meta">{why('includePool')}</span>{/if}</span
 			></label
 		>
 		<label class="opt check"
 			><input type="checkbox" class="pick" bind:checked={f.includeNote} disabled={!!why('includeNote')} />
 			<span
-				>The habit's own note<br /><span class="muted small-text"
+				>The habit's own note<br /><span class="muted meta"
 					>{why('includeNote') ?? 'Off unless you tick it: notes are private, and yours may say why the habit matters to you.'}</span
 				></span
 			></label
@@ -134,7 +134,7 @@
 		<label class="opt check"
 			><input type="checkbox" class="pick" bind:checked={f.includeHowTo} disabled={!!why('includeHowTo')} />
 			<span
-				>How to notes of its Tasks<br /><span class="muted small-text"
+				>How to notes of its Tasks<br /><span class="muted meta"
 					>{why('includeHowTo') ??
 						`${ctx.howTo === 1 ? '1 Task has' : `${ctx.howTo} Tasks have`} notes on how to do it. They help whoever adds the template.`}</span
 				></span
@@ -143,7 +143,7 @@
 		<label class="opt check"
 			><input type="checkbox" class="pick" bind:checked={f.suggestReminder} disabled={!!why('suggestReminder')} />
 			<span
-				>Suggest turning the reminder on<br /><span class="muted small-text"
+				>Suggest turning the reminder on<br /><span class="muted meta"
 					>{why('suggestReminder') ?? 'The person adding it is asked; reminders are never turned on by themselves.'}</span
 				></span
 			></label
@@ -152,13 +152,13 @@
 
 	<section class="card stack">
 		<h2>Questions</h2>
-		<p class="muted small-text" style="margin: 0">Asked when someone adds the template, so it fits them. Each has your setting as its answer to start with.</p>
+		<p class="muted meta" style="margin: 0">Asked when someone adds the template, so it fits them. Each has your setting as its answer to start with.</p>
 
 		{#if data.direction === 'build'}
 			<label class="opt check"
 				><input type="checkbox" class="pick" bind:checked={f.askDays} disabled={!!why('askDays')} />
 				<span
-					>Ask which days{#if why('askDays')}<br /><span class="muted small-text">{why('askDays')}</span>{:else}<br /><span class="muted small-text"
+					>Ask which days{#if why('askDays')}<br /><span class="muted meta">{why('askDays')}</span>{:else}<br /><span class="muted meta"
 							>{data.schedule}. Starts as {dayList(ctx.days)}.</span
 						>{/if}</span
 				></label
@@ -167,7 +167,7 @@
 
 			<label class="opt check"
 				><input type="checkbox" class="pick" bind:checked={f.askTime} />
-				<span>Ask what time<br /><span class="muted small-text">Sets the time of day. Starts as {ctx.time ?? '07:00'}.</span></span></label
+				<span>Ask what time<br /><span class="muted meta">Sets the time of day. Starts as {ctx.time ?? '07:00'}.</span></span></label
 			>
 			{#if clean.askTime}<label class="indent">Question <input bind:value={f.timeLabel} maxlength="200" /></label>{/if}
 
@@ -180,7 +180,7 @@
 						<label class="grow">Unit <input bind:value={n.unit} maxlength="20" /></label>
 					</div>
 					<div>
-						<span class="muted small-text">Sets the target of</span>
+						<span class="muted meta">Sets the target of</span>
 						{#each data.metrics as m (m.id)}
 							<label class="opt check"><input type="checkbox" class="pick" checked={n.metrics.includes(m.id)} onchange={() => toggleMetric(i, m.id)} /> <span>{metricLabel(m)}</span></label>
 						{/each}
@@ -188,7 +188,7 @@
 					<label class="opt check"
 						><input type="checkbox" class="pick" bind:checked={n.scale} />
 						<span
-							>In proportion<br /><span class="muted small-text"
+							>In proportion<br /><span class="muted meta"
 								>{n.scale
 									? 'Every target moves by the same share as the answer, so a lighter day stays lighter. Minimum and Stretch move with it.'
 									: 'The answer becomes the target everywhere. Minimum and Stretch still move with it.'}</span
@@ -201,10 +201,10 @@
 			{#if data.metrics.length}
 				<button type="button" onclick={addNumber} disabled={f.numbers.length >= 8}>+ Ask for a starting number</button>
 			{:else}
-				<p class="muted small-text" style="margin: 0">No fixed Task has a number to ask about.</p>
+				<p class="muted meta" style="margin: 0">No fixed Task has a number to ask about.</p>
 			{/if}
 		{:else}
-			<p class="muted small-text" style="margin: 0">A habit to break has no schedule or targets to ask about.</p>
+			<p class="muted meta" style="margin: 0">A habit to break has no schedule or targets to ask about.</p>
 		{/if}
 	</section>
 

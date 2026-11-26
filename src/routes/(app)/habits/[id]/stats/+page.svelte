@@ -29,7 +29,7 @@
 
 <svelte:head><title>{data.habit.name} stats · ittracks</title></svelte:head>
 
-<div class="stats-page">
+<div class="stats-page page-wide">
 	<EditChrome
 		title={data.habit.name}
 		back={{ href: '/habits', label: 'Habits' }}
@@ -70,9 +70,6 @@
 </div>
 
 <style>
-	:global(.content:has(.stats-page)) {
-		max-width: 1080px;
-	}
 	.tools {
 		margin-bottom: 0.75rem;
 	}

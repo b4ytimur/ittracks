@@ -1,6 +1,7 @@
-/* PageFrame: every page in Today's frame (TS.15). One column on a phone. From 64rem the page is 1016 wide, as Today's: a page
-   with a side column splits it 640fr / 344fr; any other page keeps to the left column, so the left edge never moves between
-   tabs. The title line spans the frame on every page.
+/* PageFrame: every page in Today's frame (TS.15). One column on a phone. From 64rem the page is --page-width (63.5rem,
+   1016px) wide: a page with a side column (Today, a day, Habits, Library, History, Settings) splits it 640fr / 344fr,
+   40 apart (space-page); any other page keeps to the left column, so the left edge never moves between tabs. The title
+   line spans the frame on every page.
    Markup:
      <div class="page-wide">…</div>          spans the frame: a search across the top, Stats' board
      <div class="page-cols">
@@ -30,9 +31,8 @@
 .side-foot { display: flex; flex-wrap: wrap; gap: var(--space-inline); margin-block-start: var(--space-inline); }
 .side-fold { margin-block: var(--space-inline) var(--space-group); }
 @media (min-width: 64rem) {
-	.app > .main { max-width: 1016px; } /* over app.css's 640, which comes after this file */
-	.page-cols { grid-template-columns: minmax(0, 640fr) minmax(0, 344fr); column-gap: calc(2 * var(--space-group)); align-items: start; }
+	.page-cols { grid-template-columns: minmax(0, 640fr) minmax(0, 344fr); column-gap: var(--space-page); align-items: start; }
 	/* The left column's width, the same sum as the grid's: (frame − gap) × 640 / 984. */
-	.main:not(:has(.page-cols, .today-cols)) > :not(.titlebar, .page-wide) { max-width: calc((100% - 2 * var(--space-group)) * 640 / 984); }
+	.main:not(:has(.page-cols)) > :not(.titlebar, .page-wide) { max-width: calc((100% - var(--space-page)) * 640 / 984); }
 }
 @media (forced-colors: active) { .side-row:is([aria-pressed='true'], [aria-current]) { outline: var(--chosen-width) solid Highlight; outline-offset: calc(-1 * var(--chosen-width)); } }

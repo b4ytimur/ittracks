@@ -17,7 +17,7 @@
 		<li>
 			<button type="button" onclick={() => onpick?.(p.key === 'other' ? null : p.key)}>
 				<i style:background={seriesColor(i, p.key)}></i>
-				<span class="label">{p.label || 'All'}</span>
+				<span class="part-name">{p.label || 'All'}</span>
 				<strong>{value(p.value, r.unit, r.kind)}</strong>
 				<span class="muted share">{Math.round(p.share * 100)}%</span>
 			</button>
@@ -71,7 +71,7 @@
 		height: 10px;
 		border-radius: 2px;
 	}
-	.label {
+	.part-name {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;

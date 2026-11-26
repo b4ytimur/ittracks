@@ -16,7 +16,7 @@
 		<li>
 			<button type="button" onclick={() => onpick?.(g.key === 'all' ? null : g.key)}>
 				<div class="head">
-					<span class="label">{g.label || `So far ${g.period}`}</span>
+					<span class="goal-name">{g.label || `So far ${g.period}`}</span>
 					<span><strong>{fmt(g.value)}</strong> <span class="muted">of {g.goalMax !== null ? `${fmt(g.goal)} to ${fmt(g.goalMax)}` : fmt(g.goal)}</span></span>
 				</div>
 				<div class="track" role="meter" aria-valuemin="0" aria-valuemax={g.goal ?? 0} aria-valuenow={g.value ?? 0} aria-label={g.label || 'Progress'}>
@@ -58,7 +58,7 @@
 		gap: 0.5rem;
 		font-size: var(--font-size-label);
 	}
-	.label {
+	.goal-name {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;

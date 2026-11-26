@@ -423,7 +423,7 @@
 		<label class="grow" style="color: var(--ink)"
 			><input type="checkbox" bind:checked={t.restTimerEnabled} disabled={!!restBlock && !t.restTimerEnabled} /> Start a countdown after each {t.rowOne}</label
 		>
-		{#if restBlock}<p class="muted small-text" style="margin: 0">{restBlock.reason}. Mark a field "Log per {t.rowOne}" first.</p>{/if}
+		{#if restBlock}<p class="muted meta">{restBlock.reason}. Mark a field "Log per {t.rowOne}" first.</p>{/if}
 		{#if t.restTimerEnabled}
 			<label style="width: 8rem"
 				>Seconds <input type="number" min="5" max="3600" bind:value={t.restTimerSeconds} /></label
@@ -476,7 +476,7 @@
 				{/if}
 			</div>
 			{#if typeLocked(m)}
-				<p class="muted small-text" style="margin: 0">
+				<p class="muted meta">
 					{isNumeric(m) ? 'Has logged values, so it can only switch between number, count and duration.' : 'Has logged values, so its type is fixed.'}
 				</p>
 			{/if}
@@ -492,7 +492,7 @@
 					<label style="color: var(--ink)"
 						><input type="radio" name="unit-{m.id}" checked={u.choice === 'relabel'} onchange={() => (unitChoices[m.id] = 'relabel')} /> Keep the numbers: they were already in {u.to || 'no unit'}</label
 					>
-					<p class="muted small-text" style="margin: 0.25rem 0 0">
+					<p class="muted meta" style="margin: 0.25rem 0 0">
 						{u.choice === 'convert'
 							? 'Every logged value, Slot target and the targets kept with past logs are converted when you save.'
 							: u.choice === 'relabel'
@@ -504,7 +504,7 @@
 				</fieldset>
 			{/if}
 			{#if m.type === 'choice'}
-				<span class="small-text muted">Options</span>
+				<span class="meta muted">Options</span>
 				<OptionList
 					bind:options={m.choices}
 					used={(id) => data.logged.options.includes(id)}
@@ -523,21 +523,21 @@
 					<label style="color: var(--ink)"
 						><input type="checkbox" checked={scored(m)} onchange={(e) => toggleScores(m, e.currentTarget.checked)} /> Give each option a number, so Stats can chart it (mood 5 to 1)</label
 					>
-					{#if scored(m) && isLogged(m.id)}<p class="muted small-text" style="margin: 0">A changed number counts from today on: past days keep the numbers they had.</p>{/if}
+					{#if scored(m) && isLogged(m.id)}<p class="muted meta">A changed number counts from today on: past days keep the numbers they had.</p>{/if}
 				{/if}
 			{/if}
 			{#if m.type === 'text'}
 				<label style="color: var(--ink)"
 					><input type="checkbox" bind:checked={m.long} disabled={!!longBlock(m) && !m.long} /> Several lines (Markdown), for a journal entry or a reflection</label
 				>
-				{#if longBlock(m) && !m.long}<p class="muted small-text" style="margin: 0">{longBlock(m)?.reason}.</p>{/if}
+				{#if longBlock(m) && !m.long}<p class="muted meta">{longBlock(m)?.reason}.</p>{/if}
 				{#if m.long}
 					<label
-						>Starter text <span class="small-text">(fills each new log, like headings to write under)</span>
+						>Starter text <span class="meta">(fills each new log, like headings to write under)</span>
 						<textarea bind:value={m.starter} rows="3" maxlength="2000" placeholder={'## Wins\n\n## Lessons'}></textarea>
 					</label>
 					<label
-						>Prompts, one per line <span class="small-text">(one shows each day and is saved with your answer)</span>
+						>Prompts, one per line <span class="meta">(one shows each day and is saved with your answer)</span>
 						<textarea
 							value={m.prompts.join('\n')}
 							oninput={(e) =>
@@ -560,12 +560,12 @@
 								</select>
 							</label>
 						</div>
-						<p class="muted small-text" style="margin: 0">Today's prompt: “{promptFor(m, today)}”</p>
+						<p class="muted meta">Today's prompt: “{promptFor(m, today)}”</p>
 					{/if}
 				{/if}
 			{/if}
 			<details class="log-settings">
-				<summary class="small-text">When logging</summary>
+				<summary class="meta">When logging</summary>
 				{#if isNumeric(m)}
 					<div class="row">
 						{#if m.repeats}<label class="grow" style="color: var(--ink)"><input type="checkbox" bind:checked={m.times} /> Written after a ×, as in 60 kg × 8</label>{/if}
@@ -584,7 +584,7 @@
 				{/if}
 				<div class="row">
 					{#if m.type === 'checkbox' || (m.type === 'text' && m.long)}
-						<p class="muted small-text grow" style="margin: 0">{prefillBlock({ ...m, prefill: 'last' })?.reason}.</p>
+						<p class="muted meta grow">{prefillBlock({ ...m, prefill: 'last' })?.reason}.</p>
 					{:else}
 						<label class="grow"
 							>Start with
@@ -609,14 +609,14 @@
 				<label style="color: var(--ink)"
 					><input type="checkbox" bind:checked={m.quick} disabled={m.required} /> Show on quick logs</label
 				>
-				{#if m.required}<p class="muted small-text" style="margin: 0">{quickBlock({ ...m, quick: false })?.reason}.</p>{/if}
+				{#if m.required}<p class="muted meta" style="margin: 0">{quickBlock({ ...m, quick: false })?.reason}.</p>{/if}
 			</details>
 			<div class="row">
 				<label class="grow" style="color: var(--ink)"
 					><input type="checkbox" bind:checked={m.repeats} disabled={!!repeatsLocked(m) || (!!repeatsBlock(m) && !m.repeats)} /> Log per {t.rowOne}</label
 				>
 			</div>
-			{#if repeatsLocked(m)}<p class="muted small-text" style="margin: 0">Has logged values, so “Log per {t.rowOne}” is fixed.</p>{/if}
+			{#if repeatsLocked(m)}<p class="muted meta">Has logged values, so “Log per {t.rowOne}” is fixed.</p>{/if}
 					</div>
 				{/if}
 				{#if unitEdit(m) && !openFields[m.id]}<p class="meta field-words">Its unit changes: open it to say what happens to what is logged.</p>{/if}
@@ -684,7 +684,7 @@
 		{/snippet}
 	</EditableList>
 	{#if t.parts.some((p) => p.kind === 'task')}
-		<p class="muted small-text" style="margin: 0 0 0.5rem">
+		<p class="muted meta" style="margin: 0 0 0.5rem">
 			Targets set here apply in every habit that uses this Task. Minimum and Stretch count in habits with levels on.
 		</p>
 	{/if}
@@ -733,13 +733,13 @@
 
 {#if data.isNew}
 	<div class="card">
-		<span class="muted small-text">Start from a type</span>
+		<span class="muted meta">Start from a type</span>
 		<div class="chips">
 			{#each data.types as type (type.key)}
 				<button type="button" class="toggle" aria-pressed={typeKey === type.key} onclick={() => applyType(type)}>{type.name}</button>
 			{/each}
 		</div>
-		{#if typeKey}<p class="muted small-text" style="margin: 0.4rem 0 0">{data.types.find((x) => x.key === typeKey)?.description}</p>{/if}
+		{#if typeKey}<p class="muted meta" style="margin: 0.4rem 0 0">{data.types.find((x) => x.key === typeKey)?.description}</p>{/if}
 	</div>
 {/if}
 
@@ -774,9 +774,9 @@
 			{#each toAdd as id (id)}<button type="button" onclick={() => add(id)}>+ {words[id]}</button>{/each}
 		</div>
 	{/if}
-	{#if waiting.length}<p class="muted small-text">{waiting.join(', ')} {waiting.length === 1 ? 'is' : 'are'} saved once finished: a field or step needs a name, and a Choice two options.</p>{/if}
+	{#if waiting.length}<p class="muted meta">{waiting.join(', ')} {waiting.length === 1 ? 'is' : 'are'} saved once finished: a field or step needs a name, and a Choice two options.</p>{/if}
 	{#each [...new Set([...ruleCheck.errors, ...(past?.errors ?? [])].map((i) => i.reason))] as reason (reason)}<p class="error">{reason}</p>{/each}
-	{#each [...new Set(ruleCheck.warnings.map((i) => i.reason))] as reason (reason)}<p class="muted small-text">{reason}.</p>{/each}
+	{#each [...new Set(ruleCheck.warnings.map((i) => i.reason))] as reason (reason)}<p class="muted meta">{reason}.</p>{/each}
 
 {/snippet}
 
@@ -823,7 +823,7 @@
 			<input class="grow" bind:value={typeName} placeholder="Type name, e.g. Swimming" aria-label="Type name" />
 			<button disabled={!typeName.trim()}>Save type</button>
 		</form>
-		{#if form?.typeSaved}<p class="muted small-text">Saved "{form.typeSaved}". It's offered when you make a new Task.</p>{/if}
+		{#if form?.typeSaved}<p class="muted meta">Saved "{form.typeSaved}". It's offered when you make a new Task.</p>{/if}
 	</details>
 {/if}
 

@@ -173,7 +173,7 @@
 	{#key data.date}<DayNote date={data.date} text={data.dayNote} />{/key}
 {/if}
 
-<div class="today-cols">
+<div class="page-cols">
 <div class="today-day">
 <GroupHeading title="Due that day" />
 {#if data.due.length}{@render list(sorted, 'Due that day')}{:else}<p class="empty-range">Nothing was due this day.</p>{/if}
@@ -347,20 +347,6 @@
 	.another input {
 		width: auto;
 		margin: 0;
-	}
-	.today-cols {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr);
-	}
-	@media (min-width: 64rem) {
-		:global(.main:has(.travels)) {
-			max-width: 1016px;
-		}
-		.today-cols {
-			grid-template-columns: minmax(0, 640fr) minmax(0, 344fr);
-			column-gap: calc(2 * var(--space-group));
-			align-items: start;
-		}
 	}
 	.slip form {
 		flex: none;

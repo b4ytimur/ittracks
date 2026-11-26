@@ -418,7 +418,7 @@
 			</div>
 			{/if}
 			{#if layout === 'block'}
-				<div class="body">
+				<div class="block-body">
 					{@render row(item, ctx)}
 				</div>
 			{/if}
@@ -453,7 +453,7 @@
 		align-items: center;
 		gap: 0.4rem;
 	}
-	.body {
+	.block-body {
 		flex: 1;
 		min-width: 0;
 	}
@@ -478,7 +478,7 @@
 		font-weight: 600;
 		color: var(--ink-muted);
 	}
-	.block.editing > li > .body:not(:empty) {
+	.block.editing > li > .block-body:not(:empty) {
 		margin-top: 0.4rem;
 	}
 	.block > li.dragging {

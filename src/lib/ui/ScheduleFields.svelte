@@ -132,7 +132,7 @@
 		</select>
 	</label>
 	{#if subset && many}
-		<span class="muted small-text">Variants in this rotation</span>
+		<span class="muted meta">Variants in this rotation</span>
 		<div class="chips" role="group" aria-label="Variants in this rotation">
 			{#each variants as v (v.id)}
 				<button type="button" class="toggle" aria-pressed={inRotation(v.id)} onclick={() => toggleInRotation(v.id)}>{v.name}</button>

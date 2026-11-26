@@ -171,7 +171,6 @@
 		padding: var(--space-group) 0;
 	}
 	.note {
-		font-size: var(--font-size-note);
 		margin-top: var(--space-inline);
 	}
 	.logs {

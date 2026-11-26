@@ -284,8 +284,4 @@
 	.note-of {
 		padding: var(--space-inline) var(--space-group) 0;
 	}
-	.note {
-		font-size: var(--font-size-note);
-		line-height: 1rem;
-	}
 </style>

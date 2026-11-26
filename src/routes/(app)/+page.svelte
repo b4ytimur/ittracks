@@ -587,7 +587,7 @@
 
 {#if data.unlogged.length && nudgeHiddenFor !== yesterday}
 	<div class="card nudge row" role="status">
-		<span class="grow small-text"
+		<span class="grow meta"
 			>Yesterday {data.unlogged.length === 1 ? 'one habit was' : `${data.unlogged.length} habits were`} not logged: {data.unlogged
 				.slice(0, 3)
 				.join(', ')}{data.unlogged.length > 3 ? ' and more' : ''}. Did you do {data.unlogged.length === 1 ? 'it' : 'them'}?</span
@@ -612,7 +612,7 @@
 		<div class="ob-hint" role="note"><span class="meta">{HINTS[hint]}</span><button type="button" class="quiet" onclick={() => hint && retire(hint)}>Got it</button></div>
 	{/if}
 
-	<div class="today-cols">
+	<div class="page-cols">
 		<div class="today-day">
 			{#if view.first && breakingShown.length}{@render breaking()}{/if}
 			<!-- Beside Breaking, the day takes a heading of the same kind, so both columns start alike (TS.11). -->
@@ -758,7 +758,7 @@
 {/snippet}
 
 {#snippet headlinePick(item: Item)}
-	<label class="headline-pick small-text"
+	<label class="headline-pick meta"
 		>Headline
 		<select value={views.today.headlineFor[item.habitId] ?? ''} onchange={(e) => setHeadline(item.habitId, e.currentTarget.value)}>
 			<option value="">This view's ({view.num === 'none' ? 'none' : STATS[view.num]})</option>
@@ -769,11 +769,11 @@
 
 {#snippet timeLine()}
 	{#if timeHidden.size}
-		<p class="muted small-text">
+		<p class="muted meta">
 			Showing what fits {currentPart}. <button class="link" onclick={() => (showAll = true)}>Show all ({timeHidden.size} more)</button>
 		</p>
 	{:else if showAll && view.fits}
-		<p class="muted small-text"><button class="link" onclick={() => (showAll = false)}>Only show what fits now</button></p>
+		<p class="muted meta"><button class="link" onclick={() => (showAll = false)}>Only show what fits now</button></p>
 	{/if}
 {/snippet}
 
@@ -831,7 +831,7 @@
 								<label style="width: 7rem">Time <input name="time" type="time" value={nowTime()} /></label>
 							</div>
 							<div>
-								<span class="muted small-text">How were you feeling? (optional)</span>
+								<span class="muted meta">How were you feeling? (optional)</span>
 								<input type="hidden" name="feeling" value={feeling} />
 								<div class="chips">
 									{#each b.triggers as t (t.id)}
@@ -981,11 +981,8 @@
 	.today-strip {
 		margin-block-end: var(--space-group);
 	}
-	/* One column on a phone; from 64rem Breaking and the end line stand beside the day (TS.11). */
-	.today-cols {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr);
-	}
+	/* PageFrame's .page-cols: one column on a phone; from 64rem Breaking and the end line stand beside the day (TS.11). On
+	   a phone the side column comes under the day, a section below it. */
 	.today-side:not(:empty) {
 		margin-block-start: var(--space-section);
 	}
@@ -997,14 +994,6 @@
 		background: var(--surface-raised);
 	}
 	@media (min-width: 64rem) {
-		:global(.main:has(.today-cols)) {
-			max-width: 1016px;
-		}
-		.today-cols {
-			grid-template-columns: minmax(0, 640fr) minmax(0, 344fr);
-			column-gap: calc(2 * var(--space-group));
-			align-items: start;
-		}
 		.today-side:not(:empty) {
 			margin-block-start: 0;
 		}
