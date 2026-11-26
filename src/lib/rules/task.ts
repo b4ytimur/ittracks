@@ -57,7 +57,10 @@ export const metricRules = defineRules<MetricForm>({
 	],
 	required: independent,
 	times: [onlyWhen((m) => m.repeats && isNumericType(m.type), 'Only a number in a row is written after a ×', false)],
-	better: [onlyWhen((m) => isNumericType(m.type), 'Only a number can be better or worse', null)]
+	better: [onlyWhen((m) => isNumericType(m.type), 'Only a number can be better or worse', null)],
+	// T3: a second log the same day adds to a number or replaces it. Other kinds always replace, and a
+	// field logged per set gets a new row instead.
+	sameDay: [onlyWhen((m) => isNumericType(m.type) && !m.repeats, 'Only a number logged once per log can add up during a day', 'add')]
 });
 
 export const taskRules = defineRules<TaskForm>({
@@ -146,6 +149,7 @@ export const metricPast = definePolicies<MetricForm>({
 	required: display(),
 	times: display('Past logs are read the same way'),
 	better: display(),
+	sameDay: display('Past days keep what was logged; it applies to the next log'),
 	quick: display(),
 	long: display('Past text stays as it was written'),
 	starter: display(),

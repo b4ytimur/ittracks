@@ -71,6 +71,7 @@ function repeatingTasks(taskIds: string[]): string[] {
 const blank = (today: string): HabitForm => ({
 	name: '',
 	direction: 'build',
+	scoring: 'habit',
 	notes: '',
 	startDate: today,
 	variants: [],

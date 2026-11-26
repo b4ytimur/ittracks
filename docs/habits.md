@@ -3,9 +3,10 @@
 A habit is either:
 
 - **Build: something to do.** It has a schedule, and each due day is done, skipped or missed.
+- **Track: just keep a log, nothing done or missed.** Weight, mood, sleep, money spent. See [Trackers](#trackers).
 - **Break: something to stop, with a slip counter.** It has no schedule. You log slips, and the counter shows days since the last one.
 
-Once a habit has logs, you can't switch it between build and break: build habits keep days and break habits keep slips, so switching would hide one or the other. Make a new habit instead.
+Once a habit has logs, you can't switch it between build and break: build habits keep days and break habits keep slips, so switching would hide one or the other. Make a new habit instead. Build and Track keep the same days, so you can switch between them at any time.
 
 ## Create a habit
 
@@ -17,7 +18,7 @@ Go to **Habits → New habit**. You choose how to start:
 - **Start blank in the full editor**: every option on one page.
 - **Start a daily journal**: see [Notes and journal](notes-and-journal.md#journal).
 
-To skip this choice and always open the full editor, untick **Ask how to start** in **Settings → New habits**. Which lines a new habit starts with is chosen at the end of its page under **On every new habit**, and on any habit's page in **Edit**: press the ones you want there from the start. It is kept per kind (habits, groups, habits you break).
+To skip this choice and always open the full editor, untick **Ask how to start** in **Settings → New habits**. Which lines a new habit starts with is chosen at the end of its page under **On every new habit**, and on any habit's page in **Edit**: press the ones you want there from the start. It is kept per kind (habits, groups, trackers, habits you break).
 
 ## A habit's page
 
@@ -87,6 +88,17 @@ Also on the page:
 - The habit's **quick-log link**. See [Integrations](integrations.md#quick-log-links).
 
 Features you never use can be hidden app-wide in **Settings → Features**. See [Views](views-and-edit-mode.md#switch-features-off).
+
+## Trackers
+
+A tracker only keeps what you log. Pick **Track** under **Kind** on the habit's page (or in the full editor when you make one). It has Tasks and fields like any habit, but:
+
+- Nothing it logs is done or missed. It has no streak, targets, Levels, One-tap Done, raises or jar, and never counts toward the day's progress, the week strip, consistency, groups or Stats done-rates.
+- You can log it any day. Its days (shown as **Asks**) only say when its reminder asks.
+- Today lists it under **Tracking**, with its last value: "82.4 kg, yesterday · −0.6 kg in a week". The value is the first number, count, duration or choice it logs once per log; the change compares with the latest value a week or more before.
+- It can't sit in a group or routine, or hold habits.
+
+Switching a habit to Track keeps everything you logged, takes away its misses, and drops its targets, Levels and streak rule. Switching back judges its days again from its schedule; days logged off its schedule stay extra.
 
 ## Break habits
 

@@ -18,6 +18,8 @@ export const POST: RequestHandler = async ({ request, locals, params }) => {
 		snooze(o.habit.id, o.occ.date, timeIn(getSettings(locals.account.id).timeZone));
 		return json({ ok: true });
 	}
+	// A tracker's Log: the service worker opens today's log to fill in.
+	if (action === 'log') return json({ ok: false, open: `/log/${o.occ.id}?quick` }, { status: 409 });
 	if (o.occ.status !== 'due') return json({ ok: true, already: o.occ.status });
 	const actor = appActor(locals.account.id, undefined, 'reminder');
 	let r: ReturnType<typeof doneOcc>;

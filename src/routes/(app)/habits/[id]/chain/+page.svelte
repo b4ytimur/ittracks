@@ -120,7 +120,7 @@
 </p>
 
 <div class="legend">
-	{#each [...(data.direction === 'break' ? [['clean', 'Clean'], ...(data.limit ? [['within', 'Within limit']] : []), ['slip', 'Slip']] : [['done', 'Done'], ['minimum', 'Minimum'], ['stretch', 'Stretch'], ['forgiven', 'Missed, forgiven'], ['missed', 'Missed'], ['skipped', 'Skipped'], ['unlogged', 'Not logged'], ['due', 'Due']])].filter(([k]) => tiles.some((x) => x.mark === k)) as [k, word] (k)}
+	{#each [...(data.direction === 'break' ? [['clean', 'Clean'], ...(data.limit ? [['within', 'Within limit']] : []), ['slip', 'Slip']] : [['done', data.tracker ? 'Logged' : 'Done'], ['minimum', 'Minimum'], ['stretch', 'Stretch'], ['forgiven', 'Missed, forgiven'], ['missed', 'Missed'], ['skipped', 'Skipped'], ['unlogged', 'Not logged'], ['due', 'Due']])].filter(([k]) => tiles.some((x) => x.mark === k)) as [k, word] (k)}
 		<span><i data-day={k}></i> {word}</span>
 	{/each}
 </div>

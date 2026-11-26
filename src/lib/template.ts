@@ -19,6 +19,7 @@ import {
 	type TaskForm
 } from './forms';
 import { tidyPhases } from './engine/schedule';
+import { SAME_DAY, SCORINGS } from './engine/scoring';
 
 export const TEMPLATE_FORMAT = 'ittracks-template';
 /**
@@ -38,9 +39,11 @@ export const TEMPLATE_FORMAT = 'ittracks-template';
  * habit); one that follows its routine keeps following it, by the routine's Variant keys.
  * Version 9 adds which Variant a habit that follows its routine logs on each of the routine's
  * Variants (the follow schedule's `map`, routine Variant key -> the habit's own key).
+ * Version 12 adds trackers (a build habit's `scoring`: 'track' keeps what is logged and never
+ * counts) and what a number logged again the same day does (a field's `sameDay`: add or replace).
  * Older files still import; the new fields take their defaults.
  */
-export const TEMPLATE_VERSION = 11;
+export const TEMPLATE_VERSION = 12;
 
 const key = z.string().min(1).max(64);
 
@@ -69,6 +72,8 @@ const templateTask = z.object({
 				/** Left out before version 10: a Task with several numbers per row keeps its ×. */
 				times: z.boolean().optional(),
 				better: z.enum(['more', 'less']).nullable().default(null),
+				/** Version 12: a number logged again the same day adds to it or replaces it. */
+				sameDay: z.enum(SAME_DAY).default('add'),
 				choices: z.array(z.string().max(40)).default([]),
 				prefill: z.enum(['last', 'target', 'blank']).optional(),
 				step: z.number().positive().max(10000).nullable().default(null),
@@ -150,6 +155,8 @@ export type TemplateMeta = z.infer<typeof templateMeta>;
 const templateHabit = z.object({
 	name: z.string().min(1).max(120),
 	direction: z.enum(['build', 'break']),
+	/** Version 12: a tracker keeps what is logged, and nothing it logs is done or missed. */
+	scoring: z.enum(SCORINGS).default('habit'),
 	notes: z.string().max(NOTE_MAX).default(''),
 	/** Same shape as a saved Schedule, with Variant keys instead of ids. */
 	schedule: z.unknown().nullable(),
@@ -223,7 +230,7 @@ export type TemplateChild = z.infer<typeof templateChild>;
 
 export const templateFile = z.object({
 	format: z.literal(TEMPLATE_FORMAT),
-	version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6), z.literal(7), z.literal(8), z.literal(9), z.literal(10), z.literal(11)]),
+	version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6), z.literal(7), z.literal(8), z.literal(9), z.literal(10), z.literal(11), z.literal(12)]),
 	name: z.string().min(1).max(120),
 	/** Version 4: a view template this habit works well with (e.g. "gym"). Only ever offered, never applied by itself. */
 	view: z.string().max(32).nullable().default(null),
@@ -333,6 +340,7 @@ export function toTemplate(
 	const habitOf = (h: HabitForm, keys: Map<string, string>, parentKeys: Map<string, string> | undefined): TemplateHabit => ({
 		name: h.name,
 		direction: h.direction,
+		scoring: h.scoring,
 		notes: share.withNote ? h.notes : '',
 		schedule: mapSchedule(
 			h.schedule,
@@ -418,6 +426,7 @@ export function toTemplate(
 				repeats: m.repeats,
 				times: m.times,
 				better: m.better,
+				sameDay: m.sameDay,
 				// Options travel as words, and their numbers by word.
 				choices: m.choices.map((o) => o.name),
 				prefill: m.prefill,
@@ -506,6 +515,7 @@ export function fromTemplate(
 				repeats: m.repeats,
 				times: m.times ?? rowNumbers.indexOf(m) > 0,
 				better: m.better,
+				sameDay: m.sameDay,
 				choices,
 				prefill: m.prefill ?? (m.type === 'text' || m.type === 'checkbox' ? ('blank' as const) : ('last' as const)),
 				step: m.step,
@@ -565,6 +575,7 @@ export function fromTemplate(
 		const habit: HabitForm = {
 			name: th.name,
 			direction: th.direction,
+			scoring: th.scoring,
 			notes: th.notes,
 			startDate,
 			variants: th.variants.map((v) => ({

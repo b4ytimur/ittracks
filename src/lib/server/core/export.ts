@@ -244,11 +244,12 @@ export function exportCsvZip(actor: Actor): { body: Uint8Array; today: string } 
 		{
 			name: 'ittracks-export/habits.csv',
 			text: csvOf(
-				['id', 'name', 'direction', 'area', 'schedule', 'start_date', 'archived', 'group_id'],
+				['id', 'name', 'direction', 'scoring', 'area', 'schedule', 'start_date', 'archived', 'group_id'],
 				habits.map((h) => ({
 					id: h.id,
 					name: h.name,
 					direction: h.direction,
+					scoring: h.scoring,
 					area: h.areaId ? areas.get(h.areaId) : '',
 					schedule: h.direction === 'build' ? describeSchedule(h.schedule as ScheduleForm | null) : '',
 					start_date: h.startDate,

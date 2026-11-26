@@ -32,7 +32,7 @@ A link that logs as soon as it is opened: from a Shortcut, Siri, an NFC tag, a Q
 
 - `/q/<habit id>` opens the habit's quick log. Signed in, it works without a key, and what it did is said on Today, with Undo. When the habit isn't due, Today offers **Log it anyway**. A link opened with a key alone answers with one sentence.
 - `?go=1` logs "same as last time" at once.
-- `?value=250` adds 250 to the habit's number, and marks the habit done once the target is reached. Add `&field=Minutes` when the habit has several numbers.
+- `?value=250` adds 250 to the habit's number (or replaces it, when the field is set to [replace a second log](tasks.md#fields-metrics)), and marks the habit done once the target is reached. Add `&field=Minutes` when the habit has several numbers. A [tracker](habits.md#trackers) logs any day.
 - Without a value, the link marks the habit done (copying your last log when it has Tasks).
 - For a break habit, the link logs a slip (`?value=3` logs three), or a resisted craving with `&craving=1`.
 - `&key=itk_…` lets it work without signing in.

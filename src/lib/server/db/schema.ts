@@ -9,6 +9,7 @@ import type { Progression } from '../../engine/progression';
 import type { EarlierSchedule } from '../../engine/unlogged';
 import type { EarlierParent } from '../../engine/tree';
 import type { EarlierArea } from '../../engine/dated';
+import { SAME_DAY, SCORINGS } from '../../engine/scoring';
 import type { ChoiceOption, EarlierScores, Scores } from '../../options';
 
 /** Temptation bundling: something you want, paired with the habit. */
@@ -169,6 +170,8 @@ export const metric = sqliteTable('metric', {
 	times: integer('times', { mode: 'boolean' }).notNull().default(false),
 	/** Which way is better, for the tone of a change. Null: more. */
 	better: text('better', { enum: ['more', 'less'] }),
+	/** A number logged again the same day: added to what is there (coffees) or put in its place (weight). */
+	sameDay: text('same_day', { enum: SAME_DAY }).notNull().default('add'),
 	/** Plus and minus step on the log screen; null uses the type's default. */
 	step: real('step'),
 	/** A required field must be filled before Finish. */
@@ -271,6 +274,8 @@ export const habit = sqliteTable('habit', {
 		.references(() => account.id, { onDelete: 'cascade' }),
 	name: text('name').notNull(),
 	direction: text('direction', { enum: ['build', 'break'] }).notNull(),
+	/** Build habits: 'habit' days are done, skipped or missed; a 'track' habit only keeps what is logged (engine/scoring.ts). */
+	scoring: text('scoring', { enum: SCORINGS }).notNull().default('habit'),
 	notes: text('notes'),
 	/** When tracking began: the start of a break habit's first run. */
 	startDate: text('start_date').notNull(),

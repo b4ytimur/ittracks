@@ -17,6 +17,7 @@
 	import DayNote from '$lib/DayNote.svelte';
 	import Markdown from '$lib/Markdown.svelte';
 	import { dayCount, dayMark, dayTitle, placeNotes, type DayLog } from '$lib/history/day';
+	import { counts } from '$lib/engine/scoring';
 	import { dayExcerpt } from '$lib/journal';
 	import { saveLayout } from '$lib/viewclient';
 
@@ -61,12 +62,14 @@
 	const yesterday = $derived(dayCount(logsOf.get(data.strip[5]) ?? []));
 	const withLogs = $derived(data.history.filter(([, d]) => d.occurrences.some((o) => o.status === 'done')).length);
 
+	/** A tracker's log is a record: it says Logged, never done or missed. */
+	const logged = (o: Occ) => !counts(o) && o.status !== 'skipped';
 	function words(o: Occ): string {
-		const done = o.status === 'done' ? `Done${o.levels?.enabled ? ` at ${levelName[o.level ?? 'target']}` : ''}` : o.status === 'skipped' ? 'Skipped' : 'Missed';
+		const done = logged(o) ? 'Logged' : o.status === 'done' ? `Done${o.levels?.enabled ? ` at ${levelName[o.level ?? 'target']}` : ''}` : o.status === 'skipped' ? 'Skipped' : 'Missed';
 		const values = views.history.values ? (data.values[o.id] ?? []).join(' · ') : data.entryCounts[o.id] ? `${data.entryCounts[o.id]} ${data.entryCounts[o.id] === 1 ? 'entry' : 'entries'}` : '';
 		return [done, o.variant, data.partial[o.id] || null, values].filter(Boolean).join(' · ');
 	}
-	const hrefOf = (o: Occ, date: string) => (o.status === 'done' ? `/log/${o.id}` : `/day/${date}`);
+	const hrefOf = (o: Occ, date: string) => (o.status === 'done' || logged(o) ? `/log/${o.id}` : `/day/${date}`);
 
 	function toggleValues() {
 		const before = views.history;
@@ -228,14 +231,14 @@
 					rowCard
 					density="compact"
 					href={(o) => hrefOf(o, day.date)}
-					itemClass={(o) => (o.status === 'missed' ? 'hi-missed' : '')}
+					itemClass={(o) => (o.status === 'missed' && !logged(o) ? 'hi-missed' : '')}
 					ariaLabel={title(day.date)}
 				>
 					{#snippet row(o)}
 						{@const out = outcome.get(o.id)}
 						{#if mode === 'use'}<a class="name" href={hrefOf(o, day.date)}>{o.habit}</a>{:else}<span class="name">{o.habit}</span>{/if}
 						{#if out?.tag}<span class="tags"><span class="tag pending"><span aria-hidden="true">→</span> {out.tag}</span></span>{/if}
-						<p class="meta-line">{#if o.status !== 'missed'}<span class="mark" aria-hidden="true">{o.status === 'done' ? '✓' : '↷'}</span>{' '}{/if}{out?.reason ?? words(o)}</p>
+						<p class="meta-line">{#if logged(o)}<span class="mark" aria-hidden="true">•</span>{' '}{:else if o.status !== 'missed'}<span class="mark" aria-hidden="true">{o.status === 'done' ? '✓' : '↷'}</span>{' '}{/if}{out?.reason ?? words(o)}</p>
 						{#each day.notes.row.get(o.id) ?? [] as it, i (i)}{@render note(it, `${o.id}:${i}`, day.date)}{/each}
 					{/snippet}
 				</EditableList>

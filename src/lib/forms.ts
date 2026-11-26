@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { reminderForm } from './reminder';
 import { metricTypes } from './metric-types';
 import { optionForm, type ChoiceOption } from './options';
+import { SAME_DAY, SCORINGS } from './engine/scoring';
 
 const id = z.string().uuid();
 /** The rule for a name of a habit or Task, shared by the editors and rename in place. */
@@ -52,6 +53,8 @@ export const taskForm = z.object({
 			times: z.boolean().default(false),
 			/** Which way is better; null is more. */
 			better: z.enum(['more', 'less']).nullable().default(null),
+			/** A number logged again the same day: added to it (coffees) or put in its place (weight). */
+			sameDay: z.enum(SAME_DAY).default('add'),
 			/** Choice field: its options. Logs store the option's id, so a rename keeps past values. */
 			choices: z.array(optionForm).default([]),
 			prefill: z.enum(['last', 'target', 'blank']).default('last'),
@@ -84,9 +87,10 @@ export type MetricForm = TaskForm['metrics'][number];
 /** What a new Task's words are. */
 export const rowWords = () => ({ rowOne: 'entry', rowMany: 'entries', betweenName: 'Pause' });
 /** What a new field has besides its name, type and unit. */
-export const noteDefaults = (): Pick<MetricForm, 'long' | 'starter' | 'prompts' | 'promptOrder' | 'scores' | 'times' | 'better'> => ({
+export const noteDefaults = (): Pick<MetricForm, 'long' | 'starter' | 'prompts' | 'promptOrder' | 'scores' | 'times' | 'better' | 'sameDay'> => ({
 	times: false,
 	better: null,
+	sameDay: 'add',
 	long: false,
 	starter: '',
 	prompts: [],
@@ -259,6 +263,8 @@ export const habitForm = z
 	.object({
 		name,
 		direction: z.enum(['build', 'break']),
+		/** A build habit's days: done, skipped or missed ('habit'), or only what is logged ('track'). See engine/scoring.ts. */
+		scoring: z.enum(SCORINGS).default('habit'),
 		notes: z.string().max(NOTE_MAX).default(''),
 		startDate: z.string().date(),
 		variants: z.array(

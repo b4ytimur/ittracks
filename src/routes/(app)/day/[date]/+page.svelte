@@ -37,8 +37,11 @@
 	const variantOf = (it: Item) => chosen[it.habitId] ?? it.variantId ?? '';
 
 	const notLogged = (it: Item) => !it.occurrence || it.occurrence.status === 'missed' || it.occurrence.status === 'due';
+	const trackers = $derived(new Set(data.tracking.map((x) => x.habitId)));
 	function statusText(it: Item): string {
 		const o = it.occurrence;
+		// A tracker keeps what was logged: never done or missed.
+		if (trackers.has(it.habitId)) return o && (o.status === 'done' || o.entries) ? `Logged${o.entries ? ` · ${o.entries} ${o.entries === 1 ? 'entry' : 'entries'}` : ''}` : 'Not logged';
 		if (o?.status === 'done') {
 			const p = data.progress[o.id];
 			const detail = isPartial(p) ? ` · ${progressText(p!)}` : o.entries ? ` · ${o.entries} ${o.entries === 1 ? 'entry' : 'entries'}` : '';
@@ -84,7 +87,7 @@
 	onMount(() => {
 		const id = page.url.searchParams.get('did');
 		if (!id) return;
-		const item = [...data.due, ...data.other].find((x) => x.occurrence?.id === id);
+		const item = [...data.due, ...data.other, ...data.tracking].find((x) => x.occurrence?.id === id);
 		if (item) showToast(`Logged ${item.name} on ${short(data.date)}.`);
 		const u = new URL(page.url);
 		u.searchParams.delete('did');
@@ -154,6 +157,11 @@
 
 <GroupHeading title="Due that day" count={count.of ? `${count.done} of ${count.of} done` : undefined} />
 {#if data.due.length}{@render list(sorted, 'Due that day')}{:else}<p class="empty-range">Nothing was due this day.</p>{/if}
+
+{#if data.tracking.length}
+	<GroupHeading title="Tracking" count={String(data.tracking.filter((x) => x.occurrence && (x.occurrence.status === 'done' || x.occurrence.entries)).length)} />
+	{@render list(data.tracking, 'Tracking')}
+{/if}
 
 {#if data.other.length}
 	<GroupHeading title="Not due that day" count={String(data.other.length)} folded={!openOther} onfold={() => (openOther = !openOther)} />

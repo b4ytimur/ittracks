@@ -23,6 +23,8 @@ interface Of {
 	cue: { time?: string | null; range?: string | null; place?: string | null } | null;
 	reminder: Reminder | null;
 	levels: { enabled: boolean; minimum: string } | null;
+	/** A tracker ('track') has nothing to be done: its notification opens the log instead. */
+	scoring?: string | null;
 }
 
 /** When it comes: its own time, the cue's, or when the cue's part of the day starts. Null: nothing to go by. */
@@ -37,7 +39,7 @@ export function reminderBody(h: Of): string {
 
 export function reminderActions(h: Of): { action: string; title: string }[] {
 	return [
-		{ action: 'done', title: 'Done' },
+		h.scoring === 'track' ? { action: 'log', title: 'Log' } : { action: 'done', title: 'Done' },
 		...(h.levels?.enabled && h.reminder?.minimum !== false ? [{ action: 'minimum', title: 'Minimum' }] : []),
 		...(h.reminder?.snooze !== false ? [{ action: 'snooze', title: `Snooze ${SNOOZE_MIN} min` }] : [])
 	];

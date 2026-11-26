@@ -12,7 +12,7 @@
 	import MenuButton from '$lib/ui/MenuButton.svelte';
 	import { sentence, todayWords } from '$lib/view-words';
 	import { saveLayout } from '$lib/viewclient';
-	import { headlineText } from '$lib/engine/stats';
+	import { headlineKind, headlineText } from '$lib/engine/stats';
 	import { isPartial, progressText } from '$lib/engine/progress';
 	import { leftText, rollupDay, rollupText, type LeftOpen } from '$lib/engine/rollup';
 	import { invalidateAll } from '$app/navigation';
@@ -261,11 +261,12 @@
 	const shows = (id: string, k: LineKey) => featureOn(k) && !view.hide.includes(k) && rankOf(id) >= NEED[k];
 	/** In Edit a row lists the hidden kinds too, each with its verb (TS.9). */
 	const listed = (id: string, k: LineKey) => featureOn(k) && (editing ? rankOf(id) >= NEED[k] : shows(id, k));
-	const headlineOf = (item: Item) => {
+	/** A tracker shows its last value unless it has a number of its own; its logs read "logged". */
+	const headlineOf = (item: Item, tracker = false) => {
 		if (view.rows === 'names' && !opened.has(item.habitId)) return '';
-		const kind = views.today.headlineFor[item.habitId] ?? view.num;
+		const kind = headlineKind(views.today.headlineFor[item.habitId], view.num, tracker);
 		if (kind === 'none') return '';
-		return data.headlines[item.habitId] ?? headlineText(kind, item.stats, item.streak);
+		return data.headlines[item.habitId] ?? headlineText(kind, item.stats, item.streak, { last: item.last, tracker });
 	};
 	const LINE_SAID: Record<LineKey, string> = { cue: 'when and where', headline: 'the number', levels: 'the Minimum', bundle: 'treats', reframe: 'reframe lines', reward: 'jars and savings', identities: 'identities', progression: 'suggestions to raise' };
 	/** Hide or show one kind of line in this view, from a row in Edit. */
@@ -382,6 +383,14 @@
 	const leavesOf = (items: Item[]): Item[] => items.flatMap((b) => (b.group ? leavesOf(kidsOf(b.habitId)) : [b]));
 	const groups = $derived(groupBy(shownBuild.map((b) => ({ ...b, part: partOf(b) })), view.group, { areas: data.areas, parts: partNames }));
 	const breakingShown = $derived(view.direction === 'build' ? [] : data.breaking.filter((b) => passes(view, { ...b, direction: 'break' })));
+	/** Trackers the view lets through, in its order: by name, or in My order. */
+	const trackingShown = $derived.by(() => {
+		if (view.direction === 'break') return [];
+		const list = data.tracking.filter((b) => passes(view, { ...b, direction: 'build' }));
+		if (view.sort === 'name') return [...list].sort((a, b) => a.name.localeCompare(b.name));
+		if (view.sort === 'manual') return manualOrder(list, views.today.order, (b) => b.habitId);
+		return list;
+	});
 	const identityNames = $derived([...new Set([...data.build, ...data.breaking].flatMap((b) => b.identities))].sort());
 	const wordsCtx = $derived({ areas: data.areas, identities: hidden('identities') ? [] : identityNames, parts: data.ranges.length > 0, breaking: data.breaking.length > 0 });
 	const words = $derived(todayWords(view, wordsCtx));
@@ -584,7 +593,7 @@
 	</div>
 {/if}
 
-{#if !data.build.length && !data.resting.length && !data.breaking.length && !data.paused.length}
+{#if !data.build.length && !data.tracking.length && !data.resting.length && !data.breaking.length && !data.paused.length}
 	<Box hint="Write it as you would say it: what, how much, how often. Anything you can count or do." />
 	<section class="ob-sec" aria-label="Or start from">
 		<p class="meta muted">Or start from</p>
@@ -619,6 +628,11 @@
 		</div>
 		<div class="today-side">
 			{#if !view.first && breakingShown.length}{@render breaking()}{/if}
+			{#if trackingShown.length}
+				<!-- Trackers keep what you log: never due or missed, so they sit beside the day, not in it. -->
+				<GroupHeading title="Tracking" {mode} count={String(trackingShown.length)} folded={folded('tracking')} onfold={() => fold('tracking')} />
+				{#if !folded('tracking')}{@render trackingSection()}{/if}
+			{/if}
 			{#if laterSays && view.direction === 'all' && !view.fits && !editing}
 				<section class="later" aria-label="Later and not today">
 					<button type="button" class="later-line" aria-expanded={!folded('later')} onclick={() => fold('later')}><span class="chev" aria-hidden="true">›</span><span>{laterSays}</span></button>
@@ -868,6 +882,19 @@
 			<p class="meta-line">Paused until {shortDate(item.pausedUntil!)}. Streak is safe.</p>
 		{/snippet}
 		{#snippet actions(item)}<a class="quiet hit" href="/habits/{item.habitId}#pause" aria-label="Change the pause of {item.name}">Change</a>{/snippet}
+	</EditableList>
+{/snippet}
+
+{#snippet trackingSection()}
+	<EditableList items={trackingShown} key={(x) => x.habitId} label={(x) => x.name} mode="use" rowCard ariaLabel="Tracking">
+		{#snippet row(item)}
+			<span class="name">{item.name}</span>
+			{#if headlineOf(item, true)}<p class="meta-line">{headlineOf(item, true)}</p>{/if}
+			{#if editing}{@render headlinePick(item)}{/if}
+		{/snippet}
+		{#snippet actions(item)}
+			<a class="quiet hit" href="/q/{item.habitId}" data-sveltekit-preload-data="off" aria-label="Log {item.name}">Log</a>
+		{/snippet}
 	</EditableList>
 {/snippet}
 

@@ -46,18 +46,27 @@ export function habitStats(marks: Mark[], today: ISODate, days = 30): HabitStats
 export const consistencyText = (s: Pick<HabitStats, 'consistency' | 'days'>): string =>
 	s.consistency === null ? '' : `${s.consistency}% in ${s.days} ${s.days === 1 ? 'day' : 'days'}`;
 
-/** The headline line for a habit on Today. */
-export function headlineText(kind: string, s: HabitStats, streak: string): string {
+/**
+ * The headline line for a habit on Today. `last` is what its main field logged last (server/last-value.ts).
+ * A tracker's logs are records, so they read "logged", and it has no streak or consistency to show.
+ */
+export function headlineText(kind: string, s: HabitStats, streak: string, opts: { last?: string | null; tracker?: boolean } = {}): string {
+	const did = opts.tracker ? 'logged' : 'done';
 	switch (kind) {
 		case 'streak':
-			return streak;
+			return opts.tracker ? '' : streak;
 		case 'consistency':
-			return consistencyText(s);
+			return opts.tracker ? '' : consistencyText(s);
 		case 'week':
-			return `${s.week} done this week`;
+			return `${s.week} ${did} this week`;
 		case 'total':
-			return `${s.total} done in total`;
+			return `${s.total} ${did} in total`;
+		case 'last':
+			return opts.last ?? '';
 		default:
 			return '';
 	}
 }
+
+/** Which headline a habit shows: its own pick, else a tracker's last value, else the default for all habits. */
+export const headlineKind = (own: string | undefined, all: string, tracker: boolean): string => own ?? (tracker ? 'last' : all);

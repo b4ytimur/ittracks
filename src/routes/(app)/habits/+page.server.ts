@@ -11,6 +11,8 @@ import { initialState, templateById } from '$lib/views';
 import { fail } from '@sveltejs/kit';
 import { archiveHabit, moveHabit, renameHabit, unarchiveHabit } from '$lib/server/habit-actions';
 import { isGroup } from '$lib/engine/schedule';
+import { isTracker } from '$lib/engine/scoring';
+import { lastValue } from '$lib/server/last-value';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ locals, url, cookies }) => {
@@ -62,9 +64,12 @@ export const load: PageServerLoad = ({ locals, url, cookies }) => {
 				variants: variantsOf.get(h.id) ?? [],
 				/** Can hold habits: a group, or a build habit with a schedule and no Tasks of its own (a routine). */
 				holds: h.direction === 'build' && !!h.schedule && (isGroup(h.schedule) || !slotted.has(h.id)),
-				consistency: h.direction === 'break' ? null : st.consistency,
+				// A tracker is never done or missed: no share of days done, and its last value instead of a last done.
+				consistency: h.direction === 'break' || isTracker(h) ? null : st.consistency,
 				consistencyDays: st.days,
-				lastDone: st.lastDone
+				lastDone: st.lastDone,
+				tracker: isTracker(h),
+				last: isTracker(h) ? (lastValue(h.id, today)?.text ?? null) : null
 			};
 		}),
 		areas: listAreas(accountId),

@@ -13,6 +13,7 @@ import { addDays, weekStart } from '$lib/engine/dates';
 import { chainCells } from '$lib/engine/chain';
 import { withinOn } from '$lib/engine/limit';
 import { describeStreak, streak, type StreakRule } from '$lib/engine/streak';
+import { isTracker } from '$lib/engine/scoring';
 import type { PageServerLoad } from './$types';
 
 const WEEKS = 12;
@@ -40,7 +41,7 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 				count
 			});
 		}
-		return { id: h.id, name: h.name, direction: h.direction, weeks, today, days, cells: [], summary: '', limit: !!h.limit, startDate: h.startDate, canBackfill };
+		return { id: h.id, name: h.name, direction: h.direction, weeks, today, days, cells: [], summary: '', tracker: false, limit: !!h.limit, startDate: h.startDate, canBackfill };
 	}
 
 	const schedule = h.schedule as ScheduleForm | null;
@@ -73,7 +74,9 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		today,
 		days: [],
 		cells: chainCells(marks, rule, from, to, today, { start: h.startDate, unlogged }),
-		summary: describeStreak(streak(marks, rule, { minimumCounts: h.minimumCounts, today }), rule),
+		// A tracker's days are logged or not: no streak to sum them up.
+		summary: isTracker(h) ? '' : describeStreak(streak(marks, rule, { minimumCounts: h.minimumCounts, today }), rule),
+		tracker: isTracker(h),
 		limit: false,
 		startDate: h.startDate,
 		canBackfill

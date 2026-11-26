@@ -568,7 +568,7 @@ describe('checking a file before adding it', () => {
 		expect(why('nope')).toMatch(/isn’t JSON/);
 		expect(why('{}')).toMatch(/isn’t an ittracks template/);
 		expect(why(JSON.stringify({ tables: {}, username: 'x' }))).toMatch(/whole backup/);
-		expect(why(JSON.stringify({ format: TEMPLATE_FORMAT, version: TEMPLATE_VERSION + 1 }))).toMatch(/newer ittracks \(version 12/);
+		expect(why(JSON.stringify({ format: TEMPLATE_FORMAT, version: TEMPLATE_VERSION + 1 }))).toMatch(/newer ittracks \(version 13/);
 		expect(why(JSON.stringify({ format: TEMPLATE_FORMAT, version: TEMPLATE_VERSION, name: 'x', habit: {} }))).toMatch(/broken at habit/);
 		expect(why('x'.repeat(1_000_001))).toMatch(/too large/);
 	});

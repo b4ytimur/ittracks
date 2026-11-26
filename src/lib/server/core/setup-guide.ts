@@ -20,10 +20,11 @@ const schema = (s: z.ZodTypeAny) => {
 const OVERVIEW = {
 	words: {
 		Habit: 'Something to build (done or not each due day) or to break (log slips; the run resets). Has a schedule, Variants, a cue, a streak rule, optional Levels (Minimum / Target / Stretch).',
+		Tracker: 'A build habit with scoring "track": it only keeps what you log (weight, mood, sleep, money spent). Nothing is done or missed, so it has no streak, targets, Levels or misses and never counts toward a day or a group; it can be logged any day, and its schedule only says when to ask (reminders). It shows under Tracking on Today with its last value. Switch with edit_habit set: { scoring: "habit" or "track" }; what was logged stays.',
 		Variant: 'A named version of a build habit, such as Workout A and Workout B. The schedule says which Variant is due on a day. A habit with one way of doing it has one Variant.',
 		Slot: 'One line of a Variant: a Task with sets and targets (per field), or an auto-fill rule that picks a Task from the Library by its Tags.',
 		Task: 'A reusable thing you do, kept in the Library (Bench press, Spanish lesson, Water). Its fields say what is logged.',
-		Field: `What a Task logs (called metrics in the forms). Types: ${metricTypes.join(', ')}. perSet (repeats: true) means once per set or row, such as weight and reps; otherwise once per log, such as minutes. A choice field has options (and optional scores per option for charts).`,
+		Field: `What a Task logs (called metrics in the forms). Types: ${metricTypes.join(', ')}. perSet (repeats: true) means once per set or row, such as weight and reps; otherwise once per log, such as minutes. A choice field has options (and optional scores per option for charts). sameDay says what a second quick log the same day does to a number logged once per log: add (glasses of water, the default) or replace (a weigh-in); log_value's mode overrides it.`,
 		Part: 'What sits inside a Task: a step (a tick box) or another Library Task with its own sets and targets. A Task with parts and no per-set fields repeats in rounds (a circuit).',
 		Schedule: 'When a build habit is due: weekly (fixed weekdays), frequency (N times a week or month), interval (every N days), rotation (Variants take turns, with rest days, or a cycle stepping by week), phases (schedules one after another: a program), group, follow (inside a routine).',
 		Group: 'A habit whose days come from the habits inside it (schedule kind group); it is never logged itself.',
@@ -161,6 +162,14 @@ export const EXAMPLES = [
 	{
 		goal: 'Quit smoking, cutting down from 10 a day by 1 each week.',
 		changes: [{ op: 'add_habit', habit: { name: 'No smoking', direction: 'break', limit: { max: 10, period: 'day', taper: { by: 1, every: 'week', floor: 0 } }, cost: { amount: 0.5, unit: '€' } } }]
+	},
+	{
+		goal: 'Keep track of my weight every morning, without a streak or a goal.',
+		changes: [
+			{ op: 'add_task', key: 'weigh', task: { name: 'Weigh-in', metrics: [{ name: 'Weight', type: 'number', unit: 'kg', sameDay: 'replace' }] } },
+			{ op: 'add_habit', habit: { name: 'Weight', scoring: 'track', schedule: { kind: 'interval', every: 1 }, cue: { time: '07:30' }, variants: [{ name: 'Weigh-in', slots: [{ taskId: 'weigh' }] }] } }
+		],
+		note: 'A tracker has no targets. sameDay: replace makes a second weigh-in the same day replace the first instead of adding to it.'
 	},
 	{
 		goal: 'A morning routine with three habits inside, done when at least two are done.',

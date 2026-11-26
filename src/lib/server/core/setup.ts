@@ -470,6 +470,7 @@ function saveTaskForm(run: Run, id: string | null, raw: Obj, units: Record<strin
 const blankHabit = (today: string): HabitForm => ({
 	name: '',
 	direction: 'build',
+	scoring: 'habit',
 	notes: '',
 	startDate: today,
 	variants: [],

@@ -27,7 +27,7 @@ const keys = <T extends Record<string, unknown>>(o: T) => Object.keys(o) as [key
 
 const habitRef = z.string().trim().min(1).max(200).describe('Habit id, or its name (any case).');
 const date = z.string().max(20).optional().describe('YYYY-MM-DD, "today" or "yesterday". Default: today.');
-const extra = z.boolean().optional().describe('Log even if the habit is not due that day (an extra session). Default false.');
+const extra = z.boolean().optional().describe('Log even if the habit is not due that day (an extra session). Default false. A tracker logs any day without it.');
 const range = {
 	from: z.string().max(10).optional().describe('First day, YYYY-MM-DD.'),
 	to: z.string().max(10).optional().describe('Last day, YYYY-MM-DD. Default: today.'),
@@ -281,7 +281,7 @@ export const ACTIONS: ActionDef[] = [
 		scope: 'log',
 		title: 'Log a value',
 		description:
-			'Log one once-per-log value, e.g. 250 ml of water, 20 minutes of Spanish, a mood. Numbers add to what is already logged that day unless mode is "set". With no field, it uses the habit\'s one number with a target (or its only number). Finishes the habit when the target is reached (finish: auto).',
+			'Log one once-per-log value, e.g. 250 ml of water, 20 minutes of Spanish, a mood. A number logged again that day adds to it or replaces it, as the field\'s sameDay says (see describe), unless mode is given. With no field, it uses the habit\'s one number with a target (or its only number). Finishes the habit when the target is reached (finish: auto).',
 		input: z.object({
 			habit: habitRef,
 			date,

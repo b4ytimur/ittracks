@@ -10,7 +10,8 @@ import { slot } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 import type { ScheduleForm } from '$lib/forms';
 import { ActionError, appActor } from '$lib/server/core/actor';
-import { findHabit } from '$lib/server/core/day';
+import { buildDay, findHabit, occurrenceFor } from '$lib/server/core/day';
+import { isTracker } from '$lib/engine/scoring';
 import { doneOcc } from '$lib/server/core/log';
 import { logsSomething, once, quickLog, quickParams, type QuickOutcome } from '$lib/server/core/quick';
 import { setFlash, type Flash } from '$lib/server/flash';
@@ -55,6 +56,17 @@ export const load: PageServerLoad = ({ locals, params, url, cookies }) => {
 	}
 
 	if (h.direction === 'break') redirect(303, '/');
+	// A tracker logs any day: today's log opens, made when there is none, and stays open to change once something is in it.
+	if (isTracker(h)) {
+		let log;
+		try {
+			log = occurrenceFor(actor, buildDay(actor, h.id, null), { extra: true });
+		} catch (e) {
+			if (e instanceof ActionError) return answer({ kind: 'error', text: e.message });
+			throw e;
+		}
+		redirect(303, `/log/${log.id}?quick`);
+	}
 	const occ = h.schedule ? ensureToday(accountId, h.id, h.schedule as ScheduleForm, userToday(accountId, cookies.get('tz'))) : null;
 	if (!occ) return answer({ kind: 'notDue', text: `${h.name} isn't due today.`, habit: h.id });
 	if (occ.status !== 'due') return answer({ kind: 'already', text: `${h.name} is already ${occ.status} today.`, occurrence: occ.id });

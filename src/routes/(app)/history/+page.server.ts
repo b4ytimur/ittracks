@@ -47,6 +47,7 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 			rollup: occurrence.rollup,
 			level: occurrence.level,
 			extra: occurrence.extra,
+			scoring: habit.scoring,
 			levels: habit.levels
 		})
 		.from(occurrence)
@@ -57,7 +58,7 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		.all();
 	// Today's habits still to do: not rows here, but today's count is of all that is due, as on Today.
 	const openToday = db
-		.select({ status: occurrence.status, extra: occurrence.extra, rollup: occurrence.rollup, habitId: habit.id, areaId: habit.areaId })
+		.select({ status: occurrence.status, extra: occurrence.extra, rollup: occurrence.rollup, scoring: habit.scoring, habitId: habit.id, areaId: habit.areaId })
 		.from(occurrence)
 		.innerJoin(habit, eq(occurrence.habitId, habit.id))
 		.where(and(eq(habit.accountId, accountId), eq(occurrence.status, 'due'), eq(occurrence.date, today)))

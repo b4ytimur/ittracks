@@ -101,6 +101,7 @@ const savedType = z.object({
 				repeats: z.boolean(),
 				times: z.boolean().optional(),
 				better: z.literal('less').optional(),
+				sameDay: z.literal('replace').optional(),
 				step: z.number().positive().nullable()
 			})
 		)

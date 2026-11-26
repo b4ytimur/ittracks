@@ -137,6 +137,10 @@
 	const parent = $derived(data.groups.find((g) => g.id === h.parentId) ?? null);
 	/** This habit holds habits and has days of its own: its day is judged from theirs too. */
 	const isRoutine = $derived(h.direction === 'build' && data.inside.length > 0 && kind !== 'group');
+	/** A tracker keeps what you log; nothing on it is done or missed (engine/scoring.ts). */
+	const tracker = $derived(h.direction === 'build' && h.scoring === 'track');
+	/** A build habit whose days are judged: what only those have shows on it. */
+	const scored = $derived(h.direction === 'build' && !tracker);
 	/** Following needs a routine to follow. Leaving it switches to a schedule of its own. */
 	$effect(() => {
 		if (kind === 'follow' && !parent?.routine) untrack(() => (kind = 'interval'));
@@ -474,9 +478,10 @@
 		effect?: string;
 	}
 	const JUDGED = 'Past days are judged again by it. What you logged stays.';
-	const LINES: Record<string, Line> = {
+	const LINES: Record<string, Line> = $derived({
 		name: { label: 'Name', fields: ['name'] },
-		days: { label: 'Days', fields: ['schedule'], held: true },
+		// A tracker's days are when it asks: nothing is due or missed on them.
+		days: { label: tracker ? 'Asks' : 'Days', fields: ['schedule'], held: true },
 		started: { label: h.direction === 'break' ? 'Counting from' : 'Started', fields: ['startDate', 'schedule'], held: true, effect: 'Days from here on count. What you logged stays.' },
 		when: { label: 'When and where', fields: ['cue'] },
 		remind: { label: 'Reminder', fields: ['remind', 'reminder'] },
@@ -497,8 +502,8 @@
 		notes: { label: 'Notes', fields: ['notes'] },
 		area: { label: 'Area', fields: ['areaId'] },
 		inside: { label: 'Inside', fields: ['parentId', 'schedule'], held: true, effect: 'From today on. The days before keep where it was.' },
-		kind: { label: 'Kind', fields: ['direction'], held: true, effect: 'What only the other kind has goes.' }
-	};
+		kind: { label: 'Kind', fields: ['direction', 'scoring'], held: true, effect: 'What only the other kind has goes. What you logged stays.' }
+	});
 	const full = $derived({ ...h, schedule, cue, prep: [...h.prep, ...pendingPrep] } as HabitForm);
 	const ordered = (v: unknown): string =>
 		JSON.stringify(v ?? null, (_, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : 1))) : x));
@@ -520,7 +525,7 @@
 	function keysOf(id: string): Key[] {
 		const ids = (f: HabitForm) => f.variants.map((v) => v.id).join();
 		const others: Key[] =
-			id === 'what' && ids(full) !== ids(base) ? ['schedule'] : id === 'days' && byDays ? ['variants'] : id === 'kind' ? ['variants', 'schedule', 'limit', 'cost', 'triggers', 'parentId'] : [];
+			id === 'what' && ids(full) !== ids(base) ? ['schedule'] : id === 'days' && byDays ? ['variants'] : id === 'kind' ? ['variants', 'schedule', 'limit', 'cost', 'triggers', 'parentId', 'levels', 'streakRule', 'minimumCounts', 'unlogged', 'quickDone', 'progression', 'reward'] : [];
 		return [...LINES[id].fields, ...others].filter(changedKey);
 	}
 	/** Two lines that share a field: the one that was opened for it holds it. */
@@ -730,7 +735,7 @@
 		notes: W.noteWords(f.notes),
 		area: data.areas.find((a) => a.id === f.areaId)?.name ?? 'None.',
 		inside: data.groups.find((g) => g.id === f.parentId)?.name ?? 'Nothing: it stands on its own.',
-		kind: f.direction === 'build' ? 'Build: something to do.' : 'Break: something to stop.'
+		kind: f.direction === 'break' ? 'Break: something to stop.' : f.scoring === 'track' ? 'Track: something to keep a log of.' : 'Build: something to do.'
 	});
 	const now = $derived(say(full));
 	const before = $derived(say(base));
@@ -742,10 +747,10 @@
 		when: { on: !!now.when, can: build, clear: () => ((h.cue = { time: null, place: null, afterHabitId: null, afterText: null, range: null }), (afterMode = 'none'), h.reminder?.time || (h.remind = false)), word: 'When and where' },
 		remind: { on: h.remind || base.remind, can: build && !isGroupKind, clear: () => (h.remind = false), word: 'Reminder' },
 		instead: { on: !!now.instead, can: !build && !off('ifThen'), clear: () => (h.ifThen = { when: '', then: '', habitId: null }), word: 'Instead' },
-		levels: { on: h.levels.enabled || base.levels.enabled, can: build && !isGroupKind && !off('levels'), clear: () => (h.levels.enabled = false), word: 'Levels' },
-		streak: { on: base.streakRule.kind !== 'neverTwice' || base.unlogged === 'ignore' || !base.minimumCounts || edited.streak, can: build, clear: () => ((h.streakRule = { kind: 'neverTwice' }), (h.unlogged = 'missed'), (h.minimumCounts = true)), word: 'Streak and days you don’t log' },
-		quick: { on: h.quickDone || base.quickDone, can: build && !isGroupKind && h.variants.some((v) => v.slots.length), clear: () => (h.quickDone = false), word: 'One-tap Done' },
-		raise: { on: !!h.progression, can: build && hasTargets && !off('progression'), clear: () => (h.progression = null), word: 'Raise targets' },
+		levels: { on: scored && (h.levels.enabled || base.levels.enabled), can: scored && !isGroupKind && !off('levels'), clear: () => (h.levels.enabled = false), word: 'Levels' },
+		streak: { on: scored && (base.streakRule.kind !== 'neverTwice' || base.unlogged === 'ignore' || !base.minimumCounts || edited.streak), can: scored, clear: () => ((h.streakRule = { kind: 'neverTwice' }), (h.unlogged = 'missed'), (h.minimumCounts = true)), word: 'Streak and days you don’t log' },
+		quick: { on: scored && (h.quickDone || base.quickDone), can: scored && !isGroupKind && h.variants.some((v) => v.slots.length), clear: () => (h.quickDone = false), word: 'One-tap Done' },
+		raise: { on: scored && !!h.progression, can: scored && hasTargets && !off('progression'), clear: () => (h.progression = null), word: 'Raise targets' },
 		cost: { on: !!h.cost, can: !build && !off('cost'), clear: () => (h.cost = null), word: 'Cost' },
 		identity: { on: h.identityIds.length > 0, can: !off('identities'), clear: () => (h.identityIds = []), word: 'Identity' },
 		treat: { on: !!h.bundle.reward, can: build && !off('rewards'), clear: () => (h.bundle = { reward: '', strict: false }), word: 'Treat' },
@@ -753,12 +758,12 @@
 		prep: { on: h.prep.length > 0, can: build && !off('prep'), clear: () => ((h.prep = []), (newPrep = '')), word: 'The day before' },
 		reframe: { on: !!h.reframe, can: !off('reframe'), clear: () => (h.reframe = ''), word: 'Reframe' },
 		notes: { on: !!h.notes, can: true, clear: () => (h.notes = ''), word: 'Notes' },
-		inside: { on: !!h.parentId || !!base.parentId, can: build && data.groups.length > 0, clear: () => (h.parentId = null), word: 'Inside a group or routine' }
+		inside: { on: !!h.parentId || !!base.parentId, can: scored && data.groups.length > 0, clear: () => (h.parentId = null), word: 'Inside a group or routine' }
 	});
 	const shows = (id: string) => optional[id].on || (added[id] && (optional[id].can || optional[id].on)) || (data.isNew && !!data.newLines[pageKind]?.includes(id) && optional[id].can);
 	// The sections under the first card, in the order this kind of habit has them.
 	let arranging = $state<Mode>('use');
-	const pageKind = $derived<Kind>(!build ? 'break' : isGroupKind ? 'group' : 'build');
+	const pageKind = $derived<Kind>(!build ? 'break' : isGroupKind ? 'group' : tracker ? 'track' : 'build');
 	const order = $derived(everySection(data.detail[pageKind]));
 	const sections = $derived(
 		order.filter(
@@ -941,7 +946,8 @@
 							/>
 						</label>
 					{/if}
-					{#if !s.fillRule && s.taskId && metricsByTask[s.taskId]?.length}
+					<!-- A tracker has no goal to aim for (rule T2). -->
+					{#if scored && !s.fillRule && s.taskId && metricsByTask[s.taskId]?.length}
 						<table class="targets">
 							<thead>
 								<tr>
@@ -1291,16 +1297,24 @@
 {/snippet}
 
 {#snippet typePart()}
+	{@const type = h.direction === 'break' ? 'break' : h.scoring === 'track' ? 'track' : 'build'}
+	<!-- A tracker is judged by nothing, so it can't be a group, hold habits or sit in one (rules T1, checkLinks). -->
+	{@const noTrack = isGroupKind ? 'A group is judged by the habits inside it, so it can’t be a tracker' : isRoutine ? 'It holds habits, and a tracker counts nothing for them' : h.parentId ? 'Take it out of its group or routine first' : ''}
 	<fieldset class="card">
 		<legend class="muted">Type</legend>
 		<label style="color: var(--ink)"
-			><input type="radio" bind:group={h.direction} value="build" disabled={!!directionLocked && h.direction !== 'build'} /> Build: something to do</label
+			><input type="radio" name="type" checked={type === 'build'} onchange={() => ((h.direction = 'build'), (h.scoring = 'habit'))} disabled={!!directionLocked && h.direction !== 'build'} /> Build: something to do</label
 		>
 		<label style="color: var(--ink)"
-			><input type="radio" bind:group={h.direction} value="break" disabled={!!directionLocked && h.direction !== 'break'} /> Break: something to stop, with
+			><input type="radio" name="type" checked={type === 'track'} onchange={() => ((h.direction = 'build'), (h.scoring = 'track'))} disabled={(!!directionLocked && h.direction !== 'build') || (!!noTrack && type !== 'track')} /> Track: just keep a log,
+			nothing done or missed</label
+		>
+		<label style="color: var(--ink)"
+			><input type="radio" name="type" checked={type === 'break'} onchange={() => ((h.direction = 'break'), (h.scoring = 'habit'))} disabled={!!directionLocked && h.direction !== 'break'} /> Break: something to stop, with
 			a slip counter</label
 		>
 		{#if directionLocked}<p class="muted small-text" style="margin: 0.25rem 0 0">{directionLocked}.</p>{/if}
+		{#if noTrack && type !== 'track' && type !== 'break'}<p class="muted small-text" style="margin: 0.25rem 0 0">Track: {noTrack.charAt(0).toLowerCase() + noTrack.slice(1)}.</p>{/if}
 	</fieldset>
 {/snippet}
 
@@ -1448,7 +1462,7 @@
 {#snippet startField()}
 	<label>{h.direction === 'break' ? 'Counting from' : 'Started on'} <input type="date" value={h.startDate} onchange={(e) => (h.direction === 'break' ? e.currentTarget.value && (h.startDate = e.currentTarget.value) : setStart(e.currentTarget.value))} required /></label>
 	<p class="meta">
-		Days from here on can be logged. {h.startDate > data.today ? 'Nothing is due before then.' : h.direction === 'build' && h.startDate < data.today && h.startDate !== savedStart ? 'Due days you leave unlogged count as missed, unless you change that under Streak.' : ''}
+		Days from here on can be logged. {h.startDate > data.today ? 'Nothing is due before then.' : scored && h.startDate < data.today && h.startDate !== savedStart ? 'Due days you leave unlogged count as missed, unless you change that under Streak.' : ''}
 	</p>
 {/snippet}
 
@@ -1581,14 +1595,15 @@
 		{#if h.reward.celebrate}
 			<label>Message <input bind:value={h.reward.message} placeholder="What you want to hear when it is done" /></label>
 		{/if}
-		<label style="color: var(--ink)"
+		<!-- A jar fills when a day is done, and a tracker's days never are (rule T2). -->
+		<label style="color: var(--ink)" hidden={tracker}
 			><input
 				type="checkbox"
 				checked={!!h.reward.jar}
 				onchange={(e) => (h.reward.jar = e.currentTarget.checked ? { amount: 2, unit: '€', goal: '' } : null)}
 			/> Fill a jar toward a reward</label
 		>
-		{#if h.reward.jar}
+		{#if h.reward.jar && !tracker}
 			<div class="row">
 				<label style="width: 7rem">Each time, add <input type="number" min="0" step="any" bind:value={h.reward.jar.amount} /></label>
 				<label style="width: 5rem">Unit <input bind:value={h.reward.jar.unit} placeholder="€, points" /></label>

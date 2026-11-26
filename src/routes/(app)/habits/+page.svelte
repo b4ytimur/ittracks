@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { describeSchedule } from '$lib/describe';
+	import { describeAsks, describeSchedule } from '$lib/describe';
 	import { forest } from '$lib/engine/tree';
 	import { onDestroy, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
@@ -213,11 +213,12 @@
 		if (h.deleteAfter) return `Deleted. It goes for good with its logs on ${goneAt(h.deleteAfter)}.`;
 		const a = area(h.areaId);
 		return [
-			show('schedule') ? (h.direction === 'break' ? 'Break habit' : (isGroup(h.schedule) || !h.holds || !habits.some((x) => x.parentId === h.id) ? '' : 'Routine · ') + describeSchedule(h.schedule, data.habits.find((x) => x.id === h.parentId), h.variants)) : null,
+			show('schedule') ? (h.direction === 'break' ? 'Break habit' : h.tracker ? `Tracker · ${describeAsks(h.schedule)}` : (isGroup(h.schedule) || !h.holds || !habits.some((x) => x.parentId === h.id) ? '' : 'Routine · ') + describeSchedule(h.schedule, data.habits.find((x) => x.id === h.parentId), h.variants)) : null,
 			show('cue') ? cueText(h.cue) : null,
 			show('area') && a && view.group !== 'area' ? `${a.name}` : null,
 			show('consistency') && h.consistency !== null ? consistencyText({ consistency: h.consistency, days: h.consistencyDays }) : null,
-			show('last') && h.direction !== 'break' ? (h.lastDone ? `last done ${ago(h.lastDone)}` : 'not done yet') : null
+			show('last') && h.tracker ? (h.last ? `last ${h.last}` : 'nothing logged yet') : null,
+			show('last') && h.direction !== 'break' && !h.tracker ? (h.lastDone ? `last done ${ago(h.lastDone)}` : 'not done yet') : null
 		]
 			.filter(Boolean)
 			.join(' · ');

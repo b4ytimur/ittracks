@@ -22,7 +22,9 @@ export const taskTypeSchema = z.object({
 				/** In a row it is written after a ×. */
 				times: z.boolean().optional(),
 				/** Less is better. */
-				better: z.literal('less').optional()
+				better: z.literal('less').optional(),
+				/** A second log the same day replaces it (a weigh-in) instead of adding to it. */
+				sameDay: z.literal('replace').optional()
 			})
 		)
 		.max(20)
@@ -61,7 +63,8 @@ export function metricsFromType(t: TaskType, units: UnitTable, newId: () => stri
 			quick: true,
 			...noteDefaults(),
 			times: !!m.times,
-			better: m.better ?? null
+			better: m.better ?? null,
+			sameDay: m.sameDay ?? ('add' as const)
 		};
 	});
 }

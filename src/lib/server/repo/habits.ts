@@ -16,6 +16,7 @@ import { isFollow, isGroup, type Schedule } from '$lib/engine/schedule';
 import { fitFollow, standaloneSchedule } from '$lib/engine/follow';
 import { keepParent, makesCycle, type EarlierParent } from '$lib/engine/tree';
 import { keepValue, type EarlierArea } from '$lib/engine/dated';
+import { isTracker } from '$lib/engine/scoring';
 import { startFrom } from '../backfill';
 import { keepGoals, keepSlots, rejudge } from '../progress';
 import type { StreakRule } from '$lib/engine/streak';
@@ -64,6 +65,7 @@ export function listHabits(accountId: string, opts: { archived?: boolean; /** Al
 			id: habit.id,
 			name: habit.name,
 			direction: habit.direction,
+			scoring: habit.scoring,
 			schedule: habit.schedule,
 			cue: habit.cue,
 			areaId: habit.areaId,
@@ -98,6 +100,7 @@ export function getHabitForm(accountId: string, id: string): HabitForm | null {
 	return {
 		name: h.name,
 		direction: h.direction,
+		scoring: h.scoring,
 		notes: h.notes ?? '',
 		startDate: h.startDate,
 		schedule: h.schedule as ScheduleForm | null,
@@ -183,7 +186,7 @@ export function variantsLogged(habitId: string, tx: Tx | typeof db = db): Set<st
 /** A Habit's links to other rows must point at this account's rows, and stacking can't loop. */
 export function checkLinks(accountId: string, id: string | null, f: HabitForm): string | null {
 	const others = db
-		.select({ id: habit.id, cue: habit.cue, direction: habit.direction, schedule: habit.schedule, parentId: habit.parentId, archived: habit.archived })
+		.select({ id: habit.id, cue: habit.cue, direction: habit.direction, scoring: habit.scoring, schedule: habit.schedule, parentId: habit.parentId, archived: habit.archived })
 		.from(habit)
 		.where(eq(habit.accountId, accountId))
 		.all();
@@ -202,7 +205,7 @@ export function checkLinks(accountId: string, id: string | null, f: HabitForm): 
 	const parent = f.parentId ? others.find((o) => o.id === f.parentId) : undefined;
 	if (f.parentId) {
 		// A group, or a routine: a habit with its own schedule and no Tasks of its own.
-		if (!parent || parent.direction !== 'build' || !parent.schedule) return 'Pick a group or a routine to put this habit in';
+		if (!parent || parent.direction !== 'build' || !parent.schedule || isTracker(parent)) return 'Pick a group or a routine to put this habit in';
 		if (!isGroup(parent.schedule as Schedule) && hasSlots(parent.id))
 			return 'That habit has Tasks of its own, so it can’t hold habits yet. Pick a group or a habit with no Tasks';
 		if (parent.archived && others.find((o) => o.id === id)?.parentId !== f.parentId) return 'That habit is archived. Pick another one';
@@ -216,6 +219,8 @@ export function checkLinks(accountId: string, id: string | null, f: HabitForm): 
 		const theirs = new Set(variantIdsOf(parent.id));
 		if (f.schedule.on && !f.schedule.on.some((v) => theirs.has(v))) return `Pick at least one of the routine's Variants`;
 	}
+	if (id && isTracker(f) && others.some((o) => o.parentId === id && o.direction === 'build'))
+		return 'This habit has habits inside it, and a tracker counts nothing for them. Move them out first';
 	// A routine's Tasks are the habits inside it, for now.
 	if (id && f.variants.some((v) => v.slots.length) && !isGroup(f.schedule) && others.some((o) => o.parentId === id && o.direction === 'build'))
 		return 'This habit has habits inside it, so it has no Tasks of its own for now. Put these Tasks in a habit inside it';
@@ -437,6 +442,7 @@ export function saveHabit(
 		const values = {
 			name: f.name,
 			direction: f.direction,
+			scoring: isBreak ? ('habit' as const) : f.scoring,
 			notes: f.notes || null,
 			startDate: f.startDate,
 			schedule: isBreak ? null : f.schedule,

@@ -26,6 +26,8 @@ import { ActionError, canSeeHabit, requireScope, type Actor } from './actor';
 import { dayOf, findHabit, visibleHabits } from './day';
 import { listEvents } from './events';
 import { activeOptions, optionName, scoresOn } from '$lib/options';
+import { isTracker } from '$lib/engine/scoring';
+import { lastValue } from '../last-value';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 type Values = Record<string, unknown>;
@@ -174,7 +176,9 @@ export function describe(actor: Actor) {
 					? { routine: { inside: habits.filter((x) => x.parentId === h.id).map((x) => x.name), rule: groupRuleText(rollupRuleOf(h.schedule as Schedule)) } }
 					: {}),
 				...(h.parentId ? { inGroup: habits.find((x) => x.id === h.parentId)?.name ?? null } : {}),
-				streakRule: (h.streakRule as StreakRule).kind,
+				// A tracker keeps what is logged (weight, mood): nothing is done or missed, and it has no streak.
+				...(isTracker(h) ? { tracker: true } : {}),
+				streakRule: isTracker(h) ? null : (h.streakRule as StreakRule).kind,
 				variants: variants
 					.filter((v) => v.habitId === h.id)
 					.map((v) => ({
@@ -192,8 +196,9 @@ export function describe(actor: Actor) {
 								)
 							}))
 					})),
-				totals:
-					h.direction === 'build'
+				totals: isTracker(h)
+					? { logged: mine.filter((c) => c.status !== 'skipped' && c.status !== 'due').length }
+					: h.direction === 'build'
 						? { done: n('done'), missed: n('missed'), skipped: n('skipped') }
 						: { slips: slipRows.filter((x) => x.habitId === h.id).reduce((a, x) => a + x.count, 0) }
 			};
@@ -230,6 +235,8 @@ export function describe(actor: Actor) {
 					type: m.type,
 					unit: metricUnit(m),
 					perSet: m.repeats,
+					// A number logged again the same day: added to it, or put in its place (log_value without mode).
+					...(['number', 'count', 'duration'].includes(m.type) && !m.repeats ? { sameDay: m.sameDay } : {}),
 					// Removed from the Task after it was logged: its past values are still in the logs.
 					...(m.archived ? { archived: true } : {}),
 					// Each option with its id (logs store it) and its number, if it has one. An archived
@@ -604,10 +611,22 @@ export function today(actor: Actor) {
 	const pauses = pausesOf(actor.accountId);
 	const variantName = (id: string) => db.select({ name: variant.name }).from(variant).where(eq(variant.id, id)).get()?.name;
 	const visible = new Set(build.map((h) => h.id));
+	const trackers = build.filter((h) => isTracker(h));
+	const tracked = new Set(trackers.map((h) => h.id));
 	return {
 		...view,
+		// Trackers stand apart: they keep what is logged and are never due or missed.
+		build: view.build.filter((r) => !tracked.has(r.habitId)),
+		tracking: trackers
+			.filter((h) => !h.archived)
+			.map((h) => {
+				const last = lastValue(h.id, date);
+				// An open log with nothing in it yet is not a log.
+				const loggedToday = last?.date === date || view.build.some((r) => r.habitId === h.id && r.status !== 'due');
+				return { habitId: h.id, habit: h.name, loggedToday, last: last?.text ?? null };
+			}),
 		// As Today's Start early: a rotation resting today can start its next Variant (log_plan).
-		resting: view.resting.map((r) => {
+		resting: view.resting.filter((r) => !tracked.has(r.habitId)).map((r) => {
 			const h = build.find((x) => x.id === r.habitId);
 			const next = h && !pauseOn(pauses, h.id, date) ? nextEarly(h.id, h.schedule as ScheduleForm, date) : null;
 			const name = next ? variantName(next) : undefined;
@@ -680,6 +699,19 @@ export function habitSummary(actor: Actor, input: { from?: string | null; to?: s
 				}
 				const occs = P.occsByHabit.get(h.id) ?? [];
 				const inR = occs.filter((o) => o.date >= from && o.date <= to);
+				if (isTracker(h)) {
+					const logged = inR.filter((o) => o.status !== 'skipped' && o.status !== 'due');
+					return {
+						ref: `habit:${h.id}`,
+						habit: h.name,
+						direction: 'build',
+						tracker: true,
+						trackerMeans: 'it keeps what is logged: nothing is done or missed, so there is no rate or streak; use series or values for its numbers',
+						daysLogged: logged.length,
+						lastLogged: logged.at(-1)?.date ?? null,
+						last: lastValue(h.id, to)?.text ?? null
+					};
+				}
 				const n = (s: string) => inR.filter((o) => o.status === s).length;
 				const done = n('done');
 				const missed = n('missed');

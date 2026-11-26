@@ -11,6 +11,7 @@ import { isRealDate } from '$lib/engine/backfill';
 import { pauseOn } from '$lib/engine/pause';
 import type { ScheduleForm } from '$lib/forms';
 import { isGroup, type Schedule } from '$lib/engine/schedule';
+import { isTracker } from '$lib/engine/scoring';
 import { ActionError, canSeeHabit, type Actor } from './actor';
 
 export type HabitRow = typeof habit.$inferSelect;
@@ -93,6 +94,7 @@ export function buildDay(actor: Actor, habitRef: string, date?: string | null): 
 /**
  * The habit's log on that day, created when there is none. Today uses the schedule; a day
  * the schedule has nothing due needs `extra` (as "Start early" or logging a day off would).
+ * A tracker logs any day: its schedule only says when to ask.
  */
 export function occurrenceFor(actor: Actor, day: Day, opts: { extra?: boolean; variant?: string | null } = {}): OccRow {
 	const { habit: h, schedule, date, today } = day;
@@ -100,7 +102,7 @@ export function occurrenceFor(actor: Actor, day: Day, opts: { extra?: boolean; v
 		const occ = ensureToday(actor.accountId, h.id, schedule, today);
 		if (occ) return db.select().from(occurrence).where(eq(occurrence.id, occ.id)).get()!;
 		if (pauseOn(pausesOf(actor.accountId), h.id, today)) throw new ActionError('not_due', `${h.name} is paused today.`);
-		if (!opts.extra) throw new ActionError('not_due', `${h.name} isn't due today. To log it anyway, send extra: true (or add &extra=1 to a link).`);
+		if (!opts.extra && !isTracker(h)) throw new ActionError('not_due', `${h.name} isn't due today. To log it anyway, send extra: true (or add &extra=1 to a link).`);
 	} else {
 		const existing = db.select().from(occurrence).where(and(eq(occurrence.habitId, h.id), eq(occurrence.date, date))).get();
 		if (existing) return existing;

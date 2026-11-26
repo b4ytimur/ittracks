@@ -42,7 +42,7 @@ describe('views', () => {
 		for (const t of TEMPLATES) {
 			const v = fromTemplate(t.id);
 			expect(viewSettings.safeParse(v).success).toBe(true);
-			expect(sectionOrder(v).map((s) => s.key).sort()).toEqual(['breaking', 'due', 'paused', 'prep', 'resting']);
+			expect(sectionOrder(v).map((s) => s.key).sort()).toEqual(['breaking', 'due', 'paused', 'prep', 'resting', 'tracking']);
 		}
 	});
 

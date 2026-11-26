@@ -162,6 +162,13 @@
       "when": 1795643469675,
       "tag": "0022_area_history",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1795676251051,
+      "tag": "0023_scoring",
+      "breakpoints": true
     }
   ]
 }

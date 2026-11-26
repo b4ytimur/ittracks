@@ -57,6 +57,8 @@ export const STATS = {
 	consistency: 'Consistency, last 30 days',
 	week: 'Done this week',
 	total: 'Times done',
+	/** What its main field logged last, and how far it moved in a week: "82.4 kg · −0.6 kg in a week". */
+	last: 'Last value',
 	none: 'Nothing'
 } as const;
 export type StatKey = keyof typeof STATS;
@@ -105,6 +107,8 @@ export type SavedView = z.infer<typeof savedView>;
 
 export const SECTIONS = {
 	due: 'Due today',
+	/** Trackers: what you keep a log of, never due or missed (engine/scoring.ts). */
+	tracking: 'Tracking',
 	breaking: 'Breaking and limiting',
 	prep: 'Prepare for tomorrow',
 	paused: 'Paused',
@@ -242,6 +246,7 @@ export const TEMPLATES: ViewTemplate[] = [
 			today: {
 				sections: [
 					{ key: 'due', show: true },
+					{ key: 'tracking', show: true },
 					{ key: 'breaking', show: true },
 					{ key: 'prep', show: false },
 					{ key: 'paused', show: false },
@@ -269,6 +274,7 @@ export const TEMPLATES: ViewTemplate[] = [
 				lines: ['cue', 'headline', 'levels', 'progression'],
 				sections: [
 					{ key: 'due', show: true },
+					{ key: 'tracking', show: true },
 					{ key: 'resting', show: true },
 					{ key: 'prep', show: true },
 					{ key: 'breaking', show: true },
@@ -290,6 +296,7 @@ export const TEMPLATES: ViewTemplate[] = [
 				sections: [
 					{ key: 'breaking', show: true },
 					{ key: 'due', show: true },
+					{ key: 'tracking', show: true },
 					{ key: 'prep', show: false },
 					{ key: 'paused', show: true },
 					{ key: 'resting', show: true }

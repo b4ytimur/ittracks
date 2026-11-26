@@ -19,6 +19,7 @@ import { DEFAULT_TRIGGERS, NOTE_MAX, type ScheduleForm } from '$lib/forms';
 import { optionName } from '$lib/options';
 import { canRepeat, createOccurrence, history, pausesOf, pickForVariant, recount, reopen, scheduleAt, settle } from './today';
 import { getSettings } from './settings';
+import { counts } from '$lib/engine/scoring';
 
 type HabitRow = typeof habit.$inferSelect;
 type Status = 'due' | 'done' | 'skipped' | 'missed';
@@ -81,11 +82,13 @@ const rowOn = (habitId: string, date: string) =>
 const entryCount = (occurrenceId: string) =>
 	db.select({ id: entry.id }).from(entry).where(eq(entry.occurrenceId, occurrenceId)).all().length;
 
-/** Everything about one past day: build habits that were due, the rest, and slips. */
+/** Everything about one past day: build habits that were due, the rest, trackers, and slips. */
 export function loadDay(accountId: string, date: string, today: string) {
 	const pauses = pausesOf(accountId);
 	const due: PastItem[] = [];
 	const other: PastItem[] = [];
+	/** Trackers: never due or missed, so they stand apart from the day's count. */
+	const tracking: PastItem[] = [];
 	const breaking: PastBreakItem[] = [];
 	const later: LaterItem[] = [];
 
@@ -117,7 +120,8 @@ export function loadDay(accountId: string, date: string, today: string) {
 		// The day is judged by the plan it had, even if the schedule changed since.
 		const sAt = scheduleAt(h, date);
 		const pd = followDue(h.id, sAt, today);
-		const wasDue = !paused && !!dueOn(sAt, past, date, pd);
+		// A tracker's schedule only says when to ask: nothing was ever due.
+		const wasDue = counts(h) && !paused && !!dueOn(sAt, past, date, pd);
 		const all = db
 			.select({ id: variant.id, name: variant.name, archived: variant.archived })
 			.from(variant)
@@ -141,9 +145,9 @@ export function loadDay(accountId: string, date: string, today: string) {
 			quickDone: h.quickDone,
 			levels: h.levels?.enabled ? { minimum: h.levels.minimum, target: h.levels.target, stretch: h.levels.stretch } : null
 		};
-		(occ || wasDue ? due : other).push(item);
+		(!counts(h) ? tracking : occ || wasDue ? due : other).push(item);
 	}
-	return { due, other, breaking, later };
+	return { due, other, tracking, breaking, later };
 }
 
 /**
@@ -171,7 +175,7 @@ export function startFrom(h: HabitRow, date: string) {
 }
 
 /**
- * Build habits that were due on `date` and have no log: a miss, or a day the app wasn't
+ * Build habits (not trackers) that were due on `date` and have no log: a miss, or a day the app wasn't
  * opened. Habits that carry over (frequency targets, waiting rotations) never miss a day,
  * so they are left out.
  */
@@ -179,7 +183,8 @@ export function unloggedOn(accountId: string, date: string): string[] {
 	const pauses = pausesOf(accountId);
 	return activeHabits(accountId, date)
 		.filter((h) => {
-			if (h.direction !== 'build' || !h.schedule) return false;
+			// A tracker asks, but a day it wasn't logged is nothing to catch up on.
+			if (h.direction !== 'build' || !h.schedule || !counts(h)) return false;
 			const schedule = scheduleAt(h, date);
 			if (carriesOver(schedule, date) || pauseOn(pauses, h.id, date)) return false;
 			const occ = rowOn(h.id, date);

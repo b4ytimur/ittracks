@@ -1,7 +1,7 @@
 // The sections of a habit's page and their order, the same on every habit of a kind.
 export const SECTIONS = { what: 'What you do', counts: 'How it counts', slip: 'When you slip', keeps: 'What keeps you at it', about: 'About' } as const;
 export type Section = keyof typeof SECTIONS;
-export const KINDS = { build: 'habit', group: 'group', break: 'habit you break' } as const;
+export const KINDS = { build: 'habit', group: 'group', track: 'tracker', break: 'habit you break' } as const;
 export type Kind = keyof typeof KINDS;
 
 const ALL = Object.keys(SECTIONS) as Section[];
@@ -17,5 +17,6 @@ export function movedSections(full: Section[], shown: Section[]): Section[] {
 export const LINES_FOR = {
 	build: ['when', 'remind', 'levels', 'streak', 'quick', 'raise', 'identity', 'treat', 'reward', 'prep', 'reframe', 'notes', 'inside'],
 	group: ['when', 'streak', 'identity', 'treat', 'reward', 'prep', 'reframe', 'notes', 'inside'],
+	track: ['when', 'remind', 'identity', 'prep', 'reframe', 'notes'],
 	break: ['instead', 'cost', 'identity', 'reframe', 'notes']
 } as const satisfies Record<Kind, readonly string[]>;

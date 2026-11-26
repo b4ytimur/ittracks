@@ -41,7 +41,7 @@ export const load: PageServerLoad = ({ locals, params, cookies }) => {
 	if (date >= today) redirect(303, '/');
 	const settings = getSettings(accountId);
 	const day = loadDay(accountId, date, today);
-	const occIds = [...day.due, ...day.other].flatMap((x) => (x.occurrence ? [x.occurrence.id] : []));
+	const occIds = [...day.due, ...day.other, ...day.tracking].flatMap((x) => (x.occurrence ? [x.occurrence.id] : []));
 	return {
 		date,
 		today,

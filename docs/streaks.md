@@ -47,10 +47,14 @@ Below the Minimum is always a miss once the day is over. What you logged always 
 
 A [group or routine](groups-and-routines.md) has its own streak, counted from the habits inside it: a day is done when enough of them are done, and counts at the Minimum when its Minimum number is reached. Each habit inside keeps its own streak as well.
 
+## Trackers
+
+A [tracker](habits.md#trackers) has no streak and no missed days: it only keeps what you log. Its headline on Today is its last value.
+
 ## Break habits
 
 A break habit has no streak rule. Its counter shows whole days since the last slip (or since **Counting from**). A slip sets it back to 0. With a limit, it shows days (or weeks) in a row within the limit. Its Stats show the longest run.
 
 ## The number on Today
 
-Each habit shows one headline number on Today: **Streak**, **Consistency, last 30 days**, **Done this week**, **Times done** or **Nothing**. Consistency says how many days it covers: "86% in 30 days", or "100% in 2 days" for a habit or group that is newer than that. Pick the default for all habits, or one per habit, in Today's [edit mode](views-and-edit-mode.md#edit-mode).
+Each habit shows one headline number on Today: **Streak**, **Consistency, last 30 days**, **Done this week**, **Times done**, **Last value** or **Nothing**. A tracker shows **Last value** unless you pick another for it. Consistency says how many days it covers: "86% in 30 days", or "100% in 2 days" for a habit or group that is newer than that. Pick the default for all habits, or one per habit, in Today's [edit mode](views-and-edit-mode.md#edit-mode).

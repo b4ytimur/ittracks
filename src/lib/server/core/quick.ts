@@ -75,7 +75,7 @@ export function quickLog(actor: Actor, habitRef: string, p: QuickParams): QuickO
 		return { habit: h.name, message: `${h.name}: ${count === 1 ? 'slip' : `${count} slips`} logged (${r.slipsThatDay} that day)`, needsInput: false, occurrenceId: null, result: r };
 	}
 	if (p.value !== null) {
-		const r = logValue(actor, { habit: h.id, date: p.date, value: p.value, field: p.field, task: p.task, mode: p.mode ?? 'add', extra: p.extra });
+		const r = logValue(actor, { habit: h.id, date: p.date, value: p.value, field: p.field, task: p.task, mode: p.mode ?? undefined, extra: p.extra });
 		const line = r.progress ?? `${r.field.split(': ').pop()} ${r.value}`;
 		return { habit: h.name, message: `${h.name}: ${line}${r.status === 'done' ? ' · done' : ''}`, needsInput: false, occurrenceId: r.occurrenceId, result: r };
 	}

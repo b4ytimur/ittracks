@@ -6,6 +6,7 @@ import { PACKS } from '../packs';
 import { measuresOf } from './catalog-of';
 import { compile, fieldsOf, FormulaError } from './formula';
 import { fits, groupsOf, type DsHabit, type DsMetric, type DsTask, type Prepared } from './engine';
+import { counts } from '../engine/scoring';
 
 type In = Omit<StatCardInput, 'id'>;
 const card = (c: In): StatCard => makeCard(c);
@@ -189,14 +190,15 @@ function habitCardsOf(P: Prepared, h: DsHabit): StatCard[] {
 			out.splice(1, 0, card({ title: 'Money saved', what: { source: 'money' }, perLog: 'saved', overTime: 'sum', range: 'all', filter, look: { chart: 'tile' } }));
 		return out;
 	}
-	const out = [
+	// A tracker is never done or missed: its tab is what it logged.
+	const out = !counts(h) ? [] : [
 		card({ title: 'Streak', what: { source: 'outcomes' }, perLog: 'done', filter, look: { chart: 'streak', size: 'wide' } }),
 		card({ title: 'Consistency', what: { source: 'outcomes' }, perLog: 'rate', overTime: 'avg', range: '30d', filter, compare: { previous: true }, look: { chart: 'tile' } }),
 		card({ title: 'Done this week', what: { source: 'outcomes' }, perLog: 'done', overTime: 'sum', range: 'week', filter, compare: { previous: true }, look: { chart: 'tile' } })
 	];
 	if (hasTargets(P, h.id))
 		out.push(card({ title: 'Target met', what: { source: 'outcomes' }, perLog: 'targetMet', overTime: 'avg', range: '30d', filter, look: { chart: 'tile' } }));
-	out.push(card({ title: 'Calendar', what: { source: 'outcomes' }, perLog: 'done', overTime: 'sum', range: '90d', filter, look: { chart: 'calendar', size: 'full' } }));
+	if (counts(h)) out.push(card({ title: 'Calendar', what: { source: 'outcomes' }, perLog: 'done', overTime: 'sum', range: '90d', filter, look: { chart: 'calendar', size: 'full' } }));
 	const tasks = habitTasks(P, h.id);
 	const rows = tasks.filter((t) => inRows(P, t));
 	if (rows.length > 2) {

@@ -6,6 +6,7 @@ import { areaOn, valuesEver, type EarlierArea } from '../engine/dated';
 import { daysSinceSlip, longestRun, streak, type Level, type Mark, type StreakRule } from '../engine/streak';
 import { chainCells } from '../engine/chain';
 import { withinOn, withinStreak, periodWithin, type Limit } from '../engine/limit';
+import { counts, type Scoring } from '../engine/scoring';
 import { canRead, compile, countsSets, evaluate, FormulaError, type Lookup } from './formula';
 import { excerpt } from '../markdown';
 import { inReadingOrder, joinRow } from '../rowtext';
@@ -34,6 +35,8 @@ export interface DsHabit {
 	id: string;
 	name: string;
 	direction: 'build' | 'break';
+	/** A tracker's logs are records, never done or missed: outcome and streak cards leave it out (engine/scoring.ts). */
+	scoring?: Scoring;
 	areaId: string | null;
 	/** Its Areas before a change: a day counts in the Area it had then (engine/dated.ts). */
 	earlierAreas?: EarlierArea[] | null;
@@ -833,7 +836,7 @@ export function pointsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range): 
 
 	if (src === 'outcomes') {
 		for (const h of P.ds.habits) {
-			if (h.direction !== 'build' || !sc.habitOnlyOk(h, 'ever')) continue;
+			if (h.direction !== 'build' || !counts(h) || !sc.habitOnlyOk(h, 'ever')) continue;
 			for (const o of P.occsByHabit.get(h.id) ?? []) {
 				if (!inRange(o.date) || o.status === 'due' || !sc.areaOk(h, null, o.date)) continue;
 				let v: number | null = null;
@@ -1576,7 +1579,7 @@ function streaksFor(card: StatCard, P: Prepared, ctx: Ctx): NonNullable<CardResu
 	const sc = scope(card, P, ctx);
 	// Slips cards show breaking habits only; habit outcome cards show both kinds.
 	const hs = P.ds.habits
-		.filter((h) => !h.archived && sc.habitOnlyOk(h) && (card.what.source !== 'slips' || h.direction === 'break'))
+		.filter((h) => !h.archived && counts(h) && sc.habitOnlyOk(h) && (card.what.source !== 'slips' || h.direction === 'break'))
 		.slice(0, card.look.top);
 	const from = addDays(ctx.today, -27);
 	return hs.map((h) => {

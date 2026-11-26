@@ -76,6 +76,7 @@ export function loadDataset(accountId: string, tz?: string): Dataset {
 			id: h.id,
 			name: h.name,
 			direction: h.direction,
+			scoring: h.scoring,
 			areaId: h.areaId,
 			earlierAreas: h.earlierAreas ?? null,
 			startDate: h.startDate,

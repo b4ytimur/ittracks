@@ -19,6 +19,16 @@ export const lengthText = (length: number, unit: 'day' | 'week') => `${length} $
  * with the parent's name and Variant names; phases read better with the habit's own Variant
  * names (`own`), which they show when there is more than one.
  */
+/**
+ * A tracker's days, said as what they are: when it asks (its reminder, and the plan Today shows),
+ * since it can be logged any day and nothing is ever due. "Asks every day", "Logged any day".
+ */
+export function describeAsks(s: ScheduleForm | PlainScheduleForm | null): string {
+	if (!s || (s.kind === 'weekly' && !Object.keys(s.days).length)) return 'Logged any day';
+	const text = describeSchedule(s);
+	return `Asks ${text.charAt(0).toLowerCase()}${text.slice(1)}`;
+}
+
 export function describeSchedule(
 	s: ScheduleForm | PlainScheduleForm | null,
 	parent?: { name: string; variants?: Named[] },

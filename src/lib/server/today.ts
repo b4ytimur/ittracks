@@ -43,6 +43,8 @@ import { pauseOn, type Pause } from '$lib/engine/pause';
 import { carriesOver, lastTimeFor } from '$lib/engine/backfill';
 import { missedDaysOver, recountFrom, scheduleOn, type EarlierSchedule, type Unlogged } from '$lib/engine/unlogged';
 import { habitStats, type HabitStats } from '$lib/engine/stats';
+import { counts } from '$lib/engine/scoring';
+import { lastValue } from './last-value';
 import type { Progress } from '$lib/engine/progress';
 import { finishAs, progressFor, stepsOf, verdictsFor } from './progress';
 import { isTick } from '$lib/engine/groups';
@@ -789,6 +791,8 @@ export interface TodayItem {
 	/** Paused until this date (inclusive), for habits in a pause. */
 	pausedUntil: string | null;
 	stats: HabitStats;
+	/** What its main field logged last, for the "Last value" headline: "82.4 kg · −0.6 kg in a week". */
+	last: string | null;
 	/** How far along today's log is: "3 of 6 glasses" (with +1 on Today) or "2 of 4 steps". */
 	progress: Progress | null;
 	/** The group this habit sits in, when that group is active. */
@@ -856,6 +860,8 @@ export function loadToday(accountId: string, today: string) {
 
 	let build: TodayItem[] = [];
 	const todayRows: Parameters<typeof progressFor>[0] = [];
+	/** Trackers: they keep what is logged and never count, so they stand apart from what is due. */
+	const tracking: TodayItem[] = [];
 	const resting: TodayItem[] = [];
 	const paused: TodayItem[] = [];
 	const breaking: BreakItem[] = [];
@@ -976,7 +982,8 @@ export function loadToday(accountId: string, today: string) {
 			.orderBy(asc(occurrence.date))
 			.all();
 		const rule = h.streakRule as StreakRule;
-		const st = streak(marks, rule, { minimumCounts: h.minimumCounts, today });
+		const counted = counts(h);
+		const st = counted ? streak(marks, rule, { minimumCounts: h.minimumCounts, today }) : null;
 		const anchor = h.cue?.afterHabitId ? habits.find((x) => x.id === h.cue?.afterHabitId) : null;
 
 		const item: TodayItem = {
@@ -994,8 +1001,8 @@ export function loadToday(accountId: string, today: string) {
 						level: occ.level ?? null
 					}
 				: null,
-			streak: describeStreak(st, rule),
-			atRisk: st.atRisk,
+			streak: st ? describeStreak(st, rule) : '',
+			atRisk: !!st?.atRisk,
 			earlyVariant: null,
 			multiVariant: variants.length > 1,
 			cue: {
@@ -1037,7 +1044,9 @@ export function loadToday(accountId: string, today: string) {
 			canRepeat: canRepeat(h.id, { id: occ?.id ?? null, date: today, variantId: occ?.variantId ?? null }),
 			areaId: h.areaId,
 			pausedUntil: pauseOn(allPauses, h.id, today)?.end ?? null,
-			stats: habitStats(marks, today),
+			// A tracker's logs are never done or missed, so it has no share of days done.
+			stats: counted ? habitStats(marks, today) : { ...habitStats(marks, today), consistency: null },
+			last: group ? null : (lastValue(h.id, today)?.text ?? null),
 			progress: null,
 			parentId: isParent(h.parentId) ? h.parentId : null,
 			group: group
@@ -1052,7 +1061,8 @@ export function loadToday(accountId: string, today: string) {
 					}
 				: null
 		};
-		if (occ) {
+		if (!counted) tracking.push(item);
+		else if (occ) {
 			build.push(item);
 			todayRows.push(occ);
 		}
@@ -1079,7 +1089,7 @@ export function loadToday(accountId: string, today: string) {
 	const doneToday = new Set(build.filter((b) => b.occurrence?.status === 'done').map((b) => b.habitId));
 	for (const b of build)
 		b.upNext = !!b.afterHabitId && doneToday.has(b.afterHabitId) && b.occurrence?.status === 'due';
-	return { build, resting, paused, breaking, week: weekStrip(accountId, today) };
+	return { build, tracking, resting, paused, breaking, week: weekStrip(accountId, today) };
 }
 
 /** Done and scheduled on each of the last seven days, today last: the strip under Today's date (TS.5), as History's. */
@@ -1089,8 +1099,8 @@ export function weekStrip(accountId: string, today: string) {
 		.select({ date: occurrence.date, status: occurrence.status })
 		.from(occurrence)
 		.innerJoin(habit, eq(occurrence.habitId, habit.id))
-		// A group's day is already counted in the habits inside it.
-		.where(and(eq(habit.accountId, accountId), isNull(occurrence.rollup), gte(occurrence.date, monday), lte(occurrence.date, addDays(monday, 6))))
+		// A group's day is already counted in the habits inside it, and a tracker's never counts.
+		.where(and(eq(habit.accountId, accountId), eq(habit.scoring, 'habit'), isNull(occurrence.rollup), gte(occurrence.date, monday), lte(occurrence.date, addDays(monday, 6))))
 		.all();
 	return Array.from({ length: 7 }, (_, i) => {
 		const date = addDays(monday, i);

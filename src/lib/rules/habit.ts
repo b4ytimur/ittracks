@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { DEFAULT_TRIGGERS, streakRuleForm, type HabitForm } from '../forms';
 import { variantsIn, type Schedule } from '../engine/schedule';
+import { isTracker } from '../engine/scoring';
 import type { FieldEditor, FieldSpec } from '../bulk/fields';
 import {
 	check,
@@ -31,7 +32,10 @@ const brk = (h: HabitForm) => h.direction === 'break';
 /** A group: a build habit whose days come from the habits inside it (G rules). */
 const isGroupForm = (h: HabitForm) => h.schedule?.kind === 'group';
 const notGroup = (h: HabitForm) => !isGroupForm(h);
+/** A tracker (engine/scoring.ts): it keeps what you log, and nothing it logs is done or missed. */
+const notTracker = (h: HabitForm) => !isTracker(h);
 const BUILD_ONLY = 'Only build habits use this';
+const TRACKER = 'A tracker only keeps what you log, so nothing is done or missed and it doesn’t use this';
 const BREAK_ONLY = 'Only break habits use this';
 const NOT_GROUP = "A group's days come from the habits inside it, so it doesn't use this";
 
@@ -61,13 +65,16 @@ const hasNumberTarget = (h: HabitForm) => h.variants.some((v) => v.slots.some((s
 export const habitRules = defineRules<HabitForm, HabitCtx>({
 	name: independent,
 	direction: independent,
+	// T1: a group's days come from the habits inside it, so it is always judged.
+	scoring: [onlyWhen(build, BUILD_ONLY, 'habit'), onlyWhen(notGroup, NOT_GROUP, 'habit')],
 	notes: independent,
 	startDate: independent,
 	areaId: independent,
 	identityIds: independent,
 	reframe: independent,
 	// G1: only build habits sit in groups and routines for now (break habits log slips, not days).
-	parentId: [onlyWhen(build, BUILD_ONLY, null)],
+	// T4: a group or routine is judged from what is inside it, and a tracker is never judged.
+	parentId: [onlyWhen(build, BUILD_ONLY, null), check((h) => isTracker(h) && !!h.parentId, 'A tracker counts nothing, so it can’t sit in a group or routine')],
 
 	// B1: a break habit has no Schedule or Variants. G2: nor does a group; the habits inside it do.
 	variants: [onlyWhen(build, BUILD_ONLY, []), onlyWhen(notGroup, 'A group has no Tasks of its own; the habits inside it do', [])],
@@ -148,6 +155,8 @@ export const habitRules = defineRules<HabitForm, HabitCtx>({
 	// L1 is the streakRule type itself. S5: grace that can never run out.
 	streakRule: [
 		onlyWhen(build, BUILD_ONLY, { kind: 'neverTwice' }),
+		// T2: a tracker has no streak, Levels, short days, misses, one-tap targets, raises or jar.
+		onlyWhen(notTracker, TRACKER, { kind: 'neverTwice' }),
 		check((h) => {
 			if (h.streakRule.kind !== 'grace') return false;
 			const n = timesPer(h, h.streakRule.period);
@@ -156,19 +165,21 @@ export const habitRules = defineRules<HabitForm, HabitCtx>({
 	],
 	// L2, L3: Levels.
 	// G4: a group's Minimum is a number of habits, set on its schedule.
-	'levels.enabled': [onlyWhen(build, BUILD_ONLY, false), onlyWhen(notGroup, NOT_GROUP, false)],
+	'levels.enabled': [onlyWhen(build, BUILD_ONLY, false), onlyWhen(notGroup, NOT_GROUP, false), onlyWhen(notTracker, TRACKER, false)],
 	'levels.minimum': [onlyWhen((h) => build(h) && h.levels.enabled, 'Turn on Levels first', '')],
 	'levels.target': [onlyWhen((h) => build(h) && h.levels.enabled, 'Turn on Levels first', '')],
 	'levels.stretch': [onlyWhen((h) => build(h) && h.levels.enabled, 'Turn on Levels first', '')],
 	// A day short of its target: counts at the Minimum (any log without Levels), or only in full.
-	minimumCounts: [onlyWhen(build, BUILD_ONLY, true)],
+	minimumCounts: [onlyWhen(build, BUILD_ONLY, true), onlyWhen(notTracker, TRACKER, true)],
 	// Days nobody logged: break habits count slips, not days, so only build habits choose.
-	unlogged: [onlyWhen(build, BUILD_ONLY, 'missed'), onlyWhen(notGroup, NOT_GROUP, 'missed')],
-	quickDone: [onlyWhen(build, BUILD_ONLY, false), onlyWhen(notGroup, NOT_GROUP, false)],
+	// A tracker's days nobody logged are never missed: settling leaves them out like any ignored day.
+	unlogged: [onlyWhen(build, BUILD_ONLY, 'missed'), onlyWhen(notGroup, NOT_GROUP, 'missed'), onlyWhen(notTracker, TRACKER, 'ignore')],
+	quickDone: [onlyWhen(build, BUILD_ONLY, false), onlyWhen(notGroup, NOT_GROUP, false), onlyWhen(notTracker, TRACKER, false)],
 	// L4: progression raises targets, so it needs some.
 	progression: [
 		onlyWhen(build, BUILD_ONLY, null),
 		onlyWhen(notGroup, NOT_GROUP, null),
+		onlyWhen(notTracker, TRACKER, null),
 		check((h) => !!h.progression && build(h) && !hasNumberTarget(h), 'Progression needs a number target on at least one Slot')
 	],
 	'bundle.reward': [onlyWhen(build, BUILD_ONLY, '')],
@@ -176,7 +187,7 @@ export const habitRules = defineRules<HabitForm, HabitCtx>({
 	prep: [onlyWhen(build, BUILD_ONLY, [])],
 	'reward.celebrate': [onlyWhen(build, BUILD_ONLY, false)],
 	'reward.message': [onlyWhen(build, BUILD_ONLY, '')],
-	'reward.jar': [onlyWhen(build, BUILD_ONLY, null)],
+	'reward.jar': [onlyWhen(build, BUILD_ONLY, null), onlyWhen(notTracker, TRACKER, null)],
 
 	// B3: break habits only. B4 (quit vs limit) is the nullable limit itself.
 	'ifThen.when': [onlyWhen(brk, BREAK_ONLY, '')],
@@ -226,7 +237,8 @@ export const slotRules = defineRules<SlotForm, SlotCtx>({
 			null
 		)
 	],
-	targets: independent,
+	// T2: a tracker has no goal to aim for.
+	targets: [onlyWhen((_s, c) => notTracker(c.habit), TRACKER, {})],
 	minTargets: [onlyWhen((_s, c) => c.habit.levels.enabled, 'Turn on Levels first', {})],
 	stretchTargets: [onlyWhen((_s, c) => c.habit.levels.enabled, 'Turn on Levels first', {})]
 });
@@ -279,6 +291,8 @@ export const habitPast = definePolicies<HabitForm>({
 	name: display(),
 	// Build habits log days and break habits log slips: switching would hide one or the other.
 	direction: locked('This habit has logs. Build habits keep days and break habits keep slips, so switching would hide them. Make a new habit instead'),
+	// Habit and tracker keep the same days, so switching only judges them again.
+	scoring: recompute('What you logged stays. Streaks, misses and counts are worked out again; a tracker drops targets, Levels, the streak rule and raises'),
 	notes: display(),
 	startDate: recompute('Days before a later start stop counting; an earlier start counts the days in between'),
 	areaId: display(),

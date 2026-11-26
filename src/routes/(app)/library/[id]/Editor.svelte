@@ -164,7 +164,7 @@
 			name: typeName,
 			restTimerEnabled: t.restTimerEnabled,
 			words: { rowOne: t.rowOne, rowMany: t.rowMany, betweenName: t.betweenName },
-			metrics: t.metrics.map((m) => ({ name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, step: m.step, ...(m.times ? { times: true } : {}), ...(m.better === 'less' ? { better: 'less' } : {}) }))
+			metrics: t.metrics.map((m) => ({ name: m.name, type: m.type, unit: m.unit, repeats: m.repeats, step: m.step, ...(m.times ? { times: true } : {}), ...(m.better === 'less' ? { better: 'less' } : {}), ...(m.sameDay === 'replace' ? { sameDay: 'replace' } : {}) }))
 		})
 	);
 
@@ -571,6 +571,16 @@
 						{#if m.repeats}<label class="grow" style="color: var(--ink)"><input type="checkbox" bind:checked={m.times} /> Written after a ×, as in 60 kg × 8</label>{/if}
 						<label class="grow" style="color: var(--ink)"><input type="checkbox" checked={m.better === 'less'} onchange={(e) => (m.better = e.currentTarget.checked ? 'less' : null)} /> Less is better</label>
 					</div>
+					{#if !m.repeats}
+						<!-- Rule T3: a quick log or the AI logging it a second time in a day. -->
+						<label
+							>A second quick log the same day
+							<select bind:value={m.sameDay}>
+								<option value="add">Adds to it, like glasses of water</option>
+								<option value="replace">Replaces it, like a weigh-in</option>
+							</select>
+						</label>
+					{/if}
 				{/if}
 				<div class="row">
 					{#if m.type === 'checkbox' || (m.type === 'text' && m.long)}

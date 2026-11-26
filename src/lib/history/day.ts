@@ -1,4 +1,5 @@
 // A day in numbers and words, from one place, so a count, a mark and a streak's words can't disagree.
+import { counts } from '../engine/scoring';
 
 export interface DayLog {
 	status: string;
@@ -6,19 +7,23 @@ export interface DayLog {
 	extra: boolean;
 	/** A group's or routine's day, judged from the habits inside it (they are counted instead). */
 	rollup?: unknown;
+	/** Its habit's scoring: a tracker's log is never done or missed, so it counts neither way. */
+	scoring?: string | null;
 }
 
 /**
- * Done of what was due: a skip was not due, a log on a day off changes nothing, and a group or
- * routine counts through the habits inside it, as Today and the Day page count.
+ * Done of what was due: a skip was not due, a log on a day off changes nothing, a tracker's log
+ * never counts, and a group or routine counts through the habits inside it, as Today and the Day
+ * page count.
  */
 export function dayCount(logs: DayLog[]): { done: number; of: number } {
-	const due = logs.filter((o) => !o.extra && !o.rollup && (o.status === 'done' || o.status === 'missed' || o.status === 'due'));
+	const due = logs.filter((o) => counts(o) && !o.extra && !o.rollup && (o.status === 'done' || o.status === 'missed' || o.status === 'due'));
 	return { done: due.filter((o) => o.status === 'done').length, of: due.length };
 }
 
 /** How a day looks in a strip: all done, some of it, none of it, only skipped, or nothing to say. */
-export function dayMark(logs: DayLog[], today = false): 'done' | 'partial' | 'missed' | 'skipped' | 'due' | 'none' {
+export function dayMark(all: DayLog[], today = false): 'done' | 'partial' | 'missed' | 'skipped' | 'due' | 'none' {
+	const logs = all.filter(counts);
 	const c = dayCount(logs);
 	if (!c.of) return logs.some((o) => o.status === 'done') ? 'done' : logs.some((o) => o.status === 'skipped') ? 'skipped' : 'none';
 	if (c.done === c.of) return 'done';

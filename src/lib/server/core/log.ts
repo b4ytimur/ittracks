@@ -438,7 +438,7 @@ function finishIf(actor: Actor, occ: OccRow, finish: 'auto' | 'yes' | 'no', how:
 
 /**
  * Log one value: "add 250 ml of water", "20 minutes of Spanish", "mood: Good". Numbers are
- * added to what is logged so far unless `mode` is set. With no field named, it is the
+ * added to what is logged so far, or replace it, as `mode` says or else the field's sameDay. With no field named, it is the
  * habit's one number with a target (as +1 on Today uses), or its only number.
  */
 export function logValue(
@@ -487,7 +487,8 @@ export function logValue(
 		const mine = db.select().from(entry).where(eq(entry.occurrenceId, occ.id)).orderBy(asc(entry.sortOrder)).all();
 		const summary = (place(positionsOf(occ), mine).at.get(t.path) ?? []).find((e) => (e.values as Values)._summary);
 		const before = summary ? (summary.values as Values)[m.id] : undefined;
-		if (numeric(m.type) && (input.mode ?? 'add') === 'add' && typeof before === 'number')
+		// Without a mode, the field says: a second coffee adds up, a second weigh-in replaces the first.
+		if (numeric(m.type) && (input.mode ?? m.sameDay ?? 'add') === 'add' && typeof before === 'number')
 			value = Math.round((before + (value as number)) * 1000) / 1000;
 		db.transaction((tx) => {
 			if (summary) tx.update(entry).set({ values: { ...(summary.values as Values), [m.id]: value }, path: t.path }).where(eq(entry.id, summary.id)).run();

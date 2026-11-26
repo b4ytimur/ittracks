@@ -48,6 +48,7 @@ Options per field:
 - **Give each option a number, so Stats can chart it** (choices): mood 5 to 1.
 - **Several lines (Markdown), for a journal entry or a reflection** (text), with optional **Starter text** and **Prompts**. See [Notes and journal](notes-and-journal.md#writing-fields).
 - **When logging**: **Start with** last time's value, the target (numbers only) or blank; and the **+/− step** for the buttons on the log screen.
+- **A second quick log the same day** (numbers logged once per log): **Adds to it**, like glasses of water, or **Replaces it**, like a weigh-in. It applies to [quick-log links](integrations.md#quick-log-links) and to an AI assistant logging a value; the log screen always shows the day's value to change.
 - **Required before Finish**.
 - **Show on quick logs**: the field appears on the short [quick log](integrations.md#quick-log-links). Required fields always show there.
 

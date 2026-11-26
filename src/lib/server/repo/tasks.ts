@@ -106,6 +106,7 @@ export function getTaskForm(accountId: string, id: string): TaskForm | null {
 				repeats: m.repeats,
 				times: m.times,
 				better: m.better,
+				sameDay: m.sameDay,
 				// Archived options stay with past logs; the editor offers the rest.
 				choices: activeOptions(m.choices).map(({ id, name }) => ({ id, name })),
 				prefill: m.prefill,
@@ -367,6 +368,7 @@ export function saveTask(
 				repeats: m.repeats,
 				times: m.times,
 				better: m.better,
+				sameDay: m.sameDay,
 				choices,
 				sortOrder: i,
 				prefill: m.prefill,
