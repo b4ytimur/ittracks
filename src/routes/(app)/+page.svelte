@@ -298,8 +298,12 @@
 		const ids = [...data.build, ...data.resting].map((b) => b.habitId);
 		const all = [...views.today.order, ...ids.filter((id) => !views.today.order.includes(id))];
 		const order = reorderFrom(all, shownBuild.map((b) => b.habitId), part, view.sort === 'manual');
-		moved({ order }, said, async () => !!(await setToday({ order: was })));
-		if (view.sort !== 'manual' || view.group !== 'none') sentenceBar?.change({ ...view, sort: 'manual', group: 'none' }, 'is in my order now, shared with the Habits page', 'My order');
+		const undo = async () => !!(await setToday({ order: was }));
+		// A drag in another sort or grouping also puts the view in My order: one line, whose Undo takes back both.
+		if (sentenceBar && (view.sort !== 'manual' || view.group !== 'none')) {
+			void setToday({ order });
+			sentenceBar.change({ ...view, sort: 'manual', group: 'none' }, 'is in my order now, shared with the Habits page', 'My order', { said, undo });
+		} else moved({ order }, said, undo);
 		return true;
 	}
 	function setHeadline(habitId: string, v: string) {

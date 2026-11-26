@@ -168,8 +168,10 @@
 	}
 	$effect(() => {
 		band.select = bar;
+		// Closing the bar takes its preview off the page's rows too.
 		return () => {
 			band.select = null;
+			outcome = new Map();
 		};
 	});
 </script>

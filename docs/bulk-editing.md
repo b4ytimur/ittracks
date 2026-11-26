@@ -6,8 +6,8 @@ Change many habits, Tasks or days in one go: skip a sick week, pause habits for 
 
 1. On the **Habits** page, the **Library** or **History**, press **Select**.
 2. Tick rows. A tap anywhere on a row ticks it, and Shift-click ticks a range. **Select all N shown** ticks everything the current filter shows, so filter first to select "all Fitness habits".
-3. Pick an action on the bar, fill in its form, and press **Preview**.
-4. The preview lists what will change, and what is left as it is and why (a reminder needs a time, a group can't be paused). Press **Apply N changes**, or **Cancel**.
+3. Pick an action on the bar and fill in its form. The preview runs by itself a moment after each change, once the form has what it needs.
+4. Each row says what will happen to it: a row that changes shows the change, and a row left as it is says why (a reminder needs a time, a group can't be paused). The bar counts what changes and what stays, and **Jump to next** brings the next row that changes into view. Press **Apply N changes**, or **Cancel**.
 5. A message confirms the change with **Undo**.
 
 Undo puts back everything the change did. Items you changed again since are kept as they are now, and the message says how many.

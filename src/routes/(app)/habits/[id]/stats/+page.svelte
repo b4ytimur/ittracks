@@ -12,17 +12,22 @@
 	let editing = $state(false);
 	let adding = $state(false);
 
-	async function op(body: Record<string, unknown>, done: string) {
+	async function op(body: Record<string, unknown>, done: string, undo?: () => unknown) {
 		try {
 			await statsOp(body);
 			await invalidateAll();
-			showToast(done);
+			showToast(done, undo);
 		} catch (e) {
 			showToast((e as Error).message);
 		}
 	}
+	/** Back to the automatic cards; its Undo puts these cards, and the number Today showed from one, back. */
+	function reset() {
+		const back = { op: 'habit.restore', habit: data.habit.id, cards: data.items.map((i) => i.card), headline: data.headline };
+		op({ op: 'habit.reset', habit: data.habit.id }, 'Back to the automatic cards', () => statsOp(back));
+	}
 	const headline = (card: StatCard) =>
-		data.headline === card.id
+		data.headline?.id === card.id
 			? op({ op: 'headline', habit: data.habit.id, card: null }, 'Today shows the usual headline again')
 			: op({ op: 'headline', habit: data.habit.id, card }, `Today shows “${card.title}” for ${data.habit.name}`);
 </script>
@@ -39,7 +44,7 @@
 		onmode={(m) => ((editing = m === 'edit'), (adding = false))}
 		add={{ label: 'New card', onclick: () => (adding = true) }}
 		addHidden={adding}
-		onreset={() => op({ op: 'habit.reset', habit: data.habit.id }, 'Back to the automatic cards')}
+		onreset={reset}
 		resetLabel="Back to the automatic cards"
 		atDefault={!data.customized}
 	/>
@@ -57,11 +62,11 @@
 		{editing}
 		bind:adding
 		csv={(id) => `/stats/export?habit=${data.habit.id}&card=${id}`}
-		headlines={data.headline ? [data.headline] : []}
+		headlines={data.headline ? [data.headline.id] : []}
 		onheadline={headline}
 	/>
 	{#if !data.customized}
-		<p class="muted meta foot">These cards are made from what {data.habit.name} logs. Customize to change them.</p>
+		<p class="muted meta foot">These cards are made from what {data.habit.name} logs. Change one in its sentence or its ⋯ to make them your own.</p>
 	{/if}
 </div>
 

@@ -13,16 +13,15 @@
 // It only adds rows. It never changes or deletes anything that is already there,
 // and it stops if the example Habits already exist. Tags with the same name are reused.
 import { randomUUID } from "node:crypto";
+import { parseArgs } from "node:util";
 import Database from "better-sqlite3";
 
-const args = Object.fromEntries(
-  process.argv
-    .slice(2)
-    .join(" ")
-    .split("--")
-    .filter(Boolean)
-    .map((a) => a.trim().split(/\s+/)),
-);
+// A path may hold "--" or spaces: each value is its own argument (--db path, or --db=path).
+const { values: args } = parseArgs({
+  options: Object.fromEntries(
+    ["db", "user", "today", "create-user"].map((k) => [k, { type: "string" }]),
+  ),
+});
 const dbPath = args.db ?? process.env.DATABASE_PATH ?? "./data/ittracks.db";
 const today =
   args.today ??

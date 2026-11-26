@@ -1722,7 +1722,7 @@
 		{#if shows('instead')}{@render line('instead', insteadPart)}{/if}
 	</div>
 
-	<EditableList items={sections} key={(x) => x} label={sectionTitle} mode={arranging} layout="bare" class="sections" ariaLabel="Sections" onmove={(m, order) => moveSection(m.key as Section, order as Section[])}>
+	<EditableList items={sections} key={(x) => x} label={sectionTitle} mode={arranging} layout="bare" class="sections" ariaLabel="Sections" onmove={(m, order) => (moveSection(m.key as Section, order as Section[]), true)}>
 		{#snippet row(x, ctx)}
 			<GroupHeading title={sectionTitle(x)} mode={arranging} grip={ctx.grip} />
 			<div>{@render { what: whatSection, counts: countsSection, slip: slipSection, keeps: keepsSection, about: aboutSection }[x]()}</div>

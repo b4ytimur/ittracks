@@ -13,7 +13,7 @@ A view template is a starting layout. Pick one in **Settings → View template**
 | **Minimal** | A plain checklist. Only what is due; done items fold away; extras hidden |
 | **Week first** | Plans: a week strip and progress on Today, "done this week" on each habit, the Library sorted by most logged |
 | **Quitter** | Breaking habits: Breaking first, quit counters and money saved, no Levels or prep |
-| **Data nerd** | Every widget and line, consistency as the headline number, logged values in History |
+| **Data nerd** | Every line, consistency as the headline number, logged values in History |
 
 After picking one, every setting can still be changed on its own. Your changes are listed under **Your own changes**, each with **Reset**. When you switch template, **Keep my own changes** carries them over.
 
@@ -23,14 +23,15 @@ Some ready-made habits suggest a view. The Habits page offers it once, with **Sw
 
 ## Filters and saved views
 
-Today, Habits, Library and History share one filter bar: Areas, build or break, status, identity, habit, **Include archived**, sort and grouping (what each page offers differs).
+Today, Habits, Library and History each show their view as a sentence, such as "Default shows everything, by time, short rows with streaks, done at the end." Press a word to change it: Areas, build or break, status, identity, habit, archived, sort and grouping (what each page offers differs).
 
 - Sorts include **Time of day**, **My order**, **Name**, **Streak at risk first**, **Consistency**, **Newest first**, **Most logged** and **Last logged**.
 - Grouping includes **Area**, **Part of day**, **Identity** and **Build / break**.
-- Each page has views: **Default** and the ones you make. The page is always on exactly one of them, shown with a ✓. Press another to switch.
-- **+ New view** (the dashed button after the views) makes one: type its name and press Enter. It starts as a copy of the view you were on, and **Customize** opens on it.
-- **Customize** changes the view you are on, and says which: "Changes save to Morning". Every change is saved to that view as you make it, including the search and filters on the page itself and a drag that switches the sort to **My order**. **Delete view** removes it and puts the page back on **Default**.
-- Under **More options**: open the page with **The view I was on last**, **Default** or one of your views. The Habits page also sets the **Lines on each habit** here (schedule, when, Area, consistency, last done).
+- Each page has views: **Default** and the ones you make. The page is always on exactly one of them. The sentence starts with its name: press it for the views, the one you are on shown with a ✓, and press another to switch.
+- **New view** (the dashed item after the views) makes a copy of the view you are on, and you type its name where it stands. On Today it can start from a template instead.
+- A word you change changes the view you are on, and the line above the tabs says so, with **Undo** and **Keep as new view**. Every change is saved to that view as you make it, including the search and filters on the page itself and a drag that switches the sort to **My order**. In Edit, a view you made can be renamed in place, and **Delete view** removes it and puts the page back on **Default**.
+- The last item under the views says what the page opens with: **the view I was on last**, **Default** or one of your views. Press it to change it.
+- On the Habits page, the sentence also says which lines each habit shows (schedule, time, Area, consistency, last done).
 
 ## Edit mode
 
@@ -38,12 +39,15 @@ Pages edit in place. The switch at the top of a page (**Use**, **Edit**, and **S
 
 ### Today
 
-- Drag widgets, sections and habits into your order. Habit order is **My order**, shared with the Habits page.
-- **Hide** or **Show** each widget (progress, week strip, streaks at risk, quit counters) and each section.
-- **Layout**: **Outline**, **Up next first**, **Area blocks** or **One list**. It belongs to the view, so each saved view has its own. **Reset layout** puts back the template's, with Undo.
-- Sections and groups fold, and stay folded.
-- Every count on Today (the progress widget, each section, the week strip) counts the habits themselves: a group or routine counts through the habits inside it. A group that is done by its rule while a habit inside is still due stays with what is still to do, so that habit isn't filed under Done.
-- Under **Customize → More options**: what happens to done items, the **Headline number** (a habit can have its own, in Edit), **Only show what fits the current part of the day**, and the **Lines on each habit**.
+The sentence at the top of Today is its view: what it shows (everything, what is still to do, what fits now and so on), how it is sorted or grouped, how rows look, the number on a row and where done habits go. Press a word to change it, in Use too. In Edit:
+
+- Drag habits into your order. Habit order is **My order**, shared with the Habits page. A drag while Today is sorted another way or grouped puts the view in **My order** too: the line above the tabs says both, and its **Undo** takes back both.
+- Each kind of line under a row (the Minimum, treats, reframe lines, jars and savings, identities, suggestions to raise) has **Hide** or **Show**. It belongs to the view, so each saved view has its own. When and where, and the number, follow the sentence's words for rows and the number.
+- **Headline** under a habit gives it a number of its own instead of the view's.
+- The **Breaking** heading has **Move first** or **Move last**.
+- **Reset view** puts the Default view back as it came, with Undo.
+
+Sections and groups fold, and stay folded. Every count on Today (the count under the title, each section, the week strip) counts the habits themselves: a group or routine counts through the habits inside it. A group that is done by its rule while a habit inside is still due stays with what is still to do, so that habit isn't filed under Done.
 
 ### Habits
 
