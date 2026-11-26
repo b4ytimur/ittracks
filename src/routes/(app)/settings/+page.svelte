@@ -27,7 +27,7 @@
 	import Units from '$lib/settings/Units.svelte';
 	import Vacations from '$lib/settings/Vacations.svelte';
 	import { showError, showToast } from '$lib/toast.svelte';
-	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import TitleLine from '$lib/ui/TitleLine.svelte';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
 	import GroupHeading from '$lib/ui/GroupHeading.svelte';
 	import { viewOp } from '$lib/viewclient';
@@ -168,9 +168,9 @@
 
 {#if chosen && !wide.current}
 	<!-- A phone: a group is a page of its own. -->
-	<EditChrome title={group?.title ?? 'Set where they act'} modes={['use']} back={{ href: '/settings', label: 'Settings' }} hints={{ use: group ? `${group.lines.length} ${group.lines.length === 1 ? 'setting' : 'settings'}` : `${ELSEWHERE.length} places, each on its own page` }} />
+	<TitleLine title={group?.title ?? 'Set where they act'} back={{ href: '/settings', label: 'Settings' }} hint={group ? `${group.lines.length} ${group.lines.length === 1 ? 'setting' : 'settings'}` : `${ELSEWHERE.length} places, each on its own page`} />
 {:else}
-	<EditChrome title="Settings" modes={['use']} hints={{ use: `Signed in as ${data.username}. ${Object.keys(FEATURES).length - views.hidden.length} of ${Object.keys(FEATURES).length} features in use.` }} />
+	<TitleLine title="Settings" hint={`Signed in as ${data.username}. ${Object.keys(FEATURES).length - views.hidden.length} of ${Object.keys(FEATURES).length} features in use.`} />
 	<div class="search se-find page-wide" role="search">
 		<label class="vh" for="se-q">Find a setting</label>
 		<input id="se-q" type="search" placeholder="Find a setting" bind:value={q} autocomplete="off" />

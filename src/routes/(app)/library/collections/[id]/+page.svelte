@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import TitleLine from '$lib/ui/TitleLine.svelte';
 
 	let { data, form } = $props();
 
@@ -37,7 +37,7 @@
 
 <svelte:head><title>{data.isNew ? 'New collection' : name} · ittracks</title></svelte:head>
 
-<EditChrome title={data.isNew ? 'New collection' : 'Edit collection'} modes={['use']} back={{ href: '/library', label: 'Library' }} />
+<TitleLine title={data.isNew ? 'New collection' : 'Edit collection'} back={{ href: '/library', label: 'Library' }} />
 
 <form method="POST" action="?/save" class="stack">
 	<input type="hidden" name="payload" value={payload} />

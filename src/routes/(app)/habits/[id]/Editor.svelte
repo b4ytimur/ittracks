@@ -12,6 +12,7 @@
 	import type { Mode } from '$lib/ui/list';
 	import * as W from '$lib/detail/words';
 	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import TitleLine from '$lib/ui/TitleLine.svelte';
 	import GroupHeading from '$lib/ui/GroupHeading.svelte';
 	import InlineText from '$lib/ui/InlineText.svelte';
 	import MenuButton, { type Way } from '$lib/ui/MenuButton.svelte';
@@ -1763,7 +1764,7 @@
 {/snippet}
 
 {#if mode === 'choose'}
-	<EditChrome title="New habit" modes={['use']} back={{ href: '/habits', label: 'Habits' }} hints={{ use: 'How do you want to start?' }} />
+	<TitleLine title="New habit" back={{ href: '/habits', label: 'Habits' }} hint="How do you want to start?" />
 	<ul class="list">
 		<li><a class="card" href="/gallery"><strong>Pick a ready-made habit</strong><div class="muted meta">Gym plans, language practice, reading, quitting smoking and more. Adjust it after.</div></a></li>
 		<li><a class="card" href="?mode=guided{data.habit.areaId ? `&area=${data.habit.areaId}` : ''}"><strong>Build it step by step</strong><div class="muted meta">Four short steps: what you do, which days, when, and a check.</div></a></li>

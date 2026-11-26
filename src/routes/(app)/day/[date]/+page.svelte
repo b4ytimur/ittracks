@@ -12,7 +12,7 @@
 	import DayNote from '$lib/DayNote.svelte';
 	import Markdown from '$lib/Markdown.svelte';
 	import EditableList from '$lib/ui/EditableList.svelte';
-	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import TitleLine from '$lib/ui/TitleLine.svelte';
 	import GroupHeading from '$lib/ui/GroupHeading.svelte';
 	import LogControl, { type Way } from '$lib/ui/LogControl.svelte';
 	import { dayCount } from '$lib/history/day';
@@ -145,12 +145,12 @@
 <!-- A swipe is a second way to move a day; the seven days are the first, for every pointer and the keyboard. -->
 <svelte:window ontouchstart={touch} ontouchend={swipe} />
 <div class="travels">
-<EditChrome title={titleOf} modes={['use']}>
-	{#snippet useHint()}
+<TitleLine title={titleOf}>
+	{#snippet hint()}
 		<span class="day-line"><span>{nice(data.date, { day: 'numeric', month: 'long' })} · {ago === 1 ? 'yesterday' : `${ago} days ago`}</span>{#if count.of}<span class="num">{count.done} of {count.of} done</span>{/if}</span>
 	{/snippet}
 	{#snippet actions()}<a class="button" href="/">Back to today</a>{/snippet}
-</EditChrome>
+</TitleLine>
 
 {#if !wide.current}{@render seven()}{/if}
 

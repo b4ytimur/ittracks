@@ -38,6 +38,7 @@
 		hints={{ use: data.customized ? 'Your own cards' : 'Made from what it logs', edit: 'Drag a card to move it.' }}
 		onmode={(m) => ((editing = m === 'edit'), (adding = false))}
 		add={{ label: 'New card', onclick: () => (adding = true) }}
+		addHidden={adding}
 		onreset={() => op({ op: 'habit.reset', habit: data.habit.id }, 'Back to the automatic cards')}
 		resetLabel="Back to the automatic cards"
 		atDefault={!data.customized}

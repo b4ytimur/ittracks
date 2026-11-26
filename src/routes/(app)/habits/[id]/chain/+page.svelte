@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { weekdayNames } from '$lib/describe';
 	import RecordTabs from '$lib/detail/RecordTabs.svelte';
-	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import TitleLine from '$lib/ui/TitleLine.svelte';
 
 	let { data } = $props();
 
@@ -91,7 +91,7 @@
 
 <svelte:head><title>{data.name} chain · ittracks</title></svelte:head>
 
-<EditChrome title={data.name} back={{ href: '/habits', label: 'Habits' }} modes={['use']} hints={{ use: `Last ${data.weeks} weeks${data.summary ? ` · ${data.summary}` : ''}` }} />
+<TitleLine title={data.name} back={{ href: '/habits', label: 'Habits' }} hint={`Last ${data.weeks} weeks${data.summary ? ` · ${data.summary}` : ''}`} />
 <RecordTabs habit={data.id} at="chain" />
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->

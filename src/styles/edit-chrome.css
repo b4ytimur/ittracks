@@ -1,17 +1,27 @@
-/* EditChrome: the title line with the back link and the mode switch, the hint line, Reset layout, the view-chip row.
+/* EditChrome and TitleLine: the title line with the back link, the page's actions and its mode switch or its one
+   pressed state, the hint line, Reset layout, the view-chip row. TitleLine replaces EditChrome screen by screen (a page
+   that only shows Use, then each screen as it drops Edit); until the last one moves, both render this markup.
    Markup:
-     <header class="titlebar" data-mode="use|edit|select" [data-add-hidden]> a.title-back, h1.page-title, div.title-actions, div.segmented </header>
-     a.title-back               a page with a parent only (D3.31): <a class="title-back" href="/habits">‹ Habits</a>
-                                (EditChrome's back prop)
-     div.title-actions          EditChrome's add and more, in this order on every page (TS.15): the page's one
-                                a.button.primary[data-add] (New habit), then its ⋯ MenuButton with everything else
+     <header class="titlebar" data-mode="use|edit|select|state" [data-add-hidden]>
+       a.title-back, h1.page-title, div.title-actions, then EditChrome's div.segmented or TitleLine's button.toggle
+     </header>
+     a.title-back               a page with a parent only (D3.31), both components' back prop. Its name says where it
+                                goes; the ‹ is hidden from screen readers: <a class="title-back" href="/habits"
+                                aria-label="Back to Habits"><span aria-hidden="true">‹</span> Habits</a>
+     div.title-actions          add and more, in this order on every page (TS.15): the page's one a.button.primary[data-add]
+                                (New habit), then its ⋯ MenuButton with everything else; or the page's own actions snippet
+                                (Today's frame, a day's Back to today). inert while the mode isn't use
+     [data-add-hidden]          addHidden: the add steps back in place while another add is open (Stats' card builder)
      div.title-actions          only when the actions don't fit beside the h1: the component renders them here instead
-     div.segmented              Segmented's control (role="radiogroup" aria-label="Mode"); EditChrome only places it
+     div.segmented              EditChrome: Segmented's control (role="radiogroup" aria-label="Mode"); EditChrome only places it
+     button.toggle              TitleLine's state: <button type="button" class="toggle" aria-pressed="true|false"><span
+                                data-reserve="Select">Select</span></button>, outside div.title-actions. Pressed, the line's
+                                data-mode is state; Esc outside a field or a second press leaves
      <div class="viewbar">…</div>
      <p class="hint-line meta" data-mode="…">
-       <span data-hint="use">…</span>
-       <span data-hint="edit"><span id="…" [data-reserve="…"]>text</span>   the text alone: InlineEditor swaps it and
-                                                            describes by it; Today reserves its longest edit text
+       <span data-hint="use">…</span>                               words, or TitleLine's hint snippet (a day's date and count)
+       <span data-hint="edit"><span id="…" [data-reserve="…"]>text</span>   EditChrome only. The text alone: InlineEditor
+                                                            swaps it and describes by it; Today reserves its longest edit text
          <span class="hint-tools">                                  trailing; only on pages with a default or a chooser
            <button class="quiet reset" [data-at-default]>Reset layout</button>  hidden in place at the default; the
                                                             label is resetLabel (Reset view on Today)
@@ -20,13 +30,13 @@
              <span class="menu layout-menu" role="menu" hidden>…menu-check, menu-label, menu-note items…</span>   a Menu, a span in a p
            </span>
          </span></span>
-       <span data-hint="select">…</span>
+       <span data-hint="select">…</span>                            EditChrome only
+       <span data-hint="state">…</span>                             TitleLine only: what a tap does while the state is on
      </p>
    Each mode's text is one span; a link such as "Log a past day" goes inside it. All of them stay rendered. The edit
    text has its own inner span, so a field's description never reads Reset layout and the chooser.
-   The page puts .pinned on <html> while the mode isn't use. The component sets .stuck on the title line while a
-   sentinel above it is out of view, and writes the line's border-box height to --titlebar-height on <html>
-   (ResizeObserver borderBoxSize, not contentRect, which leaves out the padding and the 1px stuck edge). */
+   The component puts .pinned on <html> while the mode isn't use, and sets .stuck on the title line while it is pinned
+   and scrolled to the top. --titlebar-height on <html> is the fallback below: nothing measures the line yet. */
 
 /* ---------- Title line: 4 + 32 + 3 + 1 = 40px in every mode, so nothing moves when the mode changes ---------- */
 .titlebar {
@@ -40,6 +50,7 @@
 /* Back link: leads the line in every mode (D3.31, C.2), 24px, the body line, beside the h1 while both
    fit; else the h1 wraps to the next line. It stands alone, so it underlines only on hover and :active (D3.29). */
 .titlebar > .title-back {
+	position: relative; /* its touch area, below */
 	min-width: 0; padding-block: max(0px, calc((var(--target-min) - 1lh) / 2));
 	color: var(--accent-ink); text-decoration: none; overflow-wrap: anywhere;
 }
@@ -50,26 +61,29 @@
 .titlebar > .title-actions, .titlebar + .title-actions { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-inline); }
 .titlebar + .title-actions { padding-bottom: var(--space-tight); } /* part of the title group: 4 under the line, 8 over the chips */
 .titlebar > .segmented { margin-inline-start: auto; } /* trailing, also on its own line */
-/* Below a 28rem line (bp-phone: a 480px phone with 16px gutters) the switch takes its own line on every page. The empty
-   ::after is the break; the switch's -4px top margin cancels the empty line's row gap, so it sits 4 under its line. */
+/* TitleLine's state: Chip's toggle at control-md, the line's button size (Chip's coarse padding on every pointer), so
+   it never changes the line's 40px; trailing as the switch was. data-reserve keeps its width when it is pressed. */
+.titlebar > .toggle { --toggle-pad-block: calc(var(--space-inline) - 1px); min-height: var(--control-md); margin-inline-start: auto; }
+/* Below a 28rem line (bp-phone: a 480px phone with 16px gutters) the switch, or TitleLine's state, takes its own line on
+   every page. The empty ::after is the break; the -4px top margin cancels the empty line's row gap, so it sits 4 under its line. */
 @container (width < 28rem) {
-	.titlebar:has(> .segmented)::after { content: ''; flex-basis: 100%; order: 1; }
-	.titlebar > .segmented { order: 2; margin-top: calc(-1 * var(--space-tight)); }
+	.titlebar:has(> .segmented, > .toggle)::after { content: ''; flex-basis: 100%; order: 1; }
+	.titlebar > :is(.segmented, .toggle) { order: 2; margin-top: calc(-1 * var(--space-tight)); }
 }
 /* Under a coarse pointer it sits 12 under its line instead (target-touch - control-md): its 44px hit areas and those of
-   the buttons above then meet, and the segments (z-index 1) never take the bottom of a button. */
+   the buttons above then meet, and the segments (z-index 1) or the pill's area never take the bottom of a button. */
 @media (pointer: coarse) {
-	@container (width < 28rem) { .titlebar > .segmented { margin-top: calc(var(--target-touch) - var(--control-md) - 2 * var(--space-tight)); } }
+	@container (width < 28rem) { .titlebar > :is(.segmented, .toggle) { margin-top: calc(var(--target-touch) - var(--control-md) - 2 * var(--space-tight)); } }
 }
-/* Pinned in edit and select. Also while keyboard focus is inside it, so a mode change while scrolled never sends the
-   focused switch off-screen; the line unpins once focus moves on. */
-.titlebar:is([data-mode='edit'], [data-mode='select']), .titlebar:has(:focus-visible) { position: sticky; top: 0; z-index: var(--z-sticky); }
-/* Use-mode actions hide in edit (the ghost slot is the add) and select (Apply is the view's one primary).
-   visibility keeps their space, so the switch never jumps and the line never rewraps. */
-.titlebar:is([data-mode='edit'], [data-mode='select']) > .title-actions,
-.titlebar:is([data-mode='edit'], [data-mode='select']) + .title-actions { visibility: hidden; opacity: 0; }
-/* addHidden (the list shows EmptyState's first, whose slot is then the only add): the add alone hides, space kept;
-   the links stay. */
+/* Pinned in edit, select and a pressed state. Also while keyboard focus is inside it, so a mode change while scrolled
+   never sends the focused switch off-screen; the line unpins once focus moves on. */
+.titlebar:is([data-mode='edit'], [data-mode='select'], [data-mode='state']), .titlebar:has(:focus-visible) { position: sticky; top: 0; z-index: var(--z-sticky); }
+/* Use-mode actions hide in edit (the ghost slot is the add), select (Apply is the view's one primary) and a pressed
+   state. visibility keeps their space, so the switch never jumps and the line never rewraps. */
+.titlebar:is([data-mode='edit'], [data-mode='select'], [data-mode='state']) > .title-actions,
+.titlebar:is([data-mode='edit'], [data-mode='select'], [data-mode='state']) + .title-actions { visibility: hidden; opacity: 0; }
+/* addHidden (another add is open, as Stats' card builder, or the list shows EmptyState's first, whose slot is then the
+   only add): the add alone hides, space kept; the ⋯ and the links stay. */
 .titlebar[data-add-hidden] > .title-actions > [data-add],
 .titlebar[data-add-hidden] + .title-actions > [data-add] { visibility: hidden; opacity: 0; }
 .titlebar.stuck { border-bottom-color: var(--line); }
@@ -86,11 +100,12 @@ html.pinned {
 	display: grid; grid-template-columns: minmax(0, 1fr); align-items: center;
 	min-height: var(--target-min); margin: var(--space-section) 0 var(--space-tight); color: var(--ink-muted);
 }
-.hint-line:is([data-mode='edit'], [data-mode='select']) { color: var(--ink); } /* the mode's figure, without a fill */
+.hint-line:is([data-mode='edit'], [data-mode='select'], [data-mode='state']) { color: var(--ink); } /* the mode's figure, without a fill */
 .hint-line > [data-hint] { grid-area: 1 / 1; }
 .hint-line:not([data-mode='use']) > [data-hint='use'],
 .hint-line:not([data-mode='edit']) > [data-hint='edit'],
-.hint-line:not([data-mode='select']) > [data-hint='select'] { visibility: hidden; opacity: 0; }
+.hint-line:not([data-mode='select']) > [data-hint='select'],
+.hint-line:not([data-mode='state']) > [data-hint='state'] { visibility: hidden; opacity: 0; }
 /* An edit text that changes with the layout (Today: Area blocks says more) reserves the longest one with base's
    data-reserve, as the chooser reserves its longest value, so choosing a layout never rewraps the line or moves the
    chooser. The copy is hidden, so it stays out of the text and out of a field's description. */
@@ -114,6 +129,12 @@ html.pinned {
 
 /* ---------- Touch ---------- */
 @media (pointer: coarse) {
+	/* The back link is a link, so Button's touch area doesn't reach it: the same centred 44px, its 24px box as it is. */
+	.titlebar > .title-back::before {
+		content: ''; position: absolute;
+		inset-block: min(0px, calc((100% - var(--target-touch)) / 2));
+		inset-inline: min(0px, calc((100% - var(--target-touch)) / 2));
+	}
 	/* The tools' 44px hit areas grow up into the 24px gap above, never down onto the first row's verb, so this ::before
 	   takes the place of Button's centred one. :not([role]) skips the chooser's menu items, which size themselves (Menu). */
 	.hint-line .hint-tools button:not([role])::before { content: ''; position: absolute; inset: calc(var(--target-min) - var(--target-touch)) 0 0; }

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { CATEGORY_ORDER, WANTS } from '$lib/gallery/wants';
 	import { addFrom } from '$lib/say/add';
-	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import TitleLine from '$lib/ui/TitleLine.svelte';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
 	import GroupHeading from '$lib/ui/GroupHeading.svelte';
 
@@ -54,7 +54,7 @@
 
 <svelte:head><title>Gallery · ittracks</title></svelte:head>
 
-<EditChrome title="Gallery" modes={['use']} back={{ href: '/habits', label: 'Habits' }} hints={{ use: 'Ready-made habits. Add one as it comes, or open it to change its words first.' }} />
+<TitleLine title="Gallery" back={{ href: '/habits', label: 'Habits' }} hint="Ready-made habits. Add one as it comes, or open it to change its words first." />
 
 <div class="search" role="search">
 	<label class="vh" for="gallery-q">Search the Gallery</label>

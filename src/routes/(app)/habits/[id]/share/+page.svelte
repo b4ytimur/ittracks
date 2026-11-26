@@ -3,7 +3,7 @@
 	import TemplateSentence from '$lib/say/TemplateSentence.svelte';
 	import { checkTemplate } from '$lib/template';
 	import { runAction } from '$lib/toast.svelte';
-	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import TitleLine from '$lib/ui/TitleLine.svelte';
 	import { weekdayNames } from '$lib/describe';
 	import { shareForm, type ShareForm } from '$lib/share';
 	import { blocked, normalize } from '$lib/rules/core';
@@ -73,7 +73,7 @@
 
 <svelte:head><title>Share {data.name} · ittracks</title></svelte:head>
 
-<EditChrome title="Share as a template" modes={['use']} back={{ href: `/habits/${data.id}`, label: data.name }} hints={{ use: 'A file someone else can add, with the questions you ask here. Your logs stay here, and a file you have sent stays sent.' }} />
+<TitleLine title="Share as a template" back={{ href: `/habits/${data.id}`, label: data.name }} hint="A file someone else can add, with the questions you ask here. Your logs stay here, and a file you have sent stays sent." />
 
 <form method="POST" action="/habits/{data.id}/template.json" class="stack" onsubmit={(e) => blocking.length && e.preventDefault()}>
 	<input type="hidden" name="share" value={JSON.stringify(clean)} />

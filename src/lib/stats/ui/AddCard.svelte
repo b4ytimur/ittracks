@@ -25,7 +25,8 @@
 
 <section class="card add">
 	<div class="bar">
-		<h2>Add a card</h2>
+		<!-- Focus comes here as it opens: the title line's New card, which opened it, steps back while it is open. -->
+		<h2 tabindex="-1" {@attach (h) => h.focus()}>Add a card</h2>
 		<button type="button" class="quiet" onclick={oncancel}>Close</button>
 	</div>
 	<!-- The other way to add, first in the body and over the tabs: a secondary, since the view's one primary is elsewhere. -->

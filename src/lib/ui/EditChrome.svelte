@@ -13,6 +13,7 @@
 		back,
 		hints = {},
 		add,
+		addHidden = false,
 		more = [],
 		actions,
 		tools,
@@ -32,6 +33,8 @@
 		useHint?: Snippet;
 		/** The one thing the page makes, first after the title (New habit). Out of reach while editing or selecting. */
 		add?: { label: string; href?: string; onclick?: () => void };
+		/** The add steps back in place while another one is open (Stats' card builder), so the line never moves. */
+		addHidden?: boolean;
 		/** Everything else the page offers, in the ⋯ after it. Every page's title line reads the same (TS.15). */
 		more?: (Way | '-')[];
 		/** Today's own frame only (its ⋯, Back to today on another day). Every other page uses add and more. */
@@ -65,8 +68,8 @@
 	}}
 />
 
-<header class="titlebar" class:stuck data-mode={mode} bind:this={bar}>
-	{#if back}<a class="title-back" href={back.href}>‹ {back.label}</a>{/if}
+<header class="titlebar" class:stuck data-mode={mode} data-add-hidden={addHidden ? '' : null} bind:this={bar}>
+	{#if back}<a class="title-back" href={back.href} aria-label="Back to {back.label}"><span aria-hidden="true">‹</span> {back.label}</a>{/if}
 	<h1 class="page-title">{title}</h1>
 	{#if actions || add || more.length}
 		<div class="title-actions" inert={mode !== 'use'}>
