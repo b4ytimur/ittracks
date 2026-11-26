@@ -125,8 +125,8 @@
 			{/if}
 		</div>
 		<div class="row">
-			<button type="button" class="primary small" onclick={stop}>{replace ? 'Stop and use this time' : 'Stop and add time'}</button>
-			<button type="button" class="small" onclick={cancel}>Cancel</button>
+			<button type="button" onclick={stop}>{replace ? 'Stop and use this time' : 'Stop and add time'}</button>
+			<button type="button" onclick={cancel}>Cancel</button>
 		</div>
 	{:else}
 		<div class="row">
@@ -136,22 +136,22 @@
 				<option value="focus">Focus block</option>
 			</select>
 			{#if mode === 'focus'}
-				<label style="width: 4.5rem">Work <input type="number" min="1" bind:value={work} /></label>
-				<label style="width: 4.5rem">Break <input type="number" min="0" bind:value={rest} /></label>
-				<label style="width: 4.5rem">Rounds <input type="number" min="1" bind:value={rounds} /></label>
+				<label>Work <input class="w-num" type="number" min="1" bind:value={work} /></label>
+				<label>Break <input class="w-num" type="number" min="0" bind:value={rest} /></label>
+				<label>Rounds <input class="w-num" type="number" min="1" bind:value={rounds} /></label>
 			{/if}
-			<button type="button" class="small" onclick={start}>Start</button>
+			<button type="button" onclick={start}>Start</button>
 		</div>
 	{/if}
 </div>
 
 <style>
 	.timer {
-		margin-top: 0.4rem;
+		margin-top: var(--space-inline);
 	}
 	.face {
-		font-size: 1.3rem;
+		font-size: var(--font-size-figure);
 		font-variant-numeric: tabular-nums;
-		margin-bottom: 0.4rem;
+		margin-bottom: var(--space-inline);
 	}
 </style>

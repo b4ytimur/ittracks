@@ -24,12 +24,12 @@
 			<a href="/habits/{s.habitId}/chain" class="row-link">
 				<div class="head">
 					<span class="name">{s.name}</span>
-					<span><strong>{s.current}{s.unit === 'percent' ? '%' : ''}</strong> <span class="muted small">{unitText(s.unit, s.current)}</span></span>
+					<span><strong>{s.current}{s.unit === 'percent' ? '%' : ''}</strong> <span class="muted meta">{unitText(s.unit, s.current)}</span></span>
 				</div>
 				<div class="strip" aria-hidden="true">
 					{#each s.strip as c (c.date)}<i class={c.status} title="{longDate(c.date)}: {c.status}"></i>{/each}
 				</div>
-				<div class="muted small">
+				<div class="muted meta">
 					{#if s.best !== null}{bestText(s.unit, s.best)}{/if}{#if s.atRisk} · Do it today to keep it going{/if}
 				</div>
 			</a>
@@ -44,7 +44,7 @@
 		margin: 0;
 	}
 	li + li {
-		margin-top: 0.65rem;
+		margin-top: var(--space-inline);
 	}
 	.row-link {
 		display: block;
@@ -54,7 +54,7 @@
 	.head {
 		display: flex;
 		justify-content: space-between;
-		gap: 0.5rem;
+		gap: var(--space-inline);
 		font-size: var(--font-size-label);
 	}
 	.name {
@@ -66,11 +66,11 @@
 		display: grid;
 		grid-template-columns: repeat(28, 1fr);
 		gap: 2px;
-		margin: 0.3rem 0 0.1rem;
+		margin: var(--space-tight) 0;
 	}
 	.strip i {
 		height: 10px;
-		border-radius: 2px;
+		border-radius: var(--radius-indicator);
 		background: var(--chart-grid);
 	}
 	.strip i.done,
@@ -96,8 +96,5 @@
 	.strip i.rest,
 	.strip i.due {
 		background: var(--chart-grid);
-	}
-	.small {
-		font-size: var(--font-size-note);
 	}
 </style>

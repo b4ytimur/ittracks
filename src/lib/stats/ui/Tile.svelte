@@ -25,12 +25,12 @@
 <div class="tile">
 	<div class="value">{value(r.total, r.unit, r.kind)}</div>
 	{#if r.goal && r.total !== null}
-		<div class="muted small">
+		<div class="muted meta">
 			{r.goal.max !== null ? `Goal ${value(r.goal.min, r.unit, r.kind)} to ${value(r.goal.max, r.unit, r.kind)}` : `of ${value(r.goal.min, r.unit, r.kind)}`}
 		</div>
 	{/if}
 	{#if d}
-		<div class="delta small" class:good={d.good === true} class:bad={d.good === false}>
+		<div class="delta meta" class:good={d.good === true} class:bad={d.good === false}>
 			{#if d.good !== null}<span aria-hidden="true">{d.text.startsWith('+') ? '▲' : '▼'}</span>{/if}
 			{d.text}
 		</div>
@@ -44,22 +44,19 @@
 
 <style>
 	.value {
-		font-size: 1.9rem;
+		font-size: var(--font-size-figure-lg);
 		font-weight: 600;
 		line-height: 1.15;
 		font-variant-numeric: tabular-nums;
 		overflow-wrap: anywhere;
 	}
-	.small {
-		font-size: var(--font-size-chip);
-	}
 	.delta {
 		color: var(--ink);
-		margin-top: 0.15rem;
+		margin-top: var(--space-tight);
 	}
 	.delta span {
-		font-size: 0.65rem;
-		margin-right: 0.15rem;
+		font-size: var(--font-size-note);
+		margin-right: var(--space-tight);
 	}
 	.delta.good span {
 		color: var(--good);
@@ -71,7 +68,7 @@
 		display: block;
 		width: 100%;
 		height: 28px;
-		margin-top: 0.4rem;
+		margin-top: var(--space-inline);
 	}
 	.spark path {
 		fill: none;

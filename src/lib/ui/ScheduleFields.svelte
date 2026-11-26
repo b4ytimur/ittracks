@@ -109,7 +109,7 @@
 	{/each}
 {:else if shown && value.kind === 'frequency'}
 	<div class="row">
-		<label style="width: 6rem">Times <input type="number" min="1" max="31" bind:value={value.times} /></label>
+		<label>Times <input class="w-num" type="number" min="1" max="31" bind:value={value.times} /></label>
 		<label class="grow"
 			>Per
 			<select bind:value={value.period}>
@@ -120,7 +120,7 @@
 	</div>
 {:else if shown && value.kind === 'interval'}
 	<div class="row">
-		<label style="width: 8rem">Every N days <input type="number" min="1" max="365" bind:value={value.every} /></label>
+		<label>Every N days <input class="w-num" type="number" min="1" max="365" bind:value={value.every} /></label>
 		{#if showStart}<label class="grow">Starting <input type="date" bind:value={value.start} /></label>{/if}
 	</div>
 {:else if shown && value.kind === 'rotation'}
@@ -132,7 +132,7 @@
 		</select>
 	</label>
 	{#if subset && many}
-		<span class="muted small-text">Variants in this rotation</span>
+		<span class="muted meta">Variants in this rotation</span>
 		<div class="chips" role="group" aria-label="Variants in this rotation">
 			{#each variants as v (v.id)}
 				<button type="button" class="toggle" aria-pressed={inRotation(v.id)} onclick={() => toggleInRotation(v.id)}>{v.name}</button>
@@ -147,7 +147,7 @@
 					type="number"
 					min="0"
 					max="30"
-					style="width: 5rem"
+					class="w-num"
 					value={restOf(v.id)}
 					oninput={(e) => setRest(v.id, Number(e.currentTarget.value))}
 					aria-label="Rest days after {v.name}"

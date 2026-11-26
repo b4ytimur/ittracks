@@ -57,7 +57,7 @@
 	}
 	th,
 	td {
-		padding: 0.25rem 0.4rem;
+		padding: var(--space-tight) var(--space-inline);
 		border-bottom: 1px solid var(--chart-grid);
 		text-align: right;
 		white-space: nowrap;

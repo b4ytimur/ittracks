@@ -402,7 +402,7 @@
 				</div>
 				<div class="content">{@render row(item, ctx)}</div>
 				{#if editing && onremove}
-					<button type="button" class="quiet verb hit" aria-label="{removeOf(item)} {nameOf(item)}" onclick={() => onremove(item)}>{removeOf(item)}</button>
+					<button type="button" class="quiet verb" aria-label="{removeOf(item)} {nameOf(item)}" onclick={() => onremove(item)}>{removeOf(item)}</button>
 				{:else if mode === 'use' && actions}
 					<div class="verb">{@render actions(item, ctx)}</div>
 				{/if}
@@ -413,12 +413,12 @@
 				{#if editing && onmove}{@render grip()}{/if}
 				<div class="title">{@render title?.(item, ctx)}</div>
 				{#if editing && onremove}
-					<button type="button" class="small remove" aria-label="{removeOf(item)} {nameOf(item)}" onclick={() => onremove(item)}>{removeOf(item)}</button>
+					<button type="button" class="quiet remove" aria-label="{removeOf(item)} {nameOf(item)}" onclick={() => onremove(item)}>{removeOf(item)}</button>
 				{/if}
 			</div>
 			{/if}
 			{#if layout === 'block'}
-				<div class="body">
+				<div class="block-body">
 					{@render row(item, ctx)}
 				</div>
 			{/if}
@@ -436,7 +436,7 @@
 	{/if}
 </ul>
 {#if !rowCard && editing && onadd}
-	<button type="button" class="small add" onclick={() => onadd()}>+ {addLabel}</button>
+	<button type="button" class="add" onclick={() => onadd()}>+ {addLabel}</button>
 {/if}
 {#if editing && onmove}
 	<span id="{uid}-hint" class="sr-only"
@@ -451,9 +451,9 @@
 	.head {
 		display: flex;
 		align-items: center;
-		gap: 0.4rem;
+		gap: var(--space-inline);
 	}
-	.body {
+	.block-body {
 		flex: 1;
 		min-width: 0;
 	}
@@ -464,12 +464,12 @@
 	.block.editing > li {
 		border: 1px dashed var(--line);
 		border-radius: var(--radius-card);
-		padding: 0.35rem 0.5rem 0.5rem;
+		padding: var(--space-inline);
 	}
 	.block > li > .head {
-		min-height: 2rem;
+		min-height: var(--control-md);
 		flex-wrap: wrap;
-		row-gap: 0.3rem;
+		row-gap: var(--space-tight);
 	}
 	.block .title {
 		flex: 1;
@@ -478,8 +478,8 @@
 		font-weight: 600;
 		color: var(--ink-muted);
 	}
-	.block.editing > li > .body:not(:empty) {
-		margin-top: 0.4rem;
+	.block.editing > li > .block-body:not(:empty) {
+		margin-top: var(--space-inline);
 	}
 	.block > li.dragging {
 		box-shadow: var(--shadow-lifted);
@@ -492,7 +492,7 @@
 		flex: none;
 	}
 	.add {
-		margin-top: 0.5rem;
+		margin-top: var(--space-inline);
 	}
 	.empty {
 		display: block;

@@ -27,7 +27,7 @@
 .tab:is([aria-current='page'], [aria-selected='true'])::before {
 	content: ''; border-top: var(--chosen-width) solid var(--line-chosen); /* a border, so it survives forced colours */
 }
-/* Touch: the box itself grows to 44px. Both pseudo-elements are taken (the bar, the reserve), so no .hit. */
+/* Touch: the box itself grows to 44px. Both pseudo-elements are taken (the bar, the reserve), so Button leaves .tab out. */
 @media (pointer: coarse) { .tab { min-height: var(--target-touch); } }
 @media (forced-colors: active) {
 	/* chosen is Highlight here, as every chosen state; the 600 weight stays */

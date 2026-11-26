@@ -16,7 +16,7 @@
 		<li>
 			<button type="button" onclick={() => onpick?.(g.key === 'all' ? null : g.key)}>
 				<div class="head">
-					<span class="label">{g.label || `So far ${g.period}`}</span>
+					<span class="goal-name">{g.label || `So far ${g.period}`}</span>
 					<span><strong>{fmt(g.value)}</strong> <span class="muted">of {g.goalMax !== null ? `${fmt(g.goal)} to ${fmt(g.goalMax)}` : fmt(g.goal)}</span></span>
 				</div>
 				<div class="track" role="meter" aria-valuemin="0" aria-valuemax={g.goal ?? 0} aria-valuenow={g.value ?? 0} aria-label={g.label || 'Progress'}>
@@ -25,7 +25,7 @@
 					{/if}
 					<span class="fill" class:reached class:over style:width="{Math.min(pct, 100)}%"></span>
 				</div>
-				<div class="muted small">
+				<div class="muted meta">
 					{#if over}Above the band {g.period}{:else if reached}Reached {g.period}{:else if g.goal !== null}{fmt(g.goal - (g.value ?? 0))} to go {g.period}{/if}
 				</div>
 			</button>
@@ -42,7 +42,7 @@
 		margin: 0;
 	}
 	li + li {
-		margin-top: 0.6rem;
+		margin-top: var(--space-inline);
 	}
 	button {
 		display: block;
@@ -55,10 +55,10 @@
 	.head {
 		display: flex;
 		justify-content: space-between;
-		gap: 0.5rem;
+		gap: var(--space-inline);
 		font-size: var(--font-size-label);
 	}
-	.label {
+	.goal-name {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -66,9 +66,9 @@
 	.track {
 		position: relative;
 		height: 10px;
-		border-radius: 5px;
+		border-radius: var(--radius-pill);
 		background: var(--seq-1);
-		margin: 0.3rem 0 0.15rem;
+		margin: var(--space-tight) 0;
 		overflow: hidden;
 	}
 	.fill {
@@ -76,7 +76,7 @@
 		left: 0;
 		top: 0;
 		bottom: 0;
-		border-radius: 5px;
+		border-radius: var(--radius-pill);
 		background: var(--accent);
 	}
 	.fill.reached {
@@ -91,8 +91,5 @@
 		bottom: 0;
 		background: var(--good);
 		opacity: 0.25;
-	}
-	.small {
-		font-size: var(--font-size-note);
 	}
 </style>

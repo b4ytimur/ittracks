@@ -88,7 +88,7 @@
 <EditChrome title={r.name} modes={['use']} back={{ href: back, label: backLabel(back) }} hints={{ use: [day, said(r.status, r.level), r.count].filter(Boolean).join(' · ') }} more={canLog ? all : []} />
 
 {#if !canLog}
-	<div class="notice"><span class="notice-text">This day is further back than Settings allow logging, so it can only be looked at.</span><span class="notice-acts"><a class="quiet hit" href="/settings#past">Change it in Settings</a></span></div>
+	<div class="notice"><span class="notice-text">This day is further back than Settings allow logging, so it can only be looked at.</span><span class="notice-acts"><a class="quiet" href="/settings#past">Change it in Settings</a></span></div>
 {/if}
 
 <ul class="elist lg-page lg-places" data-mode="use" aria-label="Habits in {r.name}">
@@ -98,7 +98,7 @@
 				<div class="card lg-head">
 					<span class="slot"></span>
 					<div class="content"><h2 class="name">{k.name}</h2><p class="meta-line">{words(k)}</p></div>
-					{#if canLog}<div class="verb"><MenuButton class="lg-more hit" label="More for {k.name}" items={menuOf(k)} /></div>{/if}
+					{#if canLog}<div class="verb"><MenuButton class="quiet glyph lg-more" label="More for {k.name}" items={menuOf(k)} /></div>{/if}
 				</div>
 				<div class="shelf lg-shelf">
 					<div class="lg-slot">

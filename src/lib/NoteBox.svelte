@@ -2,6 +2,7 @@
 	// A Markdown note box: plain text that grows as you type, a Write / Preview switch and a
 	// tiny toolbar. What is stored stays plain Markdown, so it exports to Obsidian unchanged.
 	import Markdown from '$lib/Markdown.svelte';
+	import Segmented from '$lib/ui/Segmented.svelte';
 
 	let {
 		value = $bindable(''),
@@ -22,7 +23,8 @@
 		hint?: string;
 	} = $props();
 
-	let preview = $state(false);
+	let view = $state<'write' | 'preview'>('write');
+	const preview = $derived(view === 'preview');
 	let box = $state<HTMLTextAreaElement | null>(null);
 	const id = `note-${Math.random().toString(36).slice(2, 9)}`;
 
@@ -65,14 +67,14 @@
 <div class="notebox">
 	<div class="head">
 		<label for={id} class="lbl">{label}</label>
-		<div class="tools" role="toolbar" aria-label="{label}: formatting">
-			{#if !preview}
-				<button type="button" class="tool" aria-label="Bold" onclick={() => wrap('**', '**', 'bold')}><b>B</b></button>
-				<button type="button" class="tool" aria-label="List" onclick={list}>•</button>
-				<button type="button" class="tool" aria-label="Link" onclick={() => wrap('[', '](https://)', 'link')}>🔗</button>
-			{/if}
-			<button type="button" class="tool switch" aria-pressed={preview} onclick={() => (preview = !preview)}>{preview ? 'Write' : 'Preview'}</button>
-		</div>
+		{#if !preview}
+			<div class="tools" role="toolbar" aria-label="{label}: formatting">
+				<button type="button" aria-label="Bold" onclick={() => wrap('**', '**', 'bold')}><b>B</b></button>
+				<button type="button" aria-label="List" onclick={list}>•</button>
+				<button type="button" aria-label="Link" onclick={() => wrap('[', '](https://)', 'link')}>🔗</button>
+			</div>
+		{/if}
+		<Segmented options={[{ value: 'write', label: 'Write' }, { value: 'preview', label: 'Preview' }]} bind:value={view} label="{label}: view" />
 	</div>
 	{#if preview}
 		<div class="preview" aria-live="polite">
@@ -87,14 +89,14 @@
 
 <style>
 	.notebox {
-		margin-top: 0.25rem;
+		margin-top: var(--space-tight);
 	}
 	.head {
 		flex-wrap: wrap;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 0.5rem;
+		gap: var(--space-inline);
 	}
 	.lbl {
 		flex: 1;
@@ -103,32 +105,34 @@
 	.tools {
 		flex-wrap: wrap;
 		display: flex;
-		gap: 0.25rem;
+		gap: var(--space-inline);
 	}
-	.tool {
-		padding: 0.1rem 0.5rem;
-		font-size: var(--font-size-chip);
-		min-width: 2rem;
-		min-height: 2rem;
-	}
-	.switch {
-		color: var(--accent);
+	/* Square M buttons with one glyph each, as the stepper's − and +; the Write / Preview switch is Segmented's. */
+	.tools > button {
+		inline-size: var(--control-md);
+		padding-inline: 0;
 	}
 	textarea {
-		margin-top: 0.25rem;
+		margin-top: var(--space-tight);
 		resize: vertical;
-		line-height: 1.4;
+	}
+	/* Under a coarse pointer the tools' and the switch's hit areas reach 6px under their 32px line, so the box starts
+	   8px under it, where taps are its own. */
+	@media (pointer: coarse) {
+		textarea {
+			margin-top: var(--space-inline);
+		}
 	}
 	.preview {
-		margin-top: 0.25rem;
+		margin-top: var(--space-tight);
 		min-height: 3.2rem;
-		padding: 0.5rem 0.6rem;
+		padding: calc(var(--space-tight) - 1px) var(--space-inline); /* the text starts where the textarea's does */
 		border: 1px dashed var(--line);
-		border-radius: 8px;
+		border-radius: var(--radius-control);
 		background: var(--surface-raised);
 	}
 	.hint {
 		font-size: var(--font-size-chip);
-		margin: 0.2rem 0 0;
+		margin: var(--space-tight) 0 0;
 	}
 </style>

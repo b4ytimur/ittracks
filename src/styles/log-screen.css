@@ -12,10 +12,9 @@
 .lg-end { --gap: var(--space-section); margin-top: calc(var(--space-page) - var(--space-group)); }
 .lg-level { display: grid; gap: var(--space-inline); }
 .lg-level > p { color: var(--ink-muted); }
-.lg-finish { inline-size: 100%; }
-.lg-finish, .lg-wide { flex: 1 0 100%; }
-.lg-finish { min-height: var(--target-act); }
-.lg-wide { min-height: var(--target-touch); }
+/* Finish is L (target-act) and full width, as the act is: the only two. Same as last time, under it, is M at its own width. */
+.lg-finish { inline-size: 100%; flex: 1 0 100%; min-height: var(--target-act); }
+.lg-wide { justify-self: start; }
 
 /* ---------- A place: the head. Folded, the head is the fold and the whole head its target ---------- */
 .elist > .lg-folded > .lg-head { min-height: calc(var(--target-touch) - 2px); padding-block: calc(var(--space-tight) - 1px); align-items: center; }
@@ -28,9 +27,9 @@
 .lg-fold-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-inline); min-width: 0; overflow-wrap: anywhere; }
 .lg-fold-words { font-weight: 400; color: var(--ink-muted); }
 .lg-tick-label { cursor: pointer; }
-.lg-more { min-inline-size: var(--target-min); padding: 0; margin-inline-end: calc(-1 * var(--space-tight)); border-color: transparent; background: none; color: var(--ink-muted); }
-.lg-more[aria-expanded='true'] { color: var(--ink); }
-@media (hover: hover) { .lg-more:hover { color: var(--ink); border-color: transparent; } }
+/* A row's or a card's ⋯ is Button's quiet glyph (24px); .lg-more only ends its glyph on the padding edge, as a trailing
+   quiet verb's text does, and lets Edit hide it in place. */
+.lg-more { margin-inline-end: calc(-1 * var(--space-tight)); }
 
 /* Up next first: a heading between the Tasks, an item of the one list. 16 + the list's 8 above, 8 under it */
 .lg-heading { margin-block-start: var(--space-group); }
@@ -92,7 +91,6 @@
 .lg-clock-face { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-inline); }
 .lg-face { font-size: var(--font-size-figure-lg); line-height: 2.5rem; font-weight: 600; min-inline-size: 4.5ch; }
 .lg-clock-acts { flex: 1 0 100%; display: grid; gap: var(--space-inline); grid-template-columns: repeat(auto-fit, minmax(max(3.75rem, 40%), 1fr)); }
-.lg-clock-acts > button { min-height: var(--target-touch); padding-inline: var(--space-tight); font-size: var(--font-size-label); line-height: 1.25rem; }
 .lg-clock > p.meta { flex: 1 0 100%; }
 .lg-clock-above { margin-block: 0; }
 
@@ -140,7 +138,6 @@
 /* ---------- Forced colours ---------- */
 @media (forced-colors: active) {
 	.lg-open { outline: var(--chosen-width) solid Highlight; outline-offset: calc(-1 * var(--chosen-width)); }
-	.lg-more { border-color: transparent; }
 }
 
 /* ---------- Edit, tier 1: a ruled number or name hugs its words and keeps the line's own height (F.6, L9) ---------- */

@@ -48,14 +48,14 @@
 
 	--font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
 
-	/* spacing */
+	/* spacing: every step is a whole number of pitches, so changing the pitch changes them all */
 	--pitch: 0.25rem;
-	--space-tight: 0.25rem;
-	--space-inline: 0.5rem;
-	--space-group: 1rem;
-	--space-section: 1.5rem;
-	--space-page: 2.5rem;
-	--space-indent: 1rem;
+	--space-tight: var(--pitch);
+	--space-inline: calc(2 * var(--pitch));
+	--space-group: calc(4 * var(--pitch));
+	--space-section: calc(6 * var(--pitch));
+	--space-page: calc(10 * var(--pitch));
+	--space-indent: var(--space-group);
 	--space-tabbar-clear: 5.5rem;
 
 	/* radius */
@@ -71,7 +71,6 @@
 	--shadow-lifted-dark: 0 8px 24px rgba(0, 0, 0, 0.6);
 	--shadow-popover: 0 4px 16px rgba(0, 0, 0, 0.14);
 	--shadow-tooltip: 0 2px 8px rgba(0, 0, 0, 0.12);
-	--shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.18);
 
 	/* zIndex */
 	--z-raised: 2;
@@ -80,7 +79,6 @@
 	--z-sticky: 5;
 	--z-popover: 6;
 	--z-band: 10;
-	--z-sheet: 21;
 
 	/* size */
 	--target-min: 24px;
@@ -88,15 +86,17 @@
 	--target-act: 3.5rem;
 	--drop-line: 3px;
 	--drop-cap: 8px;
-	--handle-slot: 1rem;
+	--handle-slot: var(--space-indent); /* the indent and the row's leading slot are one column (S.5) */
 	--area-dot: 8px;
 	--focus-width: 2px;
 	--chosen-width: 2px;
 	--band-height: 2rem;
 	--page-width: 40rem;
+	--field-num: 5rem; /* field widths by what they hold (Field): a number, a time, a short text or a date */
+	--field-time: 7rem;
+	--field-text: 10rem;
 	--control-sm: 1.5rem;
 	--control-md: 2rem;
-	--glyph-sm: 0.85rem;
 	--glyph-md: 1rem;
 	--glyph-lg: 1.15rem;
 	--font-size-page-title: 1.5rem;
@@ -123,6 +123,11 @@
 
 	/* The chosen look, one everywhere: a 2px ink edge drawn inside the box, so nothing changes size. */
 	--chosen-shadow: inset 0 0 0 var(--chosen-width) var(--line-chosen);
+}
+/* From 64rem the frame takes a side column. .main and the band both read --page-width, so the band's text keeps to the
+   page's left edge on every width. */
+@media (min-width: 64rem) {
+	:root { --page-width: 63.5rem; }
 }
 @media (prefers-color-scheme: dark) {
 	:root {

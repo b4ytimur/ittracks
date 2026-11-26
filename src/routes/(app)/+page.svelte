@@ -537,7 +537,7 @@
 
 <svelte:head><title>Today · ittracks</title></svelte:head>
 
-<EditChrome title="Today" bind:mode modes={['use', 'edit']} hints={{ edit: 'Drag ⠿ to move. Order is shared with Habits.' }}>
+<EditChrome title="Today" bind:mode modes={['use', 'edit']} hints={{ edit: 'Drag ⠿ to move. Order is shared with Habits.' }} onreset={() => sentenceBar?.resetDefault()} resetLabel="Reset view" atDefault={!sentenceBar?.canReset()}>
 	{#snippet useHint()}
 		<span class="today-line">
 			{#if wide.current}<span class="date">{dateLabel}</span>{:else}<button type="button" class="date" aria-expanded={strip} aria-controls="today-strip" onclick={() => (strip = !strip)}>{dateLabel} <span class="chev" aria-hidden="true">›</span></button>{/if}
@@ -574,26 +574,25 @@
 {#if data.askDay}
 	<div class="notice" role="note">
 		<span class="notice-text">It is past midnight. Is it still {yesterdayName} for you? What you log now counts for that day then.{#if problem} <span class="error">{problem}</span>{/if}</span>
-		<span class="notice-acts"><button type="button" class="hit" onclick={() => startDay('04:00')}>Yes, until 04:00</button><button type="button" class="quiet hit" onclick={() => startDay('00:00')}>No, days start at midnight</button></span>
+		<span class="notice-acts"><button type="button" class="quiet" onclick={() => startDay('04:00')}>Yes, until 04:00</button><button type="button" class="quiet" onclick={() => startDay('00:00')}>No, days start at midnight</button></span>
 	</div>
 {/if}
 
 {#if notDue}
 	<div class="notice" role="status">
 		<span class="notice-text">{notDue.text}</span>
-		<span class="notice-acts">{#if notDue.habit}<a class="button hit" href="/q/{notDue.habit}?go=1&extra=1" data-sveltekit-preload-data="off" onclick={() => (notDue = null)}>Log it anyway</a>{/if}<button type="button" class="quiet hit" onclick={() => (notDue = null)}>Close</button></span>
+		<span class="notice-acts">{#if notDue.habit}<a class="quiet" href="/q/{notDue.habit}?go=1&extra=1" data-sveltekit-preload-data="off" onclick={() => (notDue = null)}>Log it anyway</a>{/if}<button type="button" class="quiet" onclick={() => (notDue = null)}>Close</button></span>
 	</div>
 {/if}
 
 {#if data.unlogged.length && nudgeHiddenFor !== yesterday}
-	<div class="card nudge row" role="status">
-		<span class="grow small-text"
+	<div class="notice nudge" role="status">
+		<span class="notice-text"
 			>Yesterday {data.unlogged.length === 1 ? 'one habit was' : `${data.unlogged.length} habits were`} not logged: {data.unlogged
 				.slice(0, 3)
 				.join(', ')}{data.unlogged.length > 3 ? ' and more' : ''}. Did you do {data.unlogged.length === 1 ? 'it' : 'them'}?</span
 		>
-		<a class="button small primary" href="/day/{yesterday}">Log yesterday</a>
-		<button class="small link" onclick={hideNudge} aria-label="Hide this until tomorrow">Hide</button>
+		<span class="notice-acts"><a class="quiet" href="/day/{yesterday}">Log yesterday</a><button type="button" class="quiet" onclick={hideNudge} aria-label="Hide this until tomorrow">Hide</button></span>
 	</div>
 {/if}
 
@@ -604,15 +603,15 @@
 		<div class="chips">
 			{#each PACKS.filter((p) => !data.packs.includes(p.id)) as p (p.id)}<button type="button" class="toggle" onclick={() => packIn(p.id, p.name)}>{p.name}</button>{/each}
 		</div>
-		<div class="l-cluster"><a class="button hit" href="/gallery">Gallery</a><a class="button hit" href="/habits/import">Add a file</a><a class="quiet hit" href="/habits/new">Step by step</a></div>
+		<div class="l-cluster"><a class="button" href="/gallery">Gallery</a><a class="button" href="/habits/import">Add a file</a><a class="quiet" href="/habits/new">Step by step</a></div>
 	</section>
 {:else}
 	<ViewSentence bind:this={sentenceBar} page="today" bind:views bind:current={view} {words} starters={STARTERS()} {mode} reset={fromTemplate(views.template).defaults.today} say={(s) => sentence(todayWords(s, wordsCtx))} />
 	{#if hint && !retired.includes(hint) && mode === 'use'}
-		<div class="ob-hint" role="note"><span class="meta">{HINTS[hint]}</span><button type="button" class="quiet hit" onclick={() => hint && retire(hint)}>Got it</button></div>
+		<div class="notice ob-hint" role="note"><span class="notice-text">{HINTS[hint]}</span><span class="notice-acts"><button type="button" class="quiet" onclick={() => hint && retire(hint)}>Got it</button></span></div>
 	{/if}
 
-	<div class="today-cols">
+	<div class="page-cols">
 		<div class="today-day">
 			{#if view.first && breakingShown.length}{@render breaking()}{/if}
 			<!-- Beside Breaking, the day takes a heading of the same kind, so both columns start alike (TS.11). -->
@@ -663,7 +662,7 @@
 
 {#snippet breaking()}
 	<GroupHeading title={limiting ? 'Breaking and limiting' : 'Breaking'} {mode} verb={editing ? moveBreaking : undefined} />
-	{#snippet moveBreaking()}<button type="button" class="quiet verb hit" onclick={() => sentenceBar?.change({ ...view, first: !view.first }, view.first ? 'puts breaking after the day' : 'puts breaking first', 'Breaking first')}>{view.first ? 'Move last' : 'Move first'}</button>{/snippet}
+	{#snippet moveBreaking()}<button type="button" class="quiet verb" onclick={() => sentenceBar?.change({ ...view, first: !view.first }, view.first ? 'puts breaking after the day' : 'puts breaking first', 'Breaking first')}>{view.first ? 'Move last' : 'Move first'}</button>{/snippet}
 	{@render breakingSection()}
 {/snippet}
 
@@ -677,7 +676,7 @@
 
 {#snippet lineOf(l: { k: LineKey; text: string; warn?: boolean })}
 	<p class="row-line meta" class:warn={l.warn} class:line-off={editing && view.hide.includes(l.k)}>
-		<span>{l.text}</span>{#if editing}<button type="button" class="quiet hit line-verb" aria-label="{view.hide.includes(l.k) ? 'Show' : 'Hide'} {LINE_SAID[l.k]} in this view" onclick={() => flipLine(l.k)}>{view.hide.includes(l.k) ? 'Show' : 'Hide'}</button>{/if}
+		<span>{l.text}</span>{#if editing}<button type="button" class="quiet line-verb" aria-label="{view.hide.includes(l.k) ? 'Show' : 'Hide'} {LINE_SAID[l.k]} in this view" onclick={() => flipLine(l.k)}>{view.hide.includes(l.k) ? 'Show' : 'Hide'}</button>{/if}
 	</p>
 {/snippet}
 
@@ -717,14 +716,14 @@
 	{#each rowLines(item, st) as l (l.k)}{@render lineOf(l)}{/each}
 	{#if item.progression && st === 'due' && listed(item.habitId, 'progression')}
 		{@const p = item.progression}
-		<div class="notice" data-mode={mode} class:line-off={editing && view.hide.includes('progression')}>
+		<div class="notice" class:line-off={editing && view.hide.includes('progression')}>
 			<span class="notice-text meta"
 				>You've hit your targets {p.hits} times in a row. Raise them by {p.by}{p.unit === 'percent' ? '%' : p.by === 1 ? ' step' : ' steps'}? {p.changes.join(' · ')}</span
 			>
 			<span class="notice-acts">
-				{#if editing}<button type="button" class="quiet hit" onclick={() => flipLine('progression')}>{view.hide.includes('progression') ? 'Show' : 'Hide'}</button>{:else}
-					<form method="POST" action="?/raise" use:enhance><input type="hidden" name="habit" value={item.habitId} /><button class="quiet hit" aria-label="Raise the targets of {item.name}">Raise</button></form>
-					<form method="POST" action="?/notYet" use:enhance><input type="hidden" name="habit" value={item.habitId} /><button class="quiet hit" aria-label="Not yet for {item.name}">Not yet</button></form>
+				{#if editing}<button type="button" class="quiet" aria-label="{view.hide.includes('progression') ? 'Show' : 'Hide'} {LINE_SAID.progression} in this view" onclick={() => flipLine('progression')}>{view.hide.includes('progression') ? 'Show' : 'Hide'}</button>{:else}
+					<form method="POST" action="?/raise" use:enhance><input type="hidden" name="habit" value={item.habitId} /><button class="quiet" aria-label="Raise the targets of {item.name}">Raise</button></form>
+					<form method="POST" action="?/notYet" use:enhance><input type="hidden" name="habit" value={item.habitId} /><button class="quiet" aria-label="Not yet for {item.name}">Not yet</button></form>
 				{/if}
 			</span>
 		</div>
@@ -742,23 +741,23 @@
 		{@const w = waysOf(item)}
 		<LogControl name={item.name} act={w.act} ways={w.ways} primary={item.habitId === upNext} />
 	{:else if !pending[o.id]}
-		{#if item.group || o.slotCount > 0}<a class="quiet hit" href="/log/{o.id}" aria-label="View {item.name}">View</a>{/if}
+		{#if item.group || o.slotCount > 0}<a class="quiet" href="/log/{o.id}" aria-label="View {item.name}">View</a>{/if}
 		{@const undo = just.get(item.habitId)?.undo}
 		{#if undo}
-			<button type="button" class="quiet hit" aria-label="Undo {item.name}" onclick={undo}>Undo</button>
+			<button type="button" class="quiet" aria-label="Undo {item.name}" onclick={undo}>Undo</button>
 		{:else if !undoShows(band.entries, o.id) && (!item.group || item.group.undoable)}
 			<!-- One Undo at a time: the band's while its line is this one, else the row's (after a reload too).
 			     A routine done only through the habits inside it has nothing of its own to undo. -->
 			<form method="POST" action="?/undo" use:enhance={() => async ({ result, update }) => { await update(); if (result.type === 'success') reopened(item); }}>
 				<input type="hidden" name="occurrence" value={o.id} />
-				<button class="quiet hit" aria-label="Undo {item.name}">Undo</button>
+				<button class="quiet" aria-label="Undo {item.name}">Undo</button>
 			</form>
 		{/if}
 	{/if}
 {/snippet}
 
 {#snippet headlinePick(item: Item)}
-	<label class="headline-pick small-text"
+	<label class="headline-pick meta"
 		>Headline
 		<select value={views.today.headlineFor[item.habitId] ?? ''} onchange={(e) => setHeadline(item.habitId, e.currentTarget.value)}>
 			<option value="">This view's ({view.num === 'none' ? 'none' : STATS[view.num]})</option>
@@ -769,11 +768,11 @@
 
 {#snippet timeLine()}
 	{#if timeHidden.size}
-		<p class="muted small-text">
+		<p class="muted meta">
 			Showing what fits {currentPart}. <button class="link" onclick={() => (showAll = true)}>Show all ({timeHidden.size} more)</button>
 		</p>
 	{:else if showAll && view.fits}
-		<p class="muted small-text"><button class="link" onclick={() => (showAll = false)}>Only show what fits now</button></p>
+		<p class="muted meta"><button class="link" onclick={() => (showAll = false)}>Only show what fits now</button></p>
 	{/if}
 {/snippet}
 
@@ -824,14 +823,14 @@
 						>
 							<input type="hidden" name="habit" value={b.habitId} />
 							<div class="row">
-								<label style="width: 5rem">Count <input name="count" type="number" min="1" max="1000" step="1" value="1" required /></label>
+								<label>Count <input class="w-num" name="count" type="number" min="1" max="1000" step="1" value="1" required /></label>
 								<label class="grow"
 									>Date <input name="date" type="date" value={data.today} min={b.startDate} max={data.today} required /></label
 								>
-								<label style="width: 7rem">Time <input name="time" type="time" value={nowTime()} /></label>
+								<label>Time <input class="w-time" name="time" type="time" value={nowTime()} /></label>
 							</div>
 							<div>
-								<span class="muted small-text">How were you feeling? (optional)</span>
+								<span class="muted meta">How were you feeling? (optional)</span>
 								<input type="hidden" name="feeling" value={feeling} />
 								<div class="chips">
 									{#each b.triggers as t (t.id)}
@@ -846,7 +845,7 @@
 							<datalist id="places-{b.habitId}">
 								{#each b.places as p (p)}<option value={p}></option>{/each}
 							</datalist>
-							<button class="primary">{b.limit ? 'Log' : 'Log slip'}</button>
+							<button>{b.limit ? 'Log' : 'Log slip'}</button>
 						</form>
 				</div>
 			{/if}
@@ -870,13 +869,12 @@
 				<li class="card">
 					<strong>{p.name}</strong>
 					{#each p.items as it (it.item)}
-						<form method="POST" action="?/prep" use:enhance>
+						<form method="POST" action="?/prep" use:enhance={() => async ({ update }) => update({ reset: false })}>
 							<input type="hidden" name="habit" value={p.habitId} />
 							<input type="hidden" name="item" value={it.item} />
-							<input type="hidden" name="done" value={String(!it.done)} />
-							<button class="check" class:done={it.done} aria-pressed={it.done}>
-								<span class="box" aria-hidden="true">{it.done ? '✓' : ''}</span>{it.item}
-							</button>
+							<!-- Checkbox's tick: a change posts the box's own state, so what is sent is what is shown. No reset: it would
+							     untick the box until the reload lands. -->
+							<label class="check"><input type="checkbox" class="tick" name="done" value="true" checked={it.done} onchange={(e) => e.currentTarget.form?.requestSubmit()} /> {it.item}</label>
 						</form>
 					{/each}
 				</li>
@@ -891,7 +889,7 @@
 			<span class="name">{item.name}</span>
 			<p class="meta-line">Paused until {shortDate(item.pausedUntil!)}. Streak is safe.</p>
 		{/snippet}
-		{#snippet actions(item)}<a class="quiet hit" href="/habits/{item.habitId}#pause" aria-label="Change the pause of {item.name}">Change</a>{/snippet}
+		{#snippet actions(item)}<a class="quiet" href="/habits/{item.habitId}#pause" aria-label="Change the pause of {item.name}">Change</a>{/snippet}
 	</EditableList>
 {/snippet}
 
@@ -903,7 +901,7 @@
 			{#if editing}{@render headlinePick(item)}{/if}
 		{/snippet}
 		{#snippet actions(item)}
-			<a class="quiet hit" href="/q/{item.habitId}" data-sveltekit-preload-data="off" aria-label="Log {item.name}">Log</a>
+			<a class="quiet" href="/q/{item.habitId}" data-sveltekit-preload-data="off" aria-label="Log {item.name}">Log</a>
 		{/snippet}
 	</EditableList>
 {/snippet}
@@ -919,7 +917,7 @@
 				<form method="POST" action="?/early" use:enhance>
 					<input type="hidden" name="habit" value={item.habitId} />
 					<input type="hidden" name="variant" value={item.earlyVariant.id} />
-					<button class="quiet hit" aria-label="Start early: {item.multiVariant ? item.earlyVariant.name : item.name}">Start early</button>
+					<button class="quiet" aria-label="Start early: {item.multiVariant ? item.earlyVariant.name : item.name}">Start early</button>
 				</form>
 			{/if}
 		{/snippet}
@@ -932,49 +930,21 @@
 
 <style>
 	.headline-pick {
-		margin-top: 0.5rem;
+		margin-top: var(--space-inline);
 	}
 	.nudge {
-		align-items: center;
-		margin-bottom: 0.75rem;
-		border-color: var(--accent);
+		margin-bottom: var(--space-group);
 	}
 	:global(.elist > li.stacked) {
 		margin-inline-start: var(--space-indent);
 	}
 	.slip {
-		margin-top: 0.75rem;
+		margin-top: var(--space-group);
 	}
 	.grow,
 	.card strong {
 		min-width: 0;
 		overflow-wrap: anywhere;
-	}
-	.check {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		width: 100%;
-		margin-top: 0.4rem;
-		border: none;
-		background: none;
-		padding: 0.2rem 0;
-		min-height: 2rem;
-		text-align: left;
-	}
-	.check .box {
-		width: 1.2rem;
-		height: 1.2rem;
-		border: 1px solid var(--line);
-		border-radius: 4px;
-		display: inline-grid;
-		place-items: center;
-		font-size: var(--font-size-chip);
-		color: var(--accent);
-	}
-	.check.done {
-		color: var(--ink-muted);
-		text-decoration: line-through;
 	}
 	/* Under the title: the date, which opens the last seven days, and the one count (TS.5). */
 	.today-line {
@@ -1008,11 +978,8 @@
 	.today-strip {
 		margin-block-end: var(--space-group);
 	}
-	/* One column on a phone; from 64rem Breaking and the end line stand beside the day (TS.11). */
-	.today-cols {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr);
-	}
+	/* PageFrame's .page-cols: one column on a phone; from 64rem Breaking and the end line stand beside the day (TS.11). On
+	   a phone the side column comes under the day, a section below it. */
 	.today-side:not(:empty) {
 		margin-block-start: var(--space-section);
 	}
@@ -1024,14 +991,6 @@
 		background: var(--surface-raised);
 	}
 	@media (min-width: 64rem) {
-		:global(.main:has(.today-cols)) {
-			max-width: 1016px;
-		}
-		.today-cols {
-			grid-template-columns: minmax(0, 640fr) minmax(0, 344fr);
-			column-gap: calc(2 * var(--space-group));
-			align-items: start;
-		}
 		.today-side:not(:empty) {
 			margin-block-start: 0;
 		}
@@ -1040,21 +999,26 @@
 		margin: var(--space-group) 0;
 		font-weight: 600;
 	}
-	/* A row's ›: hangs in the card's padding before the name, and opens the row until the page is left (TS.4). */
-	:global(.elist > li > .card:has(> .content > .row-fold)) {
+	/* A row's ›: hangs in the card's padding before the name, and opens the row until the page is left (TS.4). It hangs
+	   from the content, the row's first line, so it centres where the slot does: a verb wrapped under the row moves nothing. */
+	:global(.elist > li > .card > .content:has(> .row-fold)) {
 		position: relative;
 	}
 	:global(.row-fold) {
 		position: absolute;
-		inset-inline-start: 0;
-		top: calc(var(--space-group) - 1px);
+		inset-inline-start: calc(-1 * var(--space-group));
+		top: calc(50% - var(--control-sm) / 2);
 		inline-size: var(--space-group);
-		min-height: 1.5rem;
+		min-height: var(--control-sm);
 		padding: 0;
 		border: 0;
 		background: none;
 		color: var(--ink-muted);
 		cursor: pointer;
+	}
+	/* A row with lines under it centres its marks on the name and meta (list-row.css), so the › stays there too. */
+	:global(.elist > li:has(> .card > .content > :is(.row-line, .week, .notice, .headline-pick)) > .card > .content > .row-fold) {
+		top: calc((1.5rem + 1.25rem - var(--control-sm)) / 2);
 	}
 	:global(.row-fold .chev) {
 		display: inline-block;
@@ -1077,7 +1041,7 @@
 		text-align: start;
 		cursor: pointer;
 	}
-	.line-off > span {
+	.line-off > span:not(.notice-acts) {
 		color: var(--ink-muted);
 		text-decoration: line-through;
 	}

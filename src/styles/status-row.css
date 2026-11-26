@@ -4,7 +4,7 @@
    Markup:
      <div class="act-row">
        <div class="status-text"><p class="label" id="push-s">Reminders are off for this device.</p></div>
-       <button type="button" class="hit" aria-label="Turn on reminders for this device" aria-describedby="push-s" data-reserve="Turning on…">Turn on</button>
+       <button type="button" aria-label="Turn on reminders for this device" aria-describedby="push-s" data-reserve="Turning on…">Turn on</button>
      </div>
    A form can be the row (<form class="act-row">). A BlockedReason line follows the row, in one parent with it. */
 

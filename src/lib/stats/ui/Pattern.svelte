@@ -53,7 +53,7 @@
 	}
 	td {
 		height: 26px;
-		border-radius: 3px;
+		border-radius: var(--radius-mark);
 		text-align: center;
 		background: var(--chart-grid);
 		font-variant-numeric: tabular-nums;

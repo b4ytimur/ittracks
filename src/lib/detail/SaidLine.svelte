@@ -65,13 +65,13 @@
 					{#if effect}<p class="meta">{effect}</p>{/if}
 					{@render question?.()}
 					<div class="l-cluster">
-						<button type="button" class="hit" aria-disabled={saving} onclick={() => !saving && onsave?.()}>{saving ? 'Saving…' : `Save ${label.toLowerCase()}`}</button>
-						<button type="button" class="hit" onclick={oncancel}>Cancel</button>
-						{#if onremove}<button type="button" class="quiet hit su-end" onclick={onremove}>{removeLabel}</button>{/if}
+						<button type="button" aria-disabled={saving} onclick={() => !saving && onsave?.()}>{saving ? 'Saving…' : `Save ${label.toLowerCase()}`}</button>
+						<button type="button" onclick={oncancel}>Cancel</button>
+						{#if onremove}<button type="button" class="quiet su-end" onclick={onremove}>{removeLabel}</button>{/if}
 					</div>
 				</div>
 			{:else if onremove}
-				<div class="l-cluster"><button type="button" class="quiet hit su-end" onclick={onremove}>{removeLabel}</button></div>
+				<div class="l-cluster"><button type="button" class="quiet su-end" onclick={onremove}>{removeLabel}</button></div>
 			{/if}
 		</div>
 	{/if}

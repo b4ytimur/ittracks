@@ -37,7 +37,7 @@
 /* ---------- Head: the count and the scope links read as one unit (F.21) ---------- */
 .selbar-head { display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--space-inline); }
 .selbar-count { font-weight: 600; } /* the figure of the band; .num keeps its digits' width */
-.selbar button.link { position: relative; min-height: var(--target-min); } /* Button's link; ::before is the head's dot, so the coarse hit area is ::after, not .hit */
+.selbar button.link { position: relative; min-height: var(--target-min); } /* Button's link; a head link's ::before is its dot, so its coarse hit area is ::after (Button leaves the head links out) */
 /* "3 selected · Select all 12 · Clear": each dot is centred in the 24px gap before its link, out of flow, so it is
    never underlined, never inside the link's focus ring and never a target. Screen readers skip it. */
 .selbar-head > button { margin-inline-start: var(--space-group); }
@@ -108,7 +108,7 @@
 		inset-block: calc((var(--control-md) - var(--target-touch)) / 2);
 	}
 	.selbar-form { row-gap: calc(3 * var(--pitch)); }
-	.selbar button.link::after { content: ''; position: absolute; inset: calc((var(--target-min) - var(--target-touch)) / 2) 0; }
-	/* Jump to next's hit area reaches 10px under it; 12 keeps it off Apply when the line wraps (Chip's coarse row-gap). */
+	.selbar-head > button::after { content: ''; position: absolute; inset: calc((var(--target-min) - var(--target-touch)) / 2) 0; }
+	/* Jump to next's hit area (Button's) reaches 10px under it; 12 keeps it off Apply when the line wraps (Chip's coarse row-gap). */
 	.selbar-commit { row-gap: calc(3 * var(--pitch)); }
 }

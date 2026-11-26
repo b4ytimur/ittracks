@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import EditChrome from '$lib/ui/EditChrome.svelte';
 
 	let { data, form } = $props();
 
@@ -36,10 +37,7 @@
 
 <svelte:head><title>{data.isNew ? 'New collection' : name} · ittracks</title></svelte:head>
 
-<header class="bar">
-	<h1>{data.isNew ? 'New collection' : 'Edit collection'}</h1>
-	<a href="/library">Cancel</a>
-</header>
+<EditChrome title={data.isNew ? 'New collection' : 'Edit collection'} modes={['use']} back={{ href: '/library', label: 'Library' }} />
 
 <form method="POST" action="?/save" class="stack">
 	<input type="hidden" name="payload" value={payload} />
@@ -61,12 +59,12 @@
 
 	{#if smart}
 		<div>
-			<span class="muted small-text">Has every one of these tags</span>
+			<span class="muted meta">Has every one of these tags</span>
 			<div class="chips">
 				{#each data.tags as t (t)}
 					<button type="button" class="toggle" aria-pressed={filterTags.includes(t)} onclick={() => (filterTags = toggle(filterTags, t))}>{t}</button>
 				{/each}
-				{#if !data.tags.length}<span class="muted small-text">No tags yet.</span>{/if}
+				{#if !data.tags.length}<span class="muted meta">No tags yet.</span>{/if}
 			</div>
 		</div>
 		<label
@@ -77,7 +75,7 @@
 			</select>
 		</label>
 		<label>Name contains <input bind:value={filterText} placeholder="press" /></label>
-		<p class="muted small-text">Matches {preview.length}: {preview.slice(0, 8).map((t) => t.name).join(', ')}{preview.length > 8 ? '…' : ''}</p>
+		<p class="muted meta">Matches {preview.length}: {preview.slice(0, 8).map((t) => t.name).join(', ')}{preview.length > 8 ? '…' : ''}</p>
 	{:else}
 		<input type="search" bind:value={search} placeholder="Find Tasks" aria-label="Find Tasks" />
 		<div class="picks">
@@ -85,17 +83,19 @@
 				<label style="color: var(--ink)"><input type="checkbox" checked={picked.includes(t.id)} onchange={() => (picked = toggle(picked, t.id))} /> {t.name}</label>
 			{/each}
 		</div>
-		<p class="muted small-text">{picked.length} picked</p>
+		<p class="muted meta">{picked.length} picked</p>
 	{/if}
 
 	{#if form?.error}<p class="error">{form.error}</p>{/if}
-	<div class="actions">
-		<button class="primary">Save collection</button>
-		{#if !data.isNew}
-			<button class="danger" formaction="?/delete" formnovalidate>Delete collection</button>
-		{/if}
+	<div class="actions-bar l-stack">
+		<div class="l-cluster">
+			<button class="primary">Save collection</button>
+			{#if !data.isNew}
+				<button class="danger" formaction="?/delete" formnovalidate>Delete collection</button>
+			{/if}
+		</div>
 	</div>
-	{#if !data.isNew}<p class="muted small-text">Deleting a collection never deletes its Tasks.</p>{/if}
+	{#if !data.isNew}<p class="muted meta">Deleting a collection never deletes its Tasks.</p>{/if}
 </form>
 
 <style>
@@ -106,10 +106,10 @@
 		max-height: 50vh;
 		overflow: auto;
 		border: 1px solid var(--line);
-		border-radius: 8px;
-		padding: 0.5rem;
+		border-radius: var(--radius-control);
+		padding: var(--space-inline);
 	}
 	.picks label + label {
-		margin-top: 0.35rem;
+		margin-top: var(--space-inline);
 	}
 </style>

@@ -861,7 +861,7 @@
 						<div class="slot">{@render ctx.grip?.()}</div>
 						<div class="content"><input class="grow" aria-label="Name of the Variant" bind:value={v.name} required maxlength="120" /></div>
 						<div class="verb">
-							<MenuButton class="hit" label="More for {v.name}" items={[{ label: 'Duplicate', onselect: () => duplicateVariant(h.variants.indexOf(v)) }, { label: usedVariant(v.id) ? 'Archive' : 'Remove', value: usedVariant(v.id) ? 'Past days keep it.' : undefined, onselect: () => removeVariant(v) }]} />
+							<MenuButton label="More for {v.name}" items={[{ label: 'Duplicate', onselect: () => duplicateVariant(h.variants.indexOf(v)) }, { label: usedVariant(v.id) ? 'Archive' : 'Remove', value: usedVariant(v.id) ? 'Past days keep it.' : undefined, onselect: () => removeVariant(v) }]} />
 						</div>
 					</div>
 				{/if}
@@ -880,8 +880,8 @@
 								<div class="su-slot-head">
 									<span class="slot">{@render sctx.grip?.()}</span>
 									<strong class="grow">{slotName(s)}</strong>
-									<button type="button" class="quiet hit" aria-expanded={!!openSlots[s.id]} aria-label="{openSlots[s.id] ? 'Close' : 'Change'} {slotName(s)}" onclick={() => (openSlots[s.id] = !openSlots[s.id])}>{openSlots[s.id] ? 'Close' : 'Change'}</button>
-									<button type="button" class="quiet hit" aria-label="Remove {slotName(s)}" onclick={() => (v.slots = v.slots.filter((x) => x !== s))}>Remove</button>
+									<button type="button" class="quiet" aria-expanded={!!openSlots[s.id]} aria-label="{openSlots[s.id] ? 'Close' : 'Change'} {slotName(s)}" onclick={() => (openSlots[s.id] = !openSlots[s.id])}>{openSlots[s.id] ? 'Close' : 'Change'}</button>
+									<button type="button" class="quiet" aria-label="Remove {slotName(s)}" onclick={() => (v.slots = v.slots.filter((x) => x !== s))}>Remove</button>
 								</div>
 								{#if !openSlots[s.id]}
 									{#if slotWords(s)}<p class="meta su-slot-words">{slotWords(s)}</p>{/if}
@@ -915,18 +915,19 @@
 									<button type="button" class="toggle" aria-pressed={newTaskType === type.key} onclick={() => (newTaskType = type.key)}>{type.name}</button>
 								{/each}
 							</div>
-							<p class="muted small-text" style="margin: 0">{data.types.find((x) => x.key === newTaskType)?.description}</p>
+							<p class="muted meta">{data.types.find((x) => x.key === newTaskType)?.description}</p>
 							<div class="row">
-								<button type="button" class="primary small" onclick={() => createTask(s)} disabled={!newTaskName.trim()}>Create and use</button>
-								<button type="button" class="small" onclick={() => (newTaskFor = null)}>Cancel</button>
+								<button type="button" onclick={() => createTask(s)} disabled={!newTaskName.trim()}>Create and use</button>
+								<button type="button" onclick={() => (newTaskFor = null)}>Cancel</button>
 							</div>
 							{#if newTaskError}<p class="error">{newTaskError}</p>{/if}
 						</div>
 					{/if}
 					{#if s.taskId && !repeating.has(s.taskId) && data.withParts.includes(s.taskId)}
-						<label style="width: 8rem"
+						<label
 							>Rounds
 							<input
+								class="w-num"
 								type="number"
 								min="0"
 								max="50"
@@ -935,9 +936,10 @@
 							/>
 						</label>
 					{:else if !s.taskId || repeating.has(s.taskId)}
-						<label style="width: 8rem"
+						<label
 							>Target sets
 							<input
+								class="w-num"
 								type="number"
 								min="0"
 								max="50"
@@ -986,28 +988,28 @@
 					</EditableList>
 					<div class="su-slot-add">
 			{#if isRoutine}
-				<p class="muted small-text" style="margin: 0">Its Tasks are the habits inside it, so it has none of its own for now.</p>
+				<p class="muted meta">Its Tasks are the habits inside it, so it has none of its own for now.</p>
 			{:else}
 			<div class="row">
 				{#if tasks.length}
-					<button type="button" class="small" onclick={() => addSlot(v.slots, false)}>+ Task</button>
+					<button type="button" onclick={() => addSlot(v.slots, false)}>+ Task</button>
 				{:else}
-					<button type="button" class="small" onclick={() => { addSlot(v.slots, false); newTaskFor = v.slots.at(-1)!.id; }}>+ New Task</button>
+					<button type="button" onclick={() => { addSlot(v.slots, false); newTaskFor = v.slots.at(-1)!.id; }}>+ New Task</button>
 				{/if}
-				<button type="button" class="small" onclick={() => addSlot(v.slots, true)}>+ Auto-filled</button>
+				<button type="button" onclick={() => addSlot(v.slots, true)}>+ Auto-filled</button>
 			</div>
 			{/if}
 			{#if !v.slots.length && !isRoutine}
-				<p class="muted small-text" style="margin: 0">No Tasks means there's nothing to fill in: you just tick it off.</p>
+				<p class="muted meta">No Tasks means there's nothing to fill in: you just tick it off.</p>
 			{/if}
 					</div>
 				</div>
 			</div>
 		{/snippet}
 	</EditableList>
-	<button type="button" class="small" onclick={addVariant}>{h.variants.length > 1 ? '+ Variant' : '+ Another Variant (for A/B plans)'}</button>
+	<button type="button" onclick={addVariant}>{h.variants.length > 1 ? '+ Variant' : '+ Another Variant (for A/B plans)'}</button>
 	{#each archivedVariants as v (v.id)}
-		<p class="meta muted archived">{v.name} is archived. <button type="button" class="quiet hit" aria-label="Bring back {v.name}" onclick={() => bringBack(v)}>Bring back</button></p>
+		<p class="meta muted archived">{v.name} is archived. <button type="button" class="quiet" aria-label="Bring back {v.name}" onclick={() => bringBack(v)}>Bring back</button></p>
 	{/each}
 {/snippet}
 
@@ -1032,20 +1034,20 @@
 			...(parent?.routine ? [{ value: 'follow', label: `Whenever ${parent.name} is due` }] : [])
 		]}
 	/>
-	{#if groupProblem}<p class="error small-text">{groupProblem}</p>{/if}
+	{#if groupProblem}<p class="error meta">{groupProblem}</p>{/if}
 	{#if drifts && parent}
-		<p class="muted small-text" style="margin: 0">
+		<p class="muted meta">
 			{parent.name} goes through its own Variants too, so the two can drift apart. To keep them in step, pick "Whenever {parent.name} is due" and choose
 			this habit's Variant for each of {parent.name}'s.
 		</p>
 	{/if}
 
 	{#if kind === 'phases'}
-		<p class="muted small-text" style="margin: 0">
+		<p class="muted meta">
 			Each phase runs its own schedule from its first day, then the next one takes over. Use a Variant per phase to change the targets: 5 a day
 			with one Variant for a week, then 1 a day with another.
 		</p>
-		<label style="width: 12rem">Starting <input type="date" bind:value={phasesStart} /></label>
+		<label>Starting <input class="w-text" type="date" bind:value={phasesStart} /></label>
 		<EditableList
 			items={phases}
 			key={(p) => p.key}
@@ -1062,7 +1064,7 @@
 				{@const i = phases.indexOf(p)}
 				{@const r = phaseRanges[i]}
 				<strong>Phase {i + 1}</strong>
-				<span class="muted small-text"
+				<span class="muted meta"
 					>{r?.from ? (r.to ? `${shortDate(r.from)} to ${shortDate(r.to)}` : `from ${shortDate(r.from)} on`) : 'never comes: a phase before it has no end'}</span
 				>
 			{/snippet}
@@ -1070,7 +1072,7 @@
 				<div class="stack">
 					<div class="row">
 						{#if p.length !== null}
-							<label style="width: 6rem">For <input type="number" min="1" max="520" bind:value={p.length} aria-label="Phase length" /></label>
+							<label>For <input class="w-num" type="number" min="1" max="520" bind:value={p.length} aria-label="Phase length" /></label>
 						{/if}
 						<label class="grow"
 							>{p.length === null ? 'Runs' : 'Unit'}
@@ -1097,12 +1099,12 @@
 		</EditableList>
 		{#if phases.length && phases.at(-1)?.length !== null}
 			{@const last = phases.at(-1)!}
-			<p class="muted small-text" style="margin: 0">
+			<p class="muted meta">
 				After the last phase ({lengthText(last.length!, last.unit)}) nothing is due. Pick "from then on" on it to keep going.
 			</p>
 		{/if}
 	{:else if kind === 'group'}
-		<p class="muted small-text" style="margin: 0">
+		<p class="muted meta">
 			A group has no Tasks of its own. It is due on days a habit inside it is due, and its streak counts the days enough of them were done.
 		</p>
 		<label
@@ -1116,15 +1118,15 @@
 			</select>
 		</label>
 		{#if groupTarget !== null}
-			<label style="width: 10rem">How many <input type="number" min="1" max="100" bind:value={groupTarget} /></label>
+			<label>How many <input class="w-num" type="number" min="1" max="100" bind:value={groupTarget} /></label>
 		{/if}
 		<label style="color: var(--ink)"
 			><input type="checkbox" checked={groupMinimum !== null} onchange={(e) => (groupMinimum = e.currentTarget.checked ? 1 : null)} /> A day with fewer done still counts at the Minimum</label
 		>
 		{#if groupMinimum !== null}
-			<label style="width: 10rem">Habits for the Minimum <input type="number" min="1" max="100" bind:value={groupMinimum} /></label>
+			<label>Habits for the Minimum <input class="w-num" type="number" min="1" max="100" bind:value={groupMinimum} /></label>
 		{/if}
-		<p class="muted small-text" style="margin: 0">
+		<p class="muted meta">
 			{#if data.inside.length}
 				Inside: {data.inside.map((x) => x.name + (x.archived ? ' (archived)' : '')).join(', ')}.
 			{:else}
@@ -1133,12 +1135,12 @@
 			On a day only some are due, "a number" means that many of the ones due.
 		</p>
 	{:else if kind === 'follow' && parent}
-		<p class="muted small-text" style="margin: 0">
+		<p class="muted meta">
 			Due on {parent.name}'s days{followOn ? ', with the Variants picked here' : ''}. On Today it shows inside {parent.name}, and marking
 			{parent.name} done marks this done too.
 		</p>
 		{#if parent.variants.length > 1}
-			<span class="muted small-text">Only when {parent.name} is on</span>
+			<span class="muted meta">Only when {parent.name} is on</span>
 			<div class="chips" role="group" aria-label="{parent.name}'s Variants">
 				{#each parent.variants as pv (pv.id)}
 					<button type="button" class="toggle" aria-pressed={!followOn || followOn.includes(pv.id)} onclick={() => toggleFollowOn(pv.id)}>{pv.name}</button>
@@ -1164,7 +1166,7 @@
 						</select>
 					</label>
 				{/if}
-				<p class="muted small-text" style="margin: 0">
+				<p class="muted meta">
 					The two go through their Variants together: whenever {parent.name} is on one of these, this habit logs the Variant picked for it.
 				</p>
 			</fieldset>
@@ -1185,15 +1187,15 @@
 				</select>
 			</label>
 			{#if groupTarget !== null}
-				<label style="width: 10rem">How many <input type="number" min="1" max="100" bind:value={groupTarget} /></label>
+				<label>How many <input class="w-num" type="number" min="1" max="100" bind:value={groupTarget} /></label>
 			{/if}
 			<label style="color: var(--ink)"
 				><input type="checkbox" checked={groupMinimum !== null} onchange={(e) => (groupMinimum = e.currentTarget.checked ? 1 : null)} /> A day with fewer done still counts at the Minimum</label
 			>
 			{#if groupMinimum !== null}
-				<label style="width: 10rem">Habits for the Minimum <input type="number" min="1" max="100" bind:value={groupMinimum} /></label>
+				<label>Habits for the Minimum <input class="w-num" type="number" min="1" max="100" bind:value={groupMinimum} /></label>
 			{/if}
-			<p class="muted small-text" style="margin: 0">
+			<p class="muted meta">
 				Inside: {data.inside.map((x) => x.name + (x.archived ? ' (archived)' : '')).join(', ')}. Done on Today marks the ones due done; a day none of
 				them is due, you tick it off like any habit.
 			</p>
@@ -1212,9 +1214,9 @@
 
 {#snippet cuePart()}
 	<div class="row">
-		<label style="width: 8rem"
+		<label
 			>Time
-			<input type="time" value={h.cue.time ?? ''} disabled={!!timeBlock}
+			<input class="w-time" type="time" value={h.cue.time ?? ''} disabled={!!timeBlock}
 				oninput={(e) => (h.cue.time = e.currentTarget.value || null)} />
 		</label>
 		{#if data.ranges.length}
@@ -1267,7 +1269,7 @@
 	>
 	{#if remindBlock && !h.remind}<p class="meta muted">{remindBlock.reason}, or a time of its own here.</p>{/if}
 	<div class="row">
-		<label style="width: 9rem">Time of its own <input type="time" value={r.time ?? ''} onchange={(e) => change({ time: e.currentTarget.value || null })} /></label>
+		<label>Time of its own <input class="w-time" type="time" value={r.time ?? ''} onchange={(e) => change({ time: e.currentTarget.value || null })} /></label>
 		<label class="grow">What it says <input value={r.text} maxlength="120" placeholder="The place, and the Minimum" oninput={(e) => change({ text: e.currentTarget.value })} /></label>
 	</div>
 	<p class="meta muted">Without a time it follows When and where. The notification offers Done{h.levels.enabled ? ', and what is ticked here' : ', and Snooze if you like'}.</p>
@@ -1313,15 +1315,15 @@
 			><input type="radio" name="type" checked={type === 'break'} onchange={() => ((h.direction = 'break'), (h.scoring = 'habit'))} disabled={!!directionLocked && h.direction !== 'break'} /> Break: something to stop, with
 			a slip counter</label
 		>
-		{#if directionLocked}<p class="muted small-text" style="margin: 0.25rem 0 0">{directionLocked}.</p>{/if}
-		{#if noTrack && type !== 'track' && type !== 'break'}<p class="muted small-text" style="margin: 0.25rem 0 0">Track: {noTrack.charAt(0).toLowerCase() + noTrack.slice(1)}.</p>{/if}
+		{#if directionLocked}<p class="muted meta" style="margin: var(--space-tight) 0 0">{directionLocked}.</p>{/if}
+		{#if noTrack && type !== 'track' && type !== 'break'}<p class="muted meta" style="margin: var(--space-tight) 0 0">Track: {noTrack.charAt(0).toLowerCase() + noTrack.slice(1)}.</p>{/if}
 	</fieldset>
 {/snippet}
 
 {#snippet areaPart()}
 	{#if data.areas.length}
 		<div>
-			<span class="muted small-text">Area</span>
+			<span class="muted meta">Area</span>
 			<div class="chips">
 				<button type="button" class="toggle" aria-pressed={!h.areaId} onclick={() => (h.areaId = null)}>None</button>
 				{#each data.areas as a (a.id)}
@@ -1354,7 +1356,7 @@
 			</select>
 		</label>
 		{#if parent}
-			<p class="muted small-text" style="margin-top: -0.25rem">
+			<p class="muted meta" style="margin-top: calc(-1 * var(--space-tight))">
 				{#if parent.routine}
 					On Today it shows inside {parent.name}, and {parent.name}'s days count it. Under How often it can follow {parent.name}'s days.
 				{:else}
@@ -1401,8 +1403,8 @@
 {#snippet costPart()}
 	{#if h.cost}
 		<div class="row">
-			<label style="width: 7rem">Cost per slip <input type="number" min="0" step="any" bind:value={h.cost.amount} /></label>
-			<label style="width: 6rem">Unit <input bind:value={h.cost.unit} placeholder="€, kcal, min" /></label>
+			<label>Cost per slip <input class="w-num" type="number" min="0" step="any" bind:value={h.cost.amount} /></label>
+			<label>Unit <input class="w-text" bind:value={h.cost.unit} placeholder="€, kcal, min" /></label>
 			<label class="grow"
 				>Slips a day before you started
 				<input type="number" min="0" step="any" value={h.cost.perDay ?? ''}
@@ -1426,7 +1428,7 @@
 	>
 	{#if h.limit}
 		<div class="row">
-			<label style="width: 6rem">Up to <input type="number" min="0" max="1000" bind:value={h.limit.max} /></label>
+			<label>Up to <input class="w-num" type="number" min="0" max="1000" bind:value={h.limit.max} /></label>
 			<label class="grow"
 				>Per
 				<select bind:value={h.limit.period}>
@@ -1444,7 +1446,7 @@
 		>
 		{#if h.limit.taper}
 			<div class="row">
-				<label style="width: 6rem">By <input type="number" min="1" max="100" bind:value={h.limit.taper.by} /></label>
+				<label>By <input class="w-num" type="number" min="1" max="100" bind:value={h.limit.taper.by} /></label>
 				<label class="grow"
 					>Every
 					<select bind:value={h.limit.taper.every}>
@@ -1452,10 +1454,10 @@
 						<option value="month">month</option>
 					</select>
 				</label>
-				<label style="width: 7rem">Down to <input type="number" min="0" max="1000" bind:value={h.limit.taper.floor} /></label>
+				<label>Down to <input class="w-num" type="number" min="0" max="1000" bind:value={h.limit.taper.floor} /></label>
 			</div>
 		{/if}
-		{#if limitPreview}<p class="muted small-text">{limitPreview}</p>{/if}
+		{#if limitPreview}<p class="muted meta">{limitPreview}</p>{/if}
 	{/if}
 {/snippet}
 
@@ -1495,7 +1497,7 @@
 				<label>Minimum <input bind:value={h.levels.minimum} placeholder="Put on running shoes" /></label>
 				<label>Target <input bind:value={h.levels.target} placeholder="Run 5 km" /></label>
 				<label>Stretch <input bind:value={h.levels.stretch} placeholder="Run 10 km" /></label>
-				<p class="muted small-text">Set numbers for each level per Task in the Slots above. Whether a Minimum day counts is under Streak.</p>
+				<p class="muted meta">Set numbers for each level per Task in the Slots above. Whether a Minimum day counts is under Streak.</p>
 			{/if}
 {/snippet}
 
@@ -1511,7 +1513,7 @@
 			</label>
 			{#if h.streakRule.kind === 'grace'}
 				<div class="row">
-					<label style="width: 6rem">Misses <input type="number" min="1" max="15" bind:value={h.streakRule.misses} /></label>
+					<label>Misses <input class="w-num" type="number" min="1" max="15" bind:value={h.streakRule.misses} /></label>
 					<label class="grow"
 						>Per
 						<select bind:value={h.streakRule.period}>
@@ -1521,7 +1523,7 @@
 					</label>
 				</div>
 			{:else if h.streakRule.kind === 'consistency'}
-				<label style="width: 10rem">Over the last N days <input type="number" min="7" max="365" bind:value={h.streakRule.days} /></label>
+				<label>Over the last N days <input class="w-num" type="number" min="7" max="365" bind:value={h.streakRule.days} /></label>
 			{/if}
 			{#if h.direction === 'build' && (kind !== 'group' || groupMinimum !== null)}
 				<fieldset class="card">
@@ -1533,7 +1535,7 @@
 					<label style="color: var(--ink)"
 						><input type="radio" bind:group={h.minimumCounts} value={false} /> Only the full target counts</label
 					>
-					<p class="muted small-text" style="margin: 0.25rem 0 0" hidden={kind === 'group'}>
+					<p class="muted meta" style="margin: var(--space-tight) 0 0" hidden={kind === 'group'}>
 						{h.minimumCounts
 							? h.levels.enabled
 								? 'Doing the Minimum keeps the streak alive. Less than that is a miss once the day is over.'
@@ -1552,7 +1554,7 @@
 				<label style="color: var(--ink)"
 					><input type="radio" bind:group={h.unlogged} value="ignore" /> Don't count them: only what you log counts</label
 				>
-				<p class="muted small-text" style="margin: 0.25rem 0 0">
+				<p class="muted meta" style="margin: var(--space-tight) 0 0">
 					{h.unlogged === 'ignore'
 						? 'A day you forget leaves your streak and consistency as they were. Logging it later still counts.'
 						: 'Streaks, consistency, the chain and Stats treat a forgotten day as a miss. Log or skip it later to change that.'}
@@ -1578,7 +1580,7 @@
 		{#each h.prep as item, pi (item)}
 			<div class="row">
 				<span class="grow">{item}</span>
-				<button type="button" class="small danger" onclick={() => h.prep.splice(pi, 1)}>Remove</button>
+				<button type="button" class="quiet" onclick={() => h.prep.splice(pi, 1)}>Remove</button>
 			</div>
 		{/each}
 		<div class="row">
@@ -1605,33 +1607,33 @@
 		>
 		{#if h.reward.jar && !tracker}
 			<div class="row">
-				<label style="width: 7rem">Each time, add <input type="number" min="0" step="any" bind:value={h.reward.jar.amount} /></label>
-				<label style="width: 5rem">Unit <input bind:value={h.reward.jar.unit} placeholder="€, points" /></label>
+				<label>Each time, add <input class="w-num" type="number" min="0" step="any" bind:value={h.reward.jar.amount} /></label>
+				<label>Unit <input class="w-text" bind:value={h.reward.jar.unit} placeholder="€, points" /></label>
 				<label class="grow">Saving for <input bind:value={h.reward.jar.goal} placeholder="new running shoes" /></label>
 			</div>
-			<p class="muted small-text">A pretend jar that fills up as you go. Treat yourself when it's full.</p>
+			<p class="muted meta">A pretend jar that fills up as you go. Treat yourself when it's full.</p>
 		{/if}
 {/snippet}
 
 {#snippet raisePart()}
 			{#if h.progression}
 				<div class="row">
-					<label style="width: 8rem">After hitting them <input type="number" min="2" max="60" bind:value={h.progression.after} /></label>
-					<span style="padding-bottom: 0.6rem">times in a row, raise by</span>
-					<label style="width: 5rem"><input type="number" min="0" step="any" bind:value={h.progression.by} aria-label="Raise by" /></label>
-					<label style="width: 7rem"
-						><select bind:value={h.progression.unit} aria-label="Raise unit">
+					<label>After hitting them <input class="w-num" type="number" min="2" max="60" bind:value={h.progression.after} /></label>
+					<span style="padding-bottom: calc((var(--control-md) - 1lh) / 2)">times in a row, raise by</span>
+					<label><input class="w-num" type="number" min="0" step="any" bind:value={h.progression.by} aria-label="Raise by" /></label>
+					<label
+						><select class="w-num" bind:value={h.progression.unit} aria-label="Raise unit">
 							<option value="percent">%</option>
 							<option value="steps">steps</option>
 						</select></label
 					>
 				</div>
 				{#if h.progression.unit === 'steps'}
-					<p class="muted small-text">
+					<p class="muted meta">
 						A step is each field's own +/− step, in its own unit{raiseLines.length ? `: ${raiseLines.join(', ')}` : ''}. Change a step in the Task's “When logging”.
 					</p>
 				{/if}
-				<p class="muted small-text">ittracks only suggests it. Nothing changes until you accept.</p>
+				<p class="muted meta">ittracks only suggests it. Nothing changes until you accept.</p>
 			{/if}
 {/snippet}
 
@@ -1728,8 +1730,8 @@
 
 	{#if toAdd.length}
 		<div class="chips add-more" role="group" aria-label="Add to this habit">
-			{#each morePills ? toAdd : toAdd.slice(0, 6) as id (id)}<button type="button" class="small" onclick={() => add(id)}>+ {optional[id].word}</button>{/each}
-			{#if toAdd.length > 6 && !morePills}<button type="button" class="small" onclick={() => (morePills = true)}>More…</button>{/if}
+			{#each morePills ? toAdd : toAdd.slice(0, 6) as id (id)}<button type="button" onclick={() => add(id)}>+ {optional[id].word}</button>{/each}
+			{#if toAdd.length > 6 && !morePills}<button type="button" onclick={() => (morePills = true)}>More…</button>{/if}
 		</div>
 	{/if}
 
@@ -1761,14 +1763,10 @@
 {/snippet}
 
 {#if mode === 'choose'}
-	<header class="bar">
-		<h1>New habit</h1>
-		<a href="/habits">Cancel</a>
-	</header>
-	<p class="muted">How do you want to start?</p>
+	<EditChrome title="New habit" modes={['use']} back={{ href: '/habits', label: 'Habits' }} hints={{ use: 'How do you want to start?' }} />
 	<ul class="list">
-		<li><a class="card" href="/gallery"><strong>Pick a ready-made habit</strong><div class="muted small-text">Gym plans, language practice, reading, quitting smoking and more. Adjust it after.</div></a></li>
-		<li><a class="card" href="?mode=guided{data.habit.areaId ? `&area=${data.habit.areaId}` : ''}"><strong>Build it step by step</strong><div class="muted small-text">Four short steps: what you do, which days, when, and a check.</div></a></li>
+		<li><a class="card" href="/gallery"><strong>Pick a ready-made habit</strong><div class="muted meta">Gym plans, language practice, reading, quitting smoking and more. Adjust it after.</div></a></li>
+		<li><a class="card" href="?mode=guided{data.habit.areaId ? `&area=${data.habit.areaId}` : ''}"><strong>Build it step by step</strong><div class="muted meta">Four short steps: what you do, which days, when, and a check.</div></a></li>
 		{#if data.habits.length}
 			<li class="card">
 				<strong>Copy one of my habits</strong>
@@ -1777,12 +1775,12 @@
 				</div>
 			</li>
 		{/if}
-		<li><a class="card" href="?mode=full"><strong>Start blank in the full editor</strong><div class="muted small-text">Every option on one page.</div></a></li>
+		<li><a class="card" href="?mode=full"><strong>Start blank in the full editor</strong><div class="muted meta">Every option on one page.</div></a></li>
 		{#if !data.hidden.includes('journal')}
-			<li><a class="card" href="/journal?setup"><strong>Start a daily journal</strong><div class="muted small-text">A few lines each evening with a prompt, a mood to chart, and an optional day note on Today.</div></a></li>
+			<li><a class="card" href="/journal?setup"><strong>Start a daily journal</strong><div class="muted meta">A few lines each evening with a prompt, a mood to chart, and an optional day note on Today.</div></a></li>
 		{/if}
 	</ul>
-	<p class="muted small-text">You can skip this choice in <a href="/settings#newhabits">Settings</a>.</p>
+	<p class="muted meta">You can skip this choice in <a href="/settings#newhabits">Settings</a>.</p>
 {:else}
 <EditChrome
 	title={data.isNew ? (data.copiedFrom ? `Copy of ${data.copiedFrom}` : 'New habit') : h.name || 'Habit'}
@@ -1799,17 +1797,17 @@
 {#if data.archived}
 	<form method="POST" action="?/unarchive" class="notice" use:enhance>
 		<span class="notice-text">{data.deleteAfter ? `Deleted. It goes for good with its logs on ${goneAt(data.deleteAfter)}.` : 'This habit is archived: hidden from Today, with its history kept.'}</span>
-		<span class="notice-acts"><button class="quiet hit">{data.deleteAfter ? 'Put back' : 'Unarchive'}</button></span>
+		<span class="notice-acts"><button class="quiet">{data.deleteAfter ? 'Put back' : 'Unarchive'}</button></span>
 	</form>
 {/if}
 {#if elsewhere}
 	<div class="notice" data-tone="warn" role="alert">
 		<span class="notice-text">{LINES[elsewhere.id].label} changed on another device{Object.keys(elsewhere.moved).length ? `: ${say({ ...base, ...elsewhere.moved } as HabitForm)[elsewhere.id] ?? ''}` : ''}. Yours isn't saved.</span>
-		<span class="notice-acts"><button type="button" class="quiet hit" onclick={showTheirs}>Show it</button><button type="button" class="quiet hit" onclick={keepMine}>Keep mine</button></span>
+		<span class="notice-acts"><button type="button" class="quiet" onclick={showTheirs}>Show it</button><button type="button" class="quiet" onclick={keepMine}>Keep mine</button></span>
 	</div>
 {/if}
 {#if cameBack && heldIds.length}
-	<div class="notice"><span class="notice-text">Your change from {cameBack} is back. It isn't saved yet.</span><span class="notice-acts"><button type="button" class="quiet hit" onclick={() => (forgetHeld(), onreset())}>Discard</button></span></div>
+	<div class="notice"><span class="notice-text">Your change from {cameBack} is back. It isn't saved yet.</span><span class="notice-acts"><button type="button" class="quiet" onclick={() => (forgetHeld(), onreset())}>Discard</button></span></div>
 {/if}
 {#if data.fixed.length}
 	<div class="notice"><span class="notice-text">Some options on this habit blocked each other, so they read differently here: {data.fixed.join('; ')}.</span></div>
@@ -1839,7 +1837,7 @@
 			{@render insidePart()}
 			{#if h.direction === 'build'}
 				<h2>What you do</h2>
-				<p class="muted small-text">Add the Tasks you log, like exercises or "new words". Leave it empty for a simple tick-off habit.</p>
+				<p class="muted meta">Add the Tasks you log, like exercises or "new words". Leave it empty for a simple tick-off habit.</p>
 				{@render whatYouDo()}
 			{:else}
 				{@render startField()}
@@ -1864,34 +1862,38 @@
 			<div class="card stack">
 				<div><strong>{h.name || 'Unnamed habit'}</strong> · {h.direction === 'break' ? 'Break habit' : describeSchedule(schedule, undefined, h.variants)}</div>
 				{#if h.direction === 'build'}
-					<div class="muted small-text">
+					<div class="muted meta">
 						{h.variants.flatMap((v) => v.slots).length
 							? h.variants.flatMap((v) => v.slots.map((x) => (x.fillRule ? 'auto-filled' : tasks.find((t) => t.id === x.taskId)?.name))).filter(Boolean).join(', ')
 							: 'Nothing to fill in: just tick it off'}
 					</div>
 				{/if}
 				{#if intention}<div class="intention">{intention}</div>{/if}
-				<div class="muted small-text">Streak: never miss twice (one miss is forgiven). Levels, identity and more are in the full editor any time.</div>
+				<div class="muted meta">Streak: never miss twice (one miss is forgiven). Levels, identity and more are in the full editor any time.</div>
 			</div>
 			<label style="color: var(--ink)"><input type="checkbox" bind:checked={pinned} /> Add to home screen shortcuts</label>
 		{/if}
 
 		{#if form?.error}<p class="error save-error" role="alert">{form.error}</p>{/if}
-		<div class="actions">
-			{#if step > 0}<button type="button" onclick={() => step--}>Back</button>{:else}<span></span>{/if}
-			{#if step < guidedSteps.length - 1}
-				<button type="button" class="primary" onclick={() => step++} disabled={!canNext}>Next</button>
-			{:else}
-				<button class="primary">Save habit</button>
-			{/if}
+		<div class="actions-bar l-stack">
+			<div class="l-cluster">
+				{#if step < guidedSteps.length - 1}
+					<button type="button" class="primary" onclick={() => step++} disabled={!canNext}>Next</button>
+				{:else}
+					<button class="primary">Save habit</button>
+				{/if}
+				{#if step > 0}<button type="button" onclick={() => step--}>Back</button>{/if}
+			</div>
 		</div>
-		<p class="muted small-text"><button type="button" class="link" onclick={() => (mode = 'full')}>Skip to the full editor</button></p>
+		<p class="muted meta"><button type="button" class="link" onclick={() => (mode = 'full')}>Skip to the full editor</button></p>
 	{:else}
 		{@render lines()}
 		{#if form?.error}<p class="error save-error" role="alert">{form.error}</p>{/if}
-		<div class="actions">
-			<button class="primary">Save habit</button>
-			<a class="button" href="/habits">Cancel</a>
+		<div class="actions-bar l-stack">
+			<div class="l-cluster">
+				<button class="primary">Save habit</button>
+				<a class="button" href="/habits">Cancel</a>
+			</div>
 		</div>
 	{/if}
 </form>
@@ -1900,12 +1902,12 @@
 {#if !data.isNew && h.direction === 'build' && mode === 'full'}
 	<GroupHeading title="Pauses" />
 	<section class="card stack" id="pause">
-		<p class="muted small-text" style="margin: 0">Paused days aren't due and never break the streak. For a break from every habit, use <a href="/settings#vacation">Vacation</a> in Settings.</p>
+		<p class="muted meta">Paused days aren't due and never break the streak. For a break from every habit, use <a href="/settings#vacation">Vacation</a> in Settings.</p>
 		{#each data.pauses as p (p.id)}
 			<form method="POST" action="?/unpause" class="row" style="align-items: center" use:enhance>
 				<input type="hidden" name="id" value={p.id} />
 				<span class="grow">{shortDate(p.start)} to {shortDate(p.end)}{p.note ? ` · ${p.note}` : ''}{p.end < data.today ? ' (past)' : ''}</span>
-				<button class="small">Remove</button>
+				<button class="quiet">Remove</button>
 			</form>
 		{/each}
 		<form method="POST" action="?/pause" class="row" use:enhance>
@@ -1998,7 +2000,7 @@
 	}
 	.intention {
 		font-style: italic;
-		margin: 0.25rem 0;
+		margin: var(--space-tight) 0;
 	}
 	.targets {
 		width: 100%;
@@ -2011,15 +2013,15 @@
 		font-weight: 500;
 	}
 	.targets td {
-		padding: 0.15rem 0.25rem 0.15rem 0;
+		padding: var(--space-tight) var(--space-tight) var(--space-tight) 0;
 		font-size: var(--font-size-label);
 	}
 	.steps {
 		display: flex;
-		gap: 0.75rem;
+		gap: var(--space-group);
 		list-style: none;
 		padding: 0;
-		margin: 0 0 0.5rem;
+		margin: 0 0 var(--space-inline);
 		flex-wrap: wrap;
 	}
 	.steps li button {

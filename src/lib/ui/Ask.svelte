@@ -1,7 +1,7 @@
 <script lang="ts">
 	// For the few acts Undo can't cover: asks where it stands, the safe answer first.
 	import { tick, type Snippet } from 'svelte';
-	let { label, text, act, keep = 'Keep it', small = true, onact, extra }: { label: string; text: string; act: string; keep?: string; small?: boolean; onact: () => void; extra?: Snippet } = $props();
+	let { label, text, act, keep = 'Keep it', onact, extra }: { label: string; text: string; act: string; keep?: string; onact: () => void; extra?: Snippet } = $props();
 	const uid = $props.id();
 	const id = `ask-${uid}`;
 	let open = $state(false);
@@ -18,7 +18,7 @@
 	}
 </script>
 
-<button type="button" class="danger" class:small bind:this={opener} aria-expanded={open} aria-controls={id} onclick={ask}>{label}</button>
+<button type="button" class="danger" bind:this={opener} aria-expanded={open} aria-controls={id} onclick={ask}>{label}</button>
 <div class="ask" {id} role="group" aria-label={label} hidden={!open}>
 	<span>{text}</span>
 	{@render extra?.()}

@@ -41,7 +41,7 @@
 	const y0 = $derived(ticks[0]);
 	const y1 = $derived(ticks[ticks.length - 1]);
 	const maxTick = $derived(Math.max(...ticks.map(Math.abs)));
-	const left = $derived(Math.max(...ticks.map((t) => tick(t, r.unit, r.kind, maxTick).length)) * 6.5 + 8);
+	const left = $derived(Math.max(...ticks.map((t) => tick(t, r.unit, r.kind, maxTick).length)) * 7 + 8); // a 12px (note) digit is about 7px wide
 	const plotW = $derived(Math.max(w - left - 6, 40));
 	const band = $derived(plotW / Math.max(n, 1));
 	const y = (v: number) => top + (1 - (v - y0) / (y1 - y0 || 1)) * (H - top - bottom);
@@ -255,10 +255,9 @@
 		touch-action: pan-y;
 		cursor: pointer;
 	}
+	/* Base's focus ring, with corners. */
 	svg:focus-visible {
-		outline: 2px solid var(--accent);
-		outline-offset: 2px;
-		border-radius: 4px;
+		border-radius: var(--radius-mark);
 	}
 	.grid {
 		stroke: var(--chart-grid);
@@ -269,7 +268,7 @@
 	}
 	.axis {
 		fill: var(--ink-muted);
-		font-size: 11px;
+		font-size: var(--font-size-note);
 	}
 	.hover {
 		fill: var(--ink);
@@ -306,9 +305,9 @@
 		list-style: none;
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.25rem 0.8rem;
+		gap: var(--space-tight) var(--space-group);
 		padding: 0;
-		margin: 0 0 0.4rem;
+		margin: 0 0 var(--space-inline);
 		font-size: var(--font-size-chip);
 		color: var(--ink-muted);
 	}
@@ -316,8 +315,8 @@
 		display: inline-block;
 		width: 10px;
 		height: 10px;
-		border-radius: 2px;
-		margin-right: 0.3rem;
+		border-radius: var(--radius-indicator);
+		margin-right: var(--space-tight);
 		vertical-align: -1px;
 	}
 	.legend i.line {
@@ -333,7 +332,7 @@
 		background: var(--surface-raised);
 		border: 1px solid var(--line);
 		border-radius: var(--radius-control);
-		padding: 0.4rem 0.55rem;
+		padding: var(--space-inline);
 		font-size: var(--font-size-chip);
 		box-shadow: var(--shadow-tooltip);
 		z-index: var(--z-raised);
@@ -341,7 +340,7 @@
 	.tiprow {
 		display: flex;
 		align-items: center;
-		gap: 0.35rem;
+		gap: var(--space-inline);
 	}
 	.tiprow i {
 		width: 10px;
@@ -362,13 +361,17 @@
 		display: grid;
 		grid-template-columns: minmax(4rem, 34%) 1fr auto;
 		align-items: center;
-		gap: 0.5rem;
+		gap: var(--space-inline);
 		width: 100%;
 		border: none;
 		background: none;
-		padding: 0.2rem 0;
+		padding: var(--space-tight) 0;
 		text-align: left;
 		font-size: var(--font-size-meta);
+	}
+	/* The bars touch, so Button's grown touch area would take the next bar's taps: each bar is its own target. */
+	.hrow::before {
+		content: none;
 	}
 	@media (hover: hover) {
 		.hrow:hover .htrack {
@@ -383,12 +386,12 @@
 	.htrack {
 		position: relative;
 		height: 14px;
-		border-radius: 4px;
+		border-radius: var(--radius-mark);
 	}
 	.hfill {
 		display: block;
 		height: 100%;
-		border-radius: 0 4px 4px 0;
+		border-radius: 0 var(--radius-mark) var(--radius-mark) 0;
 		background: var(--series-1);
 		min-width: 2px;
 	}
@@ -397,15 +400,13 @@
 	}
 	.hgoal {
 		position: absolute;
-		top: -3px;
-		bottom: -3px;
+		inset-block: calc(-1 * var(--space-tight)); /* through the row's padding */
 		width: 1px;
 		background: var(--good);
 	}
 	.hband {
 		position: absolute;
-		top: -3px;
-		bottom: -3px;
+		inset-block: calc(-1 * var(--space-tight)); /* through the row's padding */
 		background: var(--good);
 		opacity: 0.12;
 	}
@@ -415,7 +416,6 @@
 		text-align: right;
 	}
 	.note {
-		font-size: var(--font-size-chip);
-		margin: 0.3rem 0 0;
+		margin: var(--space-tight) 0 0;
 	}
 </style>

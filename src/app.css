@@ -45,7 +45,7 @@ body {
 	margin: 0;
 	background: var(--surface-page);
 	color: var(--ink);
-	font: 1rem/1.5rem var(--font-sans);
+	font: var(--font-size-body)/1.5rem var(--font-sans);
 }
 p:where(.meta-line, .row-line) { margin: 0; }
 p.hint-line { margin-block: 0; }
@@ -54,25 +54,17 @@ h2 { font-size: var(--font-size-section-title); line-height: 1.5rem; margin: var
 a { color: var(--accent-ink); }
 a.quiet { text-decoration: none; }
 @media (hover: hover) { a.quiet:hover { text-decoration: underline; text-underline-offset: 3px; } }
-input:where([type='checkbox'], [type='radio']) { width: auto; min-height: 0; padding: 0; margin: 0 0.4rem 0 0; vertical-align: middle; accent-color: var(--ink); }
+input:where([type='checkbox'], [type='radio']) { width: auto; min-height: 0; padding: 0; margin: 0 var(--space-tight) 0 0; vertical-align: middle; accent-color: var(--ink); }
 label > input:where([type='checkbox'], [type='radio']) { margin-top: 0; }
-fieldset label + label { margin-top: 0.5rem; }
-label { display: block; font-size: 0.9rem; color: var(--ink-muted); }
-label > input, label > select, label > textarea { margin-top: 0.25rem; color: var(--ink); }
+fieldset label + label { margin-top: var(--space-inline); }
+label { display: block; font-size: var(--font-size-label); color: var(--ink-muted); }
+label > input, label > select, label > textarea { margin-top: var(--space-tight); color: var(--ink); }
 
 .num { font-variant-numeric: tabular-nums; }
 /* Room for the widest label (bold), so a change of weight or words never resizes the box. */
 [data-reserve]::after { content: attr(data-reserve); display: block; height: 0; overflow: hidden; visibility: hidden; font-weight: 600; }
 .focus-inset:focus-visible { outline-offset: calc(-1 * var(--focus-width)); }
-.hit { position: relative; }
-@media (pointer: coarse) {
-	/* A 44px hit area, grown by a pseudo-element so the drawn box stays. */
-	.hit::before {
-		content: ''; position: absolute;
-		inset-block: min(0px, calc((100% - var(--target-touch)) / 2));
-		inset-inline: min(0px, calc((100% - var(--target-touch)) / 2));
-	}
-}
+/* The 44px touch area (.hit, and every button without it) is Button's. */
 /* Layout: one under another, and a row that wraps. */
 .l-stack { --gap: var(--space-group); display: flex; flex-direction: column; gap: var(--gap); }
 .l-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-inline); }
@@ -84,19 +76,17 @@ label > input, label > select, label > textarea { margin-top: 0.25rem; color: va
 }
 
 .app { min-height: 100dvh; display: flex; flex-direction: column; }
-.main { flex: 1; width: 100%; max-width: 640px; margin: 0 auto; padding: var(--space-group) var(--space-group) var(--tabbar-clear, var(--space-tabbar-clear)); }
+.main { flex: 1; width: 100%; max-width: var(--page-width); margin: 0 auto; padding: var(--space-group) var(--space-group) var(--tabbar-clear, var(--space-tabbar-clear)); }
 .tabbar > .tab { font-size: var(--font-size-label); line-height: 1.25rem; }
 .echo-text { font-size: var(--font-size-label); line-height: 1.25rem; }
 
-.bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-group); margin-bottom: var(--space-group); }
 .bar > div { min-width: 0; }
 .stack > * + * { margin-top: var(--space-group); }
-.row { display: flex; gap: 0.5rem; align-items: end; flex-wrap: wrap; }
-.row > .grow { flex: 1; min-width: 8rem; }
+.row { display: flex; gap: var(--space-inline); align-items: end; flex-wrap: wrap; }
 .card { background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-card); padding: var(--space-group); }
-.card + .card { margin-top: 0.6rem; }
 .list { list-style: none; padding: 0; margin: 0; }
-.list li + li { margin-top: 0.5rem; }
+.list li + li { margin-top: var(--space-inline); }
 .list a.card, .elist a.card { display: block; text-decoration: none; color: inherit; }
 .page-title { font-size: var(--font-size-page-title); line-height: 2rem; font-weight: 700; }
 .section-title { font-size: var(--font-size-section-title); line-height: 1.5rem; font-weight: 700; }
@@ -104,13 +94,11 @@ label > input, label > select, label > textarea { margin-top: 0.25rem; color: va
 .figure { font-size: var(--font-size-figure); line-height: 2rem; font-weight: 600; }
 .content > .name { font-weight: 600; }
 .meta-line { font-size: var(--font-size-label); line-height: 1.25rem; }
+/* The text roles that aren't headings, each a size on its own line height. */
+.body { font-size: var(--font-size-body); line-height: 1.5rem; }
+.label { font-size: var(--font-size-label); line-height: 1.25rem; }
 .meta { font-size: var(--font-size-meta); line-height: 1.25rem; }
-.small-text { font-size: var(--font-size-meta); }
+.note { font-size: var(--font-size-note); line-height: 1rem; }
 .muted { color: var(--ink-muted); }
 .error { color: var(--danger); }
-.chips { margin-top: 0.4rem; }
-.auth { max-width: 360px; margin: 15vh auto 0; padding: 1rem; }
-.actions { display: flex; gap: 0.5rem; justify-content: space-between; margin-top: 1.5rem; }
-/* A named part of the day: name, start, end, remove. Fits a phone in one line. */
-.range { display: grid; grid-template-columns: minmax(0, 1fr) 6.4rem 6.4rem auto; gap: 0.35rem; align-items: center; }
-.range input { min-width: 0; }
+.chips { margin-top: var(--space-tight); }

@@ -5,6 +5,7 @@
 	import { RANGES, rangeLabel, type BoardFilter } from '$lib/stats/model';
 	import CardGrid from '$lib/stats/ui/CardGrid.svelte';
 	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import EmptyState from '$lib/ui/EmptyState.svelte';
 	import InlineText from '$lib/ui/InlineText.svelte';
 	import MenuButton, { type Way } from '$lib/ui/MenuButton.svelte';
 
@@ -47,8 +48,9 @@
 			newBoard = false;
 			boardName = '';
 			await goto(`?board=${r.id}`);
+			// In Use, also when made from Edit: after Close, the title line's New card is still there.
 			if (!template) {
-				editing = true;
+				editing = false;
 				adding = true;
 			}
 		}
@@ -106,26 +108,26 @@
 				{/if}
 			{/each}
 		</div>
-		<span class="board-more"><MenuButton class="hit" label="Boards" items={boardMenu} /></span>
+		<span class="board-more"><MenuButton label="Boards" items={boardMenu} /></span>
 	</nav>
 
 	{#if newBoard}
 		<section class="card new">
 			<h2>New board</h2>
-			<p class="muted small">Start from a template, made from the habits and Tasks you already have, or start empty.</p>
+			<p class="muted meta">Start from a template, made from the habits and Tasks you already have, or start empty.</p>
 			<ul class="list templates">
 				{#each data.templates as t (t.id)}
 					<li>
 						<button type="button" class="tpl" onclick={() => addBoard(t.id)}>
 							<strong>{t.name}</strong>
-							<span class="muted small">{t.blurb}</span>
+							<span class="muted meta">{t.blurb}</span>
 						</button>
 					</li>
 				{/each}
 			</ul>
 			<form class="row" onsubmit={(e) => (e.preventDefault(), addBoard(null))}>
 				<label class="grow">Or an empty board called <input bind:value={boardName} maxlength="40" placeholder="New board" /></label>
-				<button class="primary">Create</button>
+				<button>Create</button>
 			</form>
 		</section>
 	{/if}
@@ -139,7 +141,7 @@
 				{#if board.range.startsWith('since:')}<button type="button" class="toggle" aria-pressed="true">{rangeLabel(board.range)}</button>{/if}
 			</div>
 			<details class="filter">
-				<summary>Filter{filterCount ? ` (${filterCount})` : ''}</summary>
+				<summary class="toggle">Filter{filterCount ? ` (${filterCount})` : ''}</summary>
 				<div class="card pop stack">
 					<label>
 						Habits
@@ -167,7 +169,7 @@
 					{/if}
 					{#if data.catalog.areas.length}
 						<div>
-							<div class="muted small">Areas</div>
+							<div class="muted meta">Areas</div>
 							<div class="chips">
 								{#each data.catalog.areas as a (a.id)}
 									<button type="button" class="toggle" aria-pressed={board.filter.areas.includes(a.id)} onclick={() => setFilter({ areas: toggle(board.filter.areas, a.id) })}>{a.name}</button>
@@ -177,7 +179,7 @@
 					{/if}
 					{#if data.catalog.tags.length}
 						<div>
-							<div class="muted small">Tags</div>
+							<div class="muted meta">Tags</div>
 							<div class="chips">
 								{#each data.catalog.tags as t (t)}
 									<button type="button" class="toggle" aria-pressed={board.filter.tags.includes(t)} onclick={() => setFilter({ tags: toggle(board.filter.tags, t) })}>{t}</button>
@@ -186,7 +188,7 @@
 						</div>
 					{/if}
 					{#if filterCount}
-						<button type="button" class="small" onclick={() => setFilter({ areas: [], tags: [], habit: null, identity: null, direction: 'all' })}>Clear filters</button>
+						<button type="button" onclick={() => setFilter({ areas: [], tags: [], habit: null, identity: null, direction: 'all' })}>Clear filters</button>
 					{/if}
 				</div>
 			</details>
@@ -196,12 +198,8 @@
 			<p class="muted">Log a habit and your numbers show up here.</p>
 		{/if}
 
-		{#if board.cards.length === 0 && !adding}
-			<div class="card empty">
-				<p>This board has no cards yet.</p>
-				<button type="button" class="primary" onclick={() => ((editing = true), (adding = true))}>Add a card</button>
-			</div>
-		{/if}
+		<!-- New card in the title line is the board's one add, as on a habit's Stats. -->
+		{#if board.cards.length === 0 && !adding}<EmptyState text="This board has no cards yet." />{/if}
 
 		<CardGrid
 			items={data.items}
@@ -217,7 +215,7 @@
 			{csv}
 		/>
 
-		<p class="muted small foot">
+		<p class="muted meta foot">
 			<a href="/stats/export?all=1" download>Download every log as CSV</a> ·
 			<a href="/settings#measures">Your measures</a>
 		</p>
@@ -232,8 +230,8 @@
 	.templates {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-		gap: 0.5rem;
-		margin-bottom: 0.75rem;
+		gap: var(--space-inline);
+		margin-bottom: var(--space-group);
 	}
 	.templates li + li {
 		margin-top: 0;
@@ -244,46 +242,40 @@
 		text-align: left;
 		display: flex;
 		flex-direction: column;
-		gap: 0.2rem;
+		gap: var(--space-tight);
 	}
 	.filters {
 		display: flex;
-		gap: 0.5rem;
+		gap: var(--space-inline);
 		align-items: center;
-		margin-bottom: 0.75rem;
+		margin-bottom: var(--space-group);
 		flex-wrap: wrap;
+	}
+	/* The range pills and Filter share one line, so the chips' own top margin goes. */
+	.filters > .chips {
+		margin-block-start: 0;
 	}
 	.filter {
 		position: relative;
 	}
+	/* The summary is Chip's toggle, a pill beside the range pills; only the disclosure marker goes. */
 	.filter summary {
-		cursor: pointer;
 		list-style: none;
-		padding: 0.45rem 0.8rem;
-		border: 1px solid var(--line);
-		border-radius: 8px;
-		background: var(--surface-raised);
 	}
 	.filter summary::-webkit-details-marker {
 		display: none;
 	}
+	/* A popover hangs 4px under its trigger. */
 	.filter .pop {
 		position: absolute;
 		z-index: var(--z-popover);
-		top: 2.6rem;
+		top: calc(100% + var(--space-tight));
 		left: 0;
-		width: min(22rem, calc(100vw - 2rem));
-		box-shadow: 0 4px 16px rgb(0 0 0 / 0.14);
-	}
-	.empty {
-		text-align: center;
-		margin-bottom: 0.75rem;
-	}
-	.small {
-		font-size: var(--font-size-chip);
+		width: min(22rem, calc(100vw - 2 * var(--space-group)));
+		box-shadow: var(--shadow-popover);
 	}
 	.foot {
-		margin-top: 1.5rem;
+		margin-top: var(--space-section);
 		text-align: center;
 	}
 	.boards {

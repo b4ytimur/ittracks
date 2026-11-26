@@ -58,7 +58,7 @@
 	.fields {
 		display: grid;
 		grid-template-columns: max-content 1fr;
-		gap: 0.5rem 0.75rem;
+		gap: var(--space-inline) var(--space-group);
 		align-items: center;
 	}
 	.label {
@@ -67,7 +67,7 @@
 	.check {
 		color: var(--ink);
 		display: flex;
-		gap: 0.35rem;
+		gap: var(--space-inline);
 		align-items: center;
 	}
 	.hint {

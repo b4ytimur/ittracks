@@ -3,13 +3,13 @@
    safe one first. Never a dialog, never confirm(). Owns .ask only: the buttons are Button's, their row Layout's
    .l-cluster, the trigger the consumer's.
    Markup (the trigger's row and the Ask share one parent, so nothing spaces them apart):
-     <div class="act-row"> …the thing… <button type="button" class="hit" aria-expanded="true" aria-controls="ask-z" aria-label="Revoke Zapier…">Revoke…</button> </div>
+     <div class="act-row"> …the thing… <button type="button" aria-expanded="true" aria-controls="ask-z" aria-label="Revoke Zapier…">Revoke…</button> </div>
      <div class="ask" id="ask-z" role="group" aria-labelledby="ask-z-q" [hidden]>
        <p class="name" id="ask-z-q">Revoke Zapier?</p>
        <p class="label" id="ask-z-w">Anything that uses this key stops working at once. A revoked key can't be brought back.</p>
        <div class="l-cluster">
-         <button type="button" class="hit" aria-describedby="ask-z-q ask-z-w">Keep it</button>          focus lands here
-         <button class="danger hit" form="revoke-z" data-reserve="Revoking…">Revoke Zapier</button>
+         <button type="button" aria-describedby="ask-z-q ask-z-w">Keep it</button>          focus lands here
+         <button class="danger" form="revoke-z" data-reserve="Revoking…">Revoke Zapier</button>
        </div>
      </div> */
 

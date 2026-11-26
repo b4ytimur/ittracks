@@ -404,7 +404,7 @@
 			<select bind:value={g.level} aria-label="Level for {g.name}" style="width: auto">
 				{#each levelsOf(g.name, g.level) as l (l.id)}<option value={l.id}>{l.name}</option>{/each}
 			</select>
-			<button type="button" class="small danger" onclick={() => t.tags.splice(i, 1)}>Remove</button>
+			<button type="button" class="quiet" onclick={() => t.tags.splice(i, 1)}>Remove</button>
 		</div>
 	{/each}
 	<div class="row">
@@ -423,10 +423,10 @@
 		<label class="grow" style="color: var(--ink)"
 			><input type="checkbox" bind:checked={t.restTimerEnabled} disabled={!!restBlock && !t.restTimerEnabled} /> Start a countdown after each {t.rowOne}</label
 		>
-		{#if restBlock}<p class="muted small-text" style="margin: 0">{restBlock.reason}. Mark a field "Log per {t.rowOne}" first.</p>{/if}
+		{#if restBlock}<p class="muted meta">{restBlock.reason}. Mark a field "Log per {t.rowOne}" first.</p>{/if}
 		{#if t.restTimerEnabled}
-			<label style="width: 8rem"
-				>Seconds <input type="number" min="5" max="3600" bind:value={t.restTimerSeconds} /></label
+			<label
+				>Seconds <input class="w-num" type="number" min="5" max="3600" bind:value={t.restTimerSeconds} /></label
 			>
 		{/if}
 	</div>
@@ -456,8 +456,8 @@
 				<div class="field-head">
 					<span class="slot">{@render ctx.grip?.()}</span>
 					<strong class="grow">{m.name || 'New field'}</strong>
-					<button type="button" class="quiet hit" aria-expanded={!!openFields[m.id]} aria-label="{openFields[m.id] ? 'Close' : 'Change'} {m.name || 'the new field'}" onclick={() => (openFields[m.id] = !openFields[m.id])}>{openFields[m.id] ? 'Close' : 'Change'}</button>
-					<button type="button" class="quiet hit" aria-label="{isLogged(m.id) ? 'Archive' : 'Remove'} {m.name || 'the new field'}" onclick={() => (t.metrics = t.metrics.filter((x) => x !== m))}>{isLogged(m.id) ? 'Archive' : 'Remove'}</button>
+					<button type="button" class="quiet" aria-expanded={!!openFields[m.id]} aria-label="{openFields[m.id] ? 'Close' : 'Change'} {m.name || 'the new field'}" onclick={() => (openFields[m.id] = !openFields[m.id])}>{openFields[m.id] ? 'Close' : 'Change'}</button>
+					<button type="button" class="quiet" aria-label="{isLogged(m.id) ? 'Archive' : 'Remove'} {m.name || 'the new field'}" onclick={() => (t.metrics = t.metrics.filter((x) => x !== m))}>{isLogged(m.id) ? 'Archive' : 'Remove'}</button>
 				</div>
 				{#if !openFields[m.id]}
 					<p class="meta field-words">{metricWords(m).replace(/^[^:]*: /, '')}</p>
@@ -472,11 +472,11 @@
 					</select>
 				</label>
 				{#if m.type === 'number' || m.type === 'count' || m.type === 'duration'}
-					<label style="width: 6rem">Unit <input bind:value={m.unit} placeholder={m.type === 'duration' ? 'min' : 'kg'} list="known-units" /></label>
+					<label>Unit <input class="w-text" bind:value={m.unit} placeholder={m.type === 'duration' ? 'min' : 'kg'} list="known-units" /></label>
 				{/if}
 			</div>
 			{#if typeLocked(m)}
-				<p class="muted small-text" style="margin: 0">
+				<p class="muted meta">
 					{isNumeric(m) ? 'Has logged values, so it can only switch between number, count and duration.' : 'Has logged values, so its type is fixed.'}
 				</p>
 			{/if}
@@ -492,7 +492,7 @@
 					<label style="color: var(--ink)"
 						><input type="radio" name="unit-{m.id}" checked={u.choice === 'relabel'} onchange={() => (unitChoices[m.id] = 'relabel')} /> Keep the numbers: they were already in {u.to || 'no unit'}</label
 					>
-					<p class="muted small-text" style="margin: 0.25rem 0 0">
+					<p class="muted meta" style="margin: var(--space-tight) 0 0">
 						{u.choice === 'convert'
 							? 'Every logged value, Slot target and the targets kept with past logs are converted when you save.'
 							: u.choice === 'relabel'
@@ -504,7 +504,7 @@
 				</fieldset>
 			{/if}
 			{#if m.type === 'choice'}
-				<span class="small-text muted">Options</span>
+				<span class="meta muted">Options</span>
 				<OptionList
 					bind:options={m.choices}
 					used={(id) => data.logged.options.includes(id)}
@@ -523,21 +523,21 @@
 					<label style="color: var(--ink)"
 						><input type="checkbox" checked={scored(m)} onchange={(e) => toggleScores(m, e.currentTarget.checked)} /> Give each option a number, so Stats can chart it (mood 5 to 1)</label
 					>
-					{#if scored(m) && isLogged(m.id)}<p class="muted small-text" style="margin: 0">A changed number counts from today on: past days keep the numbers they had.</p>{/if}
+					{#if scored(m) && isLogged(m.id)}<p class="muted meta">A changed number counts from today on: past days keep the numbers they had.</p>{/if}
 				{/if}
 			{/if}
 			{#if m.type === 'text'}
 				<label style="color: var(--ink)"
 					><input type="checkbox" bind:checked={m.long} disabled={!!longBlock(m) && !m.long} /> Several lines (Markdown), for a journal entry or a reflection</label
 				>
-				{#if longBlock(m) && !m.long}<p class="muted small-text" style="margin: 0">{longBlock(m)?.reason}.</p>{/if}
+				{#if longBlock(m) && !m.long}<p class="muted meta">{longBlock(m)?.reason}.</p>{/if}
 				{#if m.long}
 					<label
-						>Starter text <span class="small-text">(fills each new log, like headings to write under)</span>
+						>Starter text <span class="meta">(fills each new log, like headings to write under)</span>
 						<textarea bind:value={m.starter} rows="3" maxlength="2000" placeholder={'## Wins\n\n## Lessons'}></textarea>
 					</label>
 					<label
-						>Prompts, one per line <span class="small-text">(one shows each day and is saved with your answer)</span>
+						>Prompts, one per line <span class="meta">(one shows each day and is saved with your answer)</span>
 						<textarea
 							value={m.prompts.join('\n')}
 							oninput={(e) =>
@@ -560,12 +560,12 @@
 								</select>
 							</label>
 						</div>
-						<p class="muted small-text" style="margin: 0">Today's prompt: “{promptFor(m, today)}”</p>
+						<p class="muted meta">Today's prompt: “{promptFor(m, today)}”</p>
 					{/if}
 				{/if}
 			{/if}
 			<details class="log-settings">
-				<summary class="small-text">When logging</summary>
+				<summary class="meta">When logging</summary>
 				{#if isNumeric(m)}
 					<div class="row">
 						{#if m.repeats}<label class="grow" style="color: var(--ink)"><input type="checkbox" bind:checked={m.times} /> Written after a ×, as in 60 kg × 8</label>{/if}
@@ -584,7 +584,7 @@
 				{/if}
 				<div class="row">
 					{#if m.type === 'checkbox' || (m.type === 'text' && m.long)}
-						<p class="muted small-text grow" style="margin: 0">{prefillBlock({ ...m, prefill: 'last' })?.reason}.</p>
+						<p class="muted meta grow">{prefillBlock({ ...m, prefill: 'last' })?.reason}.</p>
 					{:else}
 						<label class="grow"
 							>Start with
@@ -596,9 +596,9 @@
 						</label>
 					{/if}
 					{#if isNumeric(m)}
-						<label style="width: 7rem"
+						<label
 							>+/− step
-							<input type="number" step="any" min="0" value={m.step ?? ''} placeholder={String(defaultStep(m.type, m.unit, units()))}
+							<input class="w-num" type="number" step="any" min="0" value={m.step ?? ''} placeholder={String(defaultStep(m.type, m.unit, units()))}
 								oninput={(e) => (m.step = e.currentTarget.value && Number(e.currentTarget.value) > 0 ? Number(e.currentTarget.value) : null)} />
 						</label>
 					{/if}
@@ -609,14 +609,14 @@
 				<label style="color: var(--ink)"
 					><input type="checkbox" bind:checked={m.quick} disabled={m.required} /> Show on quick logs</label
 				>
-				{#if m.required}<p class="muted small-text" style="margin: 0">{quickBlock({ ...m, quick: false })?.reason}.</p>{/if}
+				{#if m.required}<p class="muted meta" style="margin: 0">{quickBlock({ ...m, quick: false })?.reason}.</p>{/if}
 			</details>
 			<div class="row">
 				<label class="grow" style="color: var(--ink)"
 					><input type="checkbox" bind:checked={m.repeats} disabled={!!repeatsLocked(m) || (!!repeatsBlock(m) && !m.repeats)} /> Log per {t.rowOne}</label
 				>
 			</div>
-			{#if repeatsLocked(m)}<p class="muted small-text" style="margin: 0">Has logged values, so “Log per {t.rowOne}” is fixed.</p>{/if}
+			{#if repeatsLocked(m)}<p class="muted meta">Has logged values, so “Log per {t.rowOne}” is fixed.</p>{/if}
 					</div>
 				{/if}
 				{#if unitEdit(m) && !openFields[m.id]}<p class="meta field-words">Its unit changes: open it to say what happens to what is logged.</p>{/if}
@@ -624,7 +624,7 @@
 		{/snippet}
 	</EditableList>
 	<div class="row">
-		<button type="button" class="small" onclick={() => addMetric()}>+ Field</button>
+		<button type="button" onclick={() => addMetric()}>+ Field</button>
 	</div>
 {/snippet}
 {#snippet partsPart()}
@@ -651,16 +651,16 @@
 					{@const c = choiceOf(p.taskId)}
 					<a class="grow" href="/library/{p.taskId}">{c?.name ?? 'A Task'}</a>
 				{/if}
-					<button type="button" class="quiet hit" aria-label="{partLogged(p.id) ? 'Archive' : 'Remove'} {p.kind === 'step' ? p.name || 'the step' : (choiceOf(p.taskId)?.name ?? 'the Task')}" onclick={() => (t.parts = t.parts.filter((x) => x !== p))}>{partLogged(p.id) ? 'Archive' : 'Remove'}</button>
+					<button type="button" class="quiet" aria-label="{partLogged(p.id) ? 'Archive' : 'Remove'} {p.kind === 'step' ? p.name || 'the step' : (choiceOf(p.taskId)?.name ?? 'the Task')}" onclick={() => (t.parts = t.parts.filter((x) => x !== p))}>{partLogged(p.id) ? 'Archive' : 'Remove'}</button>
 				</div>
 				<div class="field-body">
 			{#if p.kind === 'task'}
 				{@const c = choiceOf(p.taskId)}
 				{@const nums = (c?.metrics ?? []).filter((m) => numericType(m.type))}
 				{#if c && (c.hasParts || c.metrics.some((m) => m.repeats))}
-					<label class="sets-input"
+					<label
 						>{c.metrics.some((m) => m.repeats) ? 'Sets' : 'Rounds'}
-						<input type="number" min="0" max="50" value={p.sets ?? ''} oninput={(e) => (p.sets = e.currentTarget.value ? Number(e.currentTarget.value) : null)} />
+						<input class="w-num" type="number" min="0" max="50" value={p.sets ?? ''} oninput={(e) => (p.sets = e.currentTarget.value ? Number(e.currentTarget.value) : null)} />
 					</label>
 				{/if}
 				{#if nums.length}
@@ -684,7 +684,7 @@
 		{/snippet}
 	</EditableList>
 	{#if t.parts.some((p) => p.kind === 'task')}
-		<p class="muted small-text" style="margin: 0 0 0.5rem">
+		<p class="muted meta" style="margin: 0 0 var(--space-inline)">
 			Targets set here apply in every habit that uses this Task. Minimum and Stretch count in habits with levels on.
 		</p>
 	{/if}
@@ -721,25 +721,25 @@
 {#if data.archived}
 	<form method="POST" action="?/unarchive" class="notice" use:enhance>
 		<span class="notice-text">{data.deleteAfter ? `Deleted. It goes for good with its logs on ${goneAt(data.deleteAfter)}.` : 'This Task is archived: hidden from the Library and pickers, with its history kept.'}</span>
-		<span class="notice-acts"><button class="quiet hit">{data.deleteAfter ? 'Put back' : 'Unarchive'}</button></span>
+		<span class="notice-acts"><button class="quiet">{data.deleteAfter ? 'Put back' : 'Unarchive'}</button></span>
 	</form>
 {/if}
 {#if elsewhere}
 	<div class="notice" data-tone="warn" role="alert">
 		<span class="notice-text">{LINES[elsewhere.id].label} changed on another device: {say({ ...base, ...elsewhere.moved } as TaskForm)[elsewhere.id]}. Yours isn't saved.</span>
-		<span class="notice-acts"><button type="button" class="quiet hit" onclick={() => onreset([elsewhere!.id])}>Show it</button><button type="button" class="quiet hit" onclick={keepMine}>Keep mine</button></span>
+		<span class="notice-acts"><button type="button" class="quiet" onclick={() => onreset([elsewhere!.id])}>Show it</button><button type="button" class="quiet" onclick={keepMine}>Keep mine</button></span>
 	</div>
 {/if}
 
 {#if data.isNew}
 	<div class="card">
-		<span class="muted small-text">Start from a type</span>
+		<span class="muted meta">Start from a type</span>
 		<div class="chips">
 			{#each data.types as type (type.key)}
 				<button type="button" class="toggle" aria-pressed={typeKey === type.key} onclick={() => applyType(type)}>{type.name}</button>
 			{/each}
 		</div>
-		{#if typeKey}<p class="muted small-text" style="margin: 0.4rem 0 0">{data.types.find((x) => x.key === typeKey)?.description}</p>{/if}
+		{#if typeKey}<p class="muted meta" style="margin: var(--space-inline) 0 0">{data.types.find((x) => x.key === typeKey)?.description}</p>{/if}
 	</div>
 {/if}
 
@@ -771,12 +771,12 @@
 	</div>
 	{#if toAdd.length}
 		<div class="chips add-more" role="group" aria-label="Add to this Task">
-			{#each toAdd as id (id)}<button type="button" class="small" onclick={() => add(id)}>+ {words[id]}</button>{/each}
+			{#each toAdd as id (id)}<button type="button" onclick={() => add(id)}>+ {words[id]}</button>{/each}
 		</div>
 	{/if}
-	{#if waiting.length}<p class="muted small-text">{waiting.join(', ')} {waiting.length === 1 ? 'is' : 'are'} saved once finished: a field or step needs a name, and a Choice two options.</p>{/if}
+	{#if waiting.length}<p class="muted meta">{waiting.join(', ')} {waiting.length === 1 ? 'is' : 'are'} saved once finished: a field or step needs a name, and a Choice two options.</p>{/if}
 	{#each [...new Set([...ruleCheck.errors, ...(past?.errors ?? [])].map((i) => i.reason))] as reason (reason)}<p class="error">{reason}</p>{/each}
-	{#each [...new Set(ruleCheck.warnings.map((i) => i.reason))] as reason (reason)}<p class="muted small-text">{reason}.</p>{/each}
+	{#each [...new Set(ruleCheck.warnings.map((i) => i.reason))] as reason (reason)}<p class="muted meta">{reason}.</p>{/each}
 
 {/snippet}
 
@@ -786,9 +786,11 @@
 		<input type="hidden" name="units" value={unitsPayload} />
 		{@render lines()}
 		{#if form?.error}<p class="error" role="alert">{form.error}</p>{/if}
-		<div class="actions">
-			<button class="primary">Save task</button>
-			<a class="button" href="/library">Cancel</a>
+		<div class="actions-bar l-stack">
+			<div class="l-cluster">
+				<button class="primary">Save task</button>
+				<a class="button" href="/library">Cancel</a>
+			</div>
 		</div>
 	</form>
 {:else}
@@ -821,7 +823,7 @@
 			<input class="grow" bind:value={typeName} placeholder="Type name, e.g. Swimming" aria-label="Type name" />
 			<button disabled={!typeName.trim()}>Save type</button>
 		</form>
-		{#if form?.typeSaved}<p class="muted small-text">Saved "{form.typeSaved}". It's offered when you make a new Task.</p>{/if}
+		{#if form?.typeSaved}<p class="muted meta">Saved "{form.typeSaved}". It's offered when you make a new Task.</p>{/if}
 	</details>
 {/if}
 
@@ -873,11 +875,8 @@
 	.past {
 		margin: 0;
 	}
-	.sets-input {
-		width: 7rem;
-	}
 	.targets input {
-		width: 5rem;
+		width: var(--field-num);
 	}
 	.targets th {
 		text-align: left;

@@ -45,7 +45,7 @@
 		<form onsubmit={add}>
 			<input type="hidden" name="template" value={text} />
 			<TemplateSentence {tpl} today={data.today} libraryNames={data.libraryNames} habitNames={data.habitNames} areaNames={data.areaNames} brings={bringsLine(tpl.packs.filter((id) => !data.packs.includes(id)).flatMap((id) => packById(id) ?? []))} />
-			<div class="ob-add l-cluster"><button class="primary hit" aria-disabled={busy}>{busy ? 'Adding…' : tpl.children.length ? `Add these ${tpl.children.length + 1} habits` : 'Add this habit'}</button><span class="meta muted">Anything can be changed on its page afterwards.</span></div>
+			<div class="ob-add l-cluster"><button class="primary" aria-disabled={busy}>{busy ? 'Adding…' : tpl.children.length ? `Add these ${tpl.children.length + 1} habits` : 'Add this habit'}</button><span class="meta muted">Anything can be changed on its page afterwards.</span></div>
 		</form>
 	{/key}
 {/if}

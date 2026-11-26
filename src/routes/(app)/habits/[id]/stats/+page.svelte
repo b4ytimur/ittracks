@@ -29,7 +29,7 @@
 
 <svelte:head><title>{data.habit.name} stats · ittracks</title></svelte:head>
 
-<div class="stats-page">
+<div class="stats-page page-wide">
 	<EditChrome
 		title={data.habit.name}
 		back={{ href: '/habits', label: 'Habits' }}
@@ -37,17 +37,12 @@
 		modes={['use', 'edit']}
 		hints={{ use: data.customized ? 'Your own cards' : 'Made from what it logs', edit: 'Drag a card to move it.' }}
 		onmode={(m) => ((editing = m === 'edit'), (adding = false))}
+		add={{ label: 'New card', onclick: () => (adding = true) }}
+		onreset={() => op({ op: 'habit.reset', habit: data.habit.id }, 'Back to the automatic cards')}
+		resetLabel="Back to the automatic cards"
+		atDefault={!data.customized}
 	/>
 	<RecordTabs habit={data.habit.id} at="stats" />
-
-	{#if editing}
-		<div class="row tools">
-			<button type="button" class="primary" onclick={() => (adding = true)}>Add a card</button>
-			{#if data.customized}
-				<button type="button" onclick={() => op({ op: 'habit.reset', habit: data.habit.id }, 'Back to the automatic cards')}>Back to the automatic cards</button>
-			{/if}
-		</div>
-	{/if}
 
 	<CardGrid
 		items={data.items}
@@ -65,22 +60,13 @@
 		onheadline={headline}
 	/>
 	{#if !data.customized}
-		<p class="muted small foot">These cards are made from what {data.habit.name} logs. Customize to change them.</p>
+		<p class="muted meta foot">These cards are made from what {data.habit.name} logs. Customize to change them.</p>
 	{/if}
 </div>
 
 <style>
-	:global(.content:has(.stats-page)) {
-		max-width: 1080px;
-	}
-	.tools {
-		margin-bottom: 0.75rem;
-	}
-	.small {
-		font-size: var(--font-size-chip);
-	}
 	.foot {
-		margin-top: 1.5rem;
+		margin-top: var(--space-section);
 		text-align: center;
 	}
 </style>

@@ -147,7 +147,7 @@
 		</SaidLine>
 	{/each}
 </div>
-{#if !fresh}<div><button type="button" class="hit" onclick={add}>+ Measure</button></div>{/if}
+{#if !fresh}<div><button type="button" onclick={add}>+ Measure</button></div>{/if}
 <datalist id="measure-units">{#each units().names() as u (u)}<option value={u}></option>{/each}{#each units().kinds as k (k.id)}<option value={`{${k.id}}`}></option>{/each}</datalist>
 
 <style>

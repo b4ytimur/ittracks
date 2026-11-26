@@ -19,7 +19,7 @@
 			<input id="pw" name="password" type="password" autocomplete="new-password" minlength="8" required aria-invalid={form?.field === 'password' || undefined} aria-describedby="pw-h pw-e" />
 			{#if form?.field === 'password'}<p class="error meta" id="pw-e" role="alert">{form.error}</p>{/if}
 		</div>
-		<div><button class="primary hit">Create account</button></div>
+		<div><button class="primary">Create account</button></div>
 	</form>
 </main>
 

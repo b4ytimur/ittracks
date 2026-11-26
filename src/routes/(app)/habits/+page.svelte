@@ -289,20 +289,19 @@
 <div class="page-cols">
 	<div class="page-main">
 		{#if data.added}
-			<p class="card added">
-				Added "{data.added}"{data.inside ? ` and the ${data.inside === 1 ? 'habit' : `${data.inside} habits`} inside it` : ''}{data.created ? ` with ${data.created} new ${data.created === 1 ? 'Task' : 'Tasks'}` : ''}{data.reused
-					? `${data.created ? ',' : ''} using ${data.reused} from your Library`
-					: ''}. It's on Today when it's due.
+			<p class="notice added">
+				<span class="notice-text"
+					>Added "{data.added}"{data.inside ? ` and the ${data.inside === 1 ? 'habit' : `${data.inside} habits`} inside it` : ''}{data.created ? ` with ${data.created} new ${data.created === 1 ? 'Task' : 'Tasks'}` : ''}{data.reused
+						? `${data.created ? ',' : ''} using ${data.reused} from your Library`
+						: ''}. It's on Today when it's due.</span
+				>
 			</p>
 		{/if}
 		{#if data.suggestView && !viewDismissed}
 			{@const sv = data.suggestView}
-			<div class="card added stack">
-				<span>This habit works well with the <strong>{sv.name}</strong> view. {sv.summary}</span>
-				<div class="row">
-					<button class="small primary" onclick={() => switchView(sv.id, sv.name)}>Switch to {sv.name}</button>
-					<button class="small" onclick={() => (viewDismissed = true)}>No thanks</button>
-				</div>
+			<div class="notice added">
+				<span class="notice-text">This habit works well with the <strong>{sv.name}</strong> view. {sv.summary}</span>
+				<span class="notice-acts"><button type="button" class="quiet" onclick={() => switchView(sv.id, sv.name)}>Switch to {sv.name}</button><button type="button" class="quiet" onclick={() => (viewDismissed = true)}>No thanks</button></span>
 			</div>
 		{/if}
 
@@ -365,7 +364,6 @@
 
 <style>
 	.added {
-		border-color: var(--accent);
-		margin-bottom: 0.75rem;
+		margin-bottom: var(--space-group);
 	}
 </style>

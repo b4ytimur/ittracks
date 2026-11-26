@@ -14,13 +14,22 @@
 
 /* ---------- One piece: slot, content, verb inside the card ---------- */
 .elist > li > .card {
-	display: flex; flex-wrap: wrap; align-items: flex-start;
+	display: flex; flex-wrap: wrap; align-items: center; /* grip, checkbox and verb sit on the row's middle */
 	padding: calc(var(--space-group) - 1px) var(--space-group); /* the 1px edge counts toward the pitch */
+}
+/* A row with lines under its top line (a line kind, a week strip, a notice, Today's Headline picker) centres its marks and verb on the name and meta
+   (24 + 20px), where a closed row has them, so opening a row moves nothing and nothing drifts into what hangs below. */
+.elist > li:has(> .card > .content > :is(.row-line, .week, .notice, .headline-pick)) > .card { align-items: flex-start; }
+.elist > li:has(> .card > .content > :is(.row-line, .week, .notice, .headline-pick)) > .card > :is(.slot, div.verb) {
+	align-self: flex-start; min-height: calc(1.5rem + 1.25rem); align-items: center;
+}
+.elist > li:has(> .card > .content > :is(.row-line, .week, .notice, .headline-pick)) > .card > :is(button, a).verb {
+	align-self: flex-start; margin-block-start: calc((1.5rem + 1.25rem - var(--target-min)) / 2);
 }
 
 /* The slot is always rendered: 0 wide in use mode, handle-slot wide in edit and select.
    The card's edges never move; only the name slides, 16px, on one clock. It is one name line tall
-   (24px, 48px at 200% text), so the grip and the checkbox centre on the name. */
+   (24px, 48px at 200% text): the grip and the checkbox centre on the row, or on its name and meta on a taller row. */
 .elist > li > .card > .slot { flex: none; display: flex; width: 0; min-height: max(var(--target-min), 1.5rem); }
 .elist[data-mode='edit'] > li > .card > .slot,
 .elist[data-mode='select'] > li > .card > .slot { width: var(--handle-slot); }
@@ -52,7 +61,7 @@
 .content > .row-line.warn { color: var(--warn); }
 .shelf .content > .row-line.warn { color: var(--ink); }
 
-/* The verb slot: one quiet verb in edit mode (Button's quiet, button.quiet.verb.hit). In use mode on Today a due row's
+/* The verb slot: one quiet verb in edit mode (Button's quiet, button.quiet.verb). In use mode on Today a due row's
    div.verb > div.log-control (R2.19; LogControl draws the joined control and its menu, this only places it);
    during a celebration Undo (button.quiet.verb) takes its place; a finished row with Slots shows a quiet View
    (a.button.quiet.verb: .button drops the link underline, Button's quiet hover brings it back) and a not-due row
@@ -121,9 +130,9 @@
 
 /* ---------- Coarse pointers: 44px hit areas grown by pseudo-elements, never min-width ---------- */
 @media (pointer: coarse) {
-	/* The checkbox's slot box and the quiet verb (edit's verb, Undo, View, Start early) take base's .hit in the markup.
-	   A name link on a card that isn't .link (a .link card is the target already) grows here instead: .hit's
-	   position: relative would shrink a .link card's stretched cover to the name. LogControl grows its own two
+	/* The checkbox's slot box takes .hit in the markup; the quiet verb (edit's verb, Undo, View, Start early) is Button's,
+	   so Button grows it. A name link on a card that isn't .link (a .link card is the target already) grows here: a
+	   relative position on every name would shrink a .link card's stretched cover to the name. LogControl grows its own two
 	   buttons: a 44px box on each would overlap at the seam. */
 	.elist > li > .card:not(.link) > .content > a.name { position: relative; }
 	.elist > li > .card:not(.link) > .content > a.name::before {

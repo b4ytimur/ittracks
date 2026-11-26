@@ -6,7 +6,7 @@
 
 /* ---------- The sentence ---------- */
 /* first: inside li.ghost, 8px over the slot like a heading over its rows. range: alone. filtered: ends with Clear filters,
-   a button.link.hit in the sentence, so Button underlines it (D3.29) and it wraps whole. */
+   a button.link in the sentence, so Button underlines it (D3.29) and it wraps whole. */
 .empty-first, .empty-filtered, .empty-range { color: var(--ink-muted); overflow-wrap: anywhere; }
 .empty-first { margin-block-end: var(--space-inline); }
 

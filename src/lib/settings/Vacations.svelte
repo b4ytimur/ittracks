@@ -36,7 +36,7 @@
 {#if vacations.length}
 	<ul>
 		{#each vacations as v (v.id)}
-			<li class="act-row"><span class="status-text">{said(v)}{#if v.end < today}<span class="muted"> · over</span>{/if}</span><button type="button" class="quiet hit" aria-label="Remove {said(v)}" onclick={() => remove(v)}>Remove</button></li>
+			<li class="act-row"><span class="status-text">{said(v)}{#if v.end < today}<span class="muted"> · over</span>{/if}</span><button type="button" class="quiet" aria-label="Remove {said(v)}" onclick={() => remove(v)}>Remove</button></li>
 		{/each}
 	</ul>
 {/if}
@@ -46,7 +46,7 @@
 		<div class="field"><label class="label" for="vac-to">To</label><input id="vac-to" type="date" bind:value={end} min={start || undefined} /></div>
 	</div>
 	<div class="field"><label class="label" for="vac-note">Note</label><input id="vac-note" bind:value={note} maxlength="120" placeholder="Optional" /></div>
-	<div><button class="hit" aria-disabled={busy}>+ Vacation</button></div>
+	<div><button aria-disabled={busy}>+ Vacation</button></div>
 </form>
 
 <style>

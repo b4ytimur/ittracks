@@ -4,7 +4,7 @@
    place as a row line (.content > .notice) and on a shelf.
    Markup: <div class="notice" [data-tone="warn|error"] [data-mode="edit|select"] [role="alert": an error a submit returned, only]>
              <div class="notice-text"> <p class="label">[<span class="status-disc" aria-hidden="true">!</span>]Words…</p> [p.label …] </div>
-             [<div class="notice-acts"> <button class="quiet hit">Verb</button> … </div>]
+             [<div class="notice-acts"> <button class="quiet">Verb</button> … </div>]
            </div>
    Pitch: 1 + 7 + 20 per line + 7 + 1 = 36 with one line. Verbs beside the words add nothing (their 24px boxes
    overhang the 20px line by 2px each way); under the words, as they always are in a row (D3.24), they add 4 + 20: 60. */

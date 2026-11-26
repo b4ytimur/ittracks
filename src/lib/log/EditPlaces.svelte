@@ -66,7 +66,7 @@
 >
 	{#snippet row(p)}
 		<h2 class="name">{#if p.task}<InlineText editing value={p.name} label="Name of the Task" onsave={(v) => onname(p, v)} />{:else}{p.name}{/if}</h2>
-		{#if p.rows.length}<button type="button" class="fold hit" aria-expanded={isOpen(p)} aria-label="{cap(p.rows[0].many)} of {p.name}" onclick={() => (shown[p.id] = !isOpen(p))}><span aria-hidden="true" class="chev">›</span></button>{/if}
+		{#if p.rows.length}<button type="button" class="fold" aria-expanded={isOpen(p)} aria-label="{cap(p.rows[0].many)} of {p.name}" onclick={() => (shown[p.id] = !isOpen(p))}><span aria-hidden="true" class="chev">›</span></button>{/if}
 		{#if p.numbers.length}
 			<p class="meta-line numbers">
 				{#each p.numbers as n (n.id)}
@@ -146,5 +146,16 @@
 	}
 	.num {
 		min-inline-size: var(--lg-lead);
+	}
+	/* A fold's hit area is its placer's (Disclosure) and its ::before is the focus ring, so Button's area is ::after here. */
+	@media (pointer: coarse) {
+		.fold {
+			position: relative;
+		}
+		.fold::after {
+			content: '';
+			position: absolute;
+			inset: min(0px, calc((100% - var(--target-touch)) / 2));
+		}
 	}
 </style>

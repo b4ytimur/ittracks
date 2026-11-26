@@ -6,7 +6,7 @@
        <nav class="subtabs-row scroll-x" aria-label="Boards">           links: a URL each
          <a class="tab label" href="?board=b2" data-reserve="Strength" aria-current="page">Strength</a> …
        </nav>
-       <button type="button" class="quiet hit">+ Board</button>         only an act that adds a tab
+       <button type="button" class="quiet">+ Board</button>         only an act that adds a tab
      </div>
      <div class="subtabs">
        <div class="subtabs-row scroll-x" role="tablist" aria-labelledby="add-t">

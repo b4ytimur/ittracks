@@ -21,8 +21,8 @@
 	cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none;
 }
 /* The hit area: the button itself on a fine pointer; 44px under pointer: coarse, grown toward the card's
-   outer edge so it never takes taps from the name, and the slide stays 16px. Base .hit grows both ways,
-   so the grip keeps its own one-sided ::before. */
+   outer edge so it never takes taps from the name, and the slide stays 16px. Button's touch area grows both ways,
+   so the grip's own one-sided ::before takes its place. */
 .handle::before {
 	content: ''; position: absolute;
 	inset-block: min(0px, calc((var(--grip-h) - var(--grip-hit)) / 2));

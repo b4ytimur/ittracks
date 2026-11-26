@@ -74,10 +74,10 @@
 			<input type="time" bind:value={r.start} aria-label="{name} starts" onblur={() => r.name.trim() && leave(`Changed ${name}.`)} />
 			<input type="time" bind:value={r.end} aria-label="{name} ends" onblur={() => r.name.trim() && leave(`Changed ${name}.`)} />
 		</span>
-		<button type="button" class="quiet hit" aria-label="Remove {name}" onclick={() => remove(i)}>×</button>
+		<button type="button" class="quiet glyph" aria-label="Remove {name}" onclick={() => remove(i)}>×</button>
 	</div>
 {/each}
-<div><button type="button" class="hit" onclick={add}>+ Part</button></div>
+<div><button type="button" onclick={add}>+ Part</button></div>
 {#if missing.length}
 	<p class="meta muted">Still set for a part that is gone: {missing.map((n) => `${n} (${setFor(n)} ${setFor(n) === 1 ? 'habit' : 'habits'})`).join(', ')}.</p>
 {/if}

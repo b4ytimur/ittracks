@@ -10,3 +10,11 @@ it('no var(--…) without a definition', () => {
 	// `--series-${n}` is put together in code.
 	expect(unknown.filter((x) => !x.startsWith('--series in'))).toEqual([]);
 });
+
+// --pitch is the one spacing length typed: every step is a number of pitches, so changing it changes them all.
+it('spacing steps derive from --pitch', () => {
+	const css = readFileSync('src/tokens.css', 'utf8');
+	const steps = [...css.matchAll(/(--(?:space-(?:tight|inline|group|section|page|indent)|handle-slot)):\s*([^;]+);/g)];
+	expect(steps.map(([, name]) => name).sort()).toEqual(['--handle-slot', '--space-group', '--space-indent', '--space-inline', '--space-page', '--space-section', '--space-tight']);
+	expect(steps.filter(([, , value]) => /\d(rem|px)/.test(value)).map(([, name]) => name)).toEqual([]);
+});

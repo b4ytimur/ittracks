@@ -17,6 +17,7 @@
 		oncancel: () => void;
 	} = $props();
 
+	const uid = $props.id();
 	let tab = $state<'suggested' | 'gallery'>(untrack(() => (suggested.length ? 'suggested' : 'gallery')));
 	const groups = $derived(tab === 'suggested' ? suggested : gallery);
 	const fresh = (c: StatCard) => ({ ...structuredClone(c), id: makeCard({}).id });
@@ -25,14 +26,17 @@
 <section class="card add">
 	<div class="bar">
 		<h2>Add a card</h2>
-		<button type="button" class="small" onclick={oncancel}>Close</button>
+		<button type="button" class="quiet" onclick={oncancel}>Close</button>
 	</div>
-	<div class="tabs-row" role="tablist">
-		<button type="button" role="tab" aria-selected={tab === 'suggested'} class:on={tab === 'suggested'} onclick={() => (tab = 'suggested')}>From your habits</button>
-		<button type="button" role="tab" aria-selected={tab === 'gallery'} class:on={tab === 'gallery'} onclick={() => (tab = 'gallery')}>Gallery</button>
-		<button type="button" class="primary small" onclick={() => onbuild(makeCard({ look: { chart: 'bars', size: 'wide' }, overTime: 'sum' }))}>Build your own</button>
+	<!-- The other way to add, first in the body and over the tabs: a secondary, since the view's one primary is elsewhere. -->
+	<button type="button" class="build" onclick={() => onbuild(makeCard({ look: { chart: 'bars', size: 'wide' }, overTime: 'sum' }))}>Build your own</button>
+	<div class="subtabs">
+		<div class="subtabs-row" role="tablist" aria-label="Cards to add">
+			<button type="button" class="tab" role="tab" id="{uid}-suggested" aria-controls="{uid}-panel" aria-selected={tab === 'suggested'} data-reserve="From your habits" onclick={() => (tab = 'suggested')}>From your habits</button>
+			<button type="button" class="tab" role="tab" id="{uid}-gallery" aria-controls="{uid}-panel" aria-selected={tab === 'gallery'} data-reserve="Gallery" onclick={() => (tab = 'gallery')}>Gallery</button>
+		</div>
 	</div>
-	<div class="groups">
+	<div class="groups" role="tabpanel" id="{uid}-panel" aria-labelledby="{uid}-{tab}">
 		{#each groups as g, gi (`${tab}-${gi}`)}
 			<h3>{g.group}</h3>
 			<ul class="list">
@@ -40,10 +44,10 @@
 					<li class="item">
 						<div class="grow">
 							<div>{c.title}</div>
-							<div class="muted small">{CHARTS[c.look.chart]}</div>
+							<div class="muted meta">{CHARTS[c.look.chart]}</div>
 						</div>
-						<button type="button" class="small link" onclick={() => onbuild(fresh(c))}>Change first</button>
-						<button type="button" class="small" onclick={() => onadd(fresh(c))}>Add</button>
+						<button type="button" class="quiet" onclick={() => onbuild(fresh(c))}>Change first</button>
+						<button type="button" class="quiet" onclick={() => onadd(fresh(c))}>Add</button>
 					</li>
 				{/each}
 			</ul>
@@ -57,24 +61,8 @@
 	.add h2 {
 		margin: 0;
 	}
-	.tabs-row {
-		display: flex;
-		gap: 0.4rem;
-		flex-wrap: wrap;
-		align-items: center;
-		margin-bottom: 0.5rem;
-	}
-	.tabs-row [role='tab'] {
-		border-radius: 999px;
-		padding: 0.25rem 0.75rem;
-		font-size: 0.88rem;
-	}
-	.tabs-row [role='tab'].on {
-		border-color: var(--accent);
-		color: var(--accent);
-	}
-	.tabs-row .primary {
-		margin-left: auto;
+	.build {
+		margin-block-end: var(--space-group);
 	}
 	.groups {
 		max-height: 28rem;
@@ -84,13 +72,13 @@
 		font-size: var(--font-size-meta);
 		color: var(--ink-muted);
 		font-weight: 500;
-		margin: 0.8rem 0 0.3rem;
+		margin: var(--space-group) 0 var(--space-tight);
 	}
 	.item {
 		display: flex;
 		align-items: center;
-		gap: 0.6rem;
-		padding: 0.35rem 0;
+		gap: var(--space-inline);
+		padding: var(--space-inline) 0;
 		border-bottom: 1px solid var(--chart-grid);
 	}
 	.list li + li {
@@ -99,8 +87,5 @@
 	.grow {
 		flex: 1;
 		min-width: 0;
-	}
-	.small {
-		font-size: var(--font-size-chip);
 	}
 </style>

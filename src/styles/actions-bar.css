@@ -1,17 +1,25 @@
 /* ActionsBar: how a form ends: what still needs fixing, what will be left out, then Save. Owns .actions-bar (the order and
    the hiding in Edit and Select) and .actions-note. The notices are Notice's, the buttons Button's, the stack and the
-   wrapping row Layout's. In the flow, never stuck (R1.3): the form's .l-stack puts it 24 under the last section.
+   wrapping row Layout's. In the flow, never stuck (R1.3): 24 under the last section (a .stack form gets it below; an .l-stack form sets --gap).
    Markup:
      <div class="actions-bar l-stack" [data-mode="edit|select"]>      children 16 apart (space-group)
        <div class="notice" data-tone="error" role="alert">…</div>     a submit that was refused: gaps, rules, the server, and
                                                                      where no band can be reached, a lost connection with Retry (D4.17)
        <div class="notice" data-tone="warn">…</div>                   true before the press: a risk, what won't be saved
        <div class="l-cluster">
-         <button class="primary hit" data-reserve="Save habit">Save habit</button>   first, at the leading edge
-         <button type="button" class="hit">Cancel</button>            only a form that opened in place
+         <button class="primary" data-reserve="Save habit">Save habit</button>   first, at the leading edge
+         <button type="button">Cancel</button>                        in place; on a full page a.button to the parent; a wizard's Back
          <p class="actions-note meta">…</p>                           optional: one line beside the buttons
+         <button class="danger" formaction="?/delete">Delete …</button>   a destroy of the whole record: last, trailing
        </div>
-     </div> */
+     </div>
+   Every form ends here, and only here: [primary][secondary][Cancel], or a wizard's [Next][Back], 8 apart at the leading
+   edge, so the primary sits in the same place on every form. */
+
+/* Forms that still stack by margin (.stack, 16) give the footer its 24 here; a form on .l-stack sets --gap instead. */
+.stack > .actions-bar { margin-block-start: var(--space-section); }
+/* A destroy stays after Save in the markup, so Enter still saves; the margin alone carries it to the trailing edge. */
+.actions-bar > .l-cluster > .danger { margin-inline-start: auto; }
 
 /* A note beside the buttons keeps 12rem before it wraps under them, so it never squeezes to a column of syllables. */
 .actions-note { flex: 1 1 12rem; min-width: 0; color: var(--ink-muted); overflow-wrap: anywhere; }

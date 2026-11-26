@@ -191,7 +191,7 @@
 			{#if head}<p class="meta-line"><bdi dir="ltr">{head}</bdi></p>{/if}
 			{#if extra}{@render extra()}{/if}
 		</div>
-		{#if menu.length && stage !== 'read'}<div class="verb"><MenuButton class="lg-more hit" label="More for {name}" items={menu} /></div>{/if}
+		{#if menu.length && stage !== 'read'}<div class="verb"><MenuButton class="quiet glyph lg-more" label="More for {name}" items={menu} /></div>{/if}
 	</div>
 	<div class="shelf lg-shelf">
 		{#if open === null}
@@ -291,8 +291,8 @@
 		{/if}
 		{#if stage !== 'read' && !body}
 			<div class="lg-foot">
-				<button type="button" class="quiet hit" onclick={onadd}>Add {words.one}</button>
-				{#if sets.length && !sets.at(-1)!.done}<button type="button" class="quiet hit" onclick={onremove}>Remove {words.one} {sets.length}</button>{/if}
+				<button type="button" class="quiet" onclick={onadd}>Add {words.one}</button>
+				{#if sets.length && !sets.at(-1)!.done}<button type="button" class="quiet" onclick={onremove}>Remove {words.one} {sets.length}</button>{/if}
 			</div>
 		{/if}
 		{#if once}<div class="lg-once">{@render once()}</div>{/if}

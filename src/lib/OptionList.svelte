@@ -44,7 +44,7 @@
 				{@render ctx.grip?.()}
 				<input bind:value={o.name} maxlength="40" required aria-label="{label} {options.indexOf(o) + 1}" {placeholder} />
 				{@render after?.(o)}
-				<button type="button" class="quiet hit" aria-label="{used(o.id) ? 'Archive' : 'Remove'} {o.name || label}" onclick={() => (options = options.filter((x) => x.id !== o.id))}>{used(o.id) ? 'Archive' : 'Remove'}</button>
+				<button type="button" class="quiet" aria-label="{used(o.id) ? 'Archive' : 'Remove'} {o.name || label}" onclick={() => (options = options.filter((x) => x.id !== o.id))}>{used(o.id) ? 'Archive' : 'Remove'}</button>
 			</div>
 		{/snippet}
 	</EditableList>
@@ -58,7 +58,7 @@
 	}
 	.options {
 		display: grid;
-		gap: 0.6rem;
+		gap: var(--space-inline);
 	}
 	.options > button {
 		justify-self: start;

@@ -179,7 +179,7 @@
 	items={shown}
 	key={(item) => item.card.id}
 	label={(item) => titleOf(item.card)}
-	itemClass={(item) => item.card.look.size}
+	itemClass={(item) => `size-${item.card.look.size}`}
 	mode={editing && !readonly ? 'edit' : 'use'}
 	ariaLabel="Cards"
 	onmove={(_, order, text) => (void reorder(order, text), true)}
@@ -230,7 +230,7 @@
 
 <style>
 	.card-settings {
-		inline-size: min(60rem, calc(100vw - 2rem));
+		inline-size: min(60rem, calc(100vw - 2 * var(--space-group)));
 		max-block-size: 90dvh;
 		border: 1px solid var(--line);
 		border-radius: var(--radius-card);
@@ -245,7 +245,7 @@
 	:global(ul.cards) {
 		display: grid;
 		grid-template-columns: repeat(6, minmax(0, 1fr));
-		gap: 0.75rem;
+		gap: var(--space-group);
 		align-items: stretch;
 	}
 	:global(ul.cards > li) {
@@ -263,20 +263,20 @@
 		flex: 1;
 		align-items: stretch;
 	}
-	:global(ul.cards > li.wide),
-	:global(ul.cards > li.full) {
+	:global(ul.cards > li.size-wide),
+	:global(ul.cards > li.size-full) {
 		grid-column: span 6;
 	}
 	@media (min-width: 900px) {
-		:global(ul.cards > li.small) {
+		:global(ul.cards > li.size-small) {
 			grid-column: span 2;
 		}
-		:global(ul.cards > li.wide) {
+		:global(ul.cards > li.size-wide) {
 			grid-column: span 4;
 		}
 	}
 	@media (max-width: 380px) {
-		:global(ul.cards > li.small) {
+		:global(ul.cards > li.size-small) {
 			grid-column: span 6;
 		}
 	}

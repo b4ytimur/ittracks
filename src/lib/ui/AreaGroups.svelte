@@ -107,12 +107,12 @@
 				verb={a && mode === 'edit' ? del : undefined}
 			/>
 			{#snippet swatch()}
-				<button type="button" class="quiet dot hit" aria-label="Colour of {a?.name}" aria-expanded={picking === g.key} onclick={() => (picking = picking === g.key ? null : g.key)}
+				<button type="button" class="quiet dot" aria-label="Colour of {a?.name}" aria-expanded={picking === g.key} onclick={() => (picking = picking === g.key ? null : g.key)}
 					><span class="swatch" style:--c={g.color}></span></button
 				>
 			{/snippet}
 			{#snippet del()}
-				<button type="button" class="quiet verb hit" aria-label="Delete {a?.name}" onclick={() => a && remove(a)}>Delete</button>
+				<button type="button" class="quiet verb" aria-label="Delete {a?.name}" onclick={() => a && remove(a)}>Delete</button>
 			{/snippet}
 			{#if a && mode === 'edit' && picking === g.key}
 				<div class="colors" role="group" aria-label="Colour of {a.name}">

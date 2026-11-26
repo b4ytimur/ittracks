@@ -166,7 +166,7 @@
 		{/if}
 
 		{#if data.ready}
-			<p class="notice" role="status"><span class="notice-text">{data.ready.includes('habit') ? 'Added the Journal habit to Today. ' : ''}{data.ready.includes('note') ? 'The day note is on Today now. ' : ''}</span><span class="notice-acts"><a class="quiet hit" href="/settings#daynote">Change in Settings</a></span></p>
+			<p class="notice" role="status"><span class="notice-text">{data.ready.includes('habit') ? 'Added the Journal habit to Today. ' : ''}{data.ready.includes('note') ? 'The day note is on Today now. ' : ''}</span><span class="notice-acts"><a class="quiet" href="/settings#daynote">Change in Settings</a></span></p>
 		{/if}
 		{#if data.setup}
 			<form method="POST" action="/journal?/setup" class="card stack" use:enhance={() => async ({ result, update }) => {
@@ -200,10 +200,10 @@
 		{#snippet note(it: Note, k: string, date: string, alone = '')}
 			<!-- Under its row a note needs no name, only its field's; one that stands alone says what it is. -->
 			<div class="hi-notewrap" class:note-of={alone}>
-				{#if alone}<p class="meta"><span class="muted">{alone}</span> <a class="quiet hit" href={it.href} aria-label="Change {alone}, {title(date)}">Change</a></p>
+				{#if alone}<p class="meta"><span class="muted">{alone}</span> <a class="quiet" href={it.href} aria-label="Change {alone}, {title(date)}">Change</a></p>
 				{:else if it.kind === 'field'}<p class="meta muted">{it.title.slice((it.habit ?? '').length).replace(/^ · /, '')}</p>{/if}
 				<div class:hi-clamp={long(it.text) && !openNotes[k]}><Markdown text={it.text} small /></div>
-				{#if long(it.text)}<button type="button" class="quiet hi-show hit" aria-expanded={!!openNotes[k]} aria-label="{openNotes[k] ? 'Show less' : 'Show the whole note'} of {alone || it.habit}, {title(date)}" onclick={() => (openNotes[k] = !openNotes[k])}>{openNotes[k] ? 'Show less' : 'Show the whole note'}</button>{/if}
+				{#if long(it.text)}<button type="button" class="quiet hi-show" aria-expanded={!!openNotes[k]} aria-label="{openNotes[k] ? 'Show less' : 'Show the whole note'} of {alone || it.habit}, {title(date)}" onclick={() => (openNotes[k] = !openNotes[k])}>{openNotes[k] ? 'Show less' : 'Show the whole note'}</button>{/if}
 			</div>
 		{/snippet}
 
@@ -211,7 +211,7 @@
 			{#each days as day (day.date)}
 				<section class="hi-day" id="d-{day.date}">
 					<GroupHeading title={title(day.date)} {mode} count={!data.notesOnly && day.count.of ? `${day.count.done} of ${day.count.of}` : undefined} verb={data.canBackfill && day.date < data.today && (!data.windowFrom || day.date >= data.windowFrom) ? verb : undefined} />
-					{#snippet verb()}<a class="quiet verb hit" href="/day/{day.date}" aria-label="Log {title(day.date)}">Log this day</a>{/snippet}
+					{#snippet verb()}<a class="quiet verb" href="/day/{day.date}" aria-label="Log {title(day.date)}">Log this day</a>{/snippet}
 					{#each day.notes.day as it, i (i)}{@render note(it, `${day.date}:d${i}`, day.date, it.title)}{/each}
 					{#if day.moods.length}<p class="tags moods">{#each day.moods as m (m.field + m.value)}<span class="tag">{m.field}: {m.value}</span>{/each}</p>{/if}
 					{#if day.occurrences.length}
@@ -283,9 +283,5 @@
 	}
 	.note-of {
 		padding: var(--space-inline) var(--space-group) 0;
-	}
-	.note {
-		font-size: var(--font-size-note);
-		line-height: 1rem;
 	}
 </style>

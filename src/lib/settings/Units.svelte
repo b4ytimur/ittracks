@@ -124,18 +124,18 @@
 							{/if}
 						{/if}
 						<label class="step meta">± <input class="num" inputmode="decimal" value={x.step} aria-label="Step of {x.name || 'the new unit'} on the log" onchange={(e) => setStep(k, x, e.currentTarget.value, e.currentTarget)} /></label>
-						{#if !fixed && (x.id !== base.id || !x.name)}<button type="button" class="quiet hit" aria-label="Remove {x.name || 'the new unit'}" onclick={() => remove(k, x)}>×</button>{/if}
+						{#if !fixed && (x.id !== base.id || !x.name)}<button type="button" class="quiet glyph" aria-label="Remove {x.name || 'the new unit'}" onclick={() => remove(k, x)}>×</button>{/if}
 					</div>
 				{/each}
 			</div>
 			<div class="l-cluster">
-				<button type="button" class="hit" onclick={() => addUnit(k)}>+ Unit</button>
-				{#if k.id !== TIME}<button type="button" class="quiet hit se-del" onclick={() => removeKind(k)}>Delete {k.name || 'it'}</button>{/if}
+				<button type="button" onclick={() => addUnit(k)}>+ Unit</button>
+				{#if k.id !== TIME}<button type="button" class="quiet se-del" onclick={() => removeKind(k)}>Delete {k.name || 'it'}</button>{/if}
 			</div>
 		</SaidLine>
 	{/each}
 </div>
-<div><button type="button" class="hit" onclick={addKind}>+ Kind</button></div>
+<div><button type="button" onclick={addKind}>+ Kind</button></div>
 
 <style>
 	.fixed {

@@ -5,7 +5,7 @@
        <label class="label" for="cp">Share link</label>
        <div class="act-row">
          <textarea id="cp" class="copy-value" readonly rows="1" dir="ltr" translate="no" spellcheck="false" autocomplete="off">https://…</textarea>
-         <button type="button" class="hit" aria-label="Copy share link" data-reserve="Copied">Copy</button>
+         <button type="button" aria-label="Copy share link" data-reserve="Copied">Copy</button>
        </div>
      </div> */
 
