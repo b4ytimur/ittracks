@@ -6,6 +6,7 @@ import { account, appValue } from '$lib/server/db/schema';
 import { building } from '$app/environment';
 import { readSession, SESSION_COOKIE } from '$lib/server/auth';
 import { startReminders } from '$lib/server/push';
+import { startBackups } from '$lib/server/backups';
 import { actorForKey } from '$lib/server/core/tokens';
 import { restorePartialDays } from '$lib/server/today';
 import { sweep } from '$lib/server/trash';
@@ -29,6 +30,7 @@ once('partial-days-restored', restorePartialDays);
 // judged by the same rule as the app.
 once('partial-days-restored-2', restorePartialDays);
 if (!building) startReminders();
+if (!building) startBackups();
 
 let swept = 0;
 export const handle: Handle = async ({ event, resolve }) => {

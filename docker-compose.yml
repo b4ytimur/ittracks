@@ -7,6 +7,9 @@ services:
       - "${BIND_ADDRESS:-0.0.0.0}:3000:3000"
     volumes:
       - ./data:/data
+      # Automatic backups on another drive: mount its folder, then set /backups in
+      # Settings → Data → Automatic backups (docs/private-server.md#automatic-backups).
+      # - /Volumes/Backup/ittracks:/backups
     environment:
       # The address you open the app at. Set ORIGIN in .env, or change the default here.
       ORIGIN: ${ORIGIN:-http://localhost:3000}

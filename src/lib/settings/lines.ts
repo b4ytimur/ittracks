@@ -1,5 +1,6 @@
 // The settings as lines of words: which there are, in which group, what each says now and what it
 // does. The controls are the page's.
+import { backupWords, type BackupPlan, type BackupState } from '$lib/backups';
 import { PAST_DAYS_CHOICES } from '$lib/engine/backfill';
 import type { DayRange } from '$lib/engine/day';
 import type { PastDays } from '$lib/engine/backfill';
@@ -29,6 +30,7 @@ export interface Now {
 	devices: number;
 	habits: number;
 	keys: { name: string }[];
+	backup: { plan: BackupPlan; state: BackupState };
 	/** Saves on this device that the server doesn't have yet. */
 	waiting: number;
 }
@@ -118,6 +120,7 @@ export function settingGroups(s: Now): Group[] {
 			title: 'Data',
 			lines: [
 				{ id: 'download', label: 'Download your data', words: 'A full backup, or tables for a spreadsheet.', says: 'The backup holds habits, Tasks, every log, slip, note and setting, and can be put back here or on another ittracks server. Tables are a zip of CSV files with a README that explains every column, for Excel, Google Sheets, Python, R or an AI chat.', also: 'export json csv backup' },
+				{ id: 'backups', label: 'Automatic backups', words: backupWords(s.backup.plan, s.backup.state, s.today), says: 'A copy of the whole database is written to a folder on the server: habits, Tasks, logs, notes, settings, your login and keys. Beyond the number you keep, the oldest copies are deleted.', also: 'backup auto schedule copy folder database sqlite nightly hourly weekly' },
 				{ id: 'restore', label: 'Restore from a backup', words: 'Replaces what is here.', says: 'Every habit, Task, log, note and setting in this account is replaced by the ones in the file. Your login, keys and reminder devices stay.', also: 'import json export' },
 				{ id: 'journal', label: 'Download the journal', words: s.journalOff ? 'The Journal is switched off.' : 'Everything you wrote, as Markdown.', says: 'One file per day, named as Obsidian names daily notes, with your mood and the habits you did at the top. Unzip it into your vault.', also: 'obsidian markdown notes export' },
 				{ id: 'templates', label: 'Templates', words: 'Save a habit as a file, add one, or look in the Gallery.', says: 'A template holds a habit and its Tasks, with its Areas and what its auto-filled slots pick from. Your logs stay here. Share adds a description and questions for the person adding it.', also: 'share export import habit gallery file' }

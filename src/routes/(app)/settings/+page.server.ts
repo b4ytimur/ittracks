@@ -7,6 +7,7 @@ import { checkViews } from '$lib/rules/views';
 import { db } from '$lib/server/db';
 import { account, habit, metric, slot, tag, task, taskTag, variant } from '$lib/server/db/schema';
 import { ActionError, ALL_SCOPES, appActor, SCOPES, type Scope } from '$lib/server/core/actor';
+import { backupNow, changePlan, getBackupState, getPlan, inContainer, readChange } from '$lib/server/backups';
 import { importReplace, keepTimeZone, readExport } from '$lib/server/core/export';
 import { createKey, listKeys, revokeKey } from '$lib/server/core/tokens';
 import { publicKey, sendToAccount, subscriptionCount } from '$lib/server/push';
@@ -116,6 +117,7 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		habitFields: numberFields(habits.map((h) => h.id)),
 		keys: listKeys(accountId),
 		scopes: SCOPES,
+		backup: { plan: getPlan(), state: getBackupState(), container: inContainer() },
 		origin: url.origin
 	};
 };
@@ -200,6 +202,29 @@ export const actions: Actions = {
 			if (e instanceof ActionError) return fail(400, { error: e.message });
 			throw e;
 		}
+	},
+	/** Change how often copies are made, where, or how many stay. `set` and `was` are JSON. */
+	backupPlan: async ({ request, locals }) => {
+		// Actions don't run the layout's sign-in check, and nothing else here reads the account.
+		if (!locals.account) return fail(401, { error: 'Sign in first.' });
+		const f = await request.formData();
+		const json = (k: string) => {
+			try {
+				return JSON.parse(String(f.get(k) ?? ''));
+			} catch {
+				return null;
+			}
+		};
+		const set = readChange(json('set'));
+		const was = readChange(json('was') ?? {});
+		if (!set || !was) return fail(400, { error: 'Not saved: that is not a change to backups.' });
+		const r = await changePlan(set, was);
+		return 'error' in r ? fail(r.status, { error: r.error }) : r;
+	},
+	backupNow: async ({ locals }) => {
+		if (!locals.account) return fail(401, { error: 'Sign in first.' });
+		const r = await backupNow();
+		return r.error ? fail(400, { error: r.error }) : { made: r.state.ok };
 	},
 	createKey: async ({ request, locals }) => {
 		const f = await request.formData();
