@@ -8,7 +8,7 @@ vi.mock('$app/forms', () => ({
 	}
 }));
 
-import { keyOf, readAnswer, sendAll, type Queued } from './queue';
+import { ahead, keyOf, readAnswer, sendAll, type Queued } from './queue';
 
 // As the running app answers them (SvelteKit 2): a refusal and a redirect are 200.
 const res = (status: number, body: unknown) => new Response(typeof body === 'string' ? body : JSON.stringify(body), { status });
@@ -83,5 +83,28 @@ describe('sending what waits', () => {
 	it('the same action on the same thing replaces itself', () => {
 		expect(keyOf({ url: '/?/done', fields: [['occurrence', '1']] })).toBe(keyOf({ url: '/?/done', fields: [['level', 'x'], ['occurrence', '1']] }));
 		expect(keyOf({ url: '/?/done', fields: [['occurrence', '1']] })).not.toBe(keyOf({ url: '/?/done', fields: [['occurrence', '2']] }));
+	});
+	it('a swap replaces only a swap of the same Slot; what names no Slot keeps its key', () => {
+		const swap = (slot: string, task: string) => keyOf({ url: '/log/1?/swap', fields: [['slot', slot], ['task', task]] });
+		expect(swap('a', 'incline')).toBe(swap('a', 'dumbbell'));
+		expect(swap('a', 'incline')).not.toBe(swap('b', 'incline'));
+		expect(keyOf({ url: '/log/1?/reroll', fields: [['slot', 'a']] })).not.toBe(keyOf({ url: '/log/1?/reroll', fields: [['slot', 'b']] }));
+		expect(keyOf({ url: '/?/done', fields: [['occurrence', '1']] })).toBe('/?/done|1');
+		expect(keyOf({ url: '/log/1?/save', fields: [['payload', '{}']] })).toBe('/log/1?/save|');
+		expect(keyOf({ url: '/journal?/dayNote', fields: [['date', '2026-11-26'], ['text', 'x']] })).toBe('/journal?/dayNote|2026-11-26');
+	});
+	it('what waits from earlier on the same page goes first, but not an older copy of this one, nor a refused one', () => {
+		const q = (id: string, url: string, fields: [string, string][] = [], refused?: string): Queued => ({ id, url, fields, label: 'Gym', at: 0, ...(refused ? { refused } : {}) });
+		const waiting = [
+			q('save', '/log/1?/save', [['payload', 'older']]),
+			q('swap', '/log/1?/swap', [['slot', 'a'], ['task', 't']]),
+			q('gone', '/log/1?/swap', [['slot', 'b'], ['task', 't']], 'It is no longer there.'),
+			q('other log', '/log/2?/swap', [['slot', 'a'], ['task', 't']]),
+			q('today', '/?/done', [['occurrence', '1']])
+		];
+		expect(ahead(waiting, { url: '/log/1?/save', fields: [['payload', 'newer']] })).toEqual(['swap']);
+		expect(ahead(waiting, { url: '/log/1?/swap', fields: [['slot', 'c'], ['task', 't']] })).toEqual(['save', 'swap']);
+		expect(ahead(waiting, { url: '/log/1?/swap', fields: [['slot', 'a'], ['task', 'u']] })).toEqual(['save']);
+		expect(ahead(waiting, { url: '/log/3?/save', fields: [] })).toEqual([]);
 	});
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fromDraft, placeKey } from './places';
+import { besides, fromDraft, placeKey } from './places';
 
 const at = (path: string, task: string | null) => ({ path, task: task ? { id: task } : null });
 const squat = at('s1', 'squat');
@@ -21,5 +21,28 @@ describe('what is being logged, by place', () => {
 	it('reads a list from before, and leaves one that no longer fits', () => {
 		expect(fromDraft(['a', 'b'], [squat, press])).toEqual({ [placeKey(squat)]: 'a', [placeKey(press)]: 'b' });
 		expect(fromDraft(['a', 'b'], [squat])).toEqual({});
+	});
+
+	describe('what a log saves besides the places it shows', () => {
+		const set = (task: string, path: string, kg: number) => ({ taskId: task, path, values: { kg } });
+		const legPress = at('s1', 'legpress');
+
+		it('a set ticked at a place swapped away before it was saved goes with the log, under the Task it was done with', () => {
+			const held = { [placeKey(squat)]: [set('squat', 's1', 60), set('squat', 's1', 62.5)], [placeKey(press)]: [set('press', 's2', 40)] };
+			expect(besides(held, [legPress, press], [])).toEqual([set('squat', 's1', 60), set('squat', 's1', 62.5)]);
+		});
+		it('what it held there stands for what the server holds there, which it grew from; the server keeps the rest', () => {
+			const held = { [placeKey(squat)]: [set('squat', 's1', 60), set('squat', 's1', 62.5)] };
+			const server = [set('squat', 's1', 60), set('lunge', 's1', 20), { taskId: 'squat', path: null, values: { kg: 50 } }];
+			expect(besides(held, [legPress, press], server)).toEqual([set('squat', 's1', 60), set('squat', 's1', 62.5), set('lunge', 's1', 20), { taskId: 'squat', path: null, values: { kg: 50 } }]);
+		});
+		it('a place untouched there since it was saved, or unticked before it went, says so', () => {
+			const server = [set('squat', 's1', 60)];
+			expect(besides({}, [legPress, press], server)).toEqual(server);
+			expect(besides({ [placeKey(squat)]: [] }, [legPress, press], server)).toEqual([]);
+		});
+		it('a place swapped back is shown again, and saved as it shows', () => {
+			expect(besides({ [placeKey(squat)]: [set('squat', 's1', 60)] }, [squat, press], [])).toEqual([]);
+		});
 	});
 });

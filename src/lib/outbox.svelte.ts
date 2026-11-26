@@ -3,7 +3,7 @@
 // entries, a status), so sending one twice does no harm. What an answer means is in queue.ts.
 import { untrack } from 'svelte';
 import { browser } from '$app/environment';
-import { keyOf, overriding, readAnswer, sendAll, type Answer, type Queued } from './queue';
+import { ahead, keyOf, overriding, readAnswer, sendAll, type Answer, type Queued } from './queue';
 
 export type { Queued } from './queue';
 
@@ -61,17 +61,32 @@ export async function save(url: string, fields: [string, string][], label: strin
 	const mine = ++saves;
 	sending.set(key, mine);
 	let a: Answer;
-	try {
-		a = await readAnswer(await post({ url, fields }));
-	} catch {
-		a = { kind: 'later' };
-	}
+	// Behind what still waits on this page: it waits too, so they arrive in the order they were made.
+	// Checked here first, so that with nothing ahead it is sent at once, as before.
+	if (ahead(read(), { url, fields }).length && !(await sendAhead(url, fields))) a = { kind: 'later' };
+	else
+		try {
+			a = await readAnswer(await post({ url, fields }));
+		} catch {
+			a = { kind: 'later' };
+		}
 	// A newer save of the same thing has started since: what happened to this one no longer matters.
 	if (sending.get(key) !== mine) return a;
 	sending.delete(key);
 	if (a.kind === 'later') enqueue(url, fields, label);
 	else if (a.kind === 'saved' && read().some((q) => keyOf(q) === key)) write(read().filter((q) => keyOf(q) !== key));
 	return a;
+}
+
+/**
+ * Send what waits ahead of this action on its page (see `ahead` in queue.ts), such as a swap made
+ * offline before a save of the same log. False while some of it still waits: this one waits behind it.
+ */
+export async function sendAhead(url: string, fields: [string, string][]): Promise<boolean> {
+	const first = ahead(read(), { url, fields });
+	if (!first.length) return true;
+	await sendAll({ read, write }, post, (q) => !first.includes(q.id));
+	return !read().some((q) => first.includes(q.id) && !q.refused);
 }
 
 /** Send what is waiting. Stops at the first network failure and tries again later. */

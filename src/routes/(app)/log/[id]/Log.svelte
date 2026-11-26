@@ -16,10 +16,10 @@
 	import { endRest, startRest } from '$lib/rest.svelte';
 	import { defaultStep } from '$lib/task-types';
 	import { units } from '$lib/units-here';
-	import { enqueue, isOffline, save } from '$lib/outbox.svelte';
+	import { enqueue, isOffline, save, sendAhead } from '$lib/outbox.svelte';
 	import { postAction, showError, showToast, undoWith } from '$lib/toast.svelte';
 	import { differs, revOf, type LogContent } from '$lib/logrev';
-	import { fromDraft, placeKey } from '$lib/log/places';
+	import { besides, fromDraft, placeKey, type Logged } from '$lib/log/places';
 	import NoteBox from '$lib/NoteBox.svelte';
 	import Markdown from '$lib/Markdown.svelte';
 	import { starterFor, untouched } from '$lib/journal';
@@ -141,6 +141,8 @@
 		synced: boolean;
 		/** The versions it grew from (see `bases`); drafts from before this have none. */
 		bases?: string[];
+		/** See `held`; drafts from before this have none. */
+		held?: Record<string, Logged[]>;
 	}
 	const readDraft = (): Draft | null => {
 		try {
@@ -168,6 +170,12 @@
 	});
 	/** The same, in the order the log shows them. */
 	const log = $derived(data.items.map((it) => places[placeKey(it)] ?? initial(it)));
+	/**
+	 * What each place had logged when it was last shown, by place, so it is saved with the log when a
+	 * swap, Pick another or a reload takes the place away before that reached the server: a past day
+	 * reaches it only on Finish. Kept with the draft.
+	 */
+	let held = $state.raw<Record<string, Logged[]>>({});
 	const baseOf = (i: number): ItemState | undefined => base[placeKey(data.items[i])];
 	let notes = $state(untrack(() => data.occurrence.notes));
 	let level = $state<'minimum' | 'target' | 'stretch'>(untrack(() => data.occurrence.level));
@@ -179,6 +187,8 @@
 		it.targets[id];
 	// ----- Autosave: every change is kept on this device at once, and on the server shortly after -----
 	let saveTimer: ReturnType<typeof setTimeout> | undefined;
+	/** The autosave sent and not answered yet. */
+	let onTheWay: ReturnType<typeof save> | undefined;
 	let saveState = $state<'idle' | 'saving' | 'saved' | 'local' | 'refused'>('idle');
 	let refusedWhy = $state('');
 	/**
@@ -200,6 +210,7 @@
 			Object.assign(places, fromDraft(d.log, data.items));
 			notes = d.notes;
 			level = d.level;
+			held = d.held ?? {};
 			// Not what is on the server now: if that changed since, the save says so.
 			if (d.bases?.length) bases = d.bases;
 		}
@@ -225,8 +236,9 @@
 	});
 
 	function writeDraft(synced: boolean) {
+		held = { ...held, ...Object.fromEntries(data.items.map((it, i) => [placeKey(it), entriesAt(it, i, false)])) };
 		try {
-			localStorage.setItem(DRAFT, JSON.stringify({ log: $state.snapshot(places), notes, level, synced, bases }));
+			localStorage.setItem(DRAFT, JSON.stringify({ log: $state.snapshot(places), notes, level, synced, bases, held }));
 		} catch {
 			/* storage blocked */
 		}
@@ -253,7 +265,10 @@
 		}
 		const body = payload(correcting, true);
 		const mine = sending(body);
-		const a = await save(saveUrl(), [['payload', body]], data.habitName);
+		const going = save(saveUrl(), [['payload', body]], data.habitName);
+		onTheWay = going;
+		const a = await going;
+		if (onTheWay === going) onTheWay = undefined;
 		// The server holds exactly this now; what was sent after it may be there next.
 		if (a.kind === 'saved') {
 			bases = bases.slice(bases.indexOf(mine));
@@ -357,6 +372,21 @@
 		clearTimeout(saveTimer);
 		saveTimer = undefined;
 	};
+	/**
+	 * Save the log as it is here, after a save on its way, before an action that takes a place out of
+	 * it (a swap, Pick another, out of the plan), so the server holds what was logged there. Always,
+	 * not only with a save pending: one may have waited, been refused, or a draft come back unsaved.
+	 * A past day is saved on Finish only: it is kept on this device, with what each place holds.
+	 */
+	async function saveFirst() {
+		if (data.past) {
+			writeDraft(false);
+			return { kind: 'saved' as const };
+		}
+		await onTheWay;
+		dropAutosave();
+		return autosave();
+	}
 
 	/**
 	 * What each place started with: its suggested values (last time's, or targets) and what was saved.
@@ -380,40 +410,42 @@
 	 * not saved as you go, and on Finish only as src/lib/prefill.ts says.
 	 */
 	function payload(finish: boolean, stay = false) {
-		// Each value says where it sits, so the same Task in two places keeps its own.
-		const entries: { taskId: string; path: string | null; values: Values }[] = [];
-		data.items.forEach((it, i) => {
-			const path = it.path;
-			const t = it.task;
-			if (!t) return;
-			const s = log[i];
-			const repeatingIds = t.metrics.filter((m) => m.repeats).map((m) => m.id);
-			const counts = (set: { done: boolean; values: Values }) => set.done || (quickMode && finish);
-			const sets = repeatingIds.length ? s.sets.filter(counts) : [];
-			for (const set of sets) {
-				entries.push({
-					taskId: t.id,
-					path,
-					values: Object.fromEntries(repeatingIds.map((id) => [id, set.values[id] ?? null]))
-				});
-			}
-			// A long text field that still holds only its starter text counts as not written.
-			const longs = new Map(t.metrics.filter(isLong).map((m) => [m.id, m]));
-			const keep = stationIn.has(i) ? !!s.kept : (quickMode && finish) || keepsSuggestions(log, starts, i, { finish, confirmed: suggestionsConfirmed });
-			const filled = Object.entries(s.kept === false ? {} : s.summary).filter(
-				([k, v]) =>
-					v !== '' &&
-					v !== null &&
-					v !== undefined &&
-					!(longs.has(k) && untouched(longs.get(k)!, v, data.occurrence.date)) &&
-					(keep || !isSuggestion(s, starts[i], k))
-			);
-			if (filled.length) entries.push({ taskId: t.id, path, values: { ...Object.fromEntries(filled), _summary: true } });
-			if (s.tick && isYesNo(it)) entries.push({ taskId: t.id, path, values: { done: true } });
-		});
+		const entries = data.items.flatMap((it, i) => entriesAt(it, i, finish));
 		// Values for places this log no longer shows go back as they were.
-		entries.push(...data.orphans.map((e) => ({ taskId: e.taskId, path: e.path ?? null, values: e.values })));
+		entries.push(...besides(held, data.items, data.orphans.map((e) => ({ taskId: e.taskId, path: e.path ?? null, values: e.values }))));
 		return JSON.stringify({ finish, stay, notes, entries, level, back: data.back, bases });
+	}
+	/** What gets saved at a place. Each value says where it sits, so the same Task in two places keeps its own. */
+	function entriesAt(it: Item, i: number, finish: boolean): Logged[] {
+		const path = it.path;
+		const t = it.task;
+		if (!t) return [];
+		const entries: Logged[] = [];
+		const s = log[i];
+		const repeatingIds = t.metrics.filter((m) => m.repeats).map((m) => m.id);
+		const counts = (set: { done: boolean; values: Values }) => set.done || (quickMode && finish);
+		const sets = repeatingIds.length ? s.sets.filter(counts) : [];
+		for (const set of sets) {
+			entries.push({
+				taskId: t.id,
+				path,
+				values: Object.fromEntries(repeatingIds.map((id) => [id, set.values[id] ?? null]))
+			});
+		}
+		// A long text field that still holds only its starter text counts as not written.
+		const longs = new Map(t.metrics.filter(isLong).map((m) => [m.id, m]));
+		const keep = stationIn.has(i) ? !!s.kept : (quickMode && finish) || keepsSuggestions(log, starts, i, { finish, confirmed: suggestionsConfirmed });
+		const filled = Object.entries(s.kept === false ? {} : s.summary).filter(
+			([k, v]) =>
+				v !== '' &&
+				v !== null &&
+				v !== undefined &&
+				!(longs.has(k) && untouched(longs.get(k)!, v, data.occurrence.date)) &&
+				(keep || !isSuggestion(s, starts[i], k))
+		);
+		if (filled.length) entries.push({ taskId: t.id, path, values: { ...Object.fromEntries(filled), _summary: true } });
+		if (s.tick && isYesNo(it)) entries.push({ taskId: t.id, path, values: { done: true } });
+		return entries;
 	}
 
 	const empty = (v: unknown) => v === undefined || v === null || v === '' || v === false;
@@ -849,10 +881,8 @@
 		const here = data.items.some((it, i) => it.slotId === p.id && hasLog(log[i], starts[i]));
 		// What is ticked here is saved first, so the log keeps its place.
 		const gone = async () => {
-			if (saveTimer !== undefined) {
-				dropAutosave();
-				if ((await autosave()).kind !== 'saved') return void showError('Not saved. Are you online?');
-			}
+			const first = await saveFirst();
+			if (first.kind !== 'saved') return void showError(first.kind === 'refused' ? first.why : 'Not saved. Are you online?');
 			await editPlan(withoutSlot(data.plan!, p.id), `Took ${p.name} out of ${data.habitName}, from now on.${here ? ' This log keeps it.' : ''}`);
 		};
 		void gone();
@@ -875,6 +905,24 @@
 	}
 
 	let swapping = $state<string | null>(null);
+	/**
+	 * Use another Task in a place's Slot for this log, or with none named, pick another for an
+	 * auto-filled Slot. What is ticked is saved first, so it is kept; offline both wait, in order.
+	 */
+	async function swapTask(it: Item, task?: string) {
+		swapping = null;
+		if (task && task === it.task?.id) return;
+		const first = await saveFirst();
+		if (first.kind === 'refused') return void showError(`${first.why} Nothing was swapped.`);
+		const a = await save(`/log/${data.occurrence.id}?/${task ? 'swap' : 'reroll'}`, task ? [['slot', it.slotId], ['task', task]] : [['slot', it.slotId]], data.habitName);
+		if (a.kind === 'refused') return void showError(a.why);
+		if (a.kind === 'later') {
+			const name = data.library.find((l) => l.id === task)?.name;
+			const was = it.task?.name;
+			return void showToast(`${name && was ? `Using ${name} instead of ${was}` : 'Picking another Task'}, ${data.past ? `${dateLabel} only` : 'today only'}. It will sync when you're back online.`);
+		}
+		await invalidateAll();
+	}
 	let howTo = $state<string | null>(null);
 	let finishButton = $state<HTMLButtonElement>();
 	function goToFinish() {
@@ -887,7 +935,7 @@
 			...(it.task?.notes.trim() ? [{ label: howTo === key ? 'Hide how to' : 'How to', onselect: () => (howTo = howTo === key ? null : key) }] : []),
 			...(it.task ? [{ label: 'Last 7 times', href: `/library/${it.task.id}` }] : []),
 			...(stage === 'run' && it.depth === 0 ? [{ label: 'Swap…', onselect: () => (swapping = key) }] : []),
-			...(stage === 'run' && it.open ? [{ label: 'Pick another', action: '?/reroll', fields: { slot: it.slotId } }] : [])
+			...(stage === 'run' && it.open ? [{ label: 'Pick another', onselect: () => void swapTask(it) }] : [])
 		];
 	}
 	const hint = $derived(
@@ -1043,7 +1091,7 @@
 {#snippet extraOf(it: Item)}
 	{@const t = it.task}
 	{#if swapping === placeKey(it)}
-		<form method="POST" action="?/swap" class="row lg-swap" use:enhance={() => async ({ update }) => { swapping = null; await update(); }}>
+		<form method="POST" action="?/swap" class="row lg-swap" onsubmit={(e) => { e.preventDefault(); void swapTask(it, String(new FormData(e.currentTarget).get('task'))); }}>
 			<input type="hidden" name="slot" value={it.slotId} />
 			<select class="grow" name="task" aria-label="Task to use instead of {t?.name ?? 'none'}">
 				{#each data.library as l (l.id)}<option value={l.id} selected={l.id === t?.id}>{l.name}</option>{/each}
@@ -1232,7 +1280,7 @@
 		action="?/save"
 		class="lg-form"
 		bind:this={finishForm}
-		use:enhance={({ cancel }) => {
+		use:enhance={async ({ cancel }) => {
 			problem = '';
 			const gaps = missing();
 			if (gaps.length) {
@@ -1242,7 +1290,8 @@
 			}
 			endRest();
 			dropAutosave();
-			if (!navigator.onLine) {
+			// Offline, or behind what still waits from offline (a swap): it waits too, so it comes after.
+			if (!navigator.onLine || !(await sendAhead(saveUrl(), []))) {
 				cancel();
 				enqueue(saveUrl(), [['payload', payload(true, true)]], data.habitName);
 				clearDraft();

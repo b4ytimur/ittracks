@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('$app/forms', () => ({ deserialize: (text: string) => JSON.parse(text) }));
 vi.mock('$app/environment', () => ({ browser: true }));
 
-import { discard, enqueue, flush, openOutbox, outbox, retry, save } from './outbox.svelte';
+import { discard, enqueue, flush, openOutbox, outbox, retry, save, sendAhead } from './outbox.svelte';
 
 const answer = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
 const saved = () => answer(200, { type: 'success', status: 200 });
@@ -99,6 +99,58 @@ describe('saving', () => {
 		expect(payloads()).toEqual(['private']);
 		expect(await flush()).toBe(1);
 		expect(sent).toEqual(['/journal?/dayNote']);
+	});
+	const swap = (slot: string, task: string) => enqueue('/log/1?/swap', [['slot', slot], ['task', task]], 'Gym');
+	const swaps = () => outbox.items.filter((q) => q.url === '/log/1?/swap').map((q) => q.fields.map(([, v]) => v).join(' → '));
+
+	it('two swaps of different Slots in one log both wait; a second swap of the same Slot replaces the first', () => {
+		swap('bench', 'incline');
+		swap('row', 'pull-up');
+		expect(swaps()).toEqual(['bench → incline', 'row → pull-up']);
+		swap('bench', 'dumbbell');
+		expect(swaps()).toEqual(['row → pull-up', 'bench → dumbbell']);
+		enqueue('/log/1?/reroll', [['slot', 'finisher']], 'Gym');
+		enqueue('/log/1?/reroll', [['slot', 'core']], 'Gym');
+		expect(outbox.items.filter((q) => q.url === '/log/1?/reroll')).toHaveLength(2);
+	});
+	it('a swap that waits is sent before the save of the same log that follows it', async () => {
+		const sent: string[] = [];
+		vi.stubGlobal('fetch', async (url: string) => (sent.push(url), saved()));
+		swap('bench', 'incline');
+		enqueue('/log/2?/save', [['payload', 'another log']], 'Run');
+		expect(await put('after the swap')).toEqual({ kind: 'saved' });
+		expect(sent).toEqual(['/log/1?/swap', '/log/1?/save']);
+		expect(payloads()).toEqual(['another log']);
+	});
+	it('a swap goes after the save of its log that waits from before it, so what was ticked there reaches the server first', async () => {
+		const sent: string[] = [];
+		vi.stubGlobal('fetch', async (url: string) => (sent.push(url), saved()));
+		enqueue('/log/1?/save', [['payload', 'ticked offline']], 'Gym');
+		expect(await save('/log/1?/swap', [['slot', 'bench'], ['task', 'incline']], 'Gym')).toEqual({ kind: 'saved' });
+		expect(sent).toEqual(['/log/1?/save', '/log/1?/swap']);
+		expect(outbox.items).toEqual([]);
+	});
+	it('while that swap gets no answer, the save waits behind it, and a Finish knows to', async () => {
+		const sent: string[] = [];
+		vi.stubGlobal('fetch', async (url: string) => (sent.push(url), crashed()));
+		enqueue('/log/1?/save', [['payload', 'ticked before the swap']], 'Gym');
+		swap('bench', 'incline');
+		expect(await put('after the swap')).toEqual({ kind: 'later' });
+		expect(sent).toEqual(['/log/1?/swap']);
+		expect(outbox.items.map((q) => q.fields[0][1])).toEqual(['bench', 'after the swap']);
+		expect(await sendAhead('/log/1?/save', [])).toBe(false);
+		vi.stubGlobal('fetch', async () => saved());
+		expect(await sendAhead('/log/1?/save', [])).toBe(true);
+	});
+	it('a swap that was refused holds nothing up', async () => {
+		const sent: string[] = [];
+		vi.stubGlobal('fetch', async (url: string) => (sent.push(url), saved()));
+		swap('bench', 'gone');
+		outbox.items = [{ ...outbox.items[0], refused: 'It is no longer there.' }];
+		disk['ittracks-outbox:me'] = JSON.stringify(outbox.items);
+		expect(await put('after the swap')).toEqual({ kind: 'saved' });
+		expect(sent).toEqual(['/log/1?/save']);
+		expect(outbox.items).toMatchObject([{ url: '/log/1?/swap', refused: 'It is no longer there.' }]);
 	});
 	it('what waited before there was one per account is taken over once', () => {
 		disk['ittracks-outbox'] = JSON.stringify([{ id: 'x', url: '/log/9?/save', fields: [['payload', 'old']], label: 'Gym', at: 1 }]);
