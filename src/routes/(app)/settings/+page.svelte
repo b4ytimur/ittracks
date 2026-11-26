@@ -140,7 +140,10 @@
 	let made = $state<{ name: string; secret: string } | null>(null);
 	let pasted = $state('');
 	const keyText = $derived(pasted.trim() || made?.secret || 'itk_…');
-	const mcpConfig = $derived(JSON.stringify({ mcpServers: { ittracks: { command: 'node', args: ['/path/to/ittracks-mcp.mjs'], env: { ITTRACKS_URL: data.origin, ITTRACKS_KEY: keyText } } } }, null, 2));
+	// The AI assistant script lives in ~/.ittracks: macOS doesn't let Claude Desktop read Documents, Desktop or Downloads.
+	const mcpGet = $derived(`mkdir -p ~/.ittracks && curl -fsS ${data.origin}/ittracks-mcp.mjs -o ~/.ittracks/ittracks-mcp.mjs && echo ~/.ittracks/ittracks-mcp.mjs`);
+	// Claude Desktop runs it without a shell, so it needs the whole path, which the command above prints.
+	const mcpConfig = $derived(JSON.stringify({ mcpServers: { ittracks: { command: 'node', args: ['/Users/you/.ittracks/ittracks-mcp.mjs'], env: { ITTRACKS_URL: data.origin, ITTRACKS_KEY: keyText } } } }, null, 2));
 
 	let busy = $state(false);
 	async function password(e: SubmitEvent) {
@@ -278,12 +281,15 @@
 		<QuickLinks habits={data.habits} fields={data.habitFields} origin={data.origin} {keyText} bind:secret={pasted} made={!!made} />
 	{:else if id === 'assistants'}
 		<ol class="meta steps">
-			<li>Download <a href="/ittracks-mcp.mjs" download>ittracks-mcp.mjs</a>. It needs Node.js 18 or newer and nothing else.</li>
+			<li>
+				Save <a href="/ittracks-mcp.mjs" download>ittracks-mcp.mjs</a> in <code>~/.ittracks/</code>, not in Documents, Desktop or Downloads: macOS doesn't let Claude Desktop read those. It needs Node.js 18 or newer and nothing else. From the repository, <code>make mcp</code> does it and prints the config with your path. Or in Terminal, which prints where the file is:
+				<Copy text={mcpGet} label="the download command" />
+			</li>
 			<li>Make a key for it under <button type="button" class="link" onclick={() => go('keys')}>Keys</button> (Read, plus Log if it may log for you, and Edit if it may set up and change habits with you).</li>
-			<li>Claude Desktop: Settings → Developer → Edit Config, and add: <Copy lines text={mcpConfig} label="the Claude Desktop config" /></li>
-			<li>Claude Code: <Copy text="claude mcp add ittracks -e ITTRACKS_URL={data.origin} -e ITTRACKS_KEY={keyText} -- node /path/to/ittracks-mcp.mjs" label="the Claude Code command" /></li>
+			<li>Claude Desktop: Settings → Developer → Edit Config, add this, and put the path the command printed in place of <code>/Users/you/.ittracks/ittracks-mcp.mjs</code>: <Copy lines text={mcpConfig} label="the Claude Desktop config" /></li>
+			<li>Claude Code: <Copy text="claude mcp add ittracks -e ITTRACKS_URL={data.origin} -e ITTRACKS_KEY={keyText} -- node ~/.ittracks/ittracks-mcp.mjs" label="the Claude Code command" /></li>
 		</ol>
-		<p class="meta">Replace <code>/path/to/</code> with where you saved the file. What the assistant reads is sent to its provider, so pick the access with that in mind.</p>
+		<p class="meta">What the assistant reads is sent to its provider, so pick the access with that in mind.</p>
 	{:else if id === 'scripts'}
 		<Copy text={`curl -H "Authorization: Bearer ${keyText}" "${data.origin}/api/v1/export?format=csv" -o ittracks.zip`} label="the command" />
 		<p class="meta">The actions the MCP server uses live under <code>/api/v1/actions</code>. They are still changing and aren't documented for other uses yet.</p>

@@ -59,18 +59,24 @@ Claude, Cursor and other assistants that support MCP can read your habits, run s
 
 ### Set it up
 
-1. Download `ittracks-mcp.mjs` from **Settings → AI assistants** (it is also at `https://<your server>/ittracks-mcp.mjs`, and in the repository at `static/ittracks-mcp.mjs`). It needs Node.js 18 or newer and nothing else.
-2. Make a key for it: **Read**, plus **Log** if it may log for you, **Notes** if it may search your notes, and **Edit** if it may set up and change habits (setup and bulk changes need a key for every habit).
-3. Add it to your assistant, replacing `/path/to/` with where you saved the file, and using your server's address and key. The settings page fills both in for you.
+1. Save `ittracks-mcp.mjs` in `~/.ittracks/`. Keep it out of Documents, Desktop and Downloads: macOS doesn't let Claude Desktop read those, and the assistant then fails to start. It needs Node.js 18 or newer and nothing else. In Terminal (it prints where the file is):
 
-**Claude Desktop**: Settings → Developer → Edit Config, and add:
+   ```sh
+   mkdir -p ~/.ittracks && curl -fsS https://<your server>/ittracks-mcp.mjs -o ~/.ittracks/ittracks-mcp.mjs && echo ~/.ittracks/ittracks-mcp.mjs
+   ```
+
+   **Settings → AI assistants** shows this command with your server's address, and a link to download the file. From the repository, `make mcp` copies `static/ittracks-mcp.mjs` there and prints the config below with your path filled in. Run it again after pulling to update the copy.
+2. Make a key for it: **Read**, plus **Log** if it may log for you, **Notes** if it may search your notes, and **Edit** if it may set up and change habits (setup and bulk changes need a key for every habit).
+3. Add it to your assistant with your server's address and key. The settings page fills both in for you.
+
+**Claude Desktop**: Settings → Developer → Edit Config, and add this, with the path the command printed in place of `/Users/you/.ittracks/ittracks-mcp.mjs` (Claude Desktop needs the whole path, not `~`):
 
 ```json
 {
   "mcpServers": {
     "ittracks": {
       "command": "node",
-      "args": ["/path/to/ittracks-mcp.mjs"],
+      "args": ["/Users/you/.ittracks/ittracks-mcp.mjs"],
       "env": { "ITTRACKS_URL": "http://localhost:3000", "ITTRACKS_KEY": "itk_…" }
     }
   }
@@ -82,10 +88,10 @@ Restart Claude Desktop after saving.
 **Claude Code**:
 
 ```sh
-claude mcp add ittracks -e ITTRACKS_URL=http://localhost:3000 -e ITTRACKS_KEY=itk_… -- node /path/to/ittracks-mcp.mjs
+claude mcp add ittracks -e ITTRACKS_URL=http://localhost:3000 -e ITTRACKS_KEY=itk_… -- node ~/.ittracks/ittracks-mcp.mjs
 ```
 
-**Other MCP clients** (Cursor and others): run `node /path/to/ittracks-mcp.mjs` as a stdio server with the two variables `ITTRACKS_URL` and `ITTRACKS_KEY` set.
+**Other MCP clients** (Cursor and others): run `node ~/.ittracks/ittracks-mcp.mjs` (the whole path where a client asks for one) as a stdio server with the two variables `ITTRACKS_URL` and `ITTRACKS_KEY` set.
 
 `ITTRACKS_URL` must be reachable from the computer the assistant runs on: `http://localhost:3000` when the server runs on the same machine.
 

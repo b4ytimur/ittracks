@@ -67,11 +67,12 @@ SvelteKit (TypeScript), SQLite through Drizzle ORM, Vitest. It ships as one Dock
 ```sh
 make up            # install, migrate, start; prints http://localhost:5173 once it answers
 make seed          # add the example data (below) to the database
+make mcp           # copy the AI assistant script to ~/.ittracks/ and print the Claude Desktop config
 npm test           # schedule, fill and streak rules
 npm run check      # type check
 ```
 
-`make up` and `make seed` take `PORT`, `HOST` and `DATABASE_PATH` (default `./data/ittracks.db`), e.g. `make up PORT=5180 DATABASE_PATH=./data/try.db`. On a database with no account yet, `make seed` makes one first: `demo` / `demo1234`, or `SEED_USER` and `SEED_PASSWORD`. Without make: `npm install`, then `npm run dev`.
+`make up` and `make seed` take `PORT`, `HOST` and `DATABASE_PATH` (default `./data/ittracks.db`), e.g. `make up PORT=5180 DATABASE_PATH=./data/try.db`. On a database with no account yet, `make seed` makes one first: `demo` / `demo1234`, or `SEED_USER` and `SEED_PASSWORD`. `make mcp` puts the address from `PORT` and `HOST` in the config, and copies to `MCP_DIR` (default `~/.ittracks`). Without make: `npm install`, then `npm run dev`.
 
 After changing `src/lib/server/db/schema.ts`, run `npm run db:generate` to create a migration. Migrations run automatically on startup.
 
