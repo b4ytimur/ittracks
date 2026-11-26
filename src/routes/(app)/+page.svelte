@@ -999,14 +999,15 @@
 		margin: var(--space-group) 0;
 		font-weight: 600;
 	}
-	/* A row's ›: hangs in the card's padding before the name, and opens the row until the page is left (TS.4). */
-	:global(.elist > li > .card:has(> .content > .row-fold)) {
+	/* A row's ›: hangs in the card's padding before the name, and opens the row until the page is left (TS.4). It hangs
+	   from the content, the row's first line, so it centres where the slot does: a verb wrapped under the row moves nothing. */
+	:global(.elist > li > .card > .content:has(> .row-fold)) {
 		position: relative;
 	}
 	:global(.row-fold) {
 		position: absolute;
-		inset-inline-start: 0;
-		top: calc(50% - var(--control-sm) / 2); /* centred on the row, like the grip and the verb */
+		inset-inline-start: calc(-1 * var(--space-group));
+		top: calc(50% - var(--control-sm) / 2);
 		inline-size: var(--space-group);
 		min-height: var(--control-sm);
 		padding: 0;
@@ -1017,7 +1018,7 @@
 	}
 	/* A row with lines under it centres its marks on the name and meta (list-row.css), so the › stays there too. */
 	:global(.elist > li:has(> .card > .content > :is(.row-line, .week)) .row-fold) {
-		top: calc(var(--space-group) - 1px + (1.25rem / 2));
+		top: calc((1.5rem + 1.25rem - var(--control-sm)) / 2);
 	}
 	:global(.row-fold .chev) {
 		display: inline-block;
