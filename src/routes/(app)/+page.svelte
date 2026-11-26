@@ -1047,7 +1047,7 @@
 	:global(.row-fold) {
 		position: absolute;
 		inset-inline-start: 0;
-		top: calc(var(--space-group) - 1px);
+		top: calc(50% - 0.75rem); /* centred on the row, like the grip and the verb */
 		inline-size: var(--space-group);
 		min-height: 1.5rem;
 		padding: 0;
@@ -1055,6 +1055,10 @@
 		background: none;
 		color: var(--ink-muted);
 		cursor: pointer;
+	}
+	/* A row with lines under it centres its marks on the name and meta (list-row.css), so the › stays there too. */
+	:global(.elist > li:has(> .card > .content > :is(.row-line, .week)) .row-fold) {
+		top: calc(var(--space-group) - 1px + (1.25rem / 2));
 	}
 	:global(.row-fold .chev) {
 		display: inline-block;

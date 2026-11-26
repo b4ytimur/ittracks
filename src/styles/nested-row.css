@@ -43,8 +43,8 @@
    so verbs line up at every depth. --row-slot is the slot's width where it stays open (select mode). */
 .shelf .elist > li > .card {
 	--indent-x: calc(var(--space-group) + (var(--depth) - 1) * var(--space-indent));
-	/* Grip and pick stay on the name's line (flex-start, as ListRow); align-content centres a one-line row in its 44px. */
-	align-items: flex-start; align-content: center;
+	/* Grip, pick and verb centre on the row, as ListRow's do; a row with lines under it centres them on its name and meta. */
+	align-items: center;
 	min-height: var(--target-touch);
 	/* space-tight above and below: a one-line row stays 44px, a name + meta row becomes 52px (13 pitches),
 	   so rows keep air between them when edit mode hides the dividers (R1.5). */
