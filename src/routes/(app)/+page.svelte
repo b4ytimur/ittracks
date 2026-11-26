@@ -30,7 +30,7 @@
 	import GroupHeading from '$lib/ui/GroupHeading.svelte';
 	import LogControl, { type Way } from '$lib/ui/LogControl.svelte';
 	import StatusTag from '$lib/ui/StatusTag.svelte';
-	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+	import { MediaQuery, SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { keepFocus, rowOf } from '$lib/ui/focus';
 	import { reorderFrom, type Mode } from '$lib/ui/list';
 	import { usualWay } from '$lib/log/usual';
@@ -404,6 +404,8 @@
 
 	// ----- The date opens the last seven days (TS.5), History's strip -----
 	let strip = $state(false);
+	/** From 64rem the side column holds the seven days, always shown (TS.11). */
+	const wide = new MediaQuery('min-width: 64rem');
 	const weekdayShort = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'narrow' });
 	const markOf = (d: { date: string; done: number; of: number }) => {
 		const today = d.date === data.today;
@@ -538,7 +540,7 @@
 <EditChrome title="Today" bind:mode modes={['use', 'edit']} hints={{ edit: 'Drag ⠿ to move. Order is shared with Habits.' }}>
 	{#snippet useHint()}
 		<span class="today-line">
-			<button type="button" class="date" aria-expanded={strip} aria-controls="today-strip" onclick={() => (strip = !strip)}>{dateLabel} <span class="chev" aria-hidden="true">›</span></button>
+			{#if wide.current}<span class="date">{dateLabel}</span>{:else}<button type="button" class="date" aria-expanded={strip} aria-controls="today-strip" onclick={() => (strip = !strip)}>{dateLabel} <span class="chev" aria-hidden="true">›</span></button>{/if}
 			<span class="num">{doneCount} of {dueLeaves.length} done</span>
 		</span>
 	{/snippet}
@@ -553,19 +555,21 @@
 	{/snippet}
 </EditChrome>
 
-{#if strip}
-	<div class="day-week today-strip" id="today-strip" role="group" aria-label="The last seven days">
-		{#each data.week as d (d.date)}
-			{@const mark = markOf(d)}
-			{@const words = `${shortDate(d.date)}: ${d.of ? `${d.date === data.today ? doneCount : d.done} of ${d.date === data.today ? dueLeaves.length : d.of} done` : 'nothing due'}`}
-			{#if d.date < data.today && data.canBackfill}
-				<a class="day-cell" href="/day/{d.date}" aria-label="{words}. Log it."><span class="note">{weekdayShort(d.date)}</span><i data-day={mark}></i><span class="note num">{Number(d.date.slice(8))}</span></a>
-			{:else}
-				<span class="day-cell" aria-current={d.date === data.today ? 'date' : undefined} aria-label={words} role="img"><span class="note">{weekdayShort(d.date)}</span><i data-day={mark}></i><span class="note num">{Number(d.date.slice(8))}</span></span>
-			{/if}
-		{/each}
-	</div>
+{#if strip && !wide.current}
+	<div class="day-week today-strip" id="today-strip" role="group" aria-label="The last seven days">{@render sevenDays()}</div>
 {/if}
+
+{#snippet sevenDays()}
+	{#each data.week as d (d.date)}
+		{@const mark = markOf(d)}
+		{@const words = `${shortDate(d.date)}: ${d.of ? `${d.date === data.today ? doneCount : d.done} of ${d.date === data.today ? dueLeaves.length : d.of} done` : 'nothing due'}`}
+		{#if d.date < data.today && data.canBackfill}
+			<a class="day-cell" href="/day/{d.date}" aria-label="{words}. Log it."><span class="note">{weekdayShort(d.date)}</span><i data-day={mark}></i><span class="note num">{Number(d.date.slice(8))}</span></a>
+		{:else}
+			<span class="day-cell" aria-current={d.date === data.today ? 'date' : undefined} aria-label={words} role="img"><span class="note">{weekdayShort(d.date)}</span><i data-day={mark}></i><span class="note num">{Number(d.date.slice(8))}</span></span>
+		{/if}
+	{/each}
+{/snippet}
 
 {#if data.askDay}
 	<div class="notice" role="note">
@@ -611,6 +615,8 @@
 	<div class="today-cols">
 		<div class="today-day">
 			{#if view.first && breakingShown.length}{@render breaking()}{/if}
+			<!-- Beside Breaking, the day takes a heading of the same kind, so both columns start alike (TS.11). -->
+			{#if wide.current && !view.first && groups.length && !groups[0].label}<GroupHeading title="Due today" {mode} />{/if}
 			{#if allDone}<p class="all-done">Everything due today is done.</p>{/if}
 			{#if nothingShown}<EmptyState kind="filtered" text="Nothing today matches {words[0].shown ?? 'this view'}." onclear={() => sentenceBar?.change({ ...view, fits: false, status: 'all', direction: 'all', areas: [], identity: null }, 'now shows everything', 'Everything')} />{/if}
 			{#each groups as g (g.key)}
@@ -627,6 +633,10 @@
 			{/if}
 		</div>
 		<div class="today-side">
+			{#if wide.current}
+				<GroupHeading title="Last seven days" {mode} />
+				<div class="day-week week-side" role="group" aria-label="The last seven days">{@render sevenDays()}</div>
+			{/if}
 			{#if !view.first && breakingShown.length}{@render breaking()}{/if}
 			{#if trackingShown.length}
 				<!-- Trackers keep what you log: never due or missed, so they sit beside the day, not in it. -->
@@ -996,7 +1006,6 @@
 		color: var(--ink);
 	}
 	.today-strip {
-		max-inline-size: 26rem;
 		margin-block-end: var(--space-group);
 	}
 	/* One column on a phone; from 64rem Breaking and the end line stand beside the day (TS.11). */
@@ -1006,6 +1015,13 @@
 	}
 	.today-side:not(:empty) {
 		margin-block-start: var(--space-section);
+	}
+	/* The seven days as a block at the top of the side column: as wide as the column, one card. */
+	.week-side {
+		padding: var(--space-inline);
+		border: 1px solid var(--line);
+		border-radius: var(--radius-card);
+		background: var(--surface-raised);
 	}
 	@media (min-width: 64rem) {
 		:global(.main:has(.today-cols)) {
