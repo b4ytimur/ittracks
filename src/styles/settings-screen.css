@@ -1,6 +1,15 @@
 /* SettingsScreen: the record of you as said lines (P.36, SE.1–SE.10, BU.1–BU.7). Owns .se-*: the sections and the rows inside an
    open line (units, levels, members, keys). The lines are SaidLine's, the folds GroupHeading's, the Asks Ask's. Tokens only. */
 .se-find { margin-block: 0 var(--space-group); }
+.se-index { position: sticky; top: var(--space-group); } /* the groups stay in view beside the one shown (TS.15) */
+/* A phone's list of groups: each a row with what it is set to, two lines at most, and its ›. */
+.se-groups { display: grid; padding: 0; }
+.se-group { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-inline); min-block-size: 3.75rem; padding: var(--space-inline) var(--space-group); color: var(--ink); text-decoration: none; }
+.se-group + .se-group { border-block-start: 1px solid var(--line); }
+.se-group-text { display: grid; min-inline-size: 0; }
+.se-group-name { font-weight: 600; }
+.se-group-says { color: var(--ink-muted); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.se-group > .chev { color: var(--ink-muted); }
 .se-sec > .group-heading { margin-block: 0 var(--space-inline); }
 .se-row { min-inline-size: 0; }
 .se-row + .se-row, .se-key + .se-key { margin-block-start: var(--space-inline); }

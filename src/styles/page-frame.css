@@ -7,11 +7,11 @@
        <div class="page-main">…</div>          the page's own list
        <aside class="page-side" aria-label="…">GroupHeading, then a .side-card per block</aside>
      </div>
-     .side-card.side-list                      a block of rows: <button class="side-row" aria-pressed> or <a class="side-row">,
-                                               a name, then <span class="num">
+     .side-card.side-list                      a block of rows: <button class="side-row" aria-pressed> or <a class="side-row"
+                                               [aria-current]>, a name, then <span class="num">
      details.disclosure.side-fold              a phone: the side blocks folded into one line under the sentence */
 .page-cols { display: grid; grid-template-columns: minmax(0, 1fr); }
-.page-wide + .page-cols, .view-sentence + .page-cols { margin-block-start: var(--space-inline); }
+.hint-line + .page-cols, .page-wide + .page-cols, .view-sentence + .page-cols { margin-block-start: var(--space-inline); }
 [role='search'].page-wide { margin-block: var(--space-inline); } /* a search across the top, the same on every page */
 /* Both columns start on one line: the side's first heading drops its top margin, as a list's first heading does. */
 .page-side > .group-heading:first-child { margin-block-start: 0; }
@@ -21,7 +21,7 @@
 	display: flex; align-items: center; gap: var(--space-inline); min-block-size: 2.5rem; padding: 0 var(--space-inline);
 	border: 0; border-radius: var(--radius-control); background: none; color: var(--ink); font: inherit; text-align: start; text-decoration: none;
 }
-.side-row[aria-pressed='true'] { font-weight: 600; box-shadow: inset 0 0 0 2px var(--ink); }
+.side-row:is([aria-pressed='true'], [aria-current]) { font-weight: 600; box-shadow: inset 0 0 0 2px var(--ink); } /* a filter that is on, the group shown */
 .side-row > .num { margin-inline-start: auto; color: var(--ink-muted); font-size: var(--font-size-meta); font-variant-numeric: tabular-nums; }
 @media (hover: hover) { .side-row:hover { background: var(--surface-tint); } }
 .side-foot { display: flex; flex-wrap: wrap; gap: var(--space-inline); margin-block-start: var(--space-inline); }
@@ -32,4 +32,4 @@
 	/* The left column's width, the same sum as the grid's: (frame − gap) × 640 / 984. */
 	.main:not(:has(.page-cols, .today-cols)) > :not(.titlebar, .page-wide) { max-width: calc((100% - 2 * var(--space-group)) * 640 / 984); }
 }
-@media (forced-colors: active) { .side-row[aria-pressed='true'] { outline: 2px solid Highlight; outline-offset: -2px; } }
+@media (forced-colors: active) { .side-row:is([aria-pressed='true'], [aria-current]) { outline: 2px solid Highlight; outline-offset: -2px; } }

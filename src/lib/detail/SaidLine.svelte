@@ -8,6 +8,7 @@
 		label,
 		words,
 		open = $bindable(false),
+		always = false,
 		lead = false,
 		held = false,
 		was = '',
@@ -25,6 +26,8 @@
 		label: string;
 		words: string;
 		open?: boolean;
+		/** Always open, with no fold: a page that shows every control at once (Settings, TS.15). */
+		always?: boolean;
 		lead?: boolean;
 		/** Changed, and waiting for its Save. */
 		held?: boolean;
@@ -44,15 +47,15 @@
 	} = $props();
 </script>
 
-<div class="su-value" class:su-lead={lead} class:open id="line-{id}">
+<div class="su-value" class:su-lead={lead} class:su-always={always} class:open={open || always} id="line-{id}">
 	<div class="su-said">
-		<button type="button" class="fold" aria-expanded={open} aria-labelledby="{id}-l {id}-w" onclick={() => (open = !open)}><span class="chev" aria-hidden="true">›</span></button>
+		{#if !always}<button type="button" class="fold" aria-expanded={open} aria-labelledby="{id}-l {id}-w" onclick={() => (open = !open)}><span class="chev" aria-hidden="true">›</span></button>{/if}
 		<div class="su-text">
 			<span class="su-lab"><span class="su-label meta" id="{id}-l">{label}</span>{#if held}<span class="tag pending"><span aria-hidden="true">→ </span>not saved</span>{/if}</span>
 			<span class="su-words" id="{id}-w">{words}</span>
 		</div>
 	</div>
-	{#if open}
+	{#if open || always}
 		<div class="su-body" role="group" aria-labelledby="{id}-l" aria-describedby="{id}-w">
 			{@render children()}
 			{#if problem}<p class="error meta" role="alert">{problem}</p>{/if}
