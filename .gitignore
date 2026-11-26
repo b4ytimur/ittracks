@@ -22,5 +22,17 @@ Thumbs.db
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
-# Local database
+# Local database, wherever it is put (DATABASE_PATH can point anywhere), and its backups
 /data
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite
+*.sqlite3
+*.bak
+*.backup
+/backups
+
+# Local Claude Code settings (can hold machine paths and allowed commands)
+.claude/settings.local.json
