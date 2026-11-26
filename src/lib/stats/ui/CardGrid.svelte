@@ -257,8 +257,11 @@
 	:global(ul.cards > li + li) {
 		margin-top: 0;
 	}
+	/* stretch: the cards are an .elist, whose rows start their content at the left (flex-start); a card's header, numbers
+	   and charts take its whole width instead. */
 	:global(ul.cards > li > .card) {
 		flex: 1;
+		align-items: stretch;
 	}
 	:global(ul.cards > li.wide),
 	:global(ul.cards > li.full) {
