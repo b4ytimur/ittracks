@@ -29,46 +29,7 @@ export const TODAY_STATUSES = { all: 'Any status', due: 'Still due', done: 'Done
 
 const str = (n = 200) => z.string().max(n);
 
-/** How Today is laid out. */
-export const LAYOUTS = { outline: 'Outline', focus: 'Up next first', blocks: 'Area blocks', flat: 'One list' } as const;
-export type LayoutKey = keyof typeof LAYOUTS;
-
-/** One page's filter, sort and grouping. Fields a page doesn't use are ignored there. */
-export const viewState = z.object({
-	areas: z.array(str(64)).max(50).default([]),
-	direction: z.enum(['all', 'build', 'break']).default('all'),
-	status: z.enum(['all', 'due', 'done', 'skipped', 'missed', 'slip']).default('all'),
-	identity: str(64).nullable().default(null),
-	habit: str(64).nullable().default(null),
-	query: str(200).default(''),
-	tags: z.array(str(100)).max(50).default([]),
-	collection: str(64).nullable().default(null),
-	archived: z.boolean().default(false),
-	sort: str(32).default(''),
-	group: str(32).default('none'),
-	/** Today only. Kept with the view, so each saved view has its own. */
-	layout: z.enum(Object.keys(LAYOUTS) as [LayoutKey, ...LayoutKey[]]).default('outline')
-});
-export type ViewState = z.infer<typeof viewState>;
-export const emptyState = (): ViewState => viewState.parse({});
-
-export const savedView = z.object({
-	id: str(64),
-	name: str(40).min(1),
-	page: z.enum(PAGES),
-	state: viewState
-});
-export type SavedView = z.infer<typeof savedView>;
-
-export const SECTIONS = {
-	due: 'Due today',
-	breaking: 'Breaking and limiting',
-	prep: 'Prepare for tomorrow',
-	paused: 'Paused',
-	resting: 'Not due today'
-} as const;
-export type SectionKey = keyof typeof SECTIONS;
-const sectionKeys = Object.keys(SECTIONS) as [SectionKey, ...SectionKey[]];
+const keysOf = <T extends Record<string, string>>(o: T) => Object.keys(o) as [keyof T & string, ...(keyof T & string)[]];
 
 export const DONE_MODES = {
 	keep: 'Stay where they are',
@@ -76,14 +37,6 @@ export const DONE_MODES = {
 	collapse: 'Fold into a "Done" heading',
 	hide: 'Hide them'
 } as const;
-
-export const WIDGETS = {
-	progress: 'Progress today',
-	week: 'This week, day by day',
-	atRisk: 'Streaks at risk',
-	quit: 'Quit counters and money saved'
-} as const;
-export type WidgetKey = keyof typeof WIDGETS;
 
 /** Lines a Today card can show under the habit's name. */
 export const LINES = {
@@ -108,6 +61,69 @@ export const STATS = {
 } as const;
 export type StatKey = keyof typeof STATS;
 
+/** How much a Today row says (TS.4). Up next always says at least "open". */
+export const ROWS = { names: 'names only', short: 'short rows', open: 'open rows', full: 'every line' } as const;
+export type RowsKey = keyof typeof ROWS;
+
+/** One page's filter, sort and grouping. Fields a page doesn't use are ignored there. */
+export const viewState = z.object({
+	areas: z.array(str(64)).max(50).default([]),
+	direction: z.enum(['all', 'build', 'break']).default('all'),
+	status: z.enum(['all', 'due', 'done', 'skipped', 'missed', 'slip']).default('all'),
+	identity: str(64).nullable().default(null),
+	habit: str(64).nullable().default(null),
+	query: str(200).default(''),
+	tags: z.array(str(100)).max(50).default([]),
+	collection: str(64).nullable().default(null),
+	archived: z.boolean().default(false),
+	sort: str(32).default(''),
+	group: str(32).default('none'),
+	// Today only, each kept with its view (TS.2). The account's `today` settings are only read to migrate.
+	/** How much a row says. */
+	rows: z.enum(keysOf(ROWS)).default('short'),
+	/** The one number on a row. */
+	num: z.enum(keysOf(STATS)).default('streak'),
+	/** Where finished habits go. */
+	done: z.enum(keysOf(DONE_MODES)).default('bottom'),
+	/** Breaking and limiting before the day. */
+	first: z.boolean().default(false),
+	/** Kinds of line this view leaves out, wherever a row would show them. */
+	hide: z.array(z.enum(keysOf(LINES))).max(20).default([]),
+	/** Only what fits the current part of the day, what is late, and anything without a time. */
+	fits: z.boolean().default(false)
+});
+export type ViewState = z.infer<typeof viewState>;
+export const emptyState = (): ViewState => viewState.parse({});
+
+export const savedView = z.object({
+	id: str(64),
+	name: str(40).min(1),
+	page: z.enum(PAGES),
+	state: viewState
+});
+export type SavedView = z.infer<typeof savedView>;
+
+export const SECTIONS = {
+	due: 'Due today',
+	breaking: 'Breaking and limiting',
+	prep: 'Prepare for tomorrow',
+	paused: 'Paused',
+	resting: 'Not due today'
+} as const;
+export type SectionKey = keyof typeof SECTIONS;
+const sectionKeys = Object.keys(SECTIONS) as [SectionKey, ...SectionKey[]];
+
+
+export const WIDGETS = {
+	progress: 'Progress today',
+	week: 'This week, day by day',
+	atRisk: 'Streaks at risk',
+	quit: 'Quit counters and money saved'
+} as const;
+export type WidgetKey = keyof typeof WIDGETS;
+
+
+
 export const HABIT_LINES = {
 	schedule: 'Schedule',
 	cue: 'When',
@@ -131,7 +147,6 @@ export const FEATURES = {
 } as const;
 export type FeatureKey = keyof typeof FEATURES;
 
-const keysOf = <T extends Record<string, string>>(o: T) => Object.keys(o) as [keyof T & string, ...(keyof T & string)[]];
 
 export const viewSettings = z.object({
 	template: str(32).default('standard'),
@@ -208,7 +223,7 @@ export const TEMPLATES: ViewTemplate[] = [
 		summary: 'Today shows what fits the current part of the day, grouped by Morning, Afternoon and so on, in your own order.',
 		patch: {
 			today: { timeAware: true, done: 'bottom', widgets: ['progress'] },
-			defaults: { today: { group: 'part', sort: 'manual' } }
+			defaults: { today: { group: 'part', sort: 'manual', fits: true } }
 		}
 	},
 	{
@@ -237,6 +252,7 @@ export const TEMPLATES: ViewTemplate[] = [
 				headline: 'none'
 			},
 			habits: { lines: ['schedule'] },
+			defaults: { today: { rows: 'names', num: 'none', done: 'collapse' } },
 			hidden: ['identities', 'levels', 'rewards', 'cost', 'prep', 'ifThen', 'reframe', 'progression']
 		}
 	},
@@ -260,7 +276,7 @@ export const TEMPLATES: ViewTemplate[] = [
 				]
 			},
 			hidden: ['rewards', 'cost'],
-			defaults: { library: { sort: 'used' } }
+			defaults: { today: { rows: 'open', num: 'week' }, library: { sort: 'used' } }
 		}
 	},
 	{
@@ -279,6 +295,7 @@ export const TEMPLATES: ViewTemplate[] = [
 					{ key: 'resting', show: true }
 				]
 			},
+			defaults: { today: { first: true } },
 			hidden: ['levels', 'prep', 'progression']
 		}
 	},
@@ -289,6 +306,7 @@ export const TEMPLATES: ViewTemplate[] = [
 		summary: 'Adds every widget, shows consistency on each habit, values in History, and every line on the Habits list.',
 		patch: {
 			today: { widgets: ['progress', 'week', 'atRisk', 'quit'], headline: 'consistency', lines: allLines },
+			defaults: { today: { group: 'area', rows: 'full', num: 'consistency', done: 'keep' } },
 			habits: { lines: ['schedule', 'cue', 'area', 'consistency', 'last'] },
 			history: { values: true }
 		}
@@ -333,7 +351,12 @@ const DEFAULT_FIELD_LABEL: Record<keyof ViewState, string> = {
 	archived: 'filter',
 	sort: 'sort',
 	group: 'grouping',
-	layout: 'layout'
+	rows: 'layout',
+	num: 'layout',
+	done: 'layout',
+	first: 'layout',
+	hide: 'layout',
+	fits: 'filter'
 };
 const stateKeys = Object.keys(DEFAULT_FIELD_LABEL) as (keyof ViewState)[];
 
@@ -550,10 +573,16 @@ export function switchTemplate(current: ViewSettings, id: string, opts: { keep?:
 /** Read stored views, filling anything missing. Unknown or broken data falls back to the template. */
 export function readViews(raw: unknown, opts: { groupByArea?: boolean } = {}): ViewSettings {
 	if (!raw) return fromTemplate('standard', opts);
+	const old = oldTodayStates(raw);
 	const parsed = viewSettings.safeParse(raw);
 	if (!parsed.success) return fromTemplate(typeof (raw as { template?: unknown }).template === 'string' ? (raw as { template: string }).template : 'standard', opts);
 	const v = parsed.data;
 	for (const p of PAGES) if (!v.defaults[p]) v.defaults[p] = fromTemplate(v.template, opts).defaults[p];
+	if (old.size) {
+		const words = wordsFromAccount(v);
+		if (old.has(DEFAULT_VIEW)) v.defaults.today = { ...v.defaults.today, ...words, ...old.get(DEFAULT_VIEW) };
+		v.saved = v.saved.map((s) => (old.has(s.id) ? { ...s, state: { ...s.state, ...words, ...old.get(s.id) } } : s));
+	}
 	// A deleted saved view can't be what a page opens with, or the view it is on.
 	for (const p of PAGES) {
 		const o = v.open[p];
@@ -562,6 +591,64 @@ export function readViews(raw: unknown, opts: { groupByArea?: boolean } = {}): V
 	}
 	return v;
 }
+
+// ----- Today's words, kept with each view since TS.2 -----
+
+/** Today's views stored before their words were their own, by id, with what their old layout said about grouping. */
+function oldTodayStates(raw: unknown): Map<string, Partial<ViewState>> {
+	const out = new Map<string, Partial<ViewState>>();
+	const r = raw as { defaults?: Record<string, unknown>; saved?: unknown[] };
+	const look = (id: string, s: unknown) => {
+		if (!s || typeof s !== 'object' || 'rows' in s) return;
+		// Round 2's layouts (TS.3): Area blocks grouped by Area, Up next first ran by time, One list had no groups.
+		const layout = (s as { layout?: string }).layout;
+		out.set(id, layout === 'blocks' ? { group: 'area' } : layout === 'focus' ? { group: 'none', sort: 'cue' } : layout === 'flat' ? { group: 'none' } : {});
+	};
+	look(DEFAULT_VIEW, r?.defaults?.today);
+	for (const s of Array.isArray(r?.saved) ? r.saved : []) {
+		const x = s as { id?: unknown; page?: unknown; state?: unknown };
+		if (x?.page === 'today' && typeof x.id === 'string') look(x.id, x.state);
+	}
+	return out;
+}
+
+/** Lines a row shows only when it is open, and the ones only "every line" adds. */
+const OPEN_LINES: LineKey[] = ['cue', 'levels', 'bundle'];
+const FULL_LINES: LineKey[] = ['reframe', 'reward', 'identities', 'progression'];
+
+/** The rows word and hidden lines that show what the account's "Lines on each habit" showed. */
+export function rowsFromLines(lines: LineKey[]): Pick<ViewState, 'rows' | 'hide'> {
+	const missing = (keys: LineKey[]) => keys.filter((k) => !lines.includes(k));
+	if (FULL_LINES.some((k) => lines.includes(k))) return { rows: 'full', hide: missing([...OPEN_LINES, ...FULL_LINES]) };
+	if (OPEN_LINES.some((k) => lines.includes(k))) return { rows: 'open', hide: missing(OPEN_LINES) };
+	return { rows: 'short', hide: [] };
+}
+
+/**
+ * The words an old Today view takes: the template's, with what you had changed by hand on the
+ * account carried over (the same "own" changes a template switch keeps).
+ */
+export function wordsFromAccount(v: ViewSettings): Partial<ViewState> {
+	const t = fromTemplate(v.template).defaults.today ?? emptyState();
+	const own = ownOf(v);
+	const w: Partial<ViewState> = { rows: t.rows, num: t.num, done: t.done, first: t.first, hide: t.hide, fits: t.fits };
+	if ('today.done' in own) w.done = v.today.done;
+	if ('today.timeAware' in own) w.fits = v.today.timeAware;
+	if ('today.headline' in own) w.num = v.today.headline;
+	if ('today.lines' in own) {
+		Object.assign(w, rowsFromLines(v.today.lines));
+		if (!v.today.lines.includes('headline')) w.num = 'none';
+	}
+	if ('today.sections' in own) {
+		const order = sectionOrder(v).map((x) => x.key);
+		w.first = order.indexOf('breaking') < order.indexOf('due');
+	}
+	return w;
+}
+
+/** A sentence a new Today view can start from: each template's Today words (TS.8). */
+export const STARTERS = (): { id: string; name: string; state: ViewState }[] =>
+	TEMPLATES.map((t) => ({ id: t.id, name: t.name, state: fromTemplate(t.id).defaults.today ?? emptyState() }));
 
 /** The id of a page's own view, the page default. Every other view is a saved one, by its id. */
 export const DEFAULT_VIEW = 'default';

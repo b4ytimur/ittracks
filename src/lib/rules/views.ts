@@ -62,7 +62,8 @@ export const viewRules = defineRules<ViewSettings, ViewCtx>({
 	],
 	'today.lines': independent,
 	'today.timeAware': [
-		check((v, c) => v.today.timeAware && c.ranges === 0, 'Only show what fits now needs parts of your day, set in Settings', 'warn')
+		// Each Today view keeps its own (TS.2); the account's tick is only read to migrate.
+		check((v, c) => c.ranges === 0 && [v.defaults.today, ...v.saved.filter((s) => s.page === 'today').map((s) => s.state)].some((s) => s?.fits), 'What fits now needs parts of your day, set in Settings', 'warn')
 	],
 	'today.headline': independent,
 	'today.headlineFor': independent,

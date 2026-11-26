@@ -29,6 +29,8 @@ export const viewChange = z.discriminatedUnion('op', [
 	/** A new named view with this state; the page is on it after. */
 	z.object({ op: z.literal('save'), page, name: z.string().trim().min(1).max(40), state: viewState }),
 	z.object({ op: z.literal('delete'), id: z.string().max(64) }),
+	/** A saved view's new name, typed where it stands in the sentence (TS.10). */
+	z.object({ op: z.literal('rename'), id: z.string().max(64), name: z.string().trim().min(1).max(40) }),
 	/** What the page opens with: "last", "default", or a saved view id. */
 	z.object({ op: z.literal('open'), page, value: z.string().max(64) }),
 	/** Change layout settings: Today, Habits list, History, hidden features, start page. */
@@ -101,6 +103,10 @@ export function changeViews(accountId: string, raw: unknown): ViewsChanged {
 			next = { ...v, open, active, saved: v.saved.filter((s) => s.id !== b.id) };
 			break;
 		}
+		case 'rename':
+			if (!v.saved.some((s) => s.id === b.id)) throw new ActionError('invalid', 'No such view');
+			next = { ...v, saved: v.saved.map((s) => (s.id === b.id ? { ...s, name: b.name } : s)) };
+			break;
 		case 'open':
 			if (b.value !== 'last' && b.value !== 'default' && !v.saved.some((s) => s.id === b.value && s.page === b.page))
 				throw new ActionError('invalid', 'No such view');

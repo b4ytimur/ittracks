@@ -1082,9 +1082,9 @@ export function loadToday(accountId: string, today: string) {
 	return { build, resting, paused, breaking, week: weekStrip(accountId, today) };
 }
 
-/** Done and scheduled per day since Monday, for the week strip on Today. */
+/** Done and scheduled on each of the last seven days, today last: the strip under Today's date (TS.5), as History's. */
 export function weekStrip(accountId: string, today: string) {
-	const monday = weekStart(today);
+	const monday = addDays(today, -6);
 	const rows = db
 		.select({ date: occurrence.date, status: occurrence.status })
 		.from(occurrence)

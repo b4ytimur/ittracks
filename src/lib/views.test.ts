@@ -16,7 +16,12 @@ import {
 	recordDefault,
 	recordPatch,
 	viewSettings,
-	viewState
+	viewState,
+	STARTERS,
+	emptyState,
+	type LineKey,
+	type ViewSettings,
+	type ViewState
 } from './views';
 import { habitStats, headlineText } from './engine/stats';
 import { templateFile } from './template';
@@ -163,7 +168,8 @@ describe('views', () => {
 
 	it('a page default you set is yours, field by field', () => {
 		const v = fromTemplate('routine');
-		const own = recordDefault(v, 'today', viewState.parse({ group: 'area', sort: 'manual' }));
+		// Routine's own Today words (part of day, time-aware) stay; only the grouping is yours.
+		const own = recordDefault(v, 'today', viewState.parse({ ...v.defaults.today, group: 'area' }));
 		expect(own).toEqual({ 'defaults.today.group': 'area' });
 		const next = switchTemplate({ ...v, own }, 'standard');
 		expect(next.defaults.today).toMatchObject({ group: 'area', sort: 'cue' });
@@ -340,9 +346,61 @@ describe('view rules', async () => {
 	});
 });
 
-it('a view keeps its own layout, and one from before is the outline', () => {
-	expect(viewState.parse({}).layout).toBe('outline');
-	expect(sameState(viewState.parse({}), viewState.parse({ layout: 'flat' }))).toBe(false);
+describe("Today's words (TS.2)", () => {
+	/** Stored views from before each Today view kept its own words: no rows, maybe a layout. */
+	const before = (tpl: string, change: (v: ViewSettings) => void = () => {}) => {
+		const v = JSON.parse(JSON.stringify(fromTemplate(tpl))) as ViewSettings & { own?: unknown };
+		delete v.own;
+		for (const k of ['rows', 'num', 'done', 'first', 'hide', 'fits']) delete (v.defaults.today as Record<string, unknown>)[k];
+		change(v);
+		return v;
+	};
+	it('a new view says the short sentence, and two views with other words differ', () => {
+		expect(viewState.parse({})).toMatchObject({ rows: 'short', num: 'streak', done: 'bottom', first: false, hide: [], fits: false });
+		expect(sameState(viewState.parse({}), viewState.parse({ rows: 'open' }))).toBe(false);
+	});
+	it("each template's Today words are a starting sentence", () => {
+		const s = Object.fromEntries(STARTERS().map((x) => [x.id, x.state]));
+		expect(s.routine).toMatchObject({ group: 'part', sort: 'manual', fits: true });
+		expect(s.minimal).toMatchObject({ rows: 'names', num: 'none', done: 'collapse' });
+		expect(s.quitter.first).toBe(true);
+		expect(s.standard).toMatchObject({ rows: 'short', num: 'streak', done: 'bottom' });
+	});
+	it('an old view keeps what you changed by hand, and takes the new words for the rest', () => {
+		const v = readViews(before('standard', (x) => {
+			x.today.done = 'collapse';
+			x.today.headline = 'week';
+		}));
+		expect(v.defaults.today).toMatchObject({ done: 'collapse', num: 'week', rows: 'short', fits: false });
+	});
+	it('lines you turned off become a rows word and hidden lines', () => {
+		const only = (lines: LineKey[]) => readViews(before('standard', (x) => (x.today.lines = lines))).defaults.today;
+		expect(only(['cue', 'headline', 'levels'])).toMatchObject({ rows: 'open', hide: ['bundle'], num: 'streak' });
+		expect(only(['cue', 'reframe'])).toMatchObject({ rows: 'full', num: 'none' });
+		expect(only([])).toMatchObject({ rows: 'short', num: 'none', hide: [] });
+	});
+	it('the part-of-day tick and Breaking first come along', () => {
+		const v = readViews(before('routine', (x) => {
+			x.today.timeAware = false;
+			x.today.sections = [{ key: 'breaking', show: true }, { key: 'due', show: true }];
+		}));
+		expect(v.defaults.today).toMatchObject({ fits: false, first: true });
+	});
+	it('a saved Today view migrates too, and its old layout says how it was grouped', () => {
+		const v = before('standard', (x) => {
+			(x.defaults.today as Record<string, unknown>).layout = 'blocks';
+			x.saved = [{ id: 's1', name: 'Mine', page: 'today', state: { ...emptyState(), layout: 'flat', group: 'area' } as unknown as ViewState }];
+			for (const k of ['rows', 'num', 'done', 'first', 'hide', 'fits']) delete (x.saved[0].state as Record<string, unknown>)[k];
+		});
+		const r = readViews(v);
+		expect(r.defaults.today.group).toBe('area');
+		expect(r.saved[0].state).toMatchObject({ group: 'none', rows: 'short', done: 'bottom' });
+	});
+	it('a view saved after this keeps its words as they are', () => {
+		const v = fromTemplate('standard');
+		v.defaults.today = { ...v.defaults.today, rows: 'full', done: 'hide' };
+		expect(readViews(JSON.parse(JSON.stringify(v))).defaults.today).toMatchObject({ rows: 'full', done: 'hide' });
+	});
 });
 
 it('folded headings: the defaults for old views, kept over a template switch', () => {

@@ -39,7 +39,7 @@ const OVERVIEW = {
 		Identity: 'A sentence a habit votes for, such as "I am a runner".',
 		Pause: 'Days a habit rests (not due, never a miss). A vacation pauses every habit.',
 		Collection: 'A named group of Library Tasks: hand-picked, or a saved filter (tags, Area, text).',
-		View: 'What a page (Today, Habits, Library, History) shows and in what order: a filter, sort and grouping, saved under a name. Each page is on one view; Default is a view too. The layout (Today sections, lines on a card, widgets) and hidden features apply app-wide.'
+		View: 'What a page (Today, Habits, Library, History) shows and in what order: a filter, sort and grouping, saved under a name. Each page is on one view; Default is a view too. A Today view also keeps its own words: rows (how much a row says), num (its one number), done (where finished habits go), first (Breaking first), hide (kinds of line it leaves out) and fits (only what fits the part of the day). Hidden features apply app-wide.'
 	},
 	workflow: [
 		'1. Learn what exists: describe (habits, Tasks, fields), and the stats tools when advice should rest on the user\'s own data.',
@@ -57,7 +57,7 @@ const OVERVIEW = {
 		progression: '{ habit, answer: "raise" or "not_yet" }: answers Today\'s raise suggestion (today lists them under raise). raise: Target and Stretch go up in every Slot by the habit\'s progression, logs before keep what they aimed for. not_yet: the targets stay and the count starts again today.',
 		archive: '{ habit or task, archived: false to bring it back }. Archiving keeps every log.',
 		save_template: '{ habit, name?, description? }: keep it, with the habits inside it and its Tasks, in My templates in the Gallery.',
-		view: '{ change: one view change }: a saved view (filter, sort, grouping, Today layout) on Today, Habits, Library or History, which view a page is on or opens with, the Today and Habits layout, hidden features, the start page, or a view template. Topic "views"; setup_read ref "views" shows them and every option.',
+		view: '{ change: one view change }: a saved view (filter, sort, grouping, and for Today the rows, number and done items) on Today, Habits, Library or History, which view a page is on or opens with, the Today and Habits layout, hidden features, the start page, or a view template. Topic "views"; setup_read ref "views" shows them and every option.',
 		settings: '{ set: { only the settings that change }, renames?, unitRenames? }: day start, parts of the day, logging past days, the day note, new habits, units, groupings, Task types. A list is replaced whole. Topic "account".',
 		measure: '{ set: { name, formula, unit, per, combine } } adds one; { measure: "<name>", set } changes it; { measure, delete: true } deletes it (or turns it off while cards count by it). Topic "stats".',
 		stats: '{ change: one Stats change }: boards, cards on a board or a habit\'s Stats tab, the number on Today. Topic "stats".',
@@ -226,7 +226,7 @@ const TOPICS = {
 		schema: schema(templateFile)
 	}),
 	views: () => ({
-		about: 'One view change per setup change ({ op: "view", change }). save makes a named view on a page (state: filter, sort, group, and layout for Today; fields left out are blank) and puts the page on it; update changes a view (by name or id; "default" is the page default); select puts a page on a view; delete removes one; open sets what a page opens with ("last", "default" or a view); patch changes the layout (today, habits, history, hidden features, startPage), only the keys sent; template switches the view template (keep: true keeps your own changes). Areas, a habit and an identity in state may be named. setup_read ref "views" lists the views now and every allowed sort, group and layout value.',
+		about: 'One view change per setup change ({ op: "view", change }). save makes a named view on a page (state: filter, sort, group, and for Today rows, num, done, first, hide and fits; fields left out are blank) and puts the page on it; update changes a view (by name or id; "default" is the page default); select puts a page on a view; delete removes one; open sets what a page opens with ("last", "default" or a view); patch changes the layout (today, habits, history, hidden features, startPage), only the keys sent; template switches the view template (keep: true keeps your own changes). Areas, a habit and an identity in state may be named. setup_read ref "views" lists the views now and every allowed sort, group, rows, num and done value.',
 		example: { op: 'view', change: { op: 'save', page: 'today', name: 'Gym days', state: { areas: ['Fitness'], sort: 'cue', group: 'part' } } },
 		schema: schema(viewChange)
 	}),

@@ -16,6 +16,7 @@
 		onreset,
 		resetLabel = 'Reset layout',
 		atDefault = false,
+		useHint,
 		onmode
 	}: {
 		title: string;
@@ -24,6 +25,8 @@
 		back?: { href: string; label: string };
 		/** What the line under the title says in each mode. */
 		hints?: Partial<Record<Mode, string>>;
+		/** The line under the title in Use, when it holds more than words (Today's date and count, TS.5). */
+		useHint?: Snippet;
 		/** Buttons on the title line, out of reach while editing or selecting. */
 		actions?: Snippet;
 		/** At the end of the hint line while editing. */
@@ -61,7 +64,7 @@
 	{#if actions}<div class="title-actions" inert={mode !== 'use'}>{@render actions()}</div>{/if}
 	{#if modes.length > 1}<Segmented label="Mode" options={modes.map((m) => ({ value: m, label: words[m] }))} value={mode} onchange={set} />{/if}
 </header>
-{#if Object.keys(hints).length || onreset}
+{#if Object.keys(hints).length || onreset || useHint}
 	<p class="hint-line meta" data-mode={mode}>
 		{#each modes as m (m)}
 			<span data-hint={m} inert={mode !== m}>
@@ -70,7 +73,7 @@
 						<button type="button" class="quiet reset" data-at-default={atDefault ? '' : null} onclick={onreset}>{resetLabel}</button>
 					</span>
 				{/if}
-				{hints[m] ?? ''}
+				{#if m === 'use' && useHint}{@render useHint()}{:else}{hints[m] ?? ''}{/if}
 			</span>
 		{/each}
 	</p>

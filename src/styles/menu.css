@@ -95,3 +95,13 @@
 	.menu > [role^='menuitem']:hover, .menu > button:hover, .menu > a:hover { outline: 1px solid Highlight; outline-offset: -1px; }
 }
 /* Reduced motion: nothing here moves. A menu appears and leaves at once in every mode. */
+
+/* The ghost slot as a menu row (TS.10): it ends a list of views the way a ghost slot ends any list. Dashed, + in the ✓
+   column, the items' corners; pressing it makes the thing at once, so nothing is typed in the menu. */
+.menu > .menu-ghost {
+	grid-template-columns: 1rem minmax(0, 1fr); column-gap: var(--space-tight);
+	margin-block: 2px; padding: calc(var(--space-tight) - 1px) calc(var(--space-inline) - 1px);
+	border: 1px dashed var(--line-control); color: var(--ink-muted);
+}
+.menu > .menu-ghost > .menu-check { color: var(--ink-muted); }
+@media (hover: hover) { .menu > .menu-ghost:hover { border-color: var(--ink); } }

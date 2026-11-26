@@ -13,6 +13,8 @@
 		onselect?: () => void;
 		/** One of a set, and whether it is the one now. */
 		checked?: boolean;
+		/** The ghost slot at the end of a list, as a menu row: dashed, with + in the ✓ column (TS.10). */
+		ghost?: boolean;
 		download?: boolean;
 	}
 </script>
@@ -22,7 +24,8 @@
 	import { enhance } from '$app/forms';
 	import { tick } from 'svelte';
 
-	let { label, menuLabel, items, class: klass = '' }: { label: string; menuLabel?: string; items: (Way | '-')[]; class?: string } = $props();
+	// `trigger` draws the button's face (a word of a sentence); without it the button is ⋯.
+	let { label, menuLabel, items, class: klass = '', trigger }: { label: string; menuLabel?: string; items: (Way | '-')[]; class?: string; trigger?: import('svelte').Snippet } = $props();
 
 	const uid = $props.id();
 	const formOf = (i: number) => `${uid}-f${i}`;
@@ -96,7 +99,7 @@
 			e.preventDefault();
 			show(e.key === 'ArrowUp');
 		}
-	}}><span aria-hidden="true">⋯</span></button
+	}}>{#if trigger}{@render trigger()}{:else}<span aria-hidden="true">⋯</span>{/if}</button
 >
 <div class="menu" role="menu" tabindex="-1" aria-label={menuLabel ?? label} data-side={up ? 'up' : null} style:--menu-room="{room}px" style:--menu-nudge="{nudge}px" hidden={!open} bind:this={menu} onkeydown={keys}>
 	{#each items as w, i (i)}
@@ -105,8 +108,8 @@
 		{:else if w.href}
 			<a role="menuitem" tabindex="-1" href={w.href} download={w.download ? '' : undefined}><span class="menu-label">{w.label}</span></a>
 		{:else}
-			<button type={w.action ? 'submit' : 'button'} role={w.checked === undefined ? 'menuitem' : 'menuitemradio'} aria-checked={w.checked} tabindex="-1" form={w.action ? formOf(i) : undefined} onclick={() => (close(), w.onselect?.())}
-				>{#if w.checked !== undefined}<span class="menu-check" aria-hidden="true">✓</span>{/if}<span class="menu-label">{w.label}</span>{#if w.value}<span class="menu-note meta">{w.value}</span>{/if}</button
+			<button type={w.action ? 'submit' : 'button'} class:menu-ghost={w.ghost} role={w.checked === undefined ? 'menuitem' : 'menuitemradio'} aria-checked={w.checked} tabindex="-1" form={w.action ? formOf(i) : undefined} onclick={() => (close(), w.onselect?.())}
+				>{#if w.checked !== undefined || w.ghost}<span class="menu-check" aria-hidden="true">{w.ghost ? '+' : '✓'}</span>{/if}<span class="menu-label">{w.label}</span>{#if w.value}<span class="menu-note meta">{w.value}</span>{/if}</button
 			>
 		{/if}
 	{/each}

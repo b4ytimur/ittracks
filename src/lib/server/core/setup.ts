@@ -32,7 +32,7 @@ import { takePacks, undoPack, unitsWith, type PackUndo } from '../packs';
 import { getPacks, getTaskTypes, getUnits, getViews } from '../settings';
 import { metricsFromType, PLAIN_TASK_TYPES } from '$lib/task-types';
 import { changeViews } from '../views';
-import { DEFAULT_VIEW, emptyState, FEATURES, GROUPS, HABIT_LINES, LAYOUTS, LINES, PAGE_LABEL, PAGES, SECTIONS, SORTS, STATS, TEMPLATES, WIDGETS, DONE_MODES, type ViewSettings } from '$lib/views';
+import { DEFAULT_VIEW, emptyState, FEATURES, GROUPS, HABIT_LINES, LINES, ROWS, PAGE_LABEL, PAGES, SECTIONS, SORTS, STATS, TEMPLATES, WIDGETS, DONE_MODES, type ViewSettings } from '$lib/views';
 import { trash } from '../trash';
 import { previewRaise, raiseFor, userToday } from '../today';
 import { notYet, raiseTargets } from '../day-plan';
@@ -977,7 +977,7 @@ export function readSetup(actor: Actor, input: { ref: string; as?: 'form' | 'tem
 					pages: PAGES,
 					sorts: SORTS,
 					groups: GROUPS,
-					todayLayouts: LAYOUTS,
+					todayRows: ROWS,
 					todaySections: SECTIONS,
 					todayDone: DONE_MODES,
 					todayWidgets: WIDGETS,
