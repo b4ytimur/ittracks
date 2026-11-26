@@ -2,10 +2,12 @@ services:
   ittracks:
     build: .
     ports:
-      - "3000:3000"
+      # BIND_ADDRESS=127.0.0.1 in a .env file next to this one keeps the app on this computer
+      # only, for a private server behind Tailscale (docs/private-server.md).
+      - "${BIND_ADDRESS:-0.0.0.0}:3000:3000"
     volumes:
       - ./data:/data
     environment:
-      # Set this to the address you open the app at.
-      ORIGIN: http://localhost:3000
+      # The address you open the app at. Set ORIGIN in .env, or change the default here.
+      ORIGIN: ${ORIGIN:-http://localhost:3000}
     restart: unless-stopped

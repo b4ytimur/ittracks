@@ -82,9 +82,9 @@ After changing `src/lib/server/db/schema.ts`, run `npm run db:generate` to creat
 docker compose up -d
 ```
 
-The app listens on port 3000 and keeps its database in `./data`. Set `ORIGIN` in `docker-compose.yml` to the address you open it at (links and the MCP setup in Settings → AI assistants use it). On first visit you create the account for your server.
+The app listens on port 3000 and keeps its database in `./data`. Set `ORIGIN` to the address you open it at (links and the MCP setup in Settings → AI assistants use it), in a `.env` file next to `docker-compose.yml` (`ORIGIN=https://…`) or in `docker-compose.yml` itself. `BIND_ADDRESS=127.0.0.1` in `.env` keeps the port on the machine itself. On first visit you create the account for your server.
 
-To install it on your phone, open it in the browser and choose "Add to Home Screen". Phones only offer this over HTTPS, so put the app behind a reverse proxy with a certificate (for example Caddy or Traefik).
+To install it on your phone, open it in the browser and choose "Add to Home Screen". Phones only offer this over HTTPS. [Private server with Tailscale](docs/private-server.md) walks through HTTPS for your own devices only, on a Mac, a home server or a small VPS, with nothing open to the internet. A reverse proxy with a certificate (for example Caddy or Traefik) also works.
 
 Run it from a normal folder (not one reached through a symlink), so that Docker Desktop creates `./data` on your computer. Creating the folder first with `mkdir data` also works.
 

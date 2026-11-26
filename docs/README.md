@@ -2,7 +2,7 @@
 
 How to use ittracks, page by page. Each page is short and task-first: what a thing is, how to set it up, and the rules it follows. Names in **bold** are the labels you see in the app.
 
-To install or run your own server, see the [main README](../README.md#self-host).
+To install or run your own server, see the [main README](../README.md#self-host). To run it privately on a Mac, a home server or a small VPS, with HTTPS and reachable only from your own devices, see [Private server with Tailscale](private-server.md).
 
 ## Pages
 
@@ -23,6 +23,7 @@ To install or run your own server, see the [main README](../README.md#self-host)
 | [Stats](stats.md) | Boards and cards, card types, your own measures, a habit's Stats tab |
 | [Settings](settings.md) | One page of lines: how they open and save, finding one, backups, logging out with changes waiting |
 | [Integrations](integrations.md) | Keys, quick-log links and Shortcuts, AI assistants over MCP, export and import |
+| [Private server with Tailscale](private-server.md) | Your own server on a Mac, home server or VPS, reachable only from your devices: install, phone and reminders, MCP, backups, updates |
 
 ## Words the app uses
 

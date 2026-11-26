@@ -93,7 +93,7 @@ claude mcp add ittracks -e ITTRACKS_URL=http://localhost:3000 -e ITTRACKS_KEY=it
 
 **Other MCP clients** (Cursor and others): run `node ~/.ittracks/ittracks-mcp.mjs` (the whole path where a client asks for one) as a stdio server with the two variables `ITTRACKS_URL` and `ITTRACKS_KEY` set.
 
-`ITTRACKS_URL` must be reachable from the computer the assistant runs on: `http://localhost:3000` when the server runs on the same machine.
+`ITTRACKS_URL` must be reachable from the computer the assistant runs on: `http://localhost:3000` when the server runs on the same machine, or the server's `https://…ts.net` address for a [private server with Tailscale](private-server.md#ai-assistants-mcp).
 
 Claude on the web and on phones, and ChatGPT, can only reach a server on the internet over HTTPS with sign-in (a remote MCP server). ittracks doesn't offer that yet, so use Claude Desktop, Claude Code or another assistant that runs on your computer.
 
