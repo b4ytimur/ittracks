@@ -25,7 +25,7 @@
 					{/if}
 					<span class="fill" class:reached class:over style:width="{Math.min(pct, 100)}%"></span>
 				</div>
-				<div class="muted small">
+				<div class="muted meta">
 					{#if over}Above the band {g.period}{:else if reached}Reached {g.period}{:else if g.goal !== null}{fmt(g.goal - (g.value ?? 0))} to go {g.period}{/if}
 				</div>
 			</button>
@@ -91,8 +91,5 @@
 		bottom: 0;
 		background: var(--good);
 		opacity: 0.25;
-	}
-	.small {
-		font-size: var(--font-size-note);
 	}
 </style>

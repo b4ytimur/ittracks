@@ -210,7 +210,7 @@
 <div class="builder">
 	<section class="preview card" aria-live="polite">
 		<h3>{c.title.trim() || title}</h3>
-		<div class="muted small">Preview{loading ? ' · working it out…' : ''}</div>
+		<div class="muted meta">Preview{loading ? ' · working it out…' : ''}</div>
 		{#if blocks.length}
 			<p class="muted">Fix the choices marked below to see the preview.</p>
 		{:else if failed}
@@ -222,7 +222,7 @@
 				{:else}
 					<Chart card={previewCard} r={preview} rangeKey={c.range === 'page' ? board.range : c.range} />
 				{/if}
-				{#each preview.notes as n (n)}<p class="muted small">{n}</p>{/each}
+				{#each preview.notes as n (n)}<p class="muted meta">{n}</p>{/each}
 			</div>
 		{/if}
 	</section>
@@ -245,12 +245,12 @@
 							{#each names as n (n)}<option value={n}>{n}</option>{/each}
 						</select>
 					</label>
-					<p class="muted small">Adds up every field with this name across your Tasks, in one unit. Fields in a unit that can't be converted are left out, with a note.</p>
+					<p class="muted meta">Adds up every field with this name across your Tasks, in one unit. Fields in a unit that can't be converted are left out, with a note.</p>
 				{:else}
 					<div class="fields">
 						{#each byTask as g (g.t.id)}
 							<div class="group">
-								<div class="muted small">{g.t.name}</div>
+								<div class="muted meta">{g.t.name}</div>
 								<div class="chips">
 									{#each g.ms as m (m.id)}
 										<button type="button" class="toggle" aria-pressed={c.what.metrics.includes(m.id)} onclick={() => toggleMetric(m.id)}>
@@ -383,7 +383,7 @@
 			<summary>Only some habits, tags or Areas{c.filter.habits.length + c.filter.tags.length + c.filter.areas.length ? ` (${c.filter.habits.length + c.filter.tags.length + c.filter.areas.length})` : ''}</summary>
 			<div class="stack inner">
 				<div>
-					<div class="muted small">Habits</div>
+					<div class="muted meta">Habits</div>
 					<div class="chips">
 						{#each habits as h (h.id)}
 							<button type="button" class="toggle" aria-pressed={c.filter.habits.includes(h.id)} onclick={() => (c.filter.habits = toggle(c.filter.habits, h.id))}>{h.name}{h.archived ? ' (archived)' : ''}</button>
@@ -392,7 +392,7 @@
 				</div>
 				{#if catalog.tags.length}
 					<div>
-						<div class="muted small">Tags</div>
+						<div class="muted meta">Tags</div>
 						<div class="chips">
 							{#each catalog.tags as t (t)}
 								<button type="button" class="toggle" aria-pressed={c.filter.tags.includes(t)} onclick={() => (c.filter.tags = toggle(c.filter.tags, t))}>{t}</button>
@@ -402,7 +402,7 @@
 				{/if}
 				{#if catalog.areas.length}
 					<div>
-						<div class="muted small">Areas</div>
+						<div class="muted meta">Areas</div>
 						<div class="chips">
 							{#each catalog.areas as a (a.id)}
 								<button type="button" class="toggle" aria-pressed={c.filter.areas.includes(a.id)} onclick={() => (c.filter.areas = toggle(c.filter.areas, a.id))}>{a.icon} {a.name}</button>
@@ -446,17 +446,17 @@
 						/>
 					</label>
 				</div>
-				{#each [...new Set([why('compare.goal'), c.compare.goal === null ? null : why('compare.goalMax')])].filter(Boolean) as reason (reason)}<p class="muted small">{reason}</p>{/each}
+				{#each [...new Set([why('compare.goal'), c.compare.goal === null ? null : why('compare.goalMax')])].filter(Boolean) as reason (reason)}<p class="muted meta">{reason}</p>{/each}
 				{#if c.what.source === 'field'}
 					<label class="inline">
 						<input type="checkbox" bind:checked={c.compare.goalFromTargets} disabled={!!why('compare.goalFromTargets')} /> Take the goal from the targets
 					</label>
-					{#if why('compare.goalFromTargets')}<p class="muted small">{why('compare.goalFromTargets')}</p>{/if}
+					{#if why('compare.goalFromTargets')}<p class="muted meta">{why('compare.goalFromTargets')}</p>{/if}
 				{/if}
 				<label class="inline" class:off={!!why('compare.running')}>
 					<input type="checkbox" bind:checked={c.compare.running} disabled={!!why('compare.running')} /> Running total
 				</label>
-				{#if why('compare.running')}<p class="muted small">{why('compare.running')}</p>{/if}
+				{#if why('compare.running')}<p class="muted meta">{why('compare.running')}</p>{/if}
 				<label>
 					Rolling average
 					<select bind:value={c.compare.rolling} disabled={!!why('compare.rolling')}>
@@ -465,7 +465,7 @@
 						<option value={30}>30 days</option>
 					</select>
 				</label>
-				{#if why('compare.rolling')}<p class="muted small">{why('compare.rolling')}</p>{/if}
+				{#if why('compare.rolling')}<p class="muted meta">{why('compare.rolling')}</p>{/if}
 			</div>
 		</details>
 
@@ -488,7 +488,7 @@
 					<label class="inline">
 						<input type="checkbox" bind:checked={c.look.stacked} disabled={!c.look.stacked && !!optionIssue('look.stacked', true)} /> Stack the series
 					</label>
-					{#if !c.look.stacked && optionIssue('look.stacked', true)}<p class="muted small">{optionIssue('look.stacked', true)}</p>{/if}
+					{#if !c.look.stacked && optionIssue('look.stacked', true)}<p class="muted meta">{optionIssue('look.stacked', true)}</p>{/if}
 				{/if}
 			</div>
 		</details>
@@ -588,9 +588,6 @@
 	}
 	.inner {
 		margin-top: 0.6rem;
-	}
-	.small {
-		font-size: var(--font-size-chip);
 	}
 	.issues {
 		margin: 0;

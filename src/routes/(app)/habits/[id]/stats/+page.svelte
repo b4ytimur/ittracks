@@ -65,7 +65,7 @@
 		onheadline={headline}
 	/>
 	{#if !data.customized}
-		<p class="muted small foot">These cards are made from what {data.habit.name} logs. Customize to change them.</p>
+		<p class="muted meta foot">These cards are made from what {data.habit.name} logs. Customize to change them.</p>
 	{/if}
 </div>
 
@@ -75,9 +75,6 @@
 	}
 	.tools {
 		margin-bottom: 0.75rem;
-	}
-	.small {
-		font-size: var(--font-size-chip);
 	}
 	.foot {
 		margin-top: 1.5rem;

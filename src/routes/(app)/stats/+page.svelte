@@ -112,13 +112,13 @@
 	{#if newBoard}
 		<section class="card new">
 			<h2>New board</h2>
-			<p class="muted small">Start from a template, made from the habits and Tasks you already have, or start empty.</p>
+			<p class="muted meta">Start from a template, made from the habits and Tasks you already have, or start empty.</p>
 			<ul class="list templates">
 				{#each data.templates as t (t.id)}
 					<li>
 						<button type="button" class="tpl" onclick={() => addBoard(t.id)}>
 							<strong>{t.name}</strong>
-							<span class="muted small">{t.blurb}</span>
+							<span class="muted meta">{t.blurb}</span>
 						</button>
 					</li>
 				{/each}
@@ -167,7 +167,7 @@
 					{/if}
 					{#if data.catalog.areas.length}
 						<div>
-							<div class="muted small">Areas</div>
+							<div class="muted meta">Areas</div>
 							<div class="chips">
 								{#each data.catalog.areas as a (a.id)}
 									<button type="button" class="toggle" aria-pressed={board.filter.areas.includes(a.id)} onclick={() => setFilter({ areas: toggle(board.filter.areas, a.id) })}>{a.name}</button>
@@ -177,7 +177,7 @@
 					{/if}
 					{#if data.catalog.tags.length}
 						<div>
-							<div class="muted small">Tags</div>
+							<div class="muted meta">Tags</div>
 							<div class="chips">
 								{#each data.catalog.tags as t (t)}
 									<button type="button" class="toggle" aria-pressed={board.filter.tags.includes(t)} onclick={() => setFilter({ tags: toggle(board.filter.tags, t) })}>{t}</button>
@@ -217,7 +217,7 @@
 			{csv}
 		/>
 
-		<p class="muted small foot">
+		<p class="muted meta foot">
 			<a href="/stats/export?all=1" download>Download every log as CSV</a> ·
 			<a href="/settings#measures">Your measures</a>
 		</p>
@@ -278,9 +278,6 @@
 	.empty {
 		text-align: center;
 		margin-bottom: 0.75rem;
-	}
-	.small {
-		font-size: var(--font-size-chip);
 	}
 	.foot {
 		margin-top: 1.5rem;

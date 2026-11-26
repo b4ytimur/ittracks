@@ -25,12 +25,12 @@
 <div class="tile">
 	<div class="value">{value(r.total, r.unit, r.kind)}</div>
 	{#if r.goal && r.total !== null}
-		<div class="muted small">
+		<div class="muted meta">
 			{r.goal.max !== null ? `Goal ${value(r.goal.min, r.unit, r.kind)} to ${value(r.goal.max, r.unit, r.kind)}` : `of ${value(r.goal.min, r.unit, r.kind)}`}
 		</div>
 	{/if}
 	{#if d}
-		<div class="delta small" class:good={d.good === true} class:bad={d.good === false}>
+		<div class="delta meta" class:good={d.good === true} class:bad={d.good === false}>
 			{#if d.good !== null}<span aria-hidden="true">{d.text.startsWith('+') ? '▲' : '▼'}</span>{/if}
 			{d.text}
 		</div>
@@ -49,9 +49,6 @@
 		line-height: 1.15;
 		font-variant-numeric: tabular-nums;
 		overflow-wrap: anywhere;
-	}
-	.small {
-		font-size: var(--font-size-chip);
 	}
 	.delta {
 		color: var(--ink);

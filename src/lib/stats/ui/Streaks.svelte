@@ -24,12 +24,12 @@
 			<a href="/habits/{s.habitId}/chain" class="row-link">
 				<div class="head">
 					<span class="name">{s.name}</span>
-					<span><strong>{s.current}{s.unit === 'percent' ? '%' : ''}</strong> <span class="muted small">{unitText(s.unit, s.current)}</span></span>
+					<span><strong>{s.current}{s.unit === 'percent' ? '%' : ''}</strong> <span class="muted meta">{unitText(s.unit, s.current)}</span></span>
 				</div>
 				<div class="strip" aria-hidden="true">
 					{#each s.strip as c (c.date)}<i class={c.status} title="{longDate(c.date)}: {c.status}"></i>{/each}
 				</div>
-				<div class="muted small">
+				<div class="muted meta">
 					{#if s.best !== null}{bestText(s.unit, s.best)}{/if}{#if s.atRisk} · Do it today to keep it going{/if}
 				</div>
 			</a>
@@ -96,8 +96,5 @@
 	.strip i.rest,
 	.strip i.due {
 		background: var(--chart-grid);
-	}
-	.small {
-		font-size: var(--font-size-note);
 	}
 </style>

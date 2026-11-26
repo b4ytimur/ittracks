@@ -22,7 +22,7 @@
 					<th scope="row"><button type="button" class="link" onclick={() => onpick?.(x.key === 'all' ? null : x.key)}>{x.label}</button></th>
 					<td>{fmt(x.total)}</td>
 					{#if showBest}<td>{fmt(x.best)}</td>{/if}
-					{#if showLast}<td>{fmt(x.last)}{#if x.lastDate}<div class="muted small">{shortDay(x.lastDate)}</div>{/if}</td>{/if}
+					{#if showLast}<td>{fmt(x.last)}{#if x.lastDate}<div class="muted meta">{shortDay(x.lastDate)}</div>{/if}</td>{/if}
 					<td>{x.logs}</td>
 				</tr>
 			{/each}
@@ -58,8 +58,5 @@
 	th[scope='row'] button {
 		text-align: left;
 		color: var(--ink);
-	}
-	.small {
-		font-size: 0.7rem;
 	}
 </style>

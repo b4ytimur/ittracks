@@ -23,7 +23,7 @@
 	<div class="bar">
 		<div>
 			<h2>{title}</h2>
-			<div class="muted small">{loading ? 'Finding the logs…' : rows ? `${rows.length}${rows.length === 200 ? '+' : ''} ${rows.length === 1 ? 'log' : 'logs'}` : ''}</div>
+			<div class="muted meta">{loading ? 'Finding the logs…' : rows ? `${rows.length}${rows.length === 200 ? '+' : ''} ${rows.length === 1 ? 'log' : 'logs'}` : ''}</div>
 		</div>
 		<button type="button" class="small" onclick={() => dialog?.close()}>Close</button>
 	</div>
@@ -33,9 +33,9 @@
 				<li class="row-item">
 					<div class="grow">
 						<div><strong>{fmt(r.value)}</strong> <span class="muted">· {longDate(r.date)}</span></div>
-						<div class="muted small">{r.habit}{r.task && r.task !== r.habit ? ` · ${r.task}` : ''}{r.text ? ` · ${r.text}` : ''}</div>
+						<div class="muted meta">{r.habit}{r.task && r.task !== r.habit ? ` · ${r.task}` : ''}{r.text ? ` · ${r.text}` : ''}</div>
 					</div>
-					{#if r.occId}<a class="small" href="/log/{r.occId}">Open</a>{/if}
+					{#if r.occId}<a class="quiet" href="/log/{r.occId}">Open</a>{/if}
 				</li>
 			{:else}
 				<li class="muted">No logs here.</li>
@@ -75,8 +75,5 @@
 		flex: 1;
 		min-width: 0;
 		overflow-wrap: anywhere;
-	}
-	.small {
-		font-size: var(--font-size-chip);
 	}
 </style>

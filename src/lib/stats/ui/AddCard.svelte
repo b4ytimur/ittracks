@@ -40,7 +40,7 @@
 					<li class="item">
 						<div class="grow">
 							<div>{c.title}</div>
-							<div class="muted small">{CHARTS[c.look.chart]}</div>
+							<div class="muted meta">{CHARTS[c.look.chart]}</div>
 						</div>
 						<button type="button" class="small link" onclick={() => onbuild(fresh(c))}>Change first</button>
 						<button type="button" class="small" onclick={() => onadd(fresh(c))}>Add</button>
@@ -99,8 +99,5 @@
 	.grow {
 		flex: 1;
 		min-width: 0;
-	}
-	.small {
-		font-size: var(--font-size-chip);
 	}
 </style>
