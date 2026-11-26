@@ -21,9 +21,6 @@ const now: Now = {
 	packs: [],
 	groupings: starterGroupings(),
 	startPage: 'Today',
-	template: 'Standard',
-	own: 0,
-	toCheck: 0,
 	hidden: [],
 	devices: 0,
 	habits: 0,
@@ -42,7 +39,6 @@ describe('the words of a setting', () => {
 		expect(words('daynote', { dayNote: true, journalOff: true })).toBe('On, and hidden while the Journal is off.');
 		expect(words('units')).toBe('Time, Weight in kg, Distance in km.');
 		expect(words('features', { hidden: ['levels', 'journal'] })).toBe('7 in use. Off: Levels, Journal.');
-		expect(words('template', { own: 1, toCheck: 2 })).toBe('Standard, with 1 change of your own. 2 things to check.');
 		expect(words('logout', { waiting: 1 })).toBe('1 change on this device is not saved yet.');
 	});
 	it('a vacation that is over is not planned', () => {

@@ -22,7 +22,6 @@
 	import Restore from '$lib/settings/Restore.svelte';
 	import { NO_ANSWER, saveSetting } from '$lib/settings/save';
 	import TaskTypes from '$lib/settings/TaskTypes.svelte';
-	import Template from '$lib/settings/Template.svelte';
 	import Units from '$lib/settings/Units.svelte';
 	import Vacations from '$lib/settings/Vacations.svelte';
 	import { showError, showToast } from '$lib/toast.svelte';
@@ -30,7 +29,7 @@
 	import EmptyState from '$lib/ui/EmptyState.svelte';
 	import GroupHeading from '$lib/ui/GroupHeading.svelte';
 	import { viewOp } from '$lib/viewclient';
-	import { FEATURES, PAGES, PAGE_LABEL, ownChanges, type FeatureKey, type Page } from '$lib/views';
+	import { FEATURES, PAGES, PAGE_LABEL, type FeatureKey, type Page } from '$lib/views';
 
 	let { data } = $props();
 
@@ -46,9 +45,6 @@
 			measures: data.stats.measures,
 			packs: data.packs,
 			startPage: PAGE_LABEL[views.startPage],
-			template: data.templates.find((t) => t.id === views.template)?.name ?? 'Custom',
-			own: ownChanges(views).length,
-			toCheck: data.viewIssues.length,
 			hidden: views.hidden,
 			devices: data.devices,
 			habits: data.habits.length,
@@ -248,8 +244,6 @@
 		<div class="chips" role="radiogroup" aria-label="Start page">
 			{#each PAGES as p (p)}<label class="toggle"><input type="radio" class="vh" name="startpage" checked={views.startPage === p} onchange={() => view('startpage', { startPage: p }, { startPage: views.startPage as Page }, `The app opens on ${PAGE_LABEL[p]}.`)} /><span data-reserve={PAGE_LABEL[p]}>{PAGE_LABEL[p]}</span></label>{/each}
 		</div>
-	{:else if id === 'template'}
-		<Template {views} templates={data.templates} issues={data.viewIssues} onfail={(why) => (why ? failed('template', why) : (problem.template = ''))} />
 	{:else if id === 'features'}
 		<div class="l-stack" style="--gap: var(--space-inline)">
 			{#each Object.keys(FEATURES) as FeatureKey[] as f (f)}

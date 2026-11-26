@@ -25,9 +25,6 @@ export interface Now {
 	packs: string[];
 	groupings: Grouping[];
 	startPage: string;
-	template: string;
-	own: number;
-	toCheck: number;
 	hidden: FeatureKey[];
 	devices: number;
 	habits: number;
@@ -108,7 +105,6 @@ export function settingGroups(s: Now): Group[] {
 			title: 'Look',
 			lines: [
 				{ id: 'startpage', label: 'Start page', words: `${s.startPage}.`, says: 'What opens when you start the app from its icon, a bookmark or the address bar.', also: 'open home' },
-				{ id: 'template', label: 'View template', words: `${s.template}${s.own ? `, with ${count(s.own, 'change')} of your own` : ''}.${s.toCheck ? ` ${count(s.toCheck, 'thing', 'things')} to check.` : ''}`, says: 'Sets what each page shows. Saved views, your own order, the start page and what each page opens with are kept when you switch.', also: 'layout minimal standard routine views' },
 				{ id: 'features', label: 'Features', words: s.hidden.length ? `${used} in use. Off: ${s.hidden.map(featureName).join(', ')}.` : 'All in use.', says: 'One that is off hides its controls everywhere. What you set in it is kept, and is back when you turn it on.', also: `hide switch off ${Object.values(FEATURES).join(' ')}` }
 			]
 		},
@@ -151,8 +147,8 @@ export function settingGroups(s: Now): Group[] {
 /** What is set where it acts: the place, and the way there. */
 export const ELSEWHERE: { label: string; place: string; href: string; also: string }[] = [
 	{ label: 'Areas', place: 'Habits, on their headings in Edit', href: '/habits', also: 'colours groups' },
-	{ label: 'Today’s sections and layout', place: 'Today, in Edit', href: '/', also: 'widgets lines order' },
-	{ label: 'Filters, sorts and saved views', place: 'On each page', href: '/habits', also: 'views group' },
+	{ label: 'What a page shows, and its views', place: 'The sentence under each page’s title', href: '/', also: 'views filters sort group layout sections widgets lines rows done customize' },
+	{ label: 'View templates', place: 'Today: the view’s name, then Start from', href: '/', also: 'template minimal standard routine week first quitter data nerd starter' },
 	{ label: 'Stats boards', place: 'Stats, the boards’ ⋯', href: '/stats', also: 'cards open' },
 	{ label: 'App icon shortcuts', place: 'On a habit’s page', href: '/habits', also: 'home screen pinned' },
 	{ label: 'Identities', place: 'Identities', href: '/identities', also: 'who you want to be' }

@@ -22,7 +22,6 @@ import { userToday } from '$lib/server/today';
 import { ownTypes } from '$lib/server/settings-patch';
 import { PLAIN_TASK_TYPES } from '$lib/task-types';
 import { unitWord } from '$lib/units';
-import { TEMPLATES } from '$lib/views';
 import type { Actions, PageServerLoad } from './$types';
 
 /** The number fields each habit can take a value for, so the link builder can offer them. */
@@ -99,7 +98,6 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		vacations: listVacations(accountId),
 		views,
 		viewIssues: checkViews(views, { ranges: ranges.length }),
-		templates: TEMPLATES.map(({ id, name, blurb, summary }) => ({ id, name, blurb, summary })),
 		stats: { measures: s.measures, fields: formulaFields(accountId), suggestions: suggestions(seedFields(accountId)) },
 		vapidKey: publicKey(),
 		devices: subscriptionCount(accountId),
