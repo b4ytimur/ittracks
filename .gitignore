@@ -1,28 +1,57 @@
-node_modules
+# What never goes into this repository: personal data, secrets, machine-specific files
+# and build output. Note: .gitignore only decides which FILES are committed. The name and
+# email on each commit come from `git config user.email`; use your GitHub noreply address.
 
-# Output
+# ---------- Dependencies and build output ----------
+node_modules
 .output
 .vercel
 .netlify
 .wrangler
 /.svelte-kit
 /build
+/dist
+*.tsbuildinfo
 
-# OS
-.DS_Store
-Thumbs.db
+# ---------- Caches ----------
+.cache/
+.vite/
+.eslintcache
+.stylelintcache
+.npm/
 
-# Env
+# ---------- Tests and coverage ----------
+coverage/
+.nyc_output/
+*.lcov
+test-results/
+playwright-report/
+blob-report/
+
+# ---------- Logs ----------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------- Environment and secrets ----------
 .env
 .env.*
 !.env.example
 !.env.test
+*.local
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+.secrets/
+secrets/
 
-# Vite
-vite.config.js.timestamp-*
-vite.config.ts.timestamp-*
-
-# Local database, wherever it is put (DATABASE_PATH can point anywhere), and its backups
+# ---------- Local databases, wherever DATABASE_PATH points, and backups ----------
 /data
 *.db
 *.db-wal
@@ -34,5 +63,64 @@ vite.config.ts.timestamp-*
 *.backup
 /backups
 
-# Local Claude Code settings (can hold machine paths and allowed commands)
+# ---------- Your own data exported from the app ----------
+ittracks-export*
+ittracks-journal*
+# Stats card CSVs are named after the card; none belong at the top of the repo
+/*.csv
+
+# ---------- AI assistant config (can hold API keys and machine paths) ----------
 .claude/settings.local.json
+CLAUDE.local.md
+.mcp.json
+
+# ---------- Local overrides ----------
+docker-compose.override.yml
+compose.override.yml
+
+# ---------- Editors ----------
+.vscode/
+.idea/
+.fleet/
+.zed/
+.history/
+*.code-workspace
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+\#*\#
+.#*
+
+# ---------- Operating systems ----------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+.TemporaryItems
+.DocumentRevisions-V100
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+# Linux
+.directory
+.Trash-*
+.nfs*
+
+# ---------- Leftovers from merges, patches and scratch work ----------
+*.orig
+*.rej
+*.tmp
+*.temp
+
+# ---------- Vite ----------
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
