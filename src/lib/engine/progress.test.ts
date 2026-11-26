@@ -86,4 +86,27 @@ describe('progress', () => {
 		], 'due');
 		expect(p).toEqual({ kind: 'steps', done: 2, total: 3 });
 	});
+
+	describe('a Slot swapped for the day', () => {
+		// Bench press's Slot now holds Incline; its targets are still Bench press's fields.
+		const incline: ProgressSlot = { path: 's-bench', taskId: 'incline', metrics: [{ id: 'ikg', name: 'Weight', type: 'number', unit: 'kg', repeats: true, step: 2.5 }], kids: 0, targets: { kg: 80 } };
+		const squat = yesNo('squat');
+
+		it('sets done with the old Task before the swap count for the Slot', () => {
+			const p = progressOf([incline, squat], [{ taskId: 'bench', path: 's-bench', values: { kg: 60 } }, { taskId: 'squat', path: 's-squat', values: { done: true } }], 'due');
+			expect(p).toEqual({ kind: 'steps', done: 2, total: 2 });
+			expect(isPartial(p)).toBe(false);
+		});
+
+		it('values a part removed left at another path do not', () => {
+			const p = progressOf([incline, squat], [{ taskId: 'bench', path: 's-gone', values: { kg: 60 } }, { taskId: 'squat', path: 's-squat', values: { done: true } }], 'due');
+			expect(p).toEqual({ kind: 'steps', done: 1, total: 2 });
+		});
+
+		it('the old Task\'s targets are never a number to reach for the new one', () => {
+			// Glasses of water swapped for tea: the Slot's target is for water's field, so tea has nothing to reach.
+			const tea: ProgressSlot = { ...water, taskId: 'tea', metrics: [{ id: 'cups', name: 'Cups', type: 'count', unit: '', repeats: false, step: 1 }] };
+			expect(progressOf([tea], [{ taskId: 'tea', path: 's-water', values: { cups: 2, _summary: true } }], 'done')).toBeNull();
+		});
+	});
 });

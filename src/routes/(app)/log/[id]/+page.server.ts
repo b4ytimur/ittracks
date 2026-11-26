@@ -9,13 +9,14 @@ import { currentForm } from '$lib/server/habit-patch';
 import { ensurePicks, lastEntries, recount, userToday } from '$lib/server/today';
 import { finishAs } from '$lib/server/progress';
 import { PATH_RE, place, startsRound } from '$lib/engine/parts';
+import { goneFrom } from '$lib/log/places';
 import { partIdsIn, plannedSlots, positionsOf } from '$lib/server/positions';
 import { getSettings, getUnits } from '$lib/server/settings';
 import { recapFor } from '$lib/server/stats';
 import { planOfToday, replanToday, windowFor } from '$lib/server/backfill';
 import { NOTE_MAX, type ScheduleForm } from '$lib/forms';
 import { ActionError, appActor } from '$lib/server/core/actor';
-import { rerollSlot, swapSlot } from '$lib/server/day-plan';
+import { ownTask, rerollSlot, swapSlot } from '$lib/server/day-plan';
 import { emit } from '$lib/server/core/events';
 import { doneOcc, leftOpen, reopenOcc, skipOcc, undoClears } from '$lib/server/core/log';
 import { routineDay, routineSteps, undoRoutine, withRoutineUndo } from '$lib/server/routine-day';
@@ -35,6 +36,8 @@ export interface LogTask {
 	roundHead: string | null;
 	/** An auto-filled Slot: can be rerolled. Only a Slot's own Task can be rerolled or swapped. */
 	open: boolean;
+	/** The Task its Slot has in the plan, without this log's swap: null for an auto-filled one. */
+	own: string | null;
 	sets: number | null;
 	targets: Record<string, number>;
 	minTargets: Record<string, number>;
@@ -169,6 +172,7 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 			kids: p.kids,
 			roundHead: head,
 			open: p.depth === 0 && !!s?.fillRule,
+			own: ownTask(o.occ, p.slotId, s),
 			sets: p.sets,
 			targets: p.targets ?? {},
 			minTargets: p.minTargets ?? {},
@@ -184,14 +188,15 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 	for (const s of plan)
 		if (!s.taskId) {
 			const at = items.findIndex((it) => plan.findIndex((x) => x.slotId === it.slotId) > plan.indexOf(s));
-			const empty: LogTask = { path: s.slotId, slotId: s.slotId, depth: 0, kids: 0, roundHead: null, open: !!slots.find((x) => x.id === s.slotId)?.fillRule, sets: s.sets, targets: {}, minTargets: {}, stretchTargets: {}, task: null, saved: [], previous: [] };
+			const empty: LogTask = { path: s.slotId, slotId: s.slotId, depth: 0, kids: 0, roundHead: null, open: !!slots.find((x) => x.id === s.slotId)?.fillRule, own: null, sets: s.sets, targets: {}, minTargets: {}, stretchTargets: {}, task: null, saved: [], previous: [] };
 			if (at < 0) items.push(empty);
 			else items.splice(at, 0, empty);
 		}
 	// What this log holds that no place in it shows now (a part removed, a Slot swapped):
 	// sent back with every save, so it is never lost.
 	const orphans = placed.orphans.map((e) => ({ taskId: e.taskId, path: e.path, values: e.values }));
-	const orphanNames = [...new Set(orphans.map((e) => e.taskId))]
+	// Done in a Slot before it was swapped is shown in that Slot: only what has no place shown is gone from the habit.
+	const orphanNames = [...new Set(goneFrom(orphans, items).map((e) => e.taskId))]
 		.map((id) => db.select({ name: task.name }).from(task).where(eq(task.id, id)).get()?.name)
 		.filter((n): n is string => !!n);
 
@@ -230,7 +235,7 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 			o.occ.date
 		),
 		library: db
-			.select({ id: task.id, name: task.name, archived: task.archived })
+			.select({ id: task.id, name: task.name, archived: task.archived, rowOne: task.rowOne, rowMany: task.rowMany })
 			.from(task)
 			.where(and(eq(task.accountId, accountId), isNull(task.parentTaskId), isNull(task.deleteAfter)))
 			.orderBy(asc(task.name))

@@ -19,7 +19,7 @@
 	import { enqueue, isOffline, save, sendAhead } from '$lib/outbox.svelte';
 	import { postAction, showError, showToast, undoWith } from '$lib/toast.svelte';
 	import { differs, revOf, type LogContent } from '$lib/logrev';
-	import { besides, fromDraft, placeKey, type Logged } from '$lib/log/places';
+	import { besides, doneBefore, doneLine, fromDraft, placeKey, setsToDo, swapText, type Logged } from '$lib/log/places';
 	import NoteBox from '$lib/NoteBox.svelte';
 	import Markdown from '$lib/Markdown.svelte';
 	import { starterFor, untouched } from '$lib/journal';
@@ -91,7 +91,9 @@
 		const single = t.metrics.filter((m) => !m.repeats);
 		const prev = it.previous.filter((v) => !isSummary(v));
 		const prevSummary = it.previous.find(isSummary) ?? {};
-		const count = repeating.length ? (it.sets ?? (prev.length || 1)) : 0;
+		// Swapped in after sets were done with another Task: only the sets still to do. Read when the place starts.
+		const before = untrack(() => setsBefore(it));
+		const count = repeating.length ? setsToDo(it.sets ?? (prev.length || 1), before) : 0;
 		const sets = Array.from({ length: count }, (_, i) => ({
 			done: false,
 			values: Object.fromEntries(
@@ -152,6 +154,12 @@
 		}
 	};
 
+	/**
+	 * What each place had logged when it was last shown, by place, so it is saved with the log when a
+	 * swap, Pick another or a reload takes the place away before that reached the server: a past day
+	 * reaches it only on Finish. Kept with the draft.
+	 */
+	let held = $state.raw<Record<string, Logged[]>>({});
 	/** What is being logged, by place. A place that goes keeps its values here, in case it comes back. */
 	const places = $state<Record<string, ItemState>>(untrack(() => Object.fromEntries(data.items.map((it) => [placeKey(it), initial(it)]))));
 	/** The prefill, to show which values differ from it. */
@@ -170,12 +178,6 @@
 	});
 	/** The same, in the order the log shows them. */
 	const log = $derived(data.items.map((it) => places[placeKey(it)] ?? initial(it)));
-	/**
-	 * What each place had logged when it was last shown, by place, so it is saved with the log when a
-	 * swap, Pick another or a reload takes the place away before that reached the server: a past day
-	 * reaches it only on Finish. Kept with the draft.
-	 */
-	let held = $state.raw<Record<string, Logged[]>>({});
 	const baseOf = (i: number): ItemState | undefined => base[placeKey(data.items[i])];
 	let notes = $state(untrack(() => data.occurrence.notes));
 	let level = $state<'minimum' | 'target' | 'stretch'>(untrack(() => data.occurrence.level));
@@ -412,9 +414,23 @@
 	function payload(finish: boolean, stay = false) {
 		const entries = data.items.flatMap((it, i) => entriesAt(it, i, finish));
 		// Values for places this log no longer shows go back as they were.
-		entries.push(...besides(held, data.items, data.orphans.map((e) => ({ taskId: e.taskId, path: e.path ?? null, values: e.values }))));
+		entries.push(...elsewhere());
 		return JSON.stringify({ finish, stay, notes, entries, level, back: data.back, bases });
 	}
+	/** What the log holds besides the places it shows: a Slot's Task before a swap, a part removed. */
+	function elsewhere() {
+		return besides(held, data.items, data.orphans.map((e) => ({ taskId: e.taskId, path: e.path ?? null, values: e.values })));
+	}
+	/** Sets done here with another Task before its Slot was swapped. Hoisted: the places start with it. */
+	function setsBefore(it: Item) {
+		return doneBefore(elsewhere(), it).reduce((n, d) => n + d.sets, 0);
+	}
+	/** Done here with another Task before its Slot was swapped, a line each: "Bench press · 2 sets done". */
+	const doneLines = (it: Item) =>
+		doneBefore(elsewhere(), it).map(({ taskId, sets }) => {
+			const t = data.library.find((l) => l.id === taskId);
+			return doneLine(t?.name ?? 'Another Task', sets, t?.rowOne ?? 'set', t?.rowMany ?? 'sets');
+		});
 	/** What gets saved at a place. Each value says where it sits, so the same Task in two places keeps its own. */
 	function entriesAt(it: Item, i: number, finish: boolean): Logged[] {
 		const path = it.path;
@@ -547,8 +563,10 @@
 	const runPlaces = $derived(data.items.flatMap((it, i) => (isPlace(i) ? [{ key: placeKey(it), sets: rowsAt(i), i }] : [])));
 	const row = $derived(stage === 'run' ? cursor(runPlaces, at, here) : at);
 	const setsLeft = $derived(runPlaces.some((p) => p.sets.some((x) => !x.done)));
-	const setsDone = $derived(runPlaces.reduce((n, p) => n + p.sets.filter((x) => x.done).length, 0));
-	const setsAll = $derived(runPlaces.reduce((n, p) => n + p.sets.length, 0));
+	/** Sets done before a swap are still this log's: a swap never takes them off the count, and Finish saves them. */
+	const doneElsewhere = $derived(data.items.reduce((n, it) => n + setsBefore(it), 0));
+	const setsDone = $derived(doneElsewhere + runPlaces.reduce((n, p) => n + p.sets.filter((x) => x.done).length, 0));
+	const setsAll = $derived(doneElsewhere + runPlaces.reduce((n, p) => n + p.sets.length, 0));
 	/** The Tasks' own word for their rows, when they share one. */
 	const shared = (words: string[], or: string) => (new Set(words).size === 1 ? words[0] : or);
 	const oneWord = $derived(shared(runPlaces.map((p) => wordsAt(p.i).one), 'row'));
@@ -914,14 +932,43 @@
 		if (task && task === it.task?.id) return;
 		const first = await saveFirst();
 		if (first.kind === 'refused') return void showError(`${first.why} Nothing was swapped.`);
-		const a = await save(`/log/${data.occurrence.id}?/${task ? 'swap' : 'reroll'}`, task ? [['slot', it.slotId], ['task', task]] : [['slot', it.slotId]], data.habitName);
+		const url = `/log/${data.occurrence.id}?/swap`;
+		const label = data.habitName;
+		const a = await save(task ? url : `/log/${data.occurrence.id}?/reroll`, task ? [['slot', it.slotId], ['task', task]] : [['slot', it.slotId]], label);
 		if (a.kind === 'refused') return void showError(a.why);
+		const was = it.task;
+		const how = !task ? 'reroll' : task === it.own ? 'back' : 'swap';
+		const scope = data.past ? `${dateLabel} only` : 'today only';
+		// Undo swaps back to the Task it showed before, saving what is ticked first as a swap does.
+		const undo = was
+			? async () => {
+					if (mounted) {
+						const first = await saveFirst();
+						if (first.kind === 'refused') return `${first.why} Nothing was swapped.`;
+					}
+					const b = await save(url, [['slot', it.slotId], ['task', was.id]], label);
+					if (b.kind === 'refused') return b.why;
+					// The place it puts back is the one open again.
+					if (mounted && b.kind === 'saved') {
+						here = placeKey({ path: it.path, task: was });
+						at = null;
+					}
+					return true;
+				}
+			: undefined;
 		if (a.kind === 'later') {
 			const name = data.library.find((l) => l.id === task)?.name;
-			const was = it.task?.name;
-			return void showToast(`${name && was ? `Using ${name} instead of ${was}` : 'Picking another Task'}, ${data.past ? `${dateLabel} only` : 'today only'}. It will sync when you're back online.`);
+			return void showToast(`${name ? swapText(was?.name ?? null, name, how, scope) : `Picking another Task, ${scope}.`} It will sync when you're back online.`, undo);
 		}
 		await invalidateAll();
+		const now = data.items.find((x) => x.slotId === it.slotId && x.depth === 0);
+		showToast(swapText(was?.name ?? null, now?.task?.name ?? 'another Task', how, scope), undo);
+		if (!now) return;
+		// The Task swapped in is the one open, and focus goes back to its ⋯, where the swap was made.
+		here = placeKey(now);
+		at = null;
+		await tick();
+		document.querySelector<HTMLElement>(`[data-place="${CSS.escape(here)}"] .lg-more`)?.focus();
 	}
 	let howTo = $state<string | null>(null);
 	let finishButton = $state<HTMLButtonElement>();
@@ -1090,6 +1137,7 @@
 
 {#snippet extraOf(it: Item)}
 	{@const t = it.task}
+	{#each doneLines(it) as line}<p class="meta-line">{line}</p>{/each}
 	{#if swapping === placeKey(it)}
 		<form method="POST" action="?/swap" class="row lg-swap" onsubmit={(e) => { e.preventDefault(); void swapTask(it, String(new FormData(e.currentTarget).get('task'))); }}>
 			<input type="hidden" name="slot" value={it.slotId} />

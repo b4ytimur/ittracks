@@ -4,7 +4,7 @@
 // (core/plan.ts, and setup's progression change) all call these, so each works the same everywhere.
 import { and, eq, isNull } from 'drizzle-orm';
 import { db } from './db';
-import { habit, occurrence, prepTick, slot, task, variant } from './db/schema';
+import { habit, occurrence, prepTick, slot, task, variant, type SlotGoals } from './db/schema';
 import { candidates, createOccurrence, ensurePicks } from './today';
 import { getGroups } from './settings';
 import { keepGoals, stepsOf } from './progress';
@@ -14,7 +14,7 @@ import { pickTask, type FillRule } from '$lib/engine/fill';
 import { ActionError, type Actor } from './core/actor';
 import { emit } from './core/events';
 
-type OccLike = { id: string; habitId: string; date: string; variantId: string | null };
+type OccLike = { id: string; habitId: string; date: string; variantId: string | null; goals: Record<string, SlotGoals> | null };
 
 /** Tick (or untick) a prep step for tomorrow. Returns tomorrow's date. */
 export function tickPrep(actor: Actor, h: { id: string; prep: string[] | null }, item: string, done: boolean, today: string): string {
@@ -48,10 +48,18 @@ function slotOf(occ: OccLike, slotId: string) {
 	return s;
 }
 
-function setPick(actor: Actor, occ: OccLike, slotId: string, taskId: string, what: 'swap' | 'reroll') {
-	const picks = { ...(ensurePicks(occ.id) ?? {}), [slotId]: taskId };
+/**
+ * The Task a Slot has in a day's plan, without that day's swap: the one kept with the log when the
+ * plan changed since (see keepGoals), else the Slot's own. Null for an auto-filled Slot.
+ */
+export const ownTask = (occ: Pick<OccLike, 'goals'>, slotId: string, s: { taskId: string | null } | undefined) => (occ.goals?.[slotId] ?? s)?.taskId ?? null;
+
+/** Use a Task in a Slot for this day. Back to the Slot's own Task there is no pick, so a later change to the plan reaches it. */
+function setPick(actor: Actor, occ: OccLike, s: typeof slot.$inferSelect, taskId: string, what: 'swap' | 'reroll') {
+	const { [s.id]: _, ...rest } = ensurePicks(occ.id) ?? {};
+	const picks = taskId === ownTask(occ, s.id, s) ? rest : { ...rest, [s.id]: taskId };
 	db.update(occurrence).set({ picks }).where(eq(occurrence.id, occ.id)).run();
-	emit(actor, 'plan.changed', { habitId: occ.habitId, date: occ.date, data: { what, occurrenceId: occ.id, slotId, taskId } });
+	emit(actor, 'plan.changed', { habitId: occ.habitId, date: occ.date, data: { what, occurrenceId: occ.id, slotId: s.id, taskId } });
 }
 
 /** Pick a different Task for an auto-filled Slot, for this day only. Returns the Task picked. */
@@ -68,7 +76,7 @@ export function rerollSlot(actor: Actor, occ: OccLike, slotId: string): string {
 	const used = new Set([...Object.values(ensurePicks(occ.id) ?? {}), ...fixed]);
 	const next = pickTask(s.fillRule as FillRule, candidates(actor.accountId), getGroups(actor.accountId).rank, used);
 	if (!next) throw new ActionError('invalid', 'No other Task matches this slot.');
-	setPick(actor, occ, s.id, next, 'reroll');
+	setPick(actor, occ, s, next, 'reroll');
 	return next;
 }
 
@@ -81,7 +89,7 @@ export function swapSlot(actor: Actor, occ: OccLike, slotId: string, taskId: str
 		.where(and(eq(task.id, taskId), eq(task.accountId, actor.accountId), isNull(task.parentTaskId)))
 		.get();
 	if (!t) throw new ActionError('not_found', 'No such Task');
-	setPick(actor, occ, s.id, t.id, 'swap');
+	setPick(actor, occ, s, t.id, 'swap');
 }
 
 /** Raise: Target and Stretch go up in every Slot by the habit's progression; logs before keep what they aimed for. */
