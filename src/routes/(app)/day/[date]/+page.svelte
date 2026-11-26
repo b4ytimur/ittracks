@@ -5,6 +5,7 @@
 	import { page } from '$app/state';
 	import type { ActionResult, SubmitFunction } from '@sveltejs/kit';
 	import { onMount, untrack } from 'svelte';
+	import { MediaQuery } from 'svelte/reactivity';
 	import { showToast, undoWith } from '$lib/toast.svelte';
 	import { queueable } from '$lib/queueable';
 	import { addDays } from '$lib/engine/dates';
@@ -31,6 +32,21 @@
 	const canLog = $derived(data.window === 'ok');
 	const back = $derived(encodeURIComponent(`/day/${data.date}`));
 	const ago = $derived(Math.round((Date.parse(data.today) - Date.parse(data.date)) / 86_400_000));
+	/** Today travels (option 2 of "Other days"): the day's name while it is in the last week, its date before that. */
+	const titleOf = $derived(ago === 1 ? 'Yesterday' : ago < 7 ? nice(data.date, { weekday: 'long' }) : nice(data.date, { day: 'numeric', month: 'long' }));
+	const wide = new MediaQuery('min-width: 64rem');
+	// A sideways swipe on a phone moves a day: to the right is the day before, to the left the day after.
+	let start: { x: number; y: number } | null = null;
+	const touch = (e: TouchEvent) => (start = { x: e.touches[0].clientX, y: e.touches[0].clientY });
+	function swipe(e: TouchEvent) {
+		if (!start) return;
+		const dx = e.changedTouches[0].clientX - start.x;
+		const dy = e.changedTouches[0].clientY - start.y;
+		start = null;
+		const on = e.target instanceof Element ? e.target : null;
+		if (Math.abs(dx) < 80 || Math.abs(dy) > Math.abs(dx) / 2 || on?.closest('input, select, textarea, .menu')) return;
+		jump(dx > 0 ? prev : next);
+	}
 
 	/** The Variant picked per habit, for habits with more than one. */
 	let chosen = $state<Record<string, string>>({});
@@ -126,19 +142,21 @@
 
 <svelte:head><title>{short(data.date)} · ittracks</title></svelte:head>
 
-<EditChrome
-	title={nice(data.date)}
-	back={{ href: '/history', label: 'History' }}
-	modes={['use']}
-	hints={{ use: [ago === 1 ? 'Yesterday' : `${ago} days ago`, count.of ? `${count.done} of ${count.of} done` : ''].filter(Boolean).join(' · ') }}
-/>
+<!-- A swipe is a second way to move a day; the seven days are the first, for every pointer and the keyboard. -->
+<svelte:window ontouchstart={touch} ontouchend={swipe} />
+<div class="travels">
+<EditChrome title={titleOf} modes={['use']}>
+	{#snippet useHint()}
+		<span class="day-line"><span>{nice(data.date, { day: 'numeric', month: 'long' })} · {ago === 1 ? 'yesterday' : `${ago} days ago`}</span>{#if count.of}<span class="num">{count.done} of {count.of} done</span>{/if}</span>
+	{/snippet}
+	{#snippet actions()}<a class="button" href="/">Back to today</a>{/snippet}
+</EditChrome>
 
-<nav class="row daynav" aria-label="Pick a day">
-	<a class="button" href="/day/{prev}" aria-label="The day before, {short(prev)}">{short(prev)}{data.prevUnlogged ? ` · ${data.prevUnlogged} not logged` : ''}</a>
-	<input class="grow" type="date" value={data.date} max={yesterday} min={data.earliest ?? undefined} aria-label="Go to a day" onchange={(e) => jump(e.currentTarget.value)} />
-	{#if next < data.today}<a class="button" href="/day/{next}" aria-label="The day after, {short(next)}">{short(next)}</a>{:else}<a class="button" href="/">Today</a>{/if}
-</nav>
+{#if !wide.current}{@render seven()}{/if}
 
+{#if canLog}
+	<p class="notice travel-note" role="note"><span class="notice-text">You are on {nice(data.date)}. What you log counts for that day.</span></p>
+{/if}
 {#if data.window === 'off' || data.window === 'tooOld'}
 	<div class="notice">
 		<span class="notice-text"
@@ -155,7 +173,9 @@
 	{#key data.date}<DayNote date={data.date} text={data.dayNote} />{/key}
 {/if}
 
-<GroupHeading title="Due that day" count={count.of ? `${count.done} of ${count.of} done` : undefined} />
+<div class="today-cols">
+<div class="today-day">
+<GroupHeading title="Due that day" />
 {#if data.due.length}{@render list(sorted, 'Due that day')}{:else}<p class="empty-range">Nothing was due this day.</p>{/if}
 
 {#if data.tracking.length}
@@ -187,8 +207,11 @@
 	</EditableList>
 {/if}
 
+</div>
+<div class="today-side">
+{#if wide.current}<GroupHeading title="Last seven days" />{@render seven()}{/if}
 {#if data.breaking.length}
-	<GroupHeading title="Breaking" count={String(data.breaking.length)} />
+	<GroupHeading title={data.breaking.some((b) => b.limit) ? 'Breaking and limiting' : 'Breaking'} />
 	<EditableList items={data.breaking} key={(b) => b.habitId} label={(b) => b.name} mode="use" rowCard ariaLabel="Breaking">
 		{#snippet row(b)}
 			<a class="name" id="h-{b.habitId}" href="/habits/{b.habitId}/chain">{b.name}</a>
@@ -218,6 +241,25 @@
 		{#snippet actions(b)}<button type="button" class="quiet hit" aria-expanded={openSlip === b.habitId} aria-label="{b.limit ? 'Log one' : 'Log a slip'}: {b.name}" onclick={() => (openSlip = openSlip === b.habitId ? null : b.habitId)}>{b.limit ? 'Log one…' : 'Log a slip…'}</button>{/snippet}
 	</EditableList>
 {/if}
+
+</div>
+</div>
+</div>
+
+{#snippet seven()}
+	<div class="seven">
+		<div class="day-week" role="group" aria-label="Seven days around {short(data.date)}">
+			{#each data.week as d (d.date)}
+				{@const mark = d.of ? (d.done >= d.of ? 'done' : d.done ? 'partial' : d.date === data.today ? 'due' : 'missed') : null}
+				{@const words = `${short(d.date)}: ${d.of ? `${d.done} of ${d.of} done` : 'nothing due'}`}
+				<a class="day-cell" class:chosen={d.date === data.date} href={d.date === data.today ? '/' : `/day/${d.date}`} aria-current={d.date === data.date ? 'page' : undefined} aria-label={d.date === data.date ? `${words}, the day you are on` : d.date === data.today ? `${words}. Back to today.` : words}
+					><span class="note">{nice(d.date, { weekday: 'narrow' })}</span><i data-day={mark} aria-current={d.date === data.today ? 'date' : undefined}></i><span class="note num">{Number(d.date.slice(8))}</span></a
+				>
+			{/each}
+		</div>
+		<label class="another meta">Another day <input type="date" value={data.date} max={yesterday} min={data.earliest ?? undefined} onchange={(e) => jump(e.currentTarget.value)} /></label>
+	</div>
+{/snippet}
 
 {#snippet list(items: Item[], name: string)}
 	<EditableList {items} key={(x) => x.habitId} label={(x) => x.name} mode="use" rowCard ariaLabel={name} itemClass={(x) => (x.occurrence?.status === 'done' ? 'done' : x.occurrence?.status === 'skipped' ? 'skipped' : '')}>
@@ -267,12 +309,58 @@
 	p {
 		margin: 0;
 	}
-	.daynav {
+	.day-line {
+		display: flex;
 		align-items: center;
-		margin-block: var(--space-inline) var(--space-group);
+		justify-content: space-between;
+		gap: var(--space-inline);
 	}
-	.daynav input {
-		min-width: 9rem;
+	.day-line .num {
+		color: var(--ink);
+	}
+	.travel-note {
+		margin-block: var(--space-inline);
+	}
+	.seven {
+		margin-block: var(--space-inline) var(--space-group);
+		padding: var(--space-inline);
+		border: 1px solid var(--line);
+		border-radius: var(--radius-card);
+		background: var(--surface-raised);
+	}
+	/* The day you are on: the chosen look (ink inset, 600), as every chooser has it. */
+	.seven .day-cell.chosen {
+		border-radius: var(--radius-inset);
+		box-shadow: inset 0 0 0 var(--chosen-width) var(--line-chosen, var(--ink));
+	}
+	.seven .day-cell.chosen > .note {
+		color: var(--ink);
+		font-weight: 600;
+	}
+	.another {
+		display: flex;
+		align-items: center;
+		gap: var(--space-inline);
+		margin: var(--space-inline) 0 0;
+		color: var(--ink-muted);
+	}
+	.another input {
+		width: auto;
+		margin: 0;
+	}
+	.today-cols {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+	}
+	@media (min-width: 64rem) {
+		:global(.main:has(.travels)) {
+			max-width: 1016px;
+		}
+		.today-cols {
+			grid-template-columns: minmax(0, 640fr) minmax(0, 344fr);
+			column-gap: calc(2 * var(--space-group));
+			align-items: start;
+		}
 	}
 	.slip form {
 		flex: none;

@@ -564,7 +564,7 @@
 		{@const mark = markOf(d)}
 		{@const words = `${shortDate(d.date)}: ${d.of ? `${d.date === data.today ? doneCount : d.done} of ${d.date === data.today ? dueLeaves.length : d.of} done` : 'nothing due'}`}
 		{#if d.date < data.today && data.canBackfill}
-			<a class="day-cell" href="/day/{d.date}" aria-label="{words}. Log it."><span class="note">{weekdayShort(d.date)}</span><i data-day={mark}></i><span class="note num">{Number(d.date.slice(8))}</span></a>
+			<a class="day-cell" href="/day/{d.date}" aria-label="{words}. Go to that day."><span class="note">{weekdayShort(d.date)}</span><i data-day={mark}></i><span class="note num">{Number(d.date.slice(8))}</span></a>
 		{:else}
 			<span class="day-cell" aria-current={d.date === data.today ? 'date' : undefined} aria-label={words} role="img"><span class="note">{weekdayShort(d.date)}</span><i data-day={mark}></i><span class="note num">{Number(d.date.slice(8))}</span></span>
 		{/if}

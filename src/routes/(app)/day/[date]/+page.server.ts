@@ -6,7 +6,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { habit, occurrence, slip } from '$lib/server/db/schema';
 import { ownedHabit } from '$lib/server/owned';
-import { recount, userToday } from '$lib/server/today';
+import { recount, userToday, weekStrip } from '$lib/server/today';
 import {
 	loadDay,
 	occurrenceOn,
@@ -61,7 +61,9 @@ export const load: PageServerLoad = ({ locals, params, cookies }) => {
 		/** J3: the day note, when it is on and the Journal feature is too. */
 		dayNote: settings.dayNote && !isHidden(getViews(accountId), 'journal') ? getDayNote(accountId, date) : null,
 		// The day before, for the "previous day" link: still worth a look if it has gaps.
-		prevUnlogged: unloggedOn(accountId, addDays(date, -1)).length
+		prevUnlogged: unloggedOn(accountId, addDays(date, -1)).length,
+		/** Seven days around this one, ending today at the latest: the way to travel on (option 2 of "Other days"). */
+		week: weekStrip(accountId, addDays(date, 3) < today ? addDays(date, 3) : today)
 	};
 };
 
