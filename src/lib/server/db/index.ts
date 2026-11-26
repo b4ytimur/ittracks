@@ -6,10 +6,11 @@ import { env } from '$env/dynamic/private';
 import * as schema from './schema';
 
 // Tests get a fresh database in memory, never the real one in ./data.
-const path = env.DATABASE_PATH ?? (process.env.VITEST ? ':memory:' : './data/ittracks.db');
-if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
+export const databasePath = env.DATABASE_PATH ?? (process.env.VITEST ? ':memory:' : './data/ittracks.db');
+if (databasePath !== ':memory:') mkdirSync(dirname(databasePath), { recursive: true });
 
-const sqlite = new Database(path);
+/** The connection itself, for what Drizzle doesn't do, such as a backup. */
+export const sqlite = new Database(databasePath);
 sqlite.pragma('journal_mode = WAL');
 sqlite.pragma('foreign_keys = ON');
 

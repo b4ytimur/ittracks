@@ -88,6 +88,8 @@ To install it on your phone, open it in the browser and choose "Add to Home Scre
 
 Run it from a normal folder (not one reached through a symlink), so that Docker Desktop creates `./data` on your computer. Creating the folder first with `mkdir data` also works.
 
+Settings → Data → **Automatic backups** writes a consistent copy of the whole database to a folder on the server every hour, 6 hours, day or week, and keeps the newest copies you ask for. In Docker the default folder is `/data/backups`, which is `./data/backups` next to `docker-compose.yml`; another drive has to be mounted into the container first. See [Private server: Data and backups](docs/private-server.md#data-and-backups).
+
 ### Example data
 
 To try the app without setting everything up, create your account and then add example habits (a gym rotation, a Spanish checklist with a timer, a deep-work target and two break habits), with a few weeks of history:

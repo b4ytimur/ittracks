@@ -134,7 +134,25 @@ Claude on the web and in the phone apps can't reach a tailnet. Don't use Tailsca
 
 Everything is in the `data` folder next to `docker-compose.yml`. `ittracks.db` holds your habits, logs, notes and settings, your login and keys, and the server's push keys. While the app runs, `ittracks.db-wal` and `ittracks.db-shm` sit next to it.
 
-The app writes to the database while it runs, so a copy of `ittracks.db` alone, taken then, can miss changes or be broken. Back up one of these two ways.
+The app writes to the database while it runs, so a copy of `ittracks.db` alone, taken then, can miss changes or be broken. Let the app make its copies, or copy by hand one of the two ways below.
+
+### Automatic backups
+
+In **Settings → Data → Automatic backups**, pick how often and how many copies to keep. The default folder, `/data/backups`, is `data/backups` next to `docker-compose.yml`. Each copy is a whole database, such as `ittracks-backup-2026-11-26T15-13-04Z.db`. See [Settings](settings.md#automatic-backups) for the rules.
+
+`data/backups` is on the same disk as the database, so it helps with a bad update or a mistake, not with a dead disk. For that, put the copies on another drive. The app runs in a container and sees only folders mounted into it, so mount the drive's folder first. In `docker-compose.yml`, under `volumes:`, add a line with the folder on the server, a colon, and the path the app will see:
+
+```yaml
+    volumes:
+      - ./data:/data
+      - /Volumes/Backup/ittracks:/backups
+```
+
+On Linux the drive's folder is under `/mnt` or `/media` instead. Run `docker compose up -d`, then set the folder to `/backups` in Settings. A folder the container can't keep, such as `/backups` before it is mounted, is refused. If the drive is not connected when a copy is due, nothing is written and the line says so.
+
+A cloud-synced folder (iCloud Drive, Dropbox, a NAS share) works the same way: mount it, then set its path.
+
+### By hand
 
 With the app stopped, copy the whole folder:
 
@@ -152,7 +170,7 @@ docker compose exec ittracks node -e "require('better-sqlite3')('/data/ittracks.
 
 Then move the copy off the machine: to another computer, a drive, or cloud storage. On Linux the file belongs to root, so move it with `sudo mv`. Time Machine and other file backups are fine for these copies; don't count on them for the live database.
 
-To back up every night on Linux, put that command (with `-T` after `exec`) in a script that starts with `cd` to the ittracks folder, and run the script from cron.
+To back up on a schedule without the app, put that command (with `-T` after `exec`) in a script that starts with `cd` to the ittracks folder, and run the script from cron.
 
 **Settings → Data → Everything (JSON)** is another backup: your account's data, which imports on any ittracks server. It leaves out your login, keys and reminder devices, so it suits moving to a new server more than restoring this one. See [Export and import](integrations.md#export-and-import).
 
@@ -161,15 +179,15 @@ To back up every night on Linux, put that command (with `-T` after `exec`) in a 
 ```sh
 docker compose stop
 rm -f data/ittracks.db-wal data/ittracks.db-shm
-cp ~/backups/backup-2026-11-26.db data/ittracks.db
+cp data/backups/ittracks-backup-2026-11-26T15-13-04Z.db data/ittracks.db
 docker compose start
 ```
 
-Delete the `-wal` and `-shm` files first: they belong to the database you are replacing. On Linux, put `sudo` in front of `rm` and `cp`.
+Put the name of the copy you want in the `cp` line: one from `data/backups`, from the folder you set for automatic backups, or one you made by hand. Delete the `-wal` and `-shm` files first: they belong to the database you are replacing. On Linux, put `sudo` in front of `rm` and `cp`.
 
 ## Updates
 
-Back up first, then:
+Back up first (**Back up now** under Automatic backups), then:
 
 ```sh
 cd ittracks

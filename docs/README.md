@@ -21,9 +21,9 @@ To install or run your own server, see the [main README](../README.md#self-host)
 | [Templates and the Gallery](templates.md) | Sharing a habit as a file, importing one, the built-in Gallery |
 | [Notes and journal](notes-and-journal.md) | Markdown notes, journal habits, prompts, the day note, Obsidian export |
 | [Stats](stats.md) | Boards and cards, card types, your own measures, a habit's Stats tab |
-| [Settings](settings.md) | One page of lines: how they open and save, finding one, backups, logging out with changes waiting |
+| [Settings](settings.md) | One page of lines: how they open and save, finding one, backups and automatic backups, logging out with changes waiting |
 | [Integrations](integrations.md) | Keys, quick-log links and Shortcuts, AI assistants over MCP, export and import |
-| [Private server with Tailscale](private-server.md) | Your own server on a Mac, home server or VPS, reachable only from your devices: install, phone and reminders, MCP, backups, updates |
+| [Private server with Tailscale](private-server.md) | Your own server on a Mac, home server or VPS, reachable only from your devices: install, phone and reminders, MCP, automatic backups on another drive, updates |
 
 ## Words the app uses
 

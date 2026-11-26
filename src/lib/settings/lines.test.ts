@@ -25,6 +25,7 @@ const now: Now = {
 	devices: 0,
 	habits: 0,
 	keys: [],
+	backup: { plan: { every: 0, folder: '/data/backups', keep: 30 }, state: {} },
 	waiting: 0
 };
 const words = (id: string, o: Partial<Now> = {}) => settingGroups({ ...now, ...o }).flatMap((g) => g.lines).find((l) => l.id === id)!.words;

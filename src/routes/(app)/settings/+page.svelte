@@ -10,6 +10,7 @@
 	import { outbox } from '$lib/outbox.svelte';
 	import { checkViews } from '$lib/rules/views';
 	import type { SettingsSet } from '$lib/server/settings-patch';
+	import Backups from '$lib/settings/Backups.svelte';
 	import Copy from '$lib/settings/Copy.svelte';
 	import Groupings from '$lib/settings/Groupings.svelte';
 	import Keys from '$lib/settings/Keys.svelte';
@@ -50,6 +51,7 @@
 			devices: data.devices,
 			habits: data.habits.length,
 			keys: data.keys,
+			backup: data.backup,
 			waiting: outbox.items.length
 		})
 	);
@@ -289,6 +291,8 @@
 		<Reminders vapidKey={data.vapidKey} devices={data.devices} reminders={data.reminders} bind:problem={() => problem.reminders ?? '', (v) => (problem.reminders = v)} />
 	{:else if id === 'download'}
 		<div class="l-cluster"><a class="button hit" href="/api/v1/export?format=json" download>Everything (JSON)</a><a class="button hit" href="/api/v1/export?format=csv" download>Tables (CSV)</a></div>
+	{:else if id === 'backups'}
+		<Backups plan={data.backup.plan} last={data.backup.state} container={data.backup.container} bind:problem={() => problem.backups ?? '', (v) => (problem.backups = v)} />
 	{:else if id === 'restore'}
 		<Restore bind:problem={() => problem.restore ?? '', (v) => (problem.restore = v)} />
 	{:else if id === 'journal'}
