@@ -133,7 +133,7 @@
 								<label class="vh" for="gm-{t.id}">Grouping of {t.name}</label>
 								<select id="gm-{t.id}" class="move" value={g.id} onchange={(e) => moveMember(t, e.currentTarget.value)}>{#each groupings as x (x.id)}<option value={x.id}>{x.name}</option>{/each}</select>
 							{/if}
-							{#if !t.levels.length}<button type="button" class="quiet hit" aria-label="Remove {t.name}" onclick={() => removeMember(g, t)}>×</button>{/if}
+							{#if !t.levels.length}<button type="button" class="quiet glyph hit" aria-label="Remove {t.name}" onclick={() => removeMember(g, t)}>×</button>{/if}
 						</div>
 					{/each}
 					<form class="se-unit" onsubmit={(e) => (e.preventDefault(), addMember(g))}>
@@ -148,7 +148,7 @@
 					<div class="se-unit">
 						<input value={l.name} maxlength="30" placeholder="main, also, a little…" aria-label="Name of {l.name ? `the level ${l.name}` : 'the new level'}" onchange={(e) => renameLevel(g, l, e.currentTarget.value.trim())} />
 						<span class="meta muted se-eq">counts</span><input class="num se-to" inputmode="decimal" value={l.weight} aria-label="{l.name || 'The new level'} counts" onchange={(e) => weigh(g, l, e.currentTarget)} />
-						{#if shown(g).length > 1 || !l.name}<button type="button" class="quiet hit" aria-label="Remove {l.name || 'the new level'}" onclick={() => removeLevel(g, l)}>×</button>{/if}
+						{#if shown(g).length > 1 || !l.name}<button type="button" class="quiet glyph hit" aria-label="Remove {l.name || 'the new level'}" onclick={() => removeLevel(g, l)}>×</button>{/if}
 					</div>
 				{/each}
 			</div>

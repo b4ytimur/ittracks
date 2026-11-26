@@ -25,7 +25,7 @@
 			<h2>{title}</h2>
 			<div class="muted meta">{loading ? 'Finding the logs…' : rows ? `${rows.length}${rows.length === 200 ? '+' : ''} ${rows.length === 1 ? 'log' : 'logs'}` : ''}</div>
 		</div>
-		<button type="button" class="small" onclick={() => dialog?.close()}>Close</button>
+		<button type="button" class="quiet hit" onclick={() => dialog?.close()}>Close</button>
 	</div>
 	{#if rows}
 		<ul class="list">

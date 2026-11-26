@@ -2,6 +2,7 @@
 	// A Markdown note box: plain text that grows as you type, a Write / Preview switch and a
 	// tiny toolbar. What is stored stays plain Markdown, so it exports to Obsidian unchanged.
 	import Markdown from '$lib/Markdown.svelte';
+	import Segmented from '$lib/ui/Segmented.svelte';
 
 	let {
 		value = $bindable(''),
@@ -22,7 +23,8 @@
 		hint?: string;
 	} = $props();
 
-	let preview = $state(false);
+	let view = $state<'write' | 'preview'>('write');
+	const preview = $derived(view === 'preview');
 	let box = $state<HTMLTextAreaElement | null>(null);
 	const id = `note-${Math.random().toString(36).slice(2, 9)}`;
 
@@ -65,14 +67,14 @@
 <div class="notebox">
 	<div class="head">
 		<label for={id} class="lbl">{label}</label>
-		<div class="tools" role="toolbar" aria-label="{label}: formatting">
-			{#if !preview}
-				<button type="button" class="tool" aria-label="Bold" onclick={() => wrap('**', '**', 'bold')}><b>B</b></button>
-				<button type="button" class="tool" aria-label="List" onclick={list}>•</button>
-				<button type="button" class="tool" aria-label="Link" onclick={() => wrap('[', '](https://)', 'link')}>🔗</button>
-			{/if}
-			<button type="button" class="tool switch" aria-pressed={preview} onclick={() => (preview = !preview)}>{preview ? 'Write' : 'Preview'}</button>
-		</div>
+		{#if !preview}
+			<div class="tools" role="toolbar" aria-label="{label}: formatting">
+				<button type="button" aria-label="Bold" onclick={() => wrap('**', '**', 'bold')}><b>B</b></button>
+				<button type="button" aria-label="List" onclick={list}>•</button>
+				<button type="button" aria-label="Link" onclick={() => wrap('[', '](https://)', 'link')}>🔗</button>
+			</div>
+		{/if}
+		<Segmented options={[{ value: 'write', label: 'Write' }, { value: 'preview', label: 'Preview' }]} bind:value={view} label="{label}: view" />
 	</div>
 	{#if preview}
 		<div class="preview" aria-live="polite">
@@ -103,16 +105,12 @@
 	.tools {
 		flex-wrap: wrap;
 		display: flex;
-		gap: 0.25rem;
+		gap: var(--space-inline);
 	}
-	.tool {
-		padding: 0.1rem 0.5rem;
-		font-size: var(--font-size-chip);
-		min-width: 2rem;
-		min-height: 2rem;
-	}
-	.switch {
-		color: var(--accent);
+	/* Square M buttons with one glyph each, as the stepper's − and +; the Write / Preview switch is Segmented's. */
+	.tools > button {
+		inline-size: var(--control-md);
+		padding-inline: 0;
 	}
 	textarea {
 		margin-top: 0.25rem;

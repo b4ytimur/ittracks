@@ -96,7 +96,7 @@
 		<p class="meta">
 			Made{preview.username ? ` by ${preview.username}` : ''}{preview.exportedAt ? ` on ${new Date(preview.exportedAt).toLocaleString()}` : ''}. It holds {summary(preview.counts)}.{preview.includesNotes ? '' : ' It has no notes and no journal.'}
 		</p>
-		<Ask label="Replace my data" text="Everything in this account is replaced by what is in the file, and this can't be undone here. What is here now is downloaded first, so you can restore that the same way." act="Download it, then replace" keep="Keep what is here" small={false} onact={replace} />
+		<Ask label="Replace my data" text="Everything in this account is replaced by what is in the file, and this can't be undone here. What is here now is downloaded first, so you can restore that the same way." act="Download it, then replace" keep="Keep what is here" onact={replace} />
 	</div>
 {/if}
 

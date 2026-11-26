@@ -1048,8 +1048,8 @@
 			<select class="grow" name="task" aria-label="Task to use instead of {t?.name ?? 'none'}">
 				{#each data.library as l (l.id)}<option value={l.id} selected={l.id === t?.id}>{l.name}</option>{/each}
 			</select>
-			<button class="small">Use</button>
-			<button type="button" class="small" onclick={() => (swapping = null)}>Cancel</button>
+			<button>Use</button>
+			<button type="button" onclick={() => (swapping = null)}>Cancel</button>
 		</form>
 	{/if}
 	{#if t && howTo === placeKey(it)}<div class="howto"><Markdown text={t.notes} small /></div>{/if}
@@ -1073,7 +1073,7 @@
 						<div class="content"><label class="lg-tick-label" for="tick-{i}">{t.name}</label>{@render extraOf(it)}</div>
 						<div class="verb">
 							<input id="tick-{i}" type="checkbox" class="tick hit" disabled={stage === 'read'} bind:checked={log[i].tick} aria-label="{t.name} done" />
-							{#if menuOf(it).length && stage === 'run'}<MenuButton class="lg-more hit" label="More for {t.name}" items={menuOf(it)} />{/if}
+							{#if menuOf(it).length && stage === 'run'}<MenuButton class="quiet glyph hit lg-more" label="More for {t.name}" items={menuOf(it)} />{/if}
 						</div>
 					</div>
 				</li>
@@ -1152,7 +1152,7 @@
 							{#if !t}<p class="meta-line">Nothing in your <a href="/library">Library</a> matches this place's rules.</p>{:else if recapOf(t.id)}<p class="meta-line">{recapOf(t.id, true)}</p>{/if}
 							{@render extraOf(it)}
 						</div>
-						{#if menuOf(it).length && stage === 'run' && !quickMode}<div class="verb"><MenuButton class="lg-more hit" label="More for {t?.name ?? 'this place'}" items={menuOf(it)} /></div>{/if}
+						{#if menuOf(it).length && stage === 'run' && !quickMode}<div class="verb"><MenuButton class="quiet glyph hit lg-more" label="More for {t?.name ?? 'this place'}" items={menuOf(it)} /></div>{/if}
 					</div>
 					{#if t}
 						<div class="shelf lg-shelf">

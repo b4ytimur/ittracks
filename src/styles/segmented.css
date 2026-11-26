@@ -8,7 +8,7 @@
      </div>                                     [disabled]: can't be chosen now; BlockedReason's line says why
    data-reserve is base's utility: a hidden 600 copy of the label, so a segment never widens when it is chosen. */
 
-/* ---------- Track: equal segments on a sunken track, corners nested ---------- */
+/* ---------- Track: equal segments on a sunken track, corners nested; control-md (32px) tall, as a button or a field ---------- */
 .segmented {
 	--seg-pad: calc(var(--radius-control) - var(--radius-inset)); /* 2px: concentric corners */
 	position: relative; display: inline-grid; grid-auto-flow: column;
@@ -32,10 +32,10 @@
 
 /* ---------- Segment ---------- */
 .segmented > label {
-	/* align-content: the text row and the 0px reserve copy centre together, at 24 and at 44px; justify-content: words wider
+	/* align-content: the text row and the 0px reserve copy centre together, at 28 and at 44px; justify-content: words wider
 	   than a squeezed segment pass its padding on both sides alike */
 	position: relative; z-index: 1; display: grid; place-items: center; place-content: center;
-	min-height: max(var(--control-sm), var(--target-min)); /* 24px, growing with text, never under the target */
+	min-height: max(calc(var(--control-md) - 2 * var(--seg-pad)), var(--target-min)); /* 28px, so the track is 32; growing with text */
 	padding-inline: calc(var(--space-inline) + var(--space-tight));
 	border-radius: var(--radius-inset); color: var(--ink); font-size: var(--font-size-meta); line-height: 1.25rem;
 	/* nowrap: squeezed (200% text on a phone), the equal columns eat the padding first and the words stay whole */

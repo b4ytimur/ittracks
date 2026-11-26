@@ -592,8 +592,8 @@
 				.slice(0, 3)
 				.join(', ')}{data.unlogged.length > 3 ? ' and more' : ''}. Did you do {data.unlogged.length === 1 ? 'it' : 'them'}?</span
 		>
-		<a class="button small primary" href="/day/{yesterday}">Log yesterday</a>
-		<button class="small link" onclick={hideNudge} aria-label="Hide this until tomorrow">Hide</button>
+		<a class="quiet hit" href="/day/{yesterday}">Log yesterday</a>
+		<button class="quiet hit" onclick={hideNudge} aria-label="Hide this until tomorrow">Hide</button>
 	</div>
 {/if}
 
@@ -870,13 +870,12 @@
 				<li class="card">
 					<strong>{p.name}</strong>
 					{#each p.items as it (it.item)}
-						<form method="POST" action="?/prep" use:enhance>
+						<form method="POST" action="?/prep" use:enhance={() => async ({ update }) => update({ reset: false })}>
 							<input type="hidden" name="habit" value={p.habitId} />
 							<input type="hidden" name="item" value={it.item} />
-							<input type="hidden" name="done" value={String(!it.done)} />
-							<button class="check" class:done={it.done} aria-pressed={it.done}>
-								<span class="box" aria-hidden="true">{it.done ? '✓' : ''}</span>{it.item}
-							</button>
+							<!-- Checkbox's tick: a change posts the box's own state, so what is sent is what is shown. No reset: it would
+							     untick the box until the reload lands. -->
+							<label class="check"><input type="checkbox" class="tick" name="done" value="true" checked={it.done} onchange={(e) => e.currentTarget.form?.requestSubmit()} /> {it.item}</label>
 						</form>
 					{/each}
 				</li>
@@ -949,32 +948,6 @@
 	.card strong {
 		min-width: 0;
 		overflow-wrap: anywhere;
-	}
-	.check {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		width: 100%;
-		margin-top: 0.4rem;
-		border: none;
-		background: none;
-		padding: 0.2rem 0;
-		min-height: 2rem;
-		text-align: left;
-	}
-	.check .box {
-		width: 1.2rem;
-		height: 1.2rem;
-		border: 1px solid var(--line);
-		border-radius: 4px;
-		display: inline-grid;
-		place-items: center;
-		font-size: var(--font-size-chip);
-		color: var(--accent);
-	}
-	.check.done {
-		color: var(--ink-muted);
-		text-decoration: line-through;
 	}
 	/* Under the title: the date, which opens the last seven days, and the one count (TS.5). */
 	.today-line {

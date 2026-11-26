@@ -125,8 +125,8 @@
 			{/if}
 		</div>
 		<div class="row">
-			<button type="button" class="primary small" onclick={stop}>{replace ? 'Stop and use this time' : 'Stop and add time'}</button>
-			<button type="button" class="small" onclick={cancel}>Cancel</button>
+			<button type="button" class="primary" onclick={stop}>{replace ? 'Stop and use this time' : 'Stop and add time'}</button>
+			<button type="button" onclick={cancel}>Cancel</button>
 		</div>
 	{:else}
 		<div class="row">
@@ -140,7 +140,7 @@
 				<label style="width: 4.5rem">Break <input type="number" min="0" bind:value={rest} /></label>
 				<label style="width: 4.5rem">Rounds <input type="number" min="1" bind:value={rounds} /></label>
 			{/if}
-			<button type="button" class="small" onclick={start}>Start</button>
+			<button type="button" onclick={start}>Start</button>
 		</div>
 	{/if}
 </div>

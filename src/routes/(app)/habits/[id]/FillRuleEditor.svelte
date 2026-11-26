@@ -64,7 +64,7 @@
 				<select bind:value={() => must, (v) => (mustLevel = v)} aria-label="Minimum level" style="width: auto">
 					{#each levelsOf(mustTag) as l, i (l.id)}<option value={l.id}>{i === levelsOf(mustTag).length - 1 ? l.name : `at least ${l.name}`}</option>{/each}
 				</select>
-				<button type="button" class="small" onclick={addMust}>Add</button>
+				<button type="button" onclick={addMust}>Add</button>
 			</div>
 		</div>
 
@@ -86,7 +86,7 @@
 					<option value={0}>not at all</option>
 					{#each levelsOf(notTag).slice(0, -1) as l (l.id)}<option value={l.id}>at most {l.name}</option>{/each}
 				</select>
-				<button type="button" class="small" onclick={addNot}>Add</button>
+				<button type="button" onclick={addNot}>Add</button>
 			</div>
 		</div>
 
@@ -104,7 +104,7 @@
 					<option value="">Choose a tag</option>
 					{#each tags as t (t)}<option value={t}>{t}</option>{/each}
 				</select>
-				<button type="button" class="small" onclick={addPrefer}>Add</button>
+				<button type="button" onclick={addPrefer}>Add</button>
 			</div>
 		</div>
 	{/if}

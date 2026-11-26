@@ -26,7 +26,8 @@ button, .button {
 /* ---------- Variants ---------- */
 /* Primary: the view's one act (C.9), an accent fill. Hover leaves it as it is: the fill already says act. */
 :where(button, .button).primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
-/* Small: control-sm (24px), meta words. Compact rows, the band's Undo and Retry, the selection bar's Apply. */
+/* Small: control-sm (24px), meta words. Only inside a 32px bar: the band, the selection bar, the refused-save banner.
+   Anywhere else a boxed button is M (the base) and a verb in a row, a header or a message is quiet. */
 :where(button, .button).small {
 	min-height: var(--control-sm); padding: 0 var(--space-inline);
 	font-size: var(--font-size-meta); line-height: 1.25rem;

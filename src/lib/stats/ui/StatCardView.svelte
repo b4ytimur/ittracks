@@ -91,7 +91,7 @@
 			{#if offer && onpick}<Sentence {card} {offer} named={!!card.title} rangeWords={rangeLabel(boardRange).toLowerCase()} {onpick} />
 			{:else}<div class="muted meta">{r?.chart === 'streak' ? 'Now and best' : rangeLabel(rangeKey)}</div>{/if}
 		</div>
-		{#if items.length}<span class="more"><MenuButton class="lg-more hit" label="More for {title}" {items} /></span>{/if}
+		{#if items.length}<span class="more"><MenuButton class="quiet glyph hit lg-more" label="More for {title}" {items} /></span>{/if}
 	</header>
 
 	{#if !r}

@@ -195,11 +195,11 @@
 							></span
 						></label
 					>
-					<button type="button" class="small" onclick={() => f.numbers.splice(i, 1)}>Remove this question</button>
+					<button type="button" class="quiet hit" onclick={() => f.numbers.splice(i, 1)}>Remove this question</button>
 				</fieldset>
 			{/each}
 			{#if data.metrics.length}
-				<button type="button" class="small" onclick={addNumber} disabled={f.numbers.length >= 8}>+ Ask for a starting number</button>
+				<button type="button" onclick={addNumber} disabled={f.numbers.length >= 8}>+ Ask for a starting number</button>
 			{:else}
 				<p class="muted small-text" style="margin: 0">No fixed Task has a number to ask about.</p>
 			{/if}

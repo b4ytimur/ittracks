@@ -98,7 +98,7 @@
 				<div class="card lg-head">
 					<span class="slot"></span>
 					<div class="content"><h2 class="name">{k.name}</h2><p class="meta-line">{words(k)}</p></div>
-					{#if canLog}<div class="verb"><MenuButton class="lg-more hit" label="More for {k.name}" items={menuOf(k)} /></div>{/if}
+					{#if canLog}<div class="verb"><MenuButton class="quiet glyph hit lg-more" label="More for {k.name}" items={menuOf(k)} /></div>{/if}
 				</div>
 				<div class="shelf lg-shelf">
 					<div class="lg-slot">

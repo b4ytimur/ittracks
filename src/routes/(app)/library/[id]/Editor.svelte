@@ -404,7 +404,7 @@
 			<select bind:value={g.level} aria-label="Level for {g.name}" style="width: auto">
 				{#each levelsOf(g.name, g.level) as l (l.id)}<option value={l.id}>{l.name}</option>{/each}
 			</select>
-			<button type="button" class="small danger" onclick={() => t.tags.splice(i, 1)}>Remove</button>
+			<button type="button" class="quiet hit" onclick={() => t.tags.splice(i, 1)}>Remove</button>
 		</div>
 	{/each}
 	<div class="row">
@@ -624,7 +624,7 @@
 		{/snippet}
 	</EditableList>
 	<div class="row">
-		<button type="button" class="small" onclick={() => addMetric()}>+ Field</button>
+		<button type="button" onclick={() => addMetric()}>+ Field</button>
 	</div>
 {/snippet}
 {#snippet partsPart()}
@@ -771,7 +771,7 @@
 	</div>
 	{#if toAdd.length}
 		<div class="chips add-more" role="group" aria-label="Add to this Task">
-			{#each toAdd as id (id)}<button type="button" class="small" onclick={() => add(id)}>+ {words[id]}</button>{/each}
+			{#each toAdd as id (id)}<button type="button" onclick={() => add(id)}>+ {words[id]}</button>{/each}
 		</div>
 	{/if}
 	{#if waiting.length}<p class="muted small-text">{waiting.join(', ')} {waiting.length === 1 ? 'is' : 'are'} saved once finished: a field or step needs a name, and a Choice two options.</p>{/if}

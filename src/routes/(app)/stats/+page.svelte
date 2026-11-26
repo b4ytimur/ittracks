@@ -139,7 +139,7 @@
 				{#if board.range.startsWith('since:')}<button type="button" class="toggle" aria-pressed="true">{rangeLabel(board.range)}</button>{/if}
 			</div>
 			<details class="filter">
-				<summary>Filter{filterCount ? ` (${filterCount})` : ''}</summary>
+				<summary class="toggle">Filter{filterCount ? ` (${filterCount})` : ''}</summary>
 				<div class="card pop stack">
 					<label>
 						Habits
@@ -186,7 +186,7 @@
 						</div>
 					{/if}
 					{#if filterCount}
-						<button type="button" class="small" onclick={() => setFilter({ areas: [], tags: [], habit: null, identity: null, direction: 'all' })}>Clear filters</button>
+						<button type="button" onclick={() => setFilter({ areas: [], tags: [], habit: null, identity: null, direction: 'all' })}>Clear filters</button>
 					{/if}
 				</div>
 			</details>
@@ -253,27 +253,28 @@
 		margin-bottom: 0.75rem;
 		flex-wrap: wrap;
 	}
+	/* The range pills and Filter share one line, so the chips' own top margin goes. */
+	.filters > .chips {
+		margin-block-start: 0;
+	}
 	.filter {
 		position: relative;
 	}
+	/* The summary is Chip's toggle, a pill beside the range pills; only the disclosure marker goes. */
 	.filter summary {
-		cursor: pointer;
 		list-style: none;
-		padding: 0.45rem 0.8rem;
-		border: 1px solid var(--line);
-		border-radius: 8px;
-		background: var(--surface-raised);
 	}
 	.filter summary::-webkit-details-marker {
 		display: none;
 	}
+	/* A popover hangs 4px under its trigger. */
 	.filter .pop {
 		position: absolute;
 		z-index: var(--z-popover);
-		top: 2.6rem;
+		top: calc(100% + var(--space-tight));
 		left: 0;
-		width: min(22rem, calc(100vw - 2rem));
-		box-shadow: 0 4px 16px rgb(0 0 0 / 0.14);
+		width: min(22rem, calc(100vw - 2 * var(--space-group)));
+		box-shadow: var(--shadow-popover);
 	}
 	.empty {
 		text-align: center;

@@ -917,8 +917,8 @@
 							</div>
 							<p class="muted small-text" style="margin: 0">{data.types.find((x) => x.key === newTaskType)?.description}</p>
 							<div class="row">
-								<button type="button" class="primary small" onclick={() => createTask(s)} disabled={!newTaskName.trim()}>Create and use</button>
-								<button type="button" class="small" onclick={() => (newTaskFor = null)}>Cancel</button>
+								<button type="button" class="primary" onclick={() => createTask(s)} disabled={!newTaskName.trim()}>Create and use</button>
+								<button type="button" onclick={() => (newTaskFor = null)}>Cancel</button>
 							</div>
 							{#if newTaskError}<p class="error">{newTaskError}</p>{/if}
 						</div>
@@ -990,11 +990,11 @@
 			{:else}
 			<div class="row">
 				{#if tasks.length}
-					<button type="button" class="small" onclick={() => addSlot(v.slots, false)}>+ Task</button>
+					<button type="button" onclick={() => addSlot(v.slots, false)}>+ Task</button>
 				{:else}
-					<button type="button" class="small" onclick={() => { addSlot(v.slots, false); newTaskFor = v.slots.at(-1)!.id; }}>+ New Task</button>
+					<button type="button" onclick={() => { addSlot(v.slots, false); newTaskFor = v.slots.at(-1)!.id; }}>+ New Task</button>
 				{/if}
-				<button type="button" class="small" onclick={() => addSlot(v.slots, true)}>+ Auto-filled</button>
+				<button type="button" onclick={() => addSlot(v.slots, true)}>+ Auto-filled</button>
 			</div>
 			{/if}
 			{#if !v.slots.length && !isRoutine}
@@ -1005,7 +1005,7 @@
 			</div>
 		{/snippet}
 	</EditableList>
-	<button type="button" class="small" onclick={addVariant}>{h.variants.length > 1 ? '+ Variant' : '+ Another Variant (for A/B plans)'}</button>
+	<button type="button" onclick={addVariant}>{h.variants.length > 1 ? '+ Variant' : '+ Another Variant (for A/B plans)'}</button>
 	{#each archivedVariants as v (v.id)}
 		<p class="meta muted archived">{v.name} is archived. <button type="button" class="quiet hit" aria-label="Bring back {v.name}" onclick={() => bringBack(v)}>Bring back</button></p>
 	{/each}
@@ -1578,7 +1578,7 @@
 		{#each h.prep as item, pi (item)}
 			<div class="row">
 				<span class="grow">{item}</span>
-				<button type="button" class="small danger" onclick={() => h.prep.splice(pi, 1)}>Remove</button>
+				<button type="button" class="quiet hit" onclick={() => h.prep.splice(pi, 1)}>Remove</button>
 			</div>
 		{/each}
 		<div class="row">
@@ -1728,8 +1728,8 @@
 
 	{#if toAdd.length}
 		<div class="chips add-more" role="group" aria-label="Add to this habit">
-			{#each morePills ? toAdd : toAdd.slice(0, 6) as id (id)}<button type="button" class="small" onclick={() => add(id)}>+ {optional[id].word}</button>{/each}
-			{#if toAdd.length > 6 && !morePills}<button type="button" class="small" onclick={() => (morePills = true)}>More…</button>{/if}
+			{#each morePills ? toAdd : toAdd.slice(0, 6) as id (id)}<button type="button" onclick={() => add(id)}>+ {optional[id].word}</button>{/each}
+			{#if toAdd.length > 6 && !morePills}<button type="button" onclick={() => (morePills = true)}>More…</button>{/if}
 		</div>
 	{/if}
 
@@ -1909,7 +1909,7 @@
 			<form method="POST" action="?/unpause" class="row" style="align-items: center" use:enhance>
 				<input type="hidden" name="id" value={p.id} />
 				<span class="grow">{shortDate(p.start)} to {shortDate(p.end)}{p.note ? ` · ${p.note}` : ''}{p.end < data.today ? ' (past)' : ''}</span>
-				<button class="small">Remove</button>
+				<button class="quiet hit">Remove</button>
 			</form>
 		{/each}
 		<form method="POST" action="?/pause" class="row" use:enhance>

@@ -191,7 +191,7 @@
 			{#if head}<p class="meta-line"><bdi dir="ltr">{head}</bdi></p>{/if}
 			{#if extra}{@render extra()}{/if}
 		</div>
-		{#if menu.length && stage !== 'read'}<div class="verb"><MenuButton class="lg-more hit" label="More for {name}" items={menu} /></div>{/if}
+		{#if menu.length && stage !== 'read'}<div class="verb"><MenuButton class="quiet glyph hit lg-more" label="More for {name}" items={menu} /></div>{/if}
 	</div>
 	<div class="shelf lg-shelf">
 		{#if open === null}

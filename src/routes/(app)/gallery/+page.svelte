@@ -59,7 +59,7 @@
 <div class="search" role="search">
 	<label class="vh" for="gallery-q">Search the Gallery</label>
 	<input id="gallery-q" type="search" bind:value={q} placeholder="Search: running, reading, quit…" autocomplete="off" />
-	{#if q}<button type="button" class="quiet search-clear" aria-label="Clear search" onclick={() => (q = '')}>×</button>{/if}
+	{#if q}<button type="button" class="quiet glyph search-clear hit focus-inset" aria-label="Clear search" onclick={() => (q = '')}>×</button>{/if}
 </div>
 <div class="l-cluster filters">
 	<select bind:value={days} aria-label="Days per week"><option value="">Any days</option><option value="few">3 days or fewer</option><option value="most">4 days or more</option></select>

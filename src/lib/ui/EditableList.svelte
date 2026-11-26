@@ -413,7 +413,7 @@
 				{#if editing && onmove}{@render grip()}{/if}
 				<div class="title">{@render title?.(item, ctx)}</div>
 				{#if editing && onremove}
-					<button type="button" class="small remove" aria-label="{removeOf(item)} {nameOf(item)}" onclick={() => onremove(item)}>{removeOf(item)}</button>
+					<button type="button" class="quiet remove hit" aria-label="{removeOf(item)} {nameOf(item)}" onclick={() => onremove(item)}>{removeOf(item)}</button>
 				{/if}
 			</div>
 			{/if}
@@ -436,7 +436,7 @@
 	{/if}
 </ul>
 {#if !rowCard && editing && onadd}
-	<button type="button" class="small add" onclick={() => onadd()}>+ {addLabel}</button>
+	<button type="button" class="add" onclick={() => onadd()}>+ {addLabel}</button>
 {/if}
 {#if editing && onmove}
 	<span id="{uid}-hint" class="sr-only"

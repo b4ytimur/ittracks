@@ -62,7 +62,7 @@
    width from its parent, so an inline field never sits directly in a shrink-to-fit box. Zero specificity: a component
    that is a container already (.l-grid) keeps its own. */
 :where(:has(> .field-inline)) { container-type: inline-size; }
-/* The row is at least control-md, so a 28px segmented (D3.6) sits in the same 32px row as a select. The control takes its
+/* The row is at least control-md, so a segmented (32px, D3.6) sits in the same 32px row as a select. The control takes its
    own width at the trailing end; the label takes the rest and wraps. The hint and the message go under the whole row.
    Under bp-phone the field stacks, as every field does. */
 @container (min-width: 28rem) { /* bp-phone */

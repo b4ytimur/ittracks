@@ -174,7 +174,7 @@
 	<div class="search se-find page-wide" role="search">
 		<label class="vh" for="se-q">Find a setting</label>
 		<input id="se-q" type="search" placeholder="Find a setting" bind:value={q} autocomplete="off" />
-		{#if q}<button type="button" class="quiet search-clear" aria-label="Clear search" onclick={() => ((q = ''), document.getElementById('se-q')?.focus())}>×</button>{/if}
+		{#if q}<button type="button" class="quiet glyph search-clear hit focus-inset" aria-label="Clear search" onclick={() => ((q = ''), document.getElementById('se-q')?.focus())}>×</button>{/if}
 		{#if searching}<p class="result-line meta" role="status">{found} {found === 1 ? 'setting' : 'settings'}</p>{/if}
 	</div>
 {/if}

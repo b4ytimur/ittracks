@@ -124,7 +124,7 @@
 							{/if}
 						{/if}
 						<label class="step meta">± <input class="num" inputmode="decimal" value={x.step} aria-label="Step of {x.name || 'the new unit'} on the log" onchange={(e) => setStep(k, x, e.currentTarget.value, e.currentTarget)} /></label>
-						{#if !fixed && (x.id !== base.id || !x.name)}<button type="button" class="quiet hit" aria-label="Remove {x.name || 'the new unit'}" onclick={() => remove(k, x)}>×</button>{/if}
+						{#if !fixed && (x.id !== base.id || !x.name)}<button type="button" class="quiet glyph hit" aria-label="Remove {x.name || 'the new unit'}" onclick={() => remove(k, x)}>×</button>{/if}
 					</div>
 				{/each}
 			</div>
