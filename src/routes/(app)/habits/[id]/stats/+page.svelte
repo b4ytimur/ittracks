@@ -37,17 +37,12 @@
 		modes={['use', 'edit']}
 		hints={{ use: data.customized ? 'Your own cards' : 'Made from what it logs', edit: 'Drag a card to move it.' }}
 		onmode={(m) => ((editing = m === 'edit'), (adding = false))}
+		add={{ label: 'New card', onclick: () => (adding = true) }}
+		onreset={() => op({ op: 'habit.reset', habit: data.habit.id }, 'Back to the automatic cards')}
+		resetLabel="Back to the automatic cards"
+		atDefault={!data.customized}
 	/>
 	<RecordTabs habit={data.habit.id} at="stats" />
-
-	{#if editing}
-		<div class="row tools">
-			<button type="button" class="primary" onclick={() => (adding = true)}>Add a card</button>
-			{#if data.customized}
-				<button type="button" onclick={() => op({ op: 'habit.reset', habit: data.habit.id }, 'Back to the automatic cards')}>Back to the automatic cards</button>
-			{/if}
-		</div>
-	{/if}
 
 	<CardGrid
 		items={data.items}
@@ -70,9 +65,6 @@
 </div>
 
 <style>
-	.tools {
-		margin-bottom: var(--space-group);
-	}
 	.foot {
 		margin-top: var(--space-section);
 		text-align: center;

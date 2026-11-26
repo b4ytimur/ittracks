@@ -125,7 +125,7 @@
 			{/if}
 		</div>
 		<div class="row">
-			<button type="button" class="primary" onclick={stop}>{replace ? 'Stop and use this time' : 'Stop and add time'}</button>
+			<button type="button" onclick={stop}>{replace ? 'Stop and use this time' : 'Stop and add time'}</button>
 			<button type="button" onclick={cancel}>Cancel</button>
 		</div>
 	{:else}

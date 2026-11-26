@@ -17,7 +17,7 @@ Under its title a card says what it shows: *Volume · Bench press · per week ·
 - Press a mark to see the logs behind it, in the card: five, then **All … logs**.
 - In **Edit**, drag a card by its ⠿, or use the arrow keys on it.
 
-Press **+ Card** to add one:
+Press **New card** to add one:
 
 - **From your habits**: cards suggested from what you log. **Add** it as it is, or **Change first**.
 - **Gallery**: ready-made cards.

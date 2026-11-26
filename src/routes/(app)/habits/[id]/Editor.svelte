@@ -917,7 +917,7 @@
 							</div>
 							<p class="muted meta">{data.types.find((x) => x.key === newTaskType)?.description}</p>
 							<div class="row">
-								<button type="button" class="primary" onclick={() => createTask(s)} disabled={!newTaskName.trim()}>Create and use</button>
+								<button type="button" onclick={() => createTask(s)} disabled={!newTaskName.trim()}>Create and use</button>
 								<button type="button" onclick={() => (newTaskFor = null)}>Cancel</button>
 							</div>
 							{#if newTaskError}<p class="error">{newTaskError}</p>{/if}
@@ -1763,11 +1763,7 @@
 {/snippet}
 
 {#if mode === 'choose'}
-	<header class="bar">
-		<h1>New habit</h1>
-		<a href="/habits">Cancel</a>
-	</header>
-	<p class="muted">How do you want to start?</p>
+	<EditChrome title="New habit" modes={['use']} back={{ href: '/habits', label: 'Habits' }} hints={{ use: 'How do you want to start?' }} />
 	<ul class="list">
 		<li><a class="card" href="/gallery"><strong>Pick a ready-made habit</strong><div class="muted meta">Gym plans, language practice, reading, quitting smoking and more. Adjust it after.</div></a></li>
 		<li><a class="card" href="?mode=guided{data.habit.areaId ? `&area=${data.habit.areaId}` : ''}"><strong>Build it step by step</strong><div class="muted meta">Four short steps: what you do, which days, when, and a check.</div></a></li>

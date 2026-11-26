@@ -30,7 +30,10 @@
 		/** Sentences a new view can start from (TS.8). */
 		starters?: { name: string; state: ViewState }[];
 		mode?: Mode;
-		/** What the page default goes back to with Reset view; none, no Reset. */
+		/**
+		 * What the page default goes back to with Reset view; none, no Reset. Reset view stands in the page's hint line
+		 * with every other reset (EditChrome's onreset, calling resetDefault and asking canReset), not in the sentence.
+		 */
 		reset?: ViewState;
 		/** A view's sentence in words, for the list of views and the starting sentences. */
 		say?: (s: ViewState) => string;
@@ -204,7 +207,7 @@
 			void viewOp({ op: 'select', page, view: id });
 		});
 	}
-	function resetDefault() {
+	export function resetDefault() {
 		if (!reset || active !== DEFAULT_VIEW) return;
 		const before = copy(current);
 		current = copy(reset);
@@ -231,6 +234,8 @@
 		{ label: `${PAGE_LABEL[page]} opens with ${opens.name}`, value: 'Press to change', onselect: nextOpens }
 	]);
 	const changed = $derived(!!reset && active === DEFAULT_VIEW && !same(current, reset));
+	/** The page default differs from what it came as, so Reset view has something to do. */
+	export const canReset = () => changed;
 	const shownOf = (w: Word) => w.shown ?? w.options.find((o) => o.value === w.value)?.label ?? '';
 	const kindOf = (value: string) => (value.includes(':') ? value.slice(0, value.indexOf(':') + (value.startsWith('more:') ? 3 : 0)) : '');
 	function itemsOf(w: Word): (Way | '-')[] {
@@ -291,11 +296,8 @@
 			{/each}
 		</div>
 	{/if}
-	{#if mode === 'edit' && (changed || active !== DEFAULT_VIEW)}
-		<p class="hint meta l-cluster">
-			{#if changed}<button type="button" class="quiet" onclick={resetDefault}>Reset view</button>{/if}
-			{#if active !== DEFAULT_VIEW}<button type="button" class="quiet" onclick={remove}>Delete view</button>{/if}
-		</p>
+	{#if mode === 'edit' && active !== DEFAULT_VIEW}
+		<p class="hint meta l-cluster"><button type="button" class="quiet" onclick={remove}>Delete view</button></p>
 	{/if}
 </div>
 

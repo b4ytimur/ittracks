@@ -5,6 +5,7 @@
 	import { RANGES, rangeLabel, type BoardFilter } from '$lib/stats/model';
 	import CardGrid from '$lib/stats/ui/CardGrid.svelte';
 	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import EmptyState from '$lib/ui/EmptyState.svelte';
 	import InlineText from '$lib/ui/InlineText.svelte';
 	import MenuButton, { type Way } from '$lib/ui/MenuButton.svelte';
 
@@ -125,7 +126,7 @@
 			</ul>
 			<form class="row" onsubmit={(e) => (e.preventDefault(), addBoard(null))}>
 				<label class="grow">Or an empty board called <input bind:value={boardName} maxlength="40" placeholder="New board" /></label>
-				<button class="primary">Create</button>
+				<button>Create</button>
 			</form>
 		</section>
 	{/if}
@@ -196,12 +197,8 @@
 			<p class="muted">Log a habit and your numbers show up here.</p>
 		{/if}
 
-		{#if board.cards.length === 0 && !adding}
-			<div class="card empty">
-				<p>This board has no cards yet.</p>
-				<button type="button" class="primary" onclick={() => ((editing = true), (adding = true))}>Add a card</button>
-			</div>
-		{/if}
+		<!-- New card in the title line is the board's one add, as on a habit's Stats. -->
+		{#if board.cards.length === 0 && !adding}<EmptyState text="This board has no cards yet." />{/if}
 
 		<CardGrid
 			items={data.items}
@@ -275,10 +272,6 @@
 		left: 0;
 		width: min(22rem, calc(100vw - 2 * var(--space-group)));
 		box-shadow: var(--shadow-popover);
-	}
-	.empty {
-		text-align: center;
-		margin-bottom: var(--space-group);
 	}
 	.foot {
 		margin-top: var(--space-section);

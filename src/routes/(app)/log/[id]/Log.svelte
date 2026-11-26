@@ -1209,7 +1209,7 @@
 			This log changed on another device{changed.length ? `: ${changed.join(', ')} ${changed.length === 1 ? 'is' : 'are'} different there` : ''}. Nothing here is saved over it yet.
 		</p>
 		<div class="row">
-			<button type="button" class="primary" onclick={keepMine}>Keep mine</button>
+			<button type="button" onclick={keepMine}>Keep mine</button>
 			<button type="button" onclick={useTheirs}>Use the other one</button>
 		</div>
 	</section>

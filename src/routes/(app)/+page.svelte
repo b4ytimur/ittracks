@@ -537,7 +537,7 @@
 
 <svelte:head><title>Today · ittracks</title></svelte:head>
 
-<EditChrome title="Today" bind:mode modes={['use', 'edit']} hints={{ edit: 'Drag ⠿ to move. Order is shared with Habits.' }}>
+<EditChrome title="Today" bind:mode modes={['use', 'edit']} hints={{ edit: 'Drag ⠿ to move. Order is shared with Habits.' }} onreset={() => sentenceBar?.resetDefault()} resetLabel="Reset view" atDefault={!sentenceBar?.canReset()}>
 	{#snippet useHint()}
 		<span class="today-line">
 			{#if wide.current}<span class="date">{dateLabel}</span>{:else}<button type="button" class="date" aria-expanded={strip} aria-controls="today-strip" onclick={() => (strip = !strip)}>{dateLabel} <span class="chev" aria-hidden="true">›</span></button>{/if}
@@ -574,26 +574,25 @@
 {#if data.askDay}
 	<div class="notice" role="note">
 		<span class="notice-text">It is past midnight. Is it still {yesterdayName} for you? What you log now counts for that day then.{#if problem} <span class="error">{problem}</span>{/if}</span>
-		<span class="notice-acts"><button type="button" onclick={() => startDay('04:00')}>Yes, until 04:00</button><button type="button" class="quiet" onclick={() => startDay('00:00')}>No, days start at midnight</button></span>
+		<span class="notice-acts"><button type="button" class="quiet" onclick={() => startDay('04:00')}>Yes, until 04:00</button><button type="button" class="quiet" onclick={() => startDay('00:00')}>No, days start at midnight</button></span>
 	</div>
 {/if}
 
 {#if notDue}
 	<div class="notice" role="status">
 		<span class="notice-text">{notDue.text}</span>
-		<span class="notice-acts">{#if notDue.habit}<a class="button" href="/q/{notDue.habit}?go=1&extra=1" data-sveltekit-preload-data="off" onclick={() => (notDue = null)}>Log it anyway</a>{/if}<button type="button" class="quiet" onclick={() => (notDue = null)}>Close</button></span>
+		<span class="notice-acts">{#if notDue.habit}<a class="quiet" href="/q/{notDue.habit}?go=1&extra=1" data-sveltekit-preload-data="off" onclick={() => (notDue = null)}>Log it anyway</a>{/if}<button type="button" class="quiet" onclick={() => (notDue = null)}>Close</button></span>
 	</div>
 {/if}
 
 {#if data.unlogged.length && nudgeHiddenFor !== yesterday}
-	<div class="card nudge row" role="status">
-		<span class="grow meta"
+	<div class="notice nudge" role="status">
+		<span class="notice-text"
 			>Yesterday {data.unlogged.length === 1 ? 'one habit was' : `${data.unlogged.length} habits were`} not logged: {data.unlogged
 				.slice(0, 3)
 				.join(', ')}{data.unlogged.length > 3 ? ' and more' : ''}. Did you do {data.unlogged.length === 1 ? 'it' : 'them'}?</span
 		>
-		<a class="quiet" href="/day/{yesterday}">Log yesterday</a>
-		<button class="quiet" onclick={hideNudge} aria-label="Hide this until tomorrow">Hide</button>
+		<span class="notice-acts"><a class="quiet" href="/day/{yesterday}">Log yesterday</a><button type="button" class="quiet" onclick={hideNudge} aria-label="Hide this until tomorrow">Hide</button></span>
 	</div>
 {/if}
 
@@ -609,7 +608,7 @@
 {:else}
 	<ViewSentence bind:this={sentenceBar} page="today" bind:views bind:current={view} {words} starters={STARTERS()} {mode} reset={fromTemplate(views.template).defaults.today} say={(s) => sentence(todayWords(s, wordsCtx))} />
 	{#if hint && !retired.includes(hint) && mode === 'use'}
-		<div class="ob-hint" role="note"><span class="meta">{HINTS[hint]}</span><button type="button" class="quiet" onclick={() => hint && retire(hint)}>Got it</button></div>
+		<div class="notice ob-hint" role="note"><span class="notice-text">{HINTS[hint]}</span><span class="notice-acts"><button type="button" class="quiet" onclick={() => hint && retire(hint)}>Got it</button></span></div>
 	{/if}
 
 	<div class="page-cols">
@@ -846,7 +845,7 @@
 							<datalist id="places-{b.habitId}">
 								{#each b.places as p (p)}<option value={p}></option>{/each}
 							</datalist>
-							<button class="primary">{b.limit ? 'Log' : 'Log slip'}</button>
+							<button>{b.limit ? 'Log' : 'Log slip'}</button>
 						</form>
 				</div>
 			{/if}
@@ -934,9 +933,7 @@
 		margin-top: var(--space-inline);
 	}
 	.nudge {
-		align-items: center;
 		margin-bottom: var(--space-group);
-		border-color: var(--accent);
 	}
 	:global(.elist > li.stacked) {
 		margin-inline-start: var(--space-indent);
