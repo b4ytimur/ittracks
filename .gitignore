@@ -12,6 +12,8 @@ node_modules
 /build
 /dist
 *.tsbuildinfo
+__pycache__/
+.venv/
 
 # ---------- Caches ----------
 .cache/
@@ -19,6 +21,7 @@ node_modules
 .eslintcache
 .stylelintcache
 .npm/
+tmp/
 
 # ---------- Tests and coverage ----------
 coverage/
@@ -49,6 +52,8 @@ pnpm-debug.log*
 id_rsa*
 id_ed25519*
 .secrets/
+credentials.json
+.netrc
 secrets/
 
 # ---------- Local databases, wherever DATABASE_PATH points, and backups ----------
@@ -57,11 +62,15 @@ secrets/
 *.db-wal
 *.db-shm
 *.db-journal
+*-wal
+*-shm
 *.sqlite
 *.sqlite3
 *.bak
 *.backup
 /backups
+backup*/
+*.dump
 
 # ---------- Your own data exported from the app ----------
 ittracks-export*
@@ -108,6 +117,7 @@ compose.override.yml
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+desktop.ini
 $RECYCLE.BIN/
 *.lnk
 # Linux
