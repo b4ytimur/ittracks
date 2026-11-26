@@ -716,7 +716,7 @@
 	{#each rowLines(item, st) as l (l.k)}{@render lineOf(l)}{/each}
 	{#if item.progression && st === 'due' && listed(item.habitId, 'progression')}
 		{@const p = item.progression}
-		<div class="notice" data-mode={mode} class:line-off={editing && view.hide.includes('progression')}>
+		<div class="notice" class:line-off={editing && view.hide.includes('progression')}>
 			<span class="notice-text meta"
 				>You've hit your targets {p.hits} times in a row. Raise them by {p.by}{p.unit === 'percent' ? '%' : p.by === 1 ? ' step' : ' steps'}? {p.changes.join(' · ')}</span
 			>
@@ -1017,7 +1017,7 @@
 		cursor: pointer;
 	}
 	/* A row with lines under it centres its marks on the name and meta (list-row.css), so the › stays there too. */
-	:global(.elist > li:has(> .card > .content > :is(.row-line, .week)) .row-fold) {
+	:global(.elist > li:has(> .card > .content > :is(.row-line, .week, .notice, .headline-pick)) > .card > .content > .row-fold) {
 		top: calc((1.5rem + 1.25rem - var(--control-sm)) / 2);
 	}
 	:global(.row-fold .chev) {

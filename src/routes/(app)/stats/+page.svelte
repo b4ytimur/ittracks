@@ -48,10 +48,7 @@
 			newBoard = false;
 			boardName = '';
 			await goto(`?board=${r.id}`);
-			if (!template) {
-				editing = true;
-				adding = true;
-			}
+			if (!template) adding = true; // in Use: after Close, the title line's New card is still there
 		}
 	}
 	async function deleteBoard() {

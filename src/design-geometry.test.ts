@@ -55,7 +55,7 @@ it('component styles name tokens, never a typed length', () => {
 it('no component restyles .small', () => {
 	const found = files.flatMap(([f, src]) =>
 		styleBlocks(src).flatMap(({ at, css }) =>
-			[...css.matchAll(/([^{};]+)\{/g)].filter((m) => /(?<![\w-])\.small(?![\w-])/.test(m[1])).map((m) => `${f}:${lineOf(src, at + m.index)} ${m[1].trim()}`)
+			[...css.matchAll(/([^{};]+)\{/g)].filter((m) => /\.small(?![\w-])/.test(m[1])).map((m) => `${f}:${lineOf(src, at + m.index)} ${m[1].trim()}`)
 		)
 	);
 	expect(found).toEqual([]);

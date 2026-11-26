@@ -33,6 +33,7 @@
 <style>
 	.scroll {
 		overflow-x: auto;
+		overflow-y: hidden; /* a row link's 44px touch area overhangs the last row; it must not make the card scroll */
 	}
 	table {
 		width: 100%;

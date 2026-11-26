@@ -35,4 +35,4 @@
 	/* The left column's width, the same sum as the grid's: (frame − gap) × 640 / 984. */
 	.main:not(:has(.page-cols)) > :not(.titlebar, .page-wide) { max-width: calc((100% - var(--space-page)) * 640 / 984); }
 }
-@media (forced-colors: active) { .side-row:is([aria-pressed='true'], [aria-current]) { outline: var(--chosen-width) solid Highlight; outline-offset: calc(-1 * var(--chosen-width)); } }
+@media (forced-colors: active) { .side-row:is([aria-pressed='true'], [aria-current]):where(:not(:focus-visible, .focus)) { outline: var(--chosen-width) solid Highlight; outline-offset: calc(-1 * var(--chosen-width)); } }

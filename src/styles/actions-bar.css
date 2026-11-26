@@ -1,6 +1,6 @@
 /* ActionsBar: how a form ends: what still needs fixing, what will be left out, then Save. Owns .actions-bar (the order and
    the hiding in Edit and Select) and .actions-note. The notices are Notice's, the buttons Button's, the stack and the
-   wrapping row Layout's. In the flow, never stuck (R1.3): the form's .l-stack puts it 24 under the last section.
+   wrapping row Layout's. In the flow, never stuck (R1.3): 24 under the last section (a .stack form gets it below; an .l-stack form sets --gap).
    Markup:
      <div class="actions-bar l-stack" [data-mode="edit|select"]>      children 16 apart (space-group)
        <div class="notice" data-tone="error" role="alert">…</div>     a submit that was refused: gaps, rules, the server, and
@@ -8,7 +8,7 @@
        <div class="notice" data-tone="warn">…</div>                   true before the press: a risk, what won't be saved
        <div class="l-cluster">
          <button class="primary" data-reserve="Save habit">Save habit</button>   first, at the leading edge
-         <button type="button">Cancel</button>                        only a form that opened in place; a wizard's Back
+         <button type="button">Cancel</button>                        in place; on a full page a.button to the parent; a wizard's Back
          <p class="actions-note meta">…</p>                           optional: one line beside the buttons
          <button class="danger" formaction="?/delete">Delete …</button>   a destroy of the whole record: last, trailing
        </div>

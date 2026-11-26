@@ -416,7 +416,6 @@
 		text-align: right;
 	}
 	.note {
-		font-size: var(--font-size-chip);
 		margin: var(--space-tight) 0 0;
 	}
 </style>

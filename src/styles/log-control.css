@@ -1,8 +1,8 @@
 /* LogControl: a due habit's one joined control, the action + ⋯ (Done + ⋯ menu, D2.2).
    Owns .log-control, .log-act, .log-more; its ⋯ opens a Menu (.menu, Menu's fragment).
    Markup: <div class="verb"><div class="log-control">                 ← R2.19: div.verb > div.log-control (it holds a div menu)
-             <button class="log-act [primary] [small]" aria-label="Done: Gym at Target, 45 min">Done</button>   ← or a.button for Log, Resume
-             <button class="log-more [primary] [small]" aria-label="More ways to log Gym" aria-haspopup="menu"
+             <button class="log-act [primary]" aria-label="Done: Gym at Target, 45 min">Done</button>   ← or a.button for Log, Resume
+             <button class="log-more [primary]" aria-label="More ways to log Gym" aria-haspopup="menu"
                      aria-expanded="false" aria-controls="m-gym"><span aria-hidden="true">⋯</span></button>
              <div class="menu" role="menu" id="m-gym" aria-label="More ways to log Gym" [data-side="up"] hidden>
                <button role="menuitem" tabindex="-1"><span class="menu-label">Minimum</span> <span class="menu-value label num">10 min</span></button>
@@ -16,7 +16,7 @@
    A limit row (R2.1): Resisted (never primary) + ⋯ holding Log a slip… (and Log details… when the habit has a log page). */
 
 /* ---------- The joined control: two Buttons, one shared edge ---------- */
-/* Same height (Button: control-md 32px, .small control-sm 24px), radius-control on the outer corners only.
+/* Same height (Button's control-md, 32px: the row verb's M size), radius-control on the outer corners only.
    nowrap: the pair wraps under the content as one piece (ListRow's verb), never between its halves. */
 .log-control { position: relative; flex: none; display: inline-flex; white-space: nowrap; }
 .log-control > .log-act { border-start-end-radius: 0; border-end-end-radius: 0; }

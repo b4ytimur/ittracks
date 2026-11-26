@@ -1,8 +1,8 @@
 /* EditChrome: the title line with the back link and the mode switch, the hint line, Reset layout, the view-chip row.
    Markup:
      <header class="titlebar" data-mode="use|edit|select" [data-add-hidden]> a.title-back, h1.page-title, div.title-actions, div.segmented </header>
-     a.title-back               a page with a parent only (D3.31): <a class="title-back label" href="/settings"
-                                aria-label="Back to Settings"><span aria-hidden="true">‹</span>&nbsp;Settings</a>
+     a.title-back               a page with a parent only (D3.31): <a class="title-back" href="/habits">‹ Habits</a>
+                                (EditChrome's back prop)
      div.title-actions          EditChrome's add and more, in this order on every page (TS.15): the page's one
                                 a.button.primary[data-add] (New habit), then its ⋯ MenuButton with everything else
      div.title-actions          only when the actions don't fit beside the h1: the component renders them here instead
@@ -13,7 +13,8 @@
        <span data-hint="edit"><span id="…" [data-reserve="…"]>text</span>   the text alone: InlineEditor swaps it and
                                                             describes by it; Today reserves its longest edit text
          <span class="hint-tools">                                  trailing; only on pages with a default or a chooser
-           <button class="link reset" [data-at-default]>Reset layout</button>   hidden in place while the layout matches
+           <button class="quiet reset" [data-at-default]>Reset layout</button>  hidden in place at the default; the
+                                                            label is resetLabel (Reset view on Today)
            <span class="layout-chooser">                        Today only, last: TodayLayouts' button and menu
              <button class="quiet layout-pick" aria-haspopup="menu" aria-expanded aria-controls>Layout: <b data-reserve="Up next first">…</b></button>
              <span class="menu layout-menu" role="menu" hidden>…menu-check, menu-label, menu-note items…</span>   a Menu, a span in a p
@@ -36,7 +37,7 @@
 	container-type: inline-size; /* the switch's own-line rule asks how wide the line is */
 }
 .titlebar > h1 { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; } /* wraps, never truncates */
-/* Back link: leads the line in every mode (D3.31, C.2), 24px (target-min) on label's 20px line, beside the h1 while both
+/* Back link: leads the line in every mode (D3.31, C.2), 24px, the body line, beside the h1 while both
    fit; else the h1 wraps to the next line. It stands alone, so it underlines only on hover and :active (D3.29). */
 .titlebar > .title-back {
 	min-width: 0; padding-block: max(0px, calc((var(--target-min) - 1lh) / 2));
@@ -103,7 +104,6 @@ html.pinned {
 	float: inline-end; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 0 var(--space-inline);
 	margin-block: min(0px, (1.25rem - var(--target-min)) / 2); margin-inline-start: var(--space-inline);
 }
-.hint-line .reset { min-height: var(--target-min); } /* a Button .link has none; the tools' boxes are 24px */
 /* At its default the layout has nothing to reset: Reset hides in place, so the chooser and the line never move. */
 .hint-line .reset[data-at-default] { visibility: hidden; }
 

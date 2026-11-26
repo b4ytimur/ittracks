@@ -17,13 +17,13 @@
 	display: flex; flex-wrap: wrap; align-items: center; /* grip, checkbox and verb sit on the row's middle */
 	padding: calc(var(--space-group) - 1px) var(--space-group); /* the 1px edge counts toward the pitch */
 }
-/* A row with lines under its top line (a line kind, a week strip) centres its marks and verb on the name and meta
+/* A row with lines under its top line (a line kind, a week strip, a notice, Today's Headline picker) centres its marks and verb on the name and meta
    (24 + 20px), where a closed row has them, so opening a row moves nothing and nothing drifts into what hangs below. */
-.elist > li:has(> .card > .content > :is(.row-line, .week)) > .card { align-items: flex-start; }
-.elist > li:has(> .card > .content > :is(.row-line, .week)) > .card > :is(.slot, div.verb) {
+.elist > li:has(> .card > .content > :is(.row-line, .week, .notice, .headline-pick)) > .card { align-items: flex-start; }
+.elist > li:has(> .card > .content > :is(.row-line, .week, .notice, .headline-pick)) > .card > :is(.slot, div.verb) {
 	align-self: flex-start; min-height: calc(1.5rem + 1.25rem); align-items: center;
 }
-.elist > li:has(> .card > .content > :is(.row-line, .week)) > .card > :is(button, a).verb {
+.elist > li:has(> .card > .content > :is(.row-line, .week, .notice, .headline-pick)) > .card > :is(button, a).verb {
 	align-self: flex-start; margin-block-start: calc((1.5rem + 1.25rem - var(--target-min)) / 2);
 }
 
