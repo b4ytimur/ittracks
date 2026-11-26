@@ -7,6 +7,7 @@
 @import './styles/inline-editor.css';
 @import './styles/empty-state.css';
 @import './styles/edit-chrome.css';
+@import './styles/page-frame.css';
 @import './styles/segmented.css';
 @import './styles/group-heading.css';
 @import './styles/disclosure.css';

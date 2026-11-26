@@ -2,7 +2,7 @@
 	import { describeAsks, describeSchedule } from '$lib/describe';
 	import { forest } from '$lib/engine/tree';
 	import { onDestroy, untrack } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
+	import { MediaQuery, SvelteSet } from 'svelte/reactivity';
 	import { invalidateAll } from '$app/navigation';
 	import ViewSentence from '$lib/ViewSentence.svelte';
 	import { habitsWords } from '$lib/view-words';
@@ -10,6 +10,7 @@
 	import AreaGroups from '$lib/ui/AreaGroups.svelte';
 	import EditChrome from '$lib/ui/EditChrome.svelte';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
+	import GroupHeading from '$lib/ui/GroupHeading.svelte';
 	import StatusTag from '$lib/ui/StatusTag.svelte';
 	import InlineText from '$lib/ui/InlineText.svelte';
 	import BulkBar from '$lib/bulk/BulkBar.svelte';
@@ -70,6 +71,11 @@
 	});
 	const groups = $derived(groupBy(shown, view.group, { areas: data.areas }, { keepEmpty: mode === 'edit' }));
 	const identityNames = $derived([...new Set(habits.flatMap((h) => h.identities))].sort());
+	const identitiesOn = $derived(!views.hidden.includes('identities'));
+	/** The habits the side column counts: the ones not archived. */
+	const live = $derived(habits.filter((h) => !h.archived));
+	const wide = new MediaQuery('min-width: 64rem');
+	const sideSays = $derived([data.areas.length ? 'Areas' : '', identitiesOn ? 'Identities' : '', 'Add from'].filter(Boolean).join(', '));
 
 	/**
 	 * A list of siblings was reordered. It goes into the one shared order in the places those
@@ -237,35 +243,9 @@
 		edit: 'Drag ⠿ to reorder: sideways puts a habit inside the group or routine above it, or takes it out. Tap a name to rename it. The order is shared with Today.',
 		select: 'Tick habits to change them together.'
 	}}
->
-	{#snippet actions()}
-		{#if !views.hidden.includes('identities')}<a class="button" href="/identities">Identities</a>{/if}
-		<a class="button" href="/gallery">Gallery</a>
-		<a class="button primary" href="/habits/new">New habit</a>
-	{/snippet}
-</EditChrome>
-
-{#if data.added}
-	<p class="card added">
-		Added "{data.added}"{data.inside ? ` and the ${data.inside === 1 ? 'habit' : `${data.inside} habits`} inside it` : ''}{data.created ? ` with ${data.created} new ${data.created === 1 ? 'Task' : 'Tasks'}` : ''}{data.reused
-			? `${data.created ? ',' : ''} using ${data.reused} from your Library`
-			: ''}. It's on Today when it's due.
-	</p>
-{/if}
-{#if data.suggestView && !viewDismissed}
-	{@const sv = data.suggestView}
-	<div class="card added stack">
-		<span>This habit works well with the <strong>{sv.name}</strong> view. {sv.summary}</span>
-		<div class="row">
-			<button class="small primary" onclick={() => switchView(sv.id, sv.name)}>Switch to {sv.name}</button>
-			<button class="small" onclick={() => (viewDismissed = true)}>No thanks</button>
-		</div>
-	</div>
-{/if}
-
-{#if habits.length === 0}
-	<EmptyState text="A habit can be something to build, like a gym plan or language practice, or something to break, like smoking. Pick a ready-made one from the Gallery or make your own." />
-{/if}
+	add={{ label: 'New habit', href: '/habits/new' }}
+	more={[...(identitiesOn ? [{ label: 'Identities', href: '/identities' }] : []), { label: 'Gallery', href: '/gallery' }, { label: 'Import a template file', href: '/habits/import' }]}
+/>
 
 {#if habits.length}
 	<ViewSentence
@@ -273,22 +253,79 @@
 		bind:views
 		bind:current={view}
 		{mode}
-		words={habitsWords(view, { areas: data.areas, identities: views.hidden.includes('identities') ? [] : identityNames, lines: views.habits.lines, setLines })}
+		words={habitsWords(view, { areas: data.areas, identities: identitiesOn ? identityNames : [], lines: views.habits.lines, setLines })}
 	/>
-	{#if !shown.length}<EmptyState kind="filtered" text="No habits match these filters." />{/if}
+	{#if !wide.current}<details class="disclosure side-fold"><summary class="meta"><span class="chev" aria-hidden="true">›</span>{sideSays}</summary><div>{@render side()}</div></details>{/if}
 {/if}
 
-{#if mode === 'select'}
-	<BulkBar kind="habit" {selected} bind:outcome visible={shown.map((h) => h.id)} today={data.today} sources={{ areas: areaOptions }} />
-{/if}
+<!-- The side column, beside the list from 64rem and folded under the sentence on a phone (TS.15). Pressing an Area or an
+     Identity changes the view, as its word in the sentence does. -->
+{#snippet side()}
+	{#if data.areas.length}
+		<GroupHeading title="Areas" />
+		<div class="side-card side-list" role="group" aria-label="Areas">
+			<button type="button" class="side-row" aria-pressed={!view.areas.length} onclick={() => (view = { ...view, areas: [] })}>Every Area<span class="num">{live.length}</span></button>
+			{#each data.areas as a (a.id)}
+				{@const on = view.areas.length === 1 && view.areas[0] === a.id}
+				<button type="button" class="side-row" aria-pressed={on} onclick={() => (view = { ...view, areas: on ? [] : [a.id] })}>{a.name}<span class="num">{live.filter((h) => h.areaId === a.id).length}</span></button>
+			{/each}
+		</div>
+	{/if}
+	{#if identitiesOn}
+		<GroupHeading title="Identities" />
+		{#if identityNames.length}
+			<div class="side-card side-list" role="group" aria-label="Identities">
+				{#each identityNames as i (i)}
+					<button type="button" class="side-row" aria-pressed={view.identity === i} onclick={() => (view = { ...view, identity: view.identity === i ? null : i })}>{i}<span class="num">{live.filter((h) => h.identities.includes(i)).length}</span></button>
+				{/each}
+			</div>
+		{/if}
+		<div class="side-foot"><a class="quiet" href="/identities">{identityNames.length ? 'Open Identities' : 'Say who you want to be'}</a></div>
+	{/if}
+	<GroupHeading title="Add from" />
+	<div class="side-foot"><a class="button" href="/gallery">Gallery</a><a class="button" href="/habits/import">A file</a></div>
+{/snippet}
 
-<AreaGroups {groups} areas={data.areas} {mode} byArea={view.group === 'area'}>
-	{#snippet group(g)}
-		<!-- A habit inside a group sits in a list of its own under it; one whose group isn't listed sits at the top. -->
-		{@const tree = forest(g.items)}
-		{@render habitList(tree.roots, tree.kids, g.label || 'Habits', null)}
-	{/snippet}
-</AreaGroups>
+<div class="page-cols">
+	<div class="page-main">
+		{#if data.added}
+			<p class="card added">
+				Added "{data.added}"{data.inside ? ` and the ${data.inside === 1 ? 'habit' : `${data.inside} habits`} inside it` : ''}{data.created ? ` with ${data.created} new ${data.created === 1 ? 'Task' : 'Tasks'}` : ''}{data.reused
+					? `${data.created ? ',' : ''} using ${data.reused} from your Library`
+					: ''}. It's on Today when it's due.
+			</p>
+		{/if}
+		{#if data.suggestView && !viewDismissed}
+			{@const sv = data.suggestView}
+			<div class="card added stack">
+				<span>This habit works well with the <strong>{sv.name}</strong> view. {sv.summary}</span>
+				<div class="row">
+					<button class="small primary" onclick={() => switchView(sv.id, sv.name)}>Switch to {sv.name}</button>
+					<button class="small" onclick={() => (viewDismissed = true)}>No thanks</button>
+				</div>
+			</div>
+		{/if}
+
+		{#if habits.length === 0}
+			<EmptyState text="A habit can be something to build, like a gym plan or language practice, or something to break, like smoking. Pick a ready-made one from the Gallery or make your own." />
+		{:else if !shown.length}
+			<EmptyState kind="filtered" text="No habits match these filters." />
+		{/if}
+
+		{#if mode === 'select'}
+			<BulkBar kind="habit" {selected} bind:outcome visible={shown.map((h) => h.id)} today={data.today} sources={{ areas: areaOptions }} />
+		{/if}
+
+		<AreaGroups {groups} areas={data.areas} {mode} byArea={view.group === 'area'}>
+			{#snippet group(g)}
+				<!-- A habit inside a group sits in a list of its own under it; one whose group isn't listed sits at the top. -->
+				{@const tree = forest(g.items)}
+				{@render habitList(tree.roots, tree.kids, g.label || 'Habits', null)}
+			{/snippet}
+		</AreaGroups>
+	</div>
+	{#if wide.current}<aside class="page-side" aria-label="Around your habits">{@render side()}</aside>{/if}
+</div>
 
 {#snippet habitList(items: Habit[], kids: Map<string, Habit[]>, name: string, holder: Habit | null)}
 	<EditableList
@@ -325,8 +362,6 @@
 		{/snippet}
 	</EditableList>
 {/snippet}
-
-<p style="margin-top: 1rem"><a class="button" href="/habits/import">Import a template file</a></p>
 
 <style>
 	.added {

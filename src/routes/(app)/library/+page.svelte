@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { onDestroy, untrack } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
+	import { MediaQuery, SvelteSet } from 'svelte/reactivity';
 	import ViewSentence from '$lib/ViewSentence.svelte';
 	import { libraryWords } from '$lib/view-words';
 	import EditableList from '$lib/ui/EditableList.svelte';
 	import EditChrome from '$lib/ui/EditChrome.svelte';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
+	import GroupHeading from '$lib/ui/GroupHeading.svelte';
 	import StatusTag from '$lib/ui/StatusTag.svelte';
 	import type { Mode } from '$lib/ui/list';
 	import AreaGroups from '$lib/ui/AreaGroups.svelte';
@@ -41,7 +42,6 @@
 	);
 	const areaId = $derived(view.areas[0] ?? null);
 	const setArea = (id: string | null) => (view.areas = id ? [id] : []);
-	let showTags = $state(false);
 
 	const toggleTag = (t: string) => (view.tags = view.tags.includes(t) ? view.tags.filter((x) => x !== t) : [...view.tags, t]);
 
@@ -73,6 +73,10 @@
 	const area = (id: string | null) => data.areas.find((a) => a.id === id);
 	const filtering = $derived(!!(view.query || view.tags.length || areaId || view.collection));
 	const clear = () => (view = { ...view, query: '', tags: [], areas: [], collection: null });
+	/** The Tasks the side column counts: the ones not archived. */
+	const live = $derived(tasks.filter((t) => !t.archived));
+	const wide = new MediaQuery('min-width: 64rem');
+	const sideSays = $derived([data.areas.length ? 'Areas' : '', 'Collections', data.tags.length ? 'Tags' : ''].filter(Boolean).join(', '));
 
 	/** Select mode: tick Tasks, then change them together from the band. */
 	let outcome = $state(new Map<string, { tag?: string; reason?: string }>());
@@ -162,97 +166,103 @@
 		edit: 'Tap a name to rename it. Archived Tasks keep their logs.',
 		select: 'Tick Tasks to change them together.'
 	}}
->
-	{#snippet actions()}
-		<a class="button primary" href="/library/new{areaId ? `?area=${areaId}` : view.collection ? `?collection=${view.collection}` : ''}">New task</a>
-	{/snippet}
-</EditChrome>
+	add={{ label: 'New task', href: `/library/new${areaId ? `?area=${areaId}` : view.collection ? `?collection=${view.collection}` : ''}` }}
+	more={[
+		{ label: data.showArchived ? 'Hide archived' : 'Show archived', href: data.showArchived ? '/library' : '/library?archived' },
+		...(view.collection ? [{ label: 'Edit this collection', href: `/library/collections/${view.collection}` }] : []),
+		{ label: 'New collection', href: '/library/collections/new' }
+	]}
+/>
+
+<div class="search page-wide" role="search">
+	<label class="vh" for="li-q">Search Tasks and tags</label>
+	<input id="li-q" type="search" bind:value={view.query} placeholder="Search Tasks and tags" autocomplete="off" />
+	{#if view.query}<button type="button" class="quiet search-clear" aria-label="Clear search" onclick={() => ((view.query = ''), document.getElementById('li-q')?.focus())}>×</button>{/if}
+</div>
 
 <ViewSentence page="library" bind:views bind:current={view} {mode} words={libraryWords(view, { areas: data.areas.length > 0 })} />
+{#if !wide.current}<details class="disclosure side-fold"><summary class="meta"><span class="chev" aria-hidden="true">›</span>{sideSays}</summary><div>{@render side()}</div></details>{/if}
 
-<input type="search" bind:value={view.query} placeholder="Search Tasks and tags" aria-label="Search" />
-
-<div class="chips" role="group" aria-label="Area">
-	<button type="button" class="toggle" aria-pressed={!areaId} onclick={() => setArea(null)}>All areas</button>
-	{#each data.areas as a (a.id)}
-		<button type="button" class="toggle" aria-pressed={areaId === a.id} onclick={() => setArea(areaId === a.id ? null : a.id)}>{a.name}</button>
-	{/each}
-</div>
-
-<div class="chips" role="group" aria-label="Collections">
-	{#each topCollections as c (c.id)}
-		<button type="button" class="toggle" aria-pressed={view.collection === c.id} onclick={() => (view.collection = view.collection === c.id ? null : c.id)}
-			>{c.name} · {c.taskIds.length}</button
-		>
-		{#each childrenOf(c.id) as k (k.id)}
-			<button type="button" class="toggle" aria-pressed={view.collection === k.id} onclick={() => (view.collection = view.collection === k.id ? null : k.id)}
-				>{c.name} › {k.name} · {k.taskIds.length}</button
-			>
-		{/each}
-	{/each}
-	{#if view.collection}<a class="button small" href="/library/collections/{view.collection}">Edit collection</a>{/if}
-	<a class="button small" href="/library/collections/new">+ Collection</a>
-</div>
-
-<div class="row tools">
-	<span class="grow"></span>
-	{#if data.tags.length}
-		<button type="button" class="small" onclick={() => (showTags = !showTags)}>Tags{view.tags.length ? ` (${view.tags.length})` : ''}</button>
+<!-- The side column, beside the list from 64rem and folded under the sentence on a phone (TS.15). -->
+{#snippet side()}
+	{#if data.areas.length}
+		<GroupHeading title="Areas" />
+		<div class="side-card side-list" role="group" aria-label="Areas">
+			<button type="button" class="side-row" aria-pressed={!areaId} onclick={() => setArea(null)}>Every Area<span class="num">{live.length}</span></button>
+			{#each data.areas as a (a.id)}
+				<button type="button" class="side-row" aria-pressed={areaId === a.id} onclick={() => setArea(areaId === a.id ? null : a.id)}>{a.name}<span class="num">{live.filter((t) => t.areaId === a.id).length}</span></button>
+			{/each}
+		</div>
 	{/if}
-	<a class="small-text" href={data.showArchived ? '/library' : '/library?archived'}>{data.showArchived ? 'Hide archived' : 'Show archived'}</a>
-</div>
-{#if showTags}
-	<div class="chips" role="group" aria-label="Filter by tags (all must match)">
-		{#each data.tags as t (t)}
-			<button type="button" class="toggle" aria-pressed={view.tags.includes(t)} onclick={() => toggleTag(t)}>{t}</button>
-		{/each}
+	<GroupHeading title="Collections" />
+	{#if data.collections.length}
+		<div class="side-card side-list" role="group" aria-label="Collections">
+			<button type="button" class="side-row" aria-pressed={!view.collection} onclick={() => (view.collection = null)}>Every Task<span class="num">{live.length}</span></button>
+			{#each topCollections as c (c.id)}
+				<button type="button" class="side-row" aria-pressed={view.collection === c.id} onclick={() => (view.collection = view.collection === c.id ? null : c.id)}>{c.name}<span class="num">{c.taskIds.length}</span></button>
+				{#each childrenOf(c.id) as k (k.id)}
+					<button type="button" class="side-row" aria-pressed={view.collection === k.id} onclick={() => (view.collection = view.collection === k.id ? null : k.id)}>{c.name} › {k.name}<span class="num">{k.taskIds.length}</span></button>
+				{/each}
+			{/each}
+		</div>
+	{/if}
+	<div class="side-foot">
+		{#if view.collection}<a class="quiet" href="/library/collections/{view.collection}">Edit collection</a>{/if}
+		<a class="quiet" href="/library/collections/new">+ Collection</a>
 	</div>
-{/if}
+	{#if data.tags.length}
+		<GroupHeading title="Tags" />
+		<div class="chips" role="group" aria-label="Filter by tags (all must match)">
+			{#each data.tags as t (t)}
+				<button type="button" class="toggle" aria-pressed={view.tags.includes(t)} onclick={() => toggleTag(t)}>{t}</button>
+			{/each}
+		</div>
+	{/if}
+{/snippet}
 
-{#if data.tasks.length === 0}
-	<EmptyState text={'Your Library holds the Tasks you build habits from, like “Bench press” or “Learn new words”. Add your first one, or add a ready-made habit and its Tasks come with it.'} />
-	<a href="/gallery">Browse ready-made habits</a>
-{:else if shown.length === 0}
-	<EmptyState kind="filtered" text="Nothing matches." onclear={filtering ? clear : undefined} />
-{/if}
+<div class="page-cols">
+	<div class="page-main">
+		{#if data.tasks.length === 0}
+			<EmptyState text={'Your Library holds the Tasks you build habits from, like “Bench press” or “Learn new words”. Add your first one, or add a ready-made habit and its Tasks come with it.'} />
+			<a href="/gallery">Browse ready-made habits</a>
+		{:else if shown.length === 0}
+			<EmptyState kind="filtered" text="Nothing matches." onclear={filtering ? clear : undefined} />
+		{/if}
 
-{#if mode === 'select'}
-	<BulkBar kind="task" {selected} bind:outcome visible={shown.map((t) => t.id)} today={data.today} {sources} />
-{/if}
+		{#if mode === 'select'}
+			<BulkBar kind="task" {selected} bind:outcome visible={shown.map((t) => t.id)} today={data.today} {sources} />
+		{/if}
 
-<AreaGroups {groups} areas={data.areas} {mode} byArea={view.group === 'area' && !areaId}>
-	{#snippet group(g)}
-	<EditableList
-		items={g.items}
-		key={(t) => t.id}
-		label={(t) => t.name}
-		{mode}
-		{selected}
-		rowCard
-		href={(t) => `/library/${t.id}`}
-		itemClass={(t) => (struck.has(t.id) ? 'struck' : '')}
-		onremove={archive}
-		removeLabel={(t) => (t.deleteAfter ? 'Put back' : t.archived ? 'Unarchive' : 'Archive')}
-		ariaLabel={g.label || 'Tasks'}
-	>
-		{#snippet row(t)}
-			{@const o = outcome.get(t.id)}
-			{#if mode === 'use'}<a class="name" href="/library/{t.id}">{t.name}</a>
-			{:else}<span class="name"><InlineText value={t.name} editing={mode === 'edit' && !struck.has(t.id)} label="Name of {t.name}" maxlength={120} onsave={(v) => rename(t, v)} /></span>{/if}
-			{#if o?.tag}<span class="tags"><span class="tag pending"><span aria-hidden="true">→</span> {o.tag}</span></span>
-			{:else if t.archived}<span class="tags"><StatusTag status="archived" /></span>
-			{:else if !t.usedIn.length && !t.timesLogged}<span class="tags"><StatusTag status="unused" /></span>{/if}
-			{#if o?.reason || metaOf(t)}<p class="meta-line label">{o?.reason ?? metaOf(t)}</p>{/if}
-			{#if t.tags.length}
-				<span class="row-line tags">{#each t.tags as tg (tg.name)}<span class="tag">{tg.name}: {tagGroups().levelName(tg.name, tg.level)}</span>{/each}</span>
-			{/if}
-		{/snippet}
-	</EditableList>
-	{/snippet}
-</AreaGroups>
-
-<style>
-	.tools {
-		margin-block: 0.6rem;
-	}
-</style>
+		<AreaGroups {groups} areas={data.areas} {mode} byArea={view.group === 'area' && !areaId}>
+			{#snippet group(g)}
+			<EditableList
+				items={g.items}
+				key={(t) => t.id}
+				label={(t) => t.name}
+				{mode}
+				{selected}
+				rowCard
+				href={(t) => `/library/${t.id}`}
+				itemClass={(t) => (struck.has(t.id) ? 'struck' : '')}
+				onremove={archive}
+				removeLabel={(t) => (t.deleteAfter ? 'Put back' : t.archived ? 'Unarchive' : 'Archive')}
+				ariaLabel={g.label || 'Tasks'}
+			>
+				{#snippet row(t)}
+					{@const o = outcome.get(t.id)}
+					{#if mode === 'use'}<a class="name" href="/library/{t.id}">{t.name}</a>
+					{:else}<span class="name"><InlineText value={t.name} editing={mode === 'edit' && !struck.has(t.id)} label="Name of {t.name}" maxlength={120} onsave={(v) => rename(t, v)} /></span>{/if}
+					{#if o?.tag}<span class="tags"><span class="tag pending"><span aria-hidden="true">→</span> {o.tag}</span></span>
+					{:else if t.archived}<span class="tags"><StatusTag status="archived" /></span>
+					{:else if !t.usedIn.length && !t.timesLogged}<span class="tags"><StatusTag status="unused" /></span>{/if}
+					{#if o?.reason || metaOf(t)}<p class="meta-line label">{o?.reason ?? metaOf(t)}</p>{/if}
+					{#if t.tags.length}
+						<span class="row-line tags">{#each t.tags as tg (tg.name)}<span class="tag">{tg.name}: {tagGroups().levelName(tg.name, tg.level)}</span>{/each}</span>
+					{/if}
+				{/snippet}
+			</EditableList>
+			{/snippet}
+		</AreaGroups>
+	</div>
+	{#if wide.current}<aside class="page-side" aria-label="Around your Library">{@render side()}</aside>{/if}
+</div>

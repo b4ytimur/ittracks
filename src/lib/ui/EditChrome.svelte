@@ -3,6 +3,7 @@
 	// editing and selecting, with a line under it that says what can be done now.
 	import type { Snippet } from 'svelte';
 	import Segmented from './Segmented.svelte';
+	import MenuButton, { type Way } from './MenuButton.svelte';
 	import type { Mode } from './list';
 
 	let {
@@ -11,6 +12,8 @@
 		modes = ['use', 'edit'],
 		back,
 		hints = {},
+		add,
+		more = [],
 		actions,
 		tools,
 		onreset,
@@ -27,7 +30,11 @@
 		hints?: Partial<Record<Mode, string>>;
 		/** The line under the title in Use, when it holds more than words (Today's date and count, TS.5). */
 		useHint?: Snippet;
-		/** Buttons on the title line, out of reach while editing or selecting. */
+		/** The one thing the page makes, first after the title (New habit). Out of reach while editing or selecting. */
+		add?: { label: string; href?: string; onclick?: () => void };
+		/** Everything else the page offers, in the ⋯ after it. Every page's title line reads the same (TS.15). */
+		more?: (Way | '-')[];
+		/** Today's own frame only (its ⋯, Back to today on another day). Every other page uses add and more. */
 		actions?: Snippet;
 		/** At the end of the hint line while editing. */
 		tools?: Snippet;
@@ -61,7 +68,14 @@
 <header class="titlebar" class:stuck data-mode={mode} bind:this={bar}>
 	{#if back}<a class="title-back" href={back.href}>‹ {back.label}</a>{/if}
 	<h1 class="page-title">{title}</h1>
-	{#if actions}<div class="title-actions" inert={mode !== 'use'}>{@render actions()}</div>{/if}
+	{#if actions || add || more.length}
+		<div class="title-actions" inert={mode !== 'use'}>
+			{@render actions?.()}
+			{#if add?.href}<a class="button primary" data-add href={add.href}>{add.label}</a>
+			{:else if add}<button type="button" class="primary" data-add onclick={add.onclick}>{add.label}</button>{/if}
+			{#if more.length}<MenuButton class="button" label="More on {title}" items={more} />{/if}
+		</div>
+	{/if}
 	{#if modes.length > 1}<Segmented label="Mode" options={modes.map((m) => ({ value: m, label: words[m] }))} value={mode} onchange={set} />{/if}
 </header>
 {#if Object.keys(hints).length || onreset || useHint}

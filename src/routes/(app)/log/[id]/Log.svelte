@@ -27,6 +27,7 @@
 	import { hasLog, isSuggestion, keepsSuggestions, onlySuggested, setByHand, type PlaceStart } from '$lib/prefill';
 
 	import type { ActionData, PageData } from './$types';
+	import { backLabel } from '$lib/back';
 
 	let { data, form }: { data: Extract<PageData, { routine: null }>; form: ActionData } = $props();
 
@@ -916,7 +917,7 @@
 <svelte:head><title>{data.habitName} · ittracks</title></svelte:head>
 <svelte:window onkeydown={(e) => e.key === 'Enter' && (e.ctrlKey || e.metaKey) && stage === 'run' && finishForm?.requestSubmit()} />
 
-<EditChrome title={quickMode ? `Quick log: ${data.habitName}` : data.habitName} back={{ href: data.back, label: 'Back' }} bind:mode modes={canEdit ? ['use', 'edit'] : ['use']} hints={{ use: hint, edit: 'Drag ⠿ to move. What you change, add or remove here is the plan, from now on.' }} />
+<EditChrome title={quickMode ? `Quick log: ${data.habitName}` : data.habitName} back={{ href: data.back, label: backLabel(data.back) }} bind:mode modes={canEdit ? ['use', 'edit'] : ['use']} hints={{ use: hint, edit: 'Drag ⠿ to move. What you change, add or remove here is the plan, from now on.' }} />
 {#if saveState === 'refused' && !theirs}<p class="error" role="alert">Not saved: {refusedWhy}</p>{/if}
 <p class="vh" role="status">{said}</p>
 

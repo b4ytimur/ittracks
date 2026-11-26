@@ -86,18 +86,15 @@
 
 <svelte:head><title>Stats · ittracks</title></svelte:head>
 
-<div class="stats-page">
+<div class="stats-page page-wide">
 	<EditChrome
 		title="Stats"
 		mode={editing ? 'edit' : 'use'}
 		modes={board ? ['use', 'edit'] : ['use']}
 		onmode={(m) => ((editing = m === 'edit'), (adding = false))}
 		hints={{ use: board ? `${board.cards.length} ${board.cards.length === 1 ? 'card' : 'cards'}` : '', edit: 'Drag a card to move it. Press a word to change it.' }}
-	>
-		{#snippet actions()}
-			{#if board}<button type="button" onclick={() => (adding = true)}>+ Card</button>{/if}
-		{/snippet}
-	</EditChrome>
+		add={board ? { label: 'New card', onclick: () => (adding = true) } : undefined}
+	/>
 
 	<nav class="subtabs boards" aria-label="Boards">
 		<div class="subtabs-row">
