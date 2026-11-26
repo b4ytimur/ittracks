@@ -2,7 +2,6 @@
    a day's heading and note, the end of the list, the Chain's words. Rows are ListRow, headings GroupHeading, marks DayTile,
    the grid HeatGrid, the filters FilterBar. Tokens only. From the History prototype. */
 .hi-strip { margin-block: var(--space-inline) var(--space-group); }
-.hi-days { margin-block-start: var(--space-inline); }
 .hi-head { flex-wrap: wrap; } /* at 200% text on 320 the count and the verb take a second line */
 .hi-day > .group-heading { margin-block: 0 var(--space-tight); }
 .hi-day + .hi-day { margin-block-start: var(--space-section); }

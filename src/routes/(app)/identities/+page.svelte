@@ -49,7 +49,7 @@
 
 <svelte:head><title>Identities · ittracks</title></svelte:head>
 
-<EditChrome title="Identities" bind:mode modes={list.length ? ['use', 'edit'] : ['use']} back={{ href: '/', label: 'Today' }} hints={{ use: 'Who do you want to be? A habit stands for one when you pick it on the habit’s page.', edit: 'Press a sentence to change it.' }} />
+<EditChrome title="Identities" bind:mode modes={list.length ? ['use', 'edit'] : ['use']} back={{ href: '/habits', label: 'Habits' }} hints={{ use: 'Who do you want to be? A habit stands for one when you pick it on the habit’s page.', edit: 'Press a sentence to change it.' }} />
 
 {#if !list.length}<EmptyState text="None yet. Write one as a sentence, such as “I am someone who speaks Spanish”." />{/if}
 <EditableList

@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Settings: one page of lines. Each opens where it stands and is saved as it is left, with Undo.
 	import { tick, untrack } from 'svelte';
+	import { MediaQuery } from 'svelte/reactivity';
 	import { page } from '$app/state';
 	import { invalidateAll } from '$app/navigation';
 	import { deserialize } from '$app/forms';
@@ -71,6 +72,7 @@
 		}
 	});
 	const isFolded = (id: string) => !q.trim() && folded.includes(id);
+	const wide = new MediaQuery('min-width: 64rem');
 	function fold(id: string) {
 		folded = folded.includes(id) ? folded.filter((x) => x !== id) : [...folded, id];
 		try {
@@ -170,40 +172,54 @@
 
 <EditChrome title="Settings" modes={['use']} hints={{ use: `Signed in as ${data.username}. ${Object.keys(FEATURES).length - views.hidden.length} of ${Object.keys(FEATURES).length} features in use.` }} />
 
-<div class="search se-find" role="search">
+<div class="search se-find page-wide" role="search">
 	<label class="vh" for="se-q">Find a setting</label>
 	<input id="se-q" type="search" placeholder="Find a setting" bind:value={q} autocomplete="off" />
 	{#if q}<button type="button" class="quiet search-clear" aria-label="Clear search" onclick={() => ((q = ''), document.getElementById('se-q')?.focus())}>×</button>{/if}
 	{#if q.trim()}<p class="result-line meta" role="status">{found} {found === 1 ? 'setting' : 'settings'}</p>{/if}
 </div>
 
-{#each shown as g (g.id)}
-	<section class="se-sec su-sec" aria-label={g.title}>
-		<GroupHeading title={g.title} count={String(g.lines.length)} folded={isFolded(g.id)} onfold={() => fold(g.id)} />
-		{#if !isFolded(g.id)}
-			<div class="card su-lines">
-				{#each g.lines as l (l.id)}
-					<SaidLine id={l.id} label={l.label} words={l.words} bind:open={() => !!open[l.id], (v) => (open[l.id] = v)} problem={problem[l.id]}>
-						{#if l.id !== 'password'}<p class="field-hint meta">{l.says}</p>{/if}
-						{#key drawn[l.id]}{@render body(l.id)}{/key}
-					</SaidLine>
-				{/each}
-			</div>
-		{/if}
-	</section>
-{/each}
+<div class="page-cols">
+	<div class="page-main">
+		{#each shown as g (g.id)}
+			<section class="se-sec su-sec" id="g-{g.id}" aria-label={g.title}>
+				<GroupHeading title={g.title} count={String(g.lines.length)} folded={isFolded(g.id)} onfold={() => fold(g.id)} />
+				{#if !isFolded(g.id)}
+					<div class="card su-lines">
+						{#each g.lines as l (l.id)}
+							<SaidLine id={l.id} label={l.label} words={l.words} bind:open={() => !!open[l.id], (v) => (open[l.id] = v)} problem={problem[l.id]}>
+								{#if l.id !== 'password'}<p class="field-hint meta">{l.says}</p>{/if}
+								{#key drawn[l.id]}{@render body(l.id)}{/key}
+							</SaidLine>
+						{/each}
+					</div>
+				{/if}
+			</section>
+		{/each}
 
-{#if elsewhere.length}
-	<section class="se-sec su-sec" aria-label="Set where they act">
-		<GroupHeading title="Set where they act" count={String(elsewhere.length)} folded={isFolded('elsewhere')} onfold={() => fold('elsewhere')} />
-		{#if !isFolded('elsewhere')}
-			<ul class="card places">
-				{#each elsewhere as e (e.label)}<li><a href={e.href}>{e.label}</a> <span class="meta muted">{e.place}</span></li>{/each}
-			</ul>
+		{#if elsewhere.length}
+			<section class="se-sec su-sec" id="g-elsewhere" aria-label="Set where they act">
+				<GroupHeading title="Set where they act" count={String(elsewhere.length)} folded={isFolded('elsewhere')} onfold={() => fold('elsewhere')} />
+				{#if !isFolded('elsewhere')}
+					<ul class="card places">
+						{#each elsewhere as e (e.label)}<li><a href={e.href}>{e.label}</a> <span class="meta muted">{e.place}</span></li>{/each}
+					</ul>
+				{/if}
+			</section>
 		{/if}
-	</section>
-{/if}
-{#if q.trim() && !found}<EmptyState kind="filtered" text="No setting matches “{q.trim()}”." clearLabel="Clear search" onclear={() => (q = '')} />{/if}
+		{#if q.trim() && !found}<EmptyState kind="filtered" text="No setting matches “{q.trim()}”." clearLabel="Clear search" onclear={() => (q = '')} />{/if}
+	</div>
+	<!-- From 64rem, an index of the groups beside them; pressing a folded one opens it (TS.15). -->
+	{#if wide.current}
+		<aside class="page-side" aria-label="On this page">
+			<GroupHeading title="On this page" />
+			<nav class="side-card side-list" aria-label="Settings groups">
+				{#each shown as g (g.id)}<a class="side-row" href="#g-{g.id}" onclick={() => isFolded(g.id) && fold(g.id)}>{g.title}<span class="num">{g.lines.length}</span></a>{/each}
+				{#if elsewhere.length}<a class="side-row" href="#g-elsewhere" onclick={() => isFolded('elsewhere') && fold('elsewhere')}>Set where they act<span class="num">{elsewhere.length}</span></a>{/if}
+			</nav>
+		</aside>
+	{/if}
+</div>
 
 {#snippet body(id: string)}
 	{#if id === 'daystart'}

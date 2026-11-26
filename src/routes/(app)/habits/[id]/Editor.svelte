@@ -1792,9 +1792,8 @@
 	onreset={data.isNew ? undefined : () => void arrange(undefined, `Reset the order of sections, ${everyOne}.`)}
 	atDefault={!data.detail[pageKind]}
 	hints={data.isNew ? {} : { edit: `Drag ⠿ to move a section, ${everyOne}.`,  use: `${now.days && build ? now.days : now.limit} ${heldIds.length ? 'A change isn’t saved yet.' : ''}`.trim() }}
->
-	{#snippet actions()}{#if menu.length}<span class="menu-at"><MenuButton class="hit" label="More for {h.name}" items={menu} /></span>{/if}{/snippet}
-</EditChrome>
+	more={menu}
+/>
 {#if !data.isNew}<RecordTabs habit={data.id} at="details" />{/if}
 
 {#if data.archived}
@@ -1940,10 +1939,6 @@
 		margin-block-end: var(--space-inline);
 	}
 	.blocked,
-	.menu-at {
-		position: relative;
-		display: inline-flex;
-	}
 	.pin {
 		margin-block: var(--space-group) var(--space-inline);
 	}

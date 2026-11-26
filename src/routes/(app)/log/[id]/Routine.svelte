@@ -9,6 +9,7 @@
 	import MenuButton, { type Way } from '$lib/ui/MenuButton.svelte';
 	import type { RoutineDay } from '$lib/server/routine-day';
 	import { leftText, type LeftOpen } from '$lib/engine/rollup';
+	import { backLabel } from '$lib/back';
 
 	let { routine: r, today, back, canLog }: { routine: RoutineDay; today: string; back: string; /** False for a day further back than Settings allow. */ canLog: boolean } = $props();
 	type Step = RoutineDay['steps'][number];
@@ -84,9 +85,7 @@
 
 <svelte:head><title>{r.name} · ittracks</title></svelte:head>
 
-<EditChrome title={r.name} modes={['use']} back={{ href: back, label: 'Back' }} hints={{ use: [day, said(r.status, r.level), r.count].filter(Boolean).join(' · ') }}>
-	{#snippet actions()}{#if canLog && all.length}<span class="menu-at"><MenuButton class="hit" label="More for {r.name}" items={all} /></span>{/if}{/snippet}
-</EditChrome>
+<EditChrome title={r.name} modes={['use']} back={{ href: back, label: backLabel(back) }} hints={{ use: [day, said(r.status, r.level), r.count].filter(Boolean).join(' · ') }} more={canLog ? all : []} />
 
 {#if !canLog}
 	<div class="notice"><span class="notice-text">This day is further back than Settings allow logging, so it can only be looked at.</span><span class="notice-acts"><a class="quiet hit" href="/settings#past">Change it in Settings</a></span></div>
@@ -146,9 +145,6 @@
 	p,
 	h2 {
 		margin: 0;
-	}
-	.menu-at {
-		position: relative;
 	}
 	.lg-end {
 		display: grid;

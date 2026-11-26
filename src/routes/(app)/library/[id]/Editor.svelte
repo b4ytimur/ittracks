@@ -10,7 +10,7 @@
 	import { focusOn, rowOf } from '$lib/ui/focus';
 	import EditChrome from '$lib/ui/EditChrome.svelte';
 	import GroupHeading from '$lib/ui/GroupHeading.svelte';
-	import MenuButton, { type Way } from '$lib/ui/MenuButton.svelte';
+	import type { Way } from '$lib/ui/MenuButton.svelte';
 	import { dismiss, showToast } from '$lib/toast.svelte';
 	import { enhance } from '$app/forms';
 	import { deleteHere, goneAt } from '$lib/undelete';
@@ -715,9 +715,8 @@
 					.join(' · ')
 			}
 		: {}}
->
-	{#snippet actions()}{#if menu.length}<span class="menu-at"><MenuButton class="hit" label="More for {t.name}" items={menu} /></span>{/if}{/snippet}
-</EditChrome>
+	more={menu}
+/>
 
 {#if data.archived}
 	<form method="POST" action="?/unarchive" class="notice" use:enhance>
@@ -829,10 +828,6 @@
 <style>
 	p {
 		margin: 0;
-	}
-	.menu-at {
-		position: relative;
-		display: inline-flex;
 	}
 	.add-more {
 		margin-block: var(--space-section) var(--space-group);
