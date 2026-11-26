@@ -4,7 +4,9 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
 	import { enhance } from '$app/forms';
-	import ViewBar from '$lib/ViewBar.svelte';
+	import ViewSentence from '$lib/ViewSentence.svelte';
+	import { historyWords } from '$lib/view-words';
+	import { showToast } from '$lib/toast.svelte';
 	import EditableList from '$lib/ui/EditableList.svelte';
 	import EditChrome from '$lib/ui/EditChrome.svelte';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
@@ -16,7 +18,6 @@
 	import Markdown from '$lib/Markdown.svelte';
 	import { dayCount, dayMark, dayTitle, placeNotes, type DayLog } from '$lib/history/day';
 	import { dayExcerpt } from '$lib/journal';
-	import { STATUSES } from '$lib/views';
 	import { saveLayout } from '$lib/viewclient';
 
 	let { data } = $props();
@@ -147,7 +148,21 @@
 	</div>
 {/if}
 {#if !data.notesOnly && data.history.length}
-	<ViewBar page="history" bind:views bind:current={view} areas={data.areas} habits={data.habits} statuses={STATUSES} />
+	<ViewSentence
+		page="history"
+		bind:views
+		bind:current={view}
+		words={historyWords(view, {
+			areas: data.areas,
+			habits: data.habits,
+			values: views.history.values,
+			setValues: (on) => {
+				if (on === views.history.values) return;
+				toggleValues();
+				showToast(on ? 'History now shows what each log holds.' : 'History now shows logs without their values.', () => toggleValues());
+			}
+		})}
+	/>
 {/if}
 
 {#if mode === 'select'}

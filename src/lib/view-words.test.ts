@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sentence, todayWords, type TodayCtx } from './view-words';
+import { habitsWords, historyWords, libraryWords, sentence, todayWords, type TodayCtx } from './view-words';
 import { viewState } from './views';
 
 const ctx: TodayCtx = { areas: [{ id: 'a1', name: 'Fitness' }, { id: 'a2', name: 'Focus' }], identities: ['I am a non-smoker.'], parts: true, breaking: true };
@@ -40,5 +40,26 @@ describe("Today's sentence (TS.1)", () => {
 				expect(o.said, `${w.key} ${o.value}`).toMatch(/^(now|is) /);
 				expect(o.name.length).toBeGreaterThan(0);
 			}
+	});
+});
+
+describe('the same sentence on the other pages (TS.12)', () => {
+	const areas = [{ id: 'a1', name: 'Fitness' }];
+	it('Habits reads its view, and its lines are kept for the account', () => {
+		const said: string[] = [];
+		const w = habitsWords(viewState.parse({ group: 'area', sort: 'manual' }), { areas, identities: [], lines: ['schedule', 'cue'], setLines: (_, t) => said.push(t) });
+		expect(sentence(w)).toBe('every habit, by Area in my order, with schedule and time.');
+		const lines = w.find((x) => x.key === 'lines')!;
+		lines.set!(lines.options.find((o) => o.label === 'with every line')!.value);
+		expect(said).toEqual(['Each habit now shows every line.']);
+		expect(sentence(habitsWords(viewState.parse({ direction: 'break', areas: ['a1'], archived: true, group: 'none', sort: 'name' }), { areas, identities: [], lines: ['last'], setLines: () => {} }))).toBe(
+			'the habits to break in Fitness and the archived, in one list by name, with last done.'
+		);
+	});
+	it('Library and History read theirs', () => {
+		expect(sentence(libraryWords(viewState.parse({ group: 'area', sort: 'name' }), { areas: true }))).toBe('every Task, by Area, by name.');
+		const h = historyWords(viewState.parse({ sort: 'newest', status: 'slip', habit: 'h1' }), { areas, habits: [{ id: 'h1', name: 'Less coffee' }], values: false, setValues: () => {} });
+		expect(sentence(h)).toBe('only slips for Less coffee, newest first, without values.');
+		expect(h[0].pick('more:h:')).toMatchObject({ habit: null, status: 'slip' });
 	});
 });

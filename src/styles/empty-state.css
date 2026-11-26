@@ -59,7 +59,7 @@ button.ghost-slot { cursor: text; }
 .shelf .ghost-slot > :first-child,
 .elist[data-density='compact'] > .ghost > .ghost-slot > :first-child { align-self: center; }
 
-/* ---------- The pill: the same slot ending a row of chips (ViewBar's New view) ---------- */
+/* ---------- The pill: the same slot ending a row of chips (a pill-shaped New view; the views' own New view is a menu row, TS.10) ---------- */
 /* A chip's box, dashed: Chip's .toggle edge, padding, type and radius, so it lines up with the chips and is as tall.
    Open, the name field takes the words' place at the chip type, 16ch wide; the + keeps its place. */
 .ghost-slot.pill {

@@ -52,6 +52,22 @@
 		saveView(page, state, id);
 	}
 
+	// A change the page makes itself (Library's search and tags, a drag into My order) is a change to the view it is on:
+	// kept here and saved a moment later, as the view bar did. Not the state the page opened with, nor a view just switched to.
+	let first = true;
+	$effect(() => {
+		const snap = JSON.stringify(current);
+		if (first) {
+			first = false;
+			return;
+		}
+		untrack(() => {
+			const state = viewState.parse(JSON.parse(snap));
+			const was = viewStateOf(views, page, active);
+			if (was && !same(was, state)) store(active, state);
+		});
+	});
+
 	/** A change to the view from elsewhere on the page: saved, said in the band, with Undo and Keep as new view. */
 	export function change(next: ViewState, said: string, called = 'New view') {
 		const id = active;
@@ -71,6 +87,7 @@
 	}
 
 	function choose(w: Word, value: string) {
+		if (w.set) return w.set(value);
 		const o = w.options.find((x) => x.value === value);
 		if (o) change(w.pick(value), o.said, o.name);
 	}

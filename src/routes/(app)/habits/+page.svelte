@@ -4,7 +4,8 @@
 	import { onDestroy, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { invalidateAll } from '$app/navigation';
-	import ViewBar from '$lib/ViewBar.svelte';
+	import ViewSentence from '$lib/ViewSentence.svelte';
+	import { habitsWords } from '$lib/view-words';
 	import EditableList from '$lib/ui/EditableList.svelte';
 	import AreaGroups from '$lib/ui/AreaGroups.svelte';
 	import EditChrome from '$lib/ui/EditChrome.svelte';
@@ -18,7 +19,7 @@
 	import { saveLayout, viewOp } from '$lib/viewclient';
 	import { runAction, showToast, undoWith } from '$lib/toast.svelte';
 	import { goneAt } from '$lib/undelete';
-	import { HABIT_LINES, groupBy, manualOrder, passes, type HabitLineKey } from '$lib/views';
+	import { groupBy, manualOrder, passes, type HabitLineKey } from '$lib/views';
 
 	let { data } = $props();
 
@@ -48,11 +49,13 @@
 	}
 	let view = $state(untrack(() => data.initial));
 	const show = (k: HabitLineKey) => views.habits.lines.includes(k);
-	function toggleLine(k: HabitLineKey) {
-		const lines = show(k) ? views.habits.lines.filter((x) => x !== k) : [...views.habits.lines, k];
+	/** The lines on each habit, kept for the account: the sentence's last word (TS.12). */
+	function setLines(lines: HabitLineKey[], said: string) {
 		const before = views.habits;
 		views.habits = { ...views.habits, lines };
-		saveLayout({ op: 'patch', habits: { lines } }, () => (views.habits = before), () => toggleLine(k));
+		void saveLayout({ op: 'patch', habits: { lines } }, () => (views.habits = before), () => setLines(lines, said)).then(
+			(ok) => ok && showToast(said, async () => !!(await saveLayout({ op: 'patch', habits: { lines: before.lines } }, () => {}).then((r) => r && (views.habits = before))))
+		);
 	}
 
 	const area = (id: string | null) => data.areas.find((a) => a.id === id);
@@ -264,24 +267,13 @@
 {/if}
 
 {#if habits.length}
-	<ViewBar
+	<ViewSentence
 		page="habits"
 		bind:views
 		bind:current={view}
-		areas={data.areas}
-		identities={views.hidden.includes('identities') ? [] : identityNames}
-		direction
-		archived
-	>
-		<fieldset>
-			<legend class="small-text">Lines on each habit</legend>
-			{#each Object.entries(HABIT_LINES) as [k, label] (k)}
-				<label style="color: var(--ink)"
-					><input type="checkbox" checked={show(k as HabitLineKey)} onchange={() => toggleLine(k as HabitLineKey)} /> {label}</label
-				>
-			{/each}
-		</fieldset>
-	</ViewBar>
+		{mode}
+		words={habitsWords(view, { areas: data.areas, identities: views.hidden.includes('identities') ? [] : identityNames, lines: views.habits.lines, setLines })}
+	/>
 	{#if !shown.length}<EmptyState kind="filtered" text="No habits match these filters." />{/if}
 {/if}
 
@@ -339,9 +331,5 @@
 	.added {
 		border-color: var(--accent);
 		margin-bottom: 0.75rem;
-	}
-	fieldset {
-		border: 1px solid var(--line);
-		border-radius: var(--radius-inset);
 	}
 </style>

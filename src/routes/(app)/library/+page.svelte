@@ -2,7 +2,8 @@
 	import { page } from '$app/state';
 	import { onDestroy, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
-	import ViewBar from '$lib/ViewBar.svelte';
+	import ViewSentence from '$lib/ViewSentence.svelte';
+	import { libraryWords } from '$lib/view-words';
 	import EditableList from '$lib/ui/EditableList.svelte';
 	import EditChrome from '$lib/ui/EditChrome.svelte';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
@@ -167,7 +168,7 @@
 	{/snippet}
 </EditChrome>
 
-<ViewBar page="library" bind:views bind:current={view} />
+<ViewSentence page="library" bind:views bind:current={view} {mode} words={libraryWords(view, { areas: data.areas.length > 0 })} />
 
 <input type="search" bind:value={view.query} placeholder="Search Tasks and tags" aria-label="Search" />
 

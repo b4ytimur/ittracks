@@ -23,6 +23,8 @@ export interface Word {
 	after: string;
 	options: WordOption[];
 	pick: (value: string) => ViewState;
+	/** Set when the choice is kept for the account, not the view: the page saves it and says so. */
+	set?: (value: string) => void;
 }
 
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
@@ -164,3 +166,193 @@ export const sentence = (words: Word[]) =>
 	words
 		.map((w) => [w.before, (w.shown ?? w.options.find((o) => o.value === w.value)?.label ?? '') + w.after].filter(Boolean).join(' '))
 		.join(' ');
+
+// ----- The same sentence on Habits, Library and History (TS.12) -----
+
+/** A word whose choice is kept for the account, not the view: the page saves it and says so. */
+const accountWord = (w: Omit<Word, 'pick'> & { set: (value: string) => void }, s: ViewState): Word => ({ ...w, pick: () => s });
+
+/** Filters as one word: the scope, then an Area, an identity or a habit it is kept to. */
+function filterWord(
+	s: ViewState,
+	key: string,
+	scopes: { value: string; label: string; state: Partial<ViewState>; on: boolean }[],
+	more: { label: string; options: { value: string; label: string; state: Partial<ViewState>; name: string }[] }[],
+	tail: string
+): Word {
+	const scope = scopes.find((x) => x.on) ?? scopes[0];
+	const label = [scope.label, tail].filter(Boolean).join(' ');
+	const pure = !tail;
+	const all = more.flatMap((m) => m.options);
+	return {
+		key,
+		what: 'What it shows',
+		value: pure ? `scope:${scope.value}` : '_',
+		shown: label,
+		after: ',',
+		options: [
+			...(pure ? [] : [opt('_', label, `now shows ${label}`)]),
+			...scopes.map((x) => opt(`scope:${x.value}`, [x.label, tail].filter(Boolean).join(' '), `now shows ${[x.label, tail].filter(Boolean).join(' ')}`)),
+			...all.map((o) => opt(`more:${o.value}`, `${scope.label} ${o.label}`, `now shows ${scope.label} ${o.label}`, o.name))
+		],
+		pick: (v) => {
+			if (v.startsWith('scope:')) return { ...s, ...scopes.find((x) => `scope:${x.value}` === v)!.state };
+			const o = all.find((x) => `more:${x.value}` === v);
+			return o ? { ...s, ...o.state } : s;
+		}
+	};
+}
+
+const HABIT_WORDS = { schedule: 'schedule', cue: 'time', area: 'Area', consistency: 'consistency', last: 'last done' } as const;
+type HabitLine = keyof typeof HABIT_WORDS;
+const LINE_SETS: HabitLine[][] = [['schedule', 'cue'], ['schedule', 'cue', 'area'], ['schedule'], ['schedule', 'cue', 'area', 'consistency', 'last'], []];
+const linesLabel = (ls: HabitLine[]) => (ls.length === 5 ? 'with every line' : ls.length ? `with ${and(ls.map((l) => HABIT_WORDS[l]))}` : 'with names only');
+
+export interface HabitsCtx {
+	areas: { id: string; name: string }[];
+	identities: string[];
+	/** The lines on each habit, kept for the account. */
+	lines: HabitLine[];
+	setLines: (lines: HabitLine[], said: string) => void;
+}
+
+/** Habits: "Default shows every habit, by Area in my order, with schedule and time." */
+export function habitsWords(s: ViewState, c: HabitsCtx): Word[] {
+	const areaNames = s.areas.map((id) => c.areas.find((a) => a.id === id)?.name ?? 'no Area');
+	const tail = [areaNames.length ? `in ${and(areaNames)}` : '', s.identity ? `for “${s.identity}”` : '', s.archived ? 'and the archived' : ''].filter(Boolean).join(' ');
+	const what = filterWord(
+		s,
+		'what',
+		[
+			{ value: 'all', label: 'every habit', state: { direction: 'all' }, on: s.direction === 'all' },
+			{ value: 'build', label: 'the habits to build', state: { direction: 'build' }, on: s.direction === 'build' },
+			{ value: 'break', label: 'the habits to break', state: { direction: 'break' }, on: s.direction === 'break' }
+		],
+		[
+			{ label: 'Area', options: [...c.areas.map((a) => ({ value: `a:${a.id}`, label: `in ${a.name}`, state: { areas: [a.id] }, name: a.name })), ...(s.areas.length ? [{ value: 'a:', label: 'in every Area', state: { areas: [] }, name: 'Every Area' }] : [])] },
+			{ label: 'Identity', options: [...c.identities.map((i) => ({ value: `i:${i}`, label: `for “${i}”`, state: { identity: i }, name: i })), ...(s.identity ? [{ value: 'i:', label: 'for every identity', state: { identity: null }, name: 'Every identity' }] : [])] },
+			{ label: 'Archived', options: [{ value: 'arch', label: s.archived ? 'without the archived' : 'and the archived', state: { archived: !s.archived }, name: s.archived ? 'Without archived' : 'With archived' }] }
+		],
+		tail
+	);
+	const GROUP = { area: 'by Area', direction: 'by build and break', identity: 'by Identity', none: 'in one list' } as const;
+	const SORT = { manual: 'in my order', name: 'by name', consistency: 'by consistency', created: 'newest first' } as const;
+	const group: Word = {
+		key: 'group',
+		what: 'How it is grouped',
+		value: s.group in GROUP ? s.group : 'none',
+		after: '',
+		options: (Object.keys(GROUP) as (keyof typeof GROUP)[]).filter((k) => (k !== 'area' || c.areas.length) && (k !== 'identity' || c.identities.length) || k === s.group).map((k) => opt(k, GROUP[k], `is now ${GROUP[k]}`)),
+		pick: (v) => ({ ...s, group: v })
+	};
+	const sort: Word = {
+		key: 'sort',
+		what: 'Its order',
+		value: s.sort in SORT ? s.sort : 'manual',
+		after: ',',
+		options: (Object.keys(SORT) as (keyof typeof SORT)[]).map((k) => opt(k, SORT[k], `is now ${SORT[k]}`)),
+		pick: (v) => ({ ...s, sort: v })
+	};
+	const key = (ls: HabitLine[]) => [...ls].sort().join(',') || 'none';
+	const now = key(c.lines);
+	const sets = LINE_SETS.some((ls) => key(ls) === now) ? LINE_SETS : [c.lines, ...LINE_SETS];
+	const lines = accountWord(
+		{
+			key: 'lines',
+			what: 'The lines on each habit',
+			value: now,
+			after: '.',
+			options: sets.map((ls) => opt(key(ls), linesLabel(ls), `shows each habit ${linesLabel(ls)}`)),
+			set: (v) => {
+				const ls = sets.find((x) => key(x) === v) ?? [];
+				c.setLines(ls, `Each habit now shows ${linesLabel(ls).replace(/^with /, '')}.`);
+			}
+		},
+		s
+	);
+	return [what, group, sort, lines];
+}
+
+export interface LibraryCtx {
+	areas: boolean;
+}
+
+/** Library: "Default shows every Task, by Area, by name." Search, tags and Collections stay on the page. */
+export function libraryWords(s: ViewState, c: LibraryCtx): Word[] {
+	const GROUP = { area: 'by Area', none: 'in one list' } as const;
+	const SORT = { name: 'by name', recent: 'newest first', used: 'most logged first', logged: 'last logged first' } as const;
+	return [
+		{
+			key: 'what',
+			what: 'What it shows',
+			value: 'all',
+			after: ',',
+			options: [opt('all', 'every Task', 'shows every Task')],
+			pick: () => s
+		},
+		{
+			key: 'group',
+			what: 'How it is grouped',
+			value: s.group in GROUP ? s.group : 'none',
+			after: ',',
+			options: (Object.keys(GROUP) as (keyof typeof GROUP)[]).filter((k) => k !== 'area' || c.areas || s.group === 'area').map((k) => opt(k, GROUP[k], `is now ${GROUP[k]}`)),
+			pick: (v) => ({ ...s, group: v })
+		},
+		{
+			key: 'sort',
+			what: 'Its order',
+			value: s.sort in SORT ? s.sort : 'name',
+			after: '.',
+			options: (Object.keys(SORT) as (keyof typeof SORT)[]).map((k) => opt(k, SORT[k], `is now ${SORT[k]}`)),
+			pick: (v) => ({ ...s, sort: v })
+		}
+	];
+}
+
+export interface HistoryCtx {
+	areas: { id: string; name: string }[];
+	habits: { id: string; name: string }[];
+	values: boolean;
+	setValues: (on: boolean) => void;
+}
+
+/** History: "Default shows every day, newest first, without values." */
+export function historyWords(s: ViewState, c: HistoryCtx): Word[] {
+	const STATUS = { all: 'every day', done: 'what was done', skipped: 'what was skipped', missed: 'what was missed', slip: 'only slips' } as const;
+	const habit = c.habits.find((h) => h.id === s.habit)?.name;
+	const areaNames = s.areas.map((id) => c.areas.find((a) => a.id === id)?.name ?? 'no Area');
+	const tail = [habit ? `for ${habit}` : '', areaNames.length ? `in ${and(areaNames)}` : ''].filter(Boolean).join(' ');
+	const what = filterWord(
+		s,
+		'what',
+		(Object.keys(STATUS) as (keyof typeof STATUS)[]).map((k) => ({ value: k, label: STATUS[k], state: { status: k }, on: s.status === k })),
+		[
+			{ label: 'Habit', options: [...c.habits.map((h) => ({ value: `h:${h.id}`, label: `for ${h.name}`, state: { habit: h.id }, name: h.name })), ...(s.habit ? [{ value: 'h:', label: 'for every habit', state: { habit: null }, name: 'Every habit' }] : [])] },
+			{ label: 'Area', options: [...c.areas.map((a) => ({ value: `a:${a.id}`, label: `in ${a.name}`, state: { areas: [a.id] }, name: a.name })), ...(s.areas.length ? [{ value: 'a:', label: 'in every Area', state: { areas: [] }, name: 'Every Area' }] : [])] }
+		],
+		tail
+	);
+	const SORT = { newest: 'newest first', oldest: 'oldest first' } as const;
+	return [
+		what,
+		{
+			key: 'sort',
+			what: 'Its order',
+			value: s.sort in SORT ? s.sort : 'newest',
+			after: ',',
+			options: (Object.keys(SORT) as (keyof typeof SORT)[]).map((k) => opt(k, SORT[k], `is now ${SORT[k]}`)),
+			pick: (v) => ({ ...s, sort: v })
+		},
+		accountWord(
+			{
+				key: 'values',
+				what: 'What a log shows',
+				value: c.values ? 'on' : 'off',
+				after: '.',
+				options: [opt('off', 'without values', 'shows logs without their values'), opt('on', 'with values', 'shows what each log holds')],
+				set: (v) => c.setValues(v === 'on')
+			},
+			s
+		)
+	];
+}
