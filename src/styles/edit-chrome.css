@@ -45,7 +45,8 @@
 .titlebar > .title-back:is(.hover, :active) { text-decoration: underline; text-underline-offset: 3px; }
 @media (hover: hover) { .titlebar > .title-back:hover { text-decoration: underline; text-underline-offset: 3px; } }
 /* Buttons in one group, 8 apart; the group is 16 from the h1 and the switch. A Button is control-md (32px), the h1's line. */
-.titlebar > .title-actions, .titlebar + .title-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-inline); }
+/* position: a ⋯ menu in the title line hangs from these buttons, never from the page's far end (Menu). */
+.titlebar > .title-actions, .titlebar + .title-actions { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-inline); }
 .titlebar + .title-actions { padding-bottom: var(--space-tight); } /* part of the title group: 4 under the line, 8 over the chips */
 .titlebar > .segmented { margin-inline-start: auto; } /* trailing, also on its own line */
 /* Below a 28rem line (bp-phone: a 480px phone with 16px gutters) the switch takes its own line on every page. The empty
