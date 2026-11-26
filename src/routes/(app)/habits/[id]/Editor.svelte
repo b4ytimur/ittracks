@@ -1877,21 +1877,25 @@
 		{/if}
 
 		{#if form?.error}<p class="error save-error" role="alert">{form.error}</p>{/if}
-		<div class="actions">
-			{#if step > 0}<button type="button" onclick={() => step--}>Back</button>{:else}<span></span>{/if}
-			{#if step < guidedSteps.length - 1}
-				<button type="button" class="primary" onclick={() => step++} disabled={!canNext}>Next</button>
-			{:else}
-				<button class="primary">Save habit</button>
-			{/if}
+		<div class="actions-bar l-stack">
+			<div class="l-cluster">
+				{#if step < guidedSteps.length - 1}
+					<button type="button" class="primary" onclick={() => step++} disabled={!canNext}>Next</button>
+				{:else}
+					<button class="primary">Save habit</button>
+				{/if}
+				{#if step > 0}<button type="button" onclick={() => step--}>Back</button>{/if}
+			</div>
 		</div>
 		<p class="muted small-text"><button type="button" class="link" onclick={() => (mode = 'full')}>Skip to the full editor</button></p>
 	{:else}
 		{@render lines()}
 		{#if form?.error}<p class="error save-error" role="alert">{form.error}</p>{/if}
-		<div class="actions">
-			<button class="primary">Save habit</button>
-			<a class="button" href="/habits">Cancel</a>
+		<div class="actions-bar l-stack">
+			<div class="l-cluster">
+				<button class="primary">Save habit</button>
+				<a class="button" href="/habits">Cancel</a>
+			</div>
 		</div>
 	{/if}
 </form>

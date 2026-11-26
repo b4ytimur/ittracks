@@ -89,11 +89,13 @@
 	{/if}
 
 	{#if form?.error}<p class="error">{form.error}</p>{/if}
-	<div class="actions">
-		<button class="primary">Save collection</button>
-		{#if !data.isNew}
-			<button class="danger" formaction="?/delete" formnovalidate>Delete collection</button>
-		{/if}
+	<div class="actions-bar l-stack">
+		<div class="l-cluster">
+			<button class="primary">Save collection</button>
+			{#if !data.isNew}
+				<button class="danger" formaction="?/delete" formnovalidate>Delete collection</button>
+			{/if}
+		</div>
 	</div>
 	{#if !data.isNew}<p class="muted small-text">Deleting a collection never deletes its Tasks.</p>{/if}
 </form>

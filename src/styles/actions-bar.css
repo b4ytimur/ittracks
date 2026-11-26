@@ -8,10 +8,18 @@
        <div class="notice" data-tone="warn">…</div>                   true before the press: a risk, what won't be saved
        <div class="l-cluster">
          <button class="primary hit" data-reserve="Save habit">Save habit</button>   first, at the leading edge
-         <button type="button" class="hit">Cancel</button>            only a form that opened in place
+         <button type="button" class="hit">Cancel</button>            only a form that opened in place; a wizard's Back
          <p class="actions-note meta">…</p>                           optional: one line beside the buttons
+         <button class="danger hit" formaction="?/delete">Delete …</button>   a destroy of the whole record: last, trailing
        </div>
-     </div> */
+     </div>
+   Every form ends here, and only here: [primary][secondary][Cancel], or a wizard's [Next][Back], 8 apart at the leading
+   edge, so the primary sits in the same place on every form. */
+
+/* Forms that still stack by margin (.stack, 16) give the footer its 24 here; a form on .l-stack sets --gap instead. */
+.stack > .actions-bar { margin-block-start: var(--space-section); }
+/* A destroy stays after Save in the markup, so Enter still saves; the margin alone carries it to the trailing edge. */
+.actions-bar > .l-cluster > .danger { margin-inline-start: auto; }
 
 /* A note beside the buttons keeps 12rem before it wraps under them, so it never squeezes to a column of syllables. */
 .actions-note { flex: 1 1 12rem; min-width: 0; color: var(--ink-muted); overflow-wrap: anywhere; }

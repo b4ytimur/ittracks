@@ -786,9 +786,11 @@
 		<input type="hidden" name="units" value={unitsPayload} />
 		{@render lines()}
 		{#if form?.error}<p class="error" role="alert">{form.error}</p>{/if}
-		<div class="actions">
-			<button class="primary">Save task</button>
-			<a class="button" href="/library">Cancel</a>
+		<div class="actions-bar l-stack">
+			<div class="l-cluster">
+				<button class="primary">Save task</button>
+				<a class="button" href="/library">Cancel</a>
+			</div>
 		</div>
 	</form>
 {:else}

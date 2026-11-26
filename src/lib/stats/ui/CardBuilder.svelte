@@ -503,11 +503,13 @@
 
 		{#if live}
 			<p class="meta" role="status">{blocks.length ? 'This isn’t saved until it is put right.' : problem ? `Not saved. ${problem}` : ''}</p>
-			<div class="actions"><button type="button" onclick={oncancel}>Close</button></div>
+			<div class="actions-bar l-stack"><div class="l-cluster"><button type="button" onclick={oncancel}>Close</button></div></div>
 		{:else}
-			<div class="actions">
-				<button type="button" onclick={oncancel}>Cancel</button>
-				<button type="button" class="primary" disabled={!!blocks.length || saving} onclick={save}>{saving ? 'Saving…' : 'Save card'}</button>
+			<div class="actions-bar l-stack">
+				<div class="l-cluster">
+					<button type="button" class="primary" disabled={!!blocks.length || saving} onclick={save}>{saving ? 'Saving…' : 'Save card'}</button>
+					<button type="button" onclick={oncancel}>Cancel</button>
+				</div>
 			</div>
 		{/if}
 	</div>
@@ -593,8 +595,5 @@
 		margin: 0;
 		padding-left: 1.1rem;
 		font-size: var(--font-size-meta);
-	}
-	.actions {
-		margin-top: 0.5rem;
 	}
 </style>
