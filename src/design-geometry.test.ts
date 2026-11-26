@@ -79,3 +79,11 @@ it('no .actions footer: ActionsBar is the one', () => {
 	);
 	expect(found).toEqual([]);
 });
+
+// Every button has its 44px touch area from Button's one rule; .hit is only for a control that isn't a button (a tick, a pick).
+it('no .hit on a button or a link', () => {
+	const found = files.flatMap(([f, src]) =>
+		[...markupOf(src).matchAll(/<(button|a|[A-Z]\w*Button)\b[^>]*?\bclass="([^"]*)"/g)].filter((m) => m[2].split(/\s+/).includes('hit')).map((m) => `${f}:${lineOf(src, m.index)} <${m[1]} class="${m[2]}"`)
+	);
+	expect(found).toEqual([]);
+});

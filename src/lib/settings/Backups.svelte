@@ -82,20 +82,17 @@
 </div>
 <div class="field">
 	<label class="label" for="bk-keep">Copies to keep</label>
-	<input id="bk-keep" type="number" class="short" min={KEEP_MIN} max={KEEP_MAX} step="1" value={plan.keep} onblur={keep} />
+	<input id="bk-keep" type="number" class="w-num" min={KEEP_MIN} max={KEEP_MAX} step="1" value={plan.keep} onblur={keep} />
 </div>
 <div class="act-row">
 	<span class="status-text meta">{#if last.ok}Newest: <code>{last.ok.file}</code>.{:else}No copy made yet.{/if}{nextWords}</span>
-	<button type="button" class="hit" aria-disabled={busy} onclick={now}>Back up now</button>
+	<button type="button" aria-disabled={busy} onclick={now}>Back up now</button>
 </div>
 <p class="meta">To put a copy back, stop the app, delete <code>ittracks.db-wal</code> and <code>ittracks.db-shm</code> next to the database, and put the copy in place of <code>ittracks.db</code>.</p>
 
 <style>
 	p {
 		margin: 0;
-	}
-	.short {
-		width: 9rem;
 	}
 	code {
 		overflow-wrap: anywhere;
