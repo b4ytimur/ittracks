@@ -105,3 +105,7 @@
 }
 .menu > .menu-ghost > .menu-check { color: var(--ink-muted); }
 @media (hover: hover) { .menu > .menu-ghost:hover { border-color: var(--ink); } }
+
+/* Hung from the trigger's start (a word of a view's sentence, TS.13): the nudge moves it back towards the start so its
+   end edge stands 8px from the screen's. */
+.menu.start { inset-inline: calc(-1 * var(--menu-nudge)) auto; }

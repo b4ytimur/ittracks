@@ -39,6 +39,8 @@
 	let active = $state(untrack(() => initialView(views, page)));
 	/** The view whose name is being typed, right after it was made. */
 	let naming = $state<string | null>(null);
+	/** The view just made from New view: the starting sentences stand under it until something else is chosen (TS.10). */
+	let fresh = $state<string | null>(null);
 	const list = $derived(viewsOf(views, page));
 	const nameOf = (id: string) => list.find((x) => x.id === id)?.name ?? 'Default';
 	const name = $derived(nameOf(active));
@@ -87,6 +89,7 @@
 	}
 
 	function choose(w: Word, value: string) {
+		fresh = null;
 		if (w.set) return w.set(value);
 		const o = w.options.find((x) => x.value === value);
 		if (o) change(w.pick(value), o.said, o.name);
@@ -132,6 +135,24 @@
 		});
 		await askName(made);
 	}
+	/** The view just made takes a template's words, and its name when it still has the one it was given. */
+	async function startFrom(t: { name: string; state: ViewState }) {
+		const id = active;
+		const before = copy(current);
+		fresh = null;
+		naming = null;
+		current = copy(t.state);
+		store(id, current);
+		const renamed = nameOf(id) === 'New view';
+		if (renamed) {
+			const r = await viewOp({ op: 'rename', id, name: t.name });
+			if (r) views = r.views;
+		}
+		showToast(renamed ? `Made ${t.name} from its template.` : `${nameOf(id)} now starts from ${t.name}.`, () => {
+			if (active === id) current = copy(before);
+			store(id, before);
+		});
+	}
 	async function askName(id: string) {
 		naming = id;
 		await tick();
@@ -157,6 +178,7 @@
 	function select(id: string) {
 		const s = viewStateOf(views, page, id);
 		if (!s || id === active) return;
+		fresh = null;
 		active = id;
 		current = copy(s);
 		void viewOp({ op: 'select', page, view: id });
@@ -203,13 +225,22 @@
 	}
 
 	const items = $derived<(Way | '-')[]>([
-		...list.map((x) => ({ label: x.name, checked: x.id === active, value: x.id === active ? sentence(words) : say?.(viewStateOf(views, page, x.id) ?? current), onselect: () => select(x.id) })),
-		{ label: 'New view', value: `Starts as a copy of ${name}. You name it next.`, ghost: true, onselect: () => make('New view', current) },
-		...(starters.length ? ['-' as const, ...starters.map((t) => ({ label: `Start from ${t.name}`, value: say?.(t.state), onselect: () => make(t.name, t.state) }))] : []),
+		...list.map((x) => ({ label: x.name, checked: x.id === active, value: x.id === active ? sentence(words) : undefined, onselect: () => select(x.id) })),
+		{ label: 'New view', value: starters.length ? `A copy of ${name}, or start from a template.` : `A copy of ${name}. You name it next.`, ghost: true, onselect: () => make('New view', current).then(() => (fresh = active)) },
 		'-',
 		{ label: `${PAGE_LABEL[page]} opens with ${opens.name}`, value: 'Press to change', onselect: nextOpens }
 	]);
 	const changed = $derived(!!reset && active === DEFAULT_VIEW && !same(current, reset));
+	const shownOf = (w: Word) => w.shown ?? w.options.find((o) => o.value === w.value)?.label ?? '';
+	const kindOf = (value: string) => (value.includes(':') ? value.slice(0, value.indexOf(':') + (value.startsWith('more:') ? 3 : 0)) : '');
+	function itemsOf(w: Word): (Way | '-')[] {
+		const out: (Way | '-')[] = [];
+		w.options.forEach((o, i) => {
+			if (i && o.value !== '_' && w.options[i - 1].value !== '_' && kindOf(o.value) !== kindOf(w.options[i - 1].value)) out.push('-');
+			out.push({ label: o.label, value: o.note, checked: o.value === w.value, onselect: () => choose(w, o.value) });
+		});
+		return out;
+	}
 </script>
 
 <div class="view-sentence">
@@ -235,7 +266,7 @@
 			<span class="name"><InlineText value={name} editing label="Name of {name}" maxlength={40} onsave={(v) => rename(active, v)} /></span>
 		{:else}
 			<span class="name-menu">
-				<MenuButton class="word-button" label="{name}: the views of {PAGE_LABEL[page]}" menuLabel="Views of {PAGE_LABEL[page]}" {items}>
+				<MenuButton class="word-button" align="start" label="{name}: the views of {PAGE_LABEL[page]}" menuLabel="Views of {PAGE_LABEL[page]}" {items}>
 					{#snippet trigger()}<span class="shown name">{name}</span>{/snippet}
 				</MenuButton>
 			</span>
@@ -243,17 +274,23 @@
 		<span>shows</span>
 		{#each words as w (w.key)}
 			<span class="part"
-				>{#if w.before}<span class="before">{w.before}</span>{/if}<label class="word"
-					><span class="vh">{w.what}</span><span class="shown" aria-hidden="true">{w.shown ?? w.options.find((o) => o.value === w.value)?.label}</span><select
-						value={w.value}
-						onchange={(e) => choose(w, e.currentTarget.value)}
-						>{#each w.options as o (o.value)}<option value={o.value}>{o.label}</option>{/each}</select
-					></label
+				>{#if w.before}<span class="before">{w.before}</span>{/if}<span class="word-menu"
+					><MenuButton class="word-button" align="start" label="{w.what}: {shownOf(w)}" menuLabel={w.what} items={itemsOf(w)}
+						>{#snippet trigger()}<span class="shown">{shownOf(w)}</span>{/snippet}</MenuButton
+					></span
 				>{w.after}</span
 			>
 		{/each}
 	</div>
 	{#if naming === active}<p class="hint meta">Name it, then press a ruled word to change what it shows.</p>{/if}
+	{#if fresh === active && starters.length}
+		<div class="starts" role="group" aria-label="Start from a template">
+			<span class="meta">Or start from</span>
+			{#each starters as t (t.name)}
+				<button type="button" class="toggle" onmousedown={(e) => e.preventDefault()} onclick={() => startFrom(t)}>{t.name}</button>
+			{/each}
+		</div>
+	{/if}
 	{#if mode === 'edit' && (changed || active !== DEFAULT_VIEW)}
 		<p class="hint meta l-cluster">
 			{#if changed}<button type="button" class="quiet hit" onclick={resetDefault}>Reset view</button>{/if}
@@ -267,9 +304,12 @@
 		position: relative;
 		margin-block: var(--space-tight) var(--space-group);
 	}
+	/* Every part on one baseline: a part that ends in a comma takes the comma's taller line box, so lining parts up by
+	   their tops left a word with nothing after it ("by Area" before "in my order") 4px high. */
 	.sentence {
 		display: flex;
 		flex-wrap: wrap;
+		align-items: baseline;
 		gap: 0 var(--space-tight);
 		margin: 0;
 		color: var(--ink-muted);
@@ -299,29 +339,24 @@
 		line-height: 1.5rem;
 		overflow-wrap: anywhere;
 	}
-	.word select {
-		position: absolute;
-		inset: 0;
-		width: 100%;
-		min-height: 0;
-		margin: 0;
-		padding: 0;
-		opacity: 0;
-		cursor: pointer;
-	}
-	.word:has(select:focus-visible) {
-		outline: var(--focus-width) solid var(--focus-ring);
-		outline-offset: var(--focus-width);
-		border-radius: var(--radius-mark);
-	}
 	.name {
 		font-weight: 600;
 		color: var(--ink);
 	}
-	.name-menu {
+	/* The views open under the name, from its start: the menu's own placement is for ⋯ at a row's end. */
+	.name-menu,
+	.word-menu {
+		position: relative;
 		display: inline-flex;
 	}
-	.name-menu :global(.word-button) {
+	.starts {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-inline);
+		margin-block-start: var(--space-inline);
+	}
+	.view-sentence :global(.word-button) {
 		min-height: var(--target-min);
 		padding: 0;
 		border: 0;
@@ -348,8 +383,7 @@
 		color: var(--ink);
 	}
 	@media (hover: hover) {
-		.word:hover .shown,
-		.name-menu :global(.word-button:hover .shown) {
+		.view-sentence :global(.word-button:hover .shown) {
 			border-bottom-color: var(--ink);
 		}
 	}

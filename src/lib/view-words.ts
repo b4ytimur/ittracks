@@ -11,6 +11,8 @@ export interface WordOption {
 	said: string;
 	/** A new view kept from this change is called this (TS.10). */
 	name: string;
+	/** A line under the option in its menu, where the words need it. */
+	note?: string;
 }
 export interface Word {
 	key: string;
@@ -29,7 +31,22 @@ export interface Word {
 
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 const and = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}` : (xs[0] ?? ''));
-const opt = (value: string, label: string, said: string, name = cap(label)): WordOption => ({ value, label, said, name });
+const opt = (value: string, label: string, said: string, name = cap(label), note?: string): WordOption => ({ value, label, said, name, note });
+/** Notes in a word's menu, as the design has them. */
+const NOTES: Record<string, string> = {
+	'scope:now': 'This part of the day, what is late, and anything without a time.',
+	'scope:due': 'Breaking and limiting stay out.',
+	time: 'What is next leads. A habit set after another follows it.',
+	mine: 'Drag in Edit. Shared with Habits.',
+	risk: 'What was missed last time leads, then by time.',
+	names: 'The name and its button.',
+	short: 'One line: its time and one number.',
+	open: 'When, where, the Minimum and a treat.',
+	full: 'All the habit has.',
+	collapse: 'Under a Done heading.',
+	hide: 'The count still says how many.'
+};
+const noted = (o: WordOption): WordOption => ({ ...o, note: o.note ?? NOTES[o.value] });
 
 const SCOPES = {
 	all: 'everything',
@@ -158,7 +175,7 @@ export function todayWords(s: ViewState, c: TodayCtx): Word[] {
 		options: (Object.keys(DONE_SAID) as (keyof typeof DONE_MODES)[]).map((k) => opt(k, DONE_SAID[k][0], DONE_SAID[k][1], `Done ${DONE_SAID[k][0]}`)),
 		pick: (v) => ({ ...s, done: v as ViewState['done'] })
 	};
-	return [whatWord(s, c), byWord(s, c), rows, ...(s.rows === 'names' ? [] : [num]), done];
+	return [whatWord(s, c), byWord(s, c), rows, ...(s.rows === 'names' ? [] : [num]), done].map((w) => ({ ...w, options: w.options.map(noted) }));
 }
 
 /** The shown words of a sentence, as one line of text ("everything, by time, short rows with streaks, done at the end."). */

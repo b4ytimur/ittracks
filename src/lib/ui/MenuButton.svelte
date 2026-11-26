@@ -25,7 +25,8 @@
 	import { tick } from 'svelte';
 
 	// `trigger` draws the button's face (a word of a sentence); without it the button is ⋯.
-	let { label, menuLabel, items, class: klass = '', trigger }: { label: string; menuLabel?: string; items: (Way | '-')[]; class?: string; trigger?: import('svelte').Snippet } = $props();
+	// `align` start hangs the menu from the trigger's start edge (a word in a sentence), end from its end (⋯ at a row's end).
+	let { label, menuLabel, items, class: klass = '', trigger, align = 'end' }: { label: string; menuLabel?: string; items: (Way | '-')[]; class?: string; trigger?: import('svelte').Snippet; align?: 'start' | 'end' } = $props();
 
 	const uid = $props.id();
 	const formOf = (i: number) => `${uid}-f${i}`;
@@ -42,7 +43,9 @@
 		await tick();
 		// Below where it fits, else on the side with more room, scrolling inside; never over an edge.
 		const r = more!.getBoundingClientRect();
-		const bar = document.querySelector('.tabbar')?.getBoundingClientRect().top ?? window.innerHeight;
+		// The floor is the tab bar, or the band above it while it shows: a menu never runs under either.
+		const band = document.querySelector('.band')?.getBoundingClientRect();
+		const bar = Math.min(document.querySelector('.tabbar')?.getBoundingClientRect().top ?? window.innerHeight, band && band.height > 0 ? band.top : Infinity);
 		const tall = menu?.scrollHeight ?? 0;
 		const below = bar - r.bottom - 12;
 		const above = r.top - 12;
@@ -51,7 +54,10 @@
 		nudge = 0;
 		await tick();
 		const m = menu!.getBoundingClientRect();
-		if (m.left < 8) nudge = 8 - m.left;
+		if (align === 'end' && m.left < 8) nudge = 8 - m.left;
+		// The page's width, not innerWidth: on a phone the menu's own overflow widens innerWidth to fit it.
+		const edge = document.documentElement.clientWidth - 8;
+		if (align === 'start' && m.right > edge) nudge = m.right - edge;
 		all().at(last ? -1 : 0)?.focus();
 	}
 	function close(refocus = true) {
@@ -101,7 +107,7 @@
 		}
 	}}>{#if trigger}{@render trigger()}{:else}<span aria-hidden="true">⋯</span>{/if}</button
 >
-<div class="menu" role="menu" tabindex="-1" aria-label={menuLabel ?? label} data-side={up ? 'up' : null} style:--menu-room="{room}px" style:--menu-nudge="{nudge}px" hidden={!open} bind:this={menu} onkeydown={keys}>
+<div class="menu" class:start={align === 'start'} role="menu" tabindex="-1" aria-label={menuLabel ?? label} data-side={up ? 'up' : null} style:--menu-room="{room}px" style:--menu-nudge="{nudge}px" hidden={!open} bind:this={menu} onkeydown={keys}>
 	{#each items as w, i (i)}
 		{#if w === '-'}
 			<hr />
