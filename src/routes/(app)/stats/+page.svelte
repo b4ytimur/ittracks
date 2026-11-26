@@ -48,7 +48,11 @@
 			newBoard = false;
 			boardName = '';
 			await goto(`?board=${r.id}`);
-			if (!template) adding = true; // in Use: after Close, the title line's New card is still there
+			// In Use, also when made from Edit: after Close, the title line's New card is still there.
+			if (!template) {
+				editing = false;
+				adding = true;
+			}
 		}
 	}
 	async function deleteBoard() {

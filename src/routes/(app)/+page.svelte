@@ -721,7 +721,7 @@
 				>You've hit your targets {p.hits} times in a row. Raise them by {p.by}{p.unit === 'percent' ? '%' : p.by === 1 ? ' step' : ' steps'}? {p.changes.join(' · ')}</span
 			>
 			<span class="notice-acts">
-				{#if editing}<button type="button" class="quiet" onclick={() => flipLine('progression')}>{view.hide.includes('progression') ? 'Show' : 'Hide'}</button>{:else}
+				{#if editing}<button type="button" class="quiet" aria-label="{view.hide.includes('progression') ? 'Show' : 'Hide'} {LINE_SAID.progression} in this view" onclick={() => flipLine('progression')}>{view.hide.includes('progression') ? 'Show' : 'Hide'}</button>{:else}
 					<form method="POST" action="?/raise" use:enhance><input type="hidden" name="habit" value={item.habitId} /><button class="quiet" aria-label="Raise the targets of {item.name}">Raise</button></form>
 					<form method="POST" action="?/notYet" use:enhance><input type="hidden" name="habit" value={item.habitId} /><button class="quiet" aria-label="Not yet for {item.name}">Not yet</button></form>
 				{/if}
@@ -1041,7 +1041,7 @@
 		text-align: start;
 		cursor: pointer;
 	}
-	.line-off > span {
+	.line-off > span:not(.notice-acts) {
 		color: var(--ink-muted);
 		text-decoration: line-through;
 	}
