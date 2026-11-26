@@ -451,7 +451,7 @@
 	.head {
 		display: flex;
 		align-items: center;
-		gap: 0.4rem;
+		gap: var(--space-inline);
 	}
 	.block-body {
 		flex: 1;
@@ -464,12 +464,12 @@
 	.block.editing > li {
 		border: 1px dashed var(--line);
 		border-radius: var(--radius-card);
-		padding: 0.35rem 0.5rem 0.5rem;
+		padding: var(--space-inline);
 	}
 	.block > li > .head {
-		min-height: 2rem;
+		min-height: var(--control-md);
 		flex-wrap: wrap;
-		row-gap: 0.3rem;
+		row-gap: var(--space-tight);
 	}
 	.block .title {
 		flex: 1;
@@ -479,7 +479,7 @@
 		color: var(--ink-muted);
 	}
 	.block.editing > li > .block-body:not(:empty) {
-		margin-top: 0.4rem;
+		margin-top: var(--space-inline);
 	}
 	.block > li.dragging {
 		box-shadow: var(--shadow-lifted);
@@ -492,7 +492,7 @@
 		flex: none;
 	}
 	.add {
-		margin-top: 0.5rem;
+		margin-top: var(--space-inline);
 	}
 	.empty {
 		display: block;

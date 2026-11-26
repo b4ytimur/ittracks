@@ -425,8 +425,8 @@
 		>
 		{#if restBlock}<p class="muted meta">{restBlock.reason}. Mark a field "Log per {t.rowOne}" first.</p>{/if}
 		{#if t.restTimerEnabled}
-			<label style="width: 8rem"
-				>Seconds <input type="number" min="5" max="3600" bind:value={t.restTimerSeconds} /></label
+			<label
+				>Seconds <input class="w-num" type="number" min="5" max="3600" bind:value={t.restTimerSeconds} /></label
 			>
 		{/if}
 	</div>
@@ -472,7 +472,7 @@
 					</select>
 				</label>
 				{#if m.type === 'number' || m.type === 'count' || m.type === 'duration'}
-					<label style="width: 6rem">Unit <input bind:value={m.unit} placeholder={m.type === 'duration' ? 'min' : 'kg'} list="known-units" /></label>
+					<label>Unit <input class="w-text" bind:value={m.unit} placeholder={m.type === 'duration' ? 'min' : 'kg'} list="known-units" /></label>
 				{/if}
 			</div>
 			{#if typeLocked(m)}
@@ -492,7 +492,7 @@
 					<label style="color: var(--ink)"
 						><input type="radio" name="unit-{m.id}" checked={u.choice === 'relabel'} onchange={() => (unitChoices[m.id] = 'relabel')} /> Keep the numbers: they were already in {u.to || 'no unit'}</label
 					>
-					<p class="muted meta" style="margin: 0.25rem 0 0">
+					<p class="muted meta" style="margin: var(--space-tight) 0 0">
 						{u.choice === 'convert'
 							? 'Every logged value, Slot target and the targets kept with past logs are converted when you save.'
 							: u.choice === 'relabel'
@@ -596,9 +596,9 @@
 						</label>
 					{/if}
 					{#if isNumeric(m)}
-						<label style="width: 7rem"
+						<label
 							>+/− step
-							<input type="number" step="any" min="0" value={m.step ?? ''} placeholder={String(defaultStep(m.type, m.unit, units()))}
+							<input class="w-num" type="number" step="any" min="0" value={m.step ?? ''} placeholder={String(defaultStep(m.type, m.unit, units()))}
 								oninput={(e) => (m.step = e.currentTarget.value && Number(e.currentTarget.value) > 0 ? Number(e.currentTarget.value) : null)} />
 						</label>
 					{/if}
@@ -658,9 +658,9 @@
 				{@const c = choiceOf(p.taskId)}
 				{@const nums = (c?.metrics ?? []).filter((m) => numericType(m.type))}
 				{#if c && (c.hasParts || c.metrics.some((m) => m.repeats))}
-					<label class="sets-input"
+					<label
 						>{c.metrics.some((m) => m.repeats) ? 'Sets' : 'Rounds'}
-						<input type="number" min="0" max="50" value={p.sets ?? ''} oninput={(e) => (p.sets = e.currentTarget.value ? Number(e.currentTarget.value) : null)} />
+						<input class="w-num" type="number" min="0" max="50" value={p.sets ?? ''} oninput={(e) => (p.sets = e.currentTarget.value ? Number(e.currentTarget.value) : null)} />
 					</label>
 				{/if}
 				{#if nums.length}
@@ -684,7 +684,7 @@
 		{/snippet}
 	</EditableList>
 	{#if t.parts.some((p) => p.kind === 'task')}
-		<p class="muted meta" style="margin: 0 0 0.5rem">
+		<p class="muted meta" style="margin: 0 0 var(--space-inline)">
 			Targets set here apply in every habit that uses this Task. Minimum and Stretch count in habits with levels on.
 		</p>
 	{/if}
@@ -739,7 +739,7 @@
 				<button type="button" class="toggle" aria-pressed={typeKey === type.key} onclick={() => applyType(type)}>{type.name}</button>
 			{/each}
 		</div>
-		{#if typeKey}<p class="muted meta" style="margin: 0.4rem 0 0">{data.types.find((x) => x.key === typeKey)?.description}</p>{/if}
+		{#if typeKey}<p class="muted meta" style="margin: var(--space-inline) 0 0">{data.types.find((x) => x.key === typeKey)?.description}</p>{/if}
 	</div>
 {/if}
 
@@ -875,11 +875,8 @@
 	.past {
 		margin: 0;
 	}
-	.sets-input {
-		width: 7rem;
-	}
 	.targets input {
-		width: 5rem;
+		width: var(--field-num);
 	}
 	.targets th {
 		text-align: left;

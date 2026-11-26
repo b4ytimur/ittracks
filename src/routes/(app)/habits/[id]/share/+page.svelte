@@ -84,7 +84,7 @@
 		<label>Description <textarea bind:value={f.description} rows="3" maxlength="2000" placeholder="Who it's for and how it works"></textarea></label>
 		<details>
 			<summary class="meta">Gallery details (optional)</summary>
-			<div class="stack" style="margin-top: 0.5rem">
+			<div class="stack" style="margin-top: var(--space-inline)">
 				<label>Category <input bind:value={f.category} maxlength="40" placeholder="Gym, Learning, Health…" /></label>
 				<div class="row">
 					<label class="grow"
@@ -107,7 +107,7 @@
 			<div>
 				<span>{data.inside.length === 1 ? 'The habit inside it' : `The ${data.inside.length} habits inside it`}, with their schedules and Tasks</span>
 				<ul class="inside muted meta">
-					{#each data.inside as h, i (i)}<li style:margin-left="{(h.depth - 1) * 1}rem">{h.name}</li>{/each}
+					{#each data.inside as h, i (i)}<li style:margin-left="calc({h.depth - 1} * var(--space-indent))">{h.name}</li>{/each}
 				</ul>
 			</div>
 		{/if}
@@ -230,29 +230,28 @@
 <style>
 	h2 {
 		margin: 0;
-		font-size: 1.05rem;
 	}
 	.opt {
 		display: flex;
-		gap: 0.5rem;
+		gap: var(--space-inline);
 		align-items: flex-start;
 		color: var(--ink);
 	}
 	.opt input {
-		margin-top: 0.2rem;
+		margin-top: var(--space-tight);
 	}
 	.indent {
-		margin-left: 1.6rem;
+		margin-left: var(--space-section);
 	}
 	.number {
 		border: 1px solid var(--line);
 	}
 	.issues {
 		margin: 0;
-		padding-left: 1.2rem;
+		padding-left: var(--space-indent);
 	}
 	.inside {
-		margin: 0.2rem 0 0;
-		padding-left: 1.1rem;
+		margin: var(--space-tight) 0 0;
+		padding-left: var(--space-indent);
 	}
 </style>

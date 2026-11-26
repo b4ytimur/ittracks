@@ -87,15 +87,15 @@
 				</div>
 			</div>
 		{:else if q.kind === 'number'}
-			<div class="field"><label class="label" for="q-{q.key}">{q.label}{q.unit ? ` (${q.unit})` : ''}</label><input id="q-{q.key}" type="number" step="any" class="short" name="q_{q.key}" bind:value={answers[q.key]} /></div>
+			<div class="field"><label class="label" for="q-{q.key}">{q.label}{q.unit ? ` (${q.unit})` : ''}</label><input id="q-{q.key}" type="number" step="any" class="w-num" name="q_{q.key}" bind:value={answers[q.key]} /></div>
 		{:else}
-			<div class="field"><label class="label" for="q-{q.key}">{q.label}</label><input id="q-{q.key}" type="time" class="short" name="q_{q.key}" bind:value={answers[q.key]} /></div>
+			<div class="field"><label class="label" for="q-{q.key}">{q.label}</label><input id="q-{q.key}" type="time" class="w-time" name="q_{q.key}" bind:value={answers[q.key]} /></div>
 		{/if}
 	{/each}
 	{#if asks}
 		<div class="field">
 			<label class="label" for="tpl-start">Its plan starts on</label>
-			<input id="tpl-start" type="date" class="short" name="start" bind:value={start} required />
+			<input id="tpl-start" type="date" class="w-text" name="start" bind:value={start} required />
 			<p class="meta">{start < today ? 'A day before today puts you where the plan is now. Nothing before today counts.' : start > today ? 'Nothing is due before then.' : 'Today, unless you pick another day.'}</p>
 		</div>
 	{/if}
@@ -109,7 +109,7 @@
 <section class="ob-sec" aria-label="What it adds">
 	<h2 class="section-title">What it adds</h2>
 	<ul class="adds">
-		{#each made.inside as c (c.key)}<li style:margin-inline-start="{(c.depth - 1) * 1}rem">{c.name} <span class="meta muted">· {lower(c.days)}</span></li>{/each}
+		{#each made.inside as c (c.key)}<li style:margin-inline-start="calc({c.depth - 1} * var(--space-indent))">{c.name} <span class="meta muted">· {lower(c.days)}</span></li>{/each}
 		{#each variants as v, i (i)}<li>{variants.length > 1 ? v.name : 'Each time'} <span class="meta muted">· {v.tasks.join(', ')}</span></li>{/each}
 		{#each tpl.tasks as t (t.key)}<li>{t.name} <span class="meta muted">· {mine(t.name) && !separate ? 'your Task, used as it is' : `logs ${fields(t)}`}</span></li>{/each}
 		{#if brings}<li>{brings}</li>{/if}
@@ -130,9 +130,6 @@
 <style>
 	p {
 		margin: 0;
-	}
-	.short {
-		width: 9rem;
 	}
 	.adds {
 		list-style: none;

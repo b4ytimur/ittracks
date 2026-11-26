@@ -58,7 +58,7 @@
 	}
 	.options {
 		display: grid;
-		gap: 0.6rem;
+		gap: var(--space-inline);
 	}
 	.options > button {
 		justify-self: start;

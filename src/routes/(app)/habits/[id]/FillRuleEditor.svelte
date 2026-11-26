@@ -56,7 +56,7 @@
 					>
 				{/each}
 			</div>
-			<div class="row" style="margin-top: 0.4rem">
+			<div class="row" style="margin-top: var(--space-inline)">
 				<select class="grow" bind:value={mustTag} aria-label="Tag">
 					<option value="">Choose a tag</option>
 					{#each tags as t (t)}<option value={t}>{t}</option>{/each}
@@ -77,7 +77,7 @@
 					>
 				{/each}
 			</div>
-			<div class="row" style="margin-top: 0.4rem">
+			<div class="row" style="margin-top: var(--space-inline)">
 				<select class="grow" bind:value={notTag} aria-label="Tag">
 					<option value="">Choose a tag</option>
 					{#each tags as t (t)}<option value={t}>{t}</option>{/each}
@@ -99,7 +99,7 @@
 					>
 				{/each}
 			</div>
-			<div class="row" style="margin-top: 0.4rem">
+			<div class="row" style="margin-top: var(--space-inline)">
 				<select class="grow" bind:value={preferTag} aria-label="Tag">
 					<option value="">Choose a tag</option>
 					{#each tags as t (t)}<option value={t}>{t}</option>{/each}

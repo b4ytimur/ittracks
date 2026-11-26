@@ -8,7 +8,7 @@
 
 {#if html}
 	<!-- eslint-disable-next-line svelte/no-at-html-tags -- markdown-it with raw HTML off and a link allow-list -->
-	<div class="md" class:small>{@html html}</div>
+	<div class="md" class:md-small={small}>{@html html}</div>
 {/if}
 
 <style>
@@ -16,7 +16,7 @@
 		overflow-wrap: anywhere;
 		color: var(--ink);
 	}
-	.md.small {
+	.md-small {
 		font-size: var(--font-size-label);
 	}
 	.md :global(> :first-child) {
@@ -31,40 +31,40 @@
 	.md :global(blockquote),
 	.md :global(pre),
 	.md :global(table) {
-		margin: 0 0 0.5rem;
+		margin: 0 0 var(--space-inline);
 	}
 	.md :global(h1),
 	.md :global(h2),
 	.md :global(h3),
 	.md :global(h4) {
 		font-size: var(--font-size-body);
-		margin: 0.6rem 0 0.25rem;
+		margin: var(--space-inline) 0 var(--space-tight);
 	}
 	.md :global(h1) {
 		font-size: var(--font-size-section-title);
 	}
 	.md :global(ul),
 	.md :global(ol) {
-		padding-left: 1.3rem;
+		padding-left: var(--space-indent);
 	}
 	.md :global(blockquote) {
 		border-left: 3px solid var(--line);
-		padding-left: 0.6rem;
+		padding-left: var(--space-inline);
 		color: var(--ink-muted);
 	}
 	.md :global(code) {
 		font-size: 0.85em;
 		background: var(--surface-page);
 		border: 1px solid var(--line);
-		border-radius: 4px;
-		padding: 0 0.2rem;
+		border-radius: var(--radius-mark);
+		padding: 0 var(--space-tight);
 	}
 	.md :global(pre) {
 		overflow-x: auto;
 		background: var(--surface-page);
 		border: 1px solid var(--line);
-		border-radius: 6px;
-		padding: 0.5rem;
+		border-radius: var(--radius-inset);
+		padding: var(--space-inline);
 	}
 	.md :global(pre code) {
 		border: none;
@@ -78,7 +78,7 @@
 	.md :global(th),
 	.md :global(td) {
 		border: 1px solid var(--line);
-		padding: 0.2rem 0.4rem;
+		padding: var(--space-tight) var(--space-inline);
 		text-align: left;
 	}
 	.md :global(hr) {

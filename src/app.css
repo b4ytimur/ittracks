@@ -84,7 +84,6 @@ label > input, label > select, label > textarea { margin-top: var(--space-tight)
 .bar > div { min-width: 0; }
 .stack > * + * { margin-top: var(--space-group); }
 .row { display: flex; gap: var(--space-inline); align-items: end; flex-wrap: wrap; }
-.row > .grow { flex: 1; min-width: 8rem; }
 .card { background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-card); padding: var(--space-group); }
 .list { list-style: none; padding: 0; margin: 0; }
 .list li + li { margin-top: var(--space-inline); }

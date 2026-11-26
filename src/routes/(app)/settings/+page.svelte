@@ -237,7 +237,7 @@
 
 {#snippet body(id: string)}
 	{#if id === 'daystart'}
-		<div class="field"><label class="label" for="daystart-t">Day starts at</label><input id="daystart-t" type="time" class="short" value={s.dayStart ?? '00:00'} onblur={(e) => e.currentTarget.value && e.currentTarget.value !== (s.dayStart ?? '00:00') && save('daystart', { dayStart: e.currentTarget.value }, `The day starts at ${e.currentTarget.value} now.`)} /></div>
+		<div class="field"><label class="label" for="daystart-t">Day starts at</label><input id="daystart-t" type="time" class="w-time" value={s.dayStart ?? '00:00'} onblur={(e) => e.currentTarget.value && e.currentTarget.value !== (s.dayStart ?? '00:00') && save('daystart', { dayStart: e.currentTarget.value }, `The day starts at ${e.currentTarget.value} now.`)} /></div>
 	{:else if id === 'parts'}
 		<Parts ranges={s.ranges} used={data.usedRanges} bind:problem={() => problem.parts ?? '', (v) => (problem.parts = v)} onsave={(ranges, said, renames) => save('parts', { ranges }, said, renames)} />
 	{:else if id === 'vacation'}
@@ -341,9 +341,6 @@
 	p {
 		margin: 0;
 	}
-	.short {
-		width: 9rem;
-	}
 	.places,
 	.habits {
 		list-style: none;
@@ -362,7 +359,7 @@
 	}
 	.steps {
 		margin: 0;
-		padding-inline-start: 1.2rem;
+		padding-inline-start: var(--space-indent);
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
 		gap: var(--space-inline);

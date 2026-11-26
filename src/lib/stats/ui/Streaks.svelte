@@ -44,7 +44,7 @@
 		margin: 0;
 	}
 	li + li {
-		margin-top: 0.65rem;
+		margin-top: var(--space-inline);
 	}
 	.row-link {
 		display: block;
@@ -54,7 +54,7 @@
 	.head {
 		display: flex;
 		justify-content: space-between;
-		gap: 0.5rem;
+		gap: var(--space-inline);
 		font-size: var(--font-size-label);
 	}
 	.name {
@@ -66,11 +66,11 @@
 		display: grid;
 		grid-template-columns: repeat(28, 1fr);
 		gap: 2px;
-		margin: 0.3rem 0 0.1rem;
+		margin: var(--space-tight) 0;
 	}
 	.strip i {
 		height: 10px;
-		border-radius: 2px;
+		border-radius: var(--radius-indicator);
 		background: var(--chart-grid);
 	}
 	.strip i.done,

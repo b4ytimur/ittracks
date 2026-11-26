@@ -924,9 +924,10 @@
 						</div>
 					{/if}
 					{#if s.taskId && !repeating.has(s.taskId) && data.withParts.includes(s.taskId)}
-						<label style="width: 8rem"
+						<label
 							>Rounds
 							<input
+								class="w-num"
 								type="number"
 								min="0"
 								max="50"
@@ -935,9 +936,10 @@
 							/>
 						</label>
 					{:else if !s.taskId || repeating.has(s.taskId)}
-						<label style="width: 8rem"
+						<label
 							>Target sets
 							<input
+								class="w-num"
 								type="number"
 								min="0"
 								max="50"
@@ -1045,7 +1047,7 @@
 			Each phase runs its own schedule from its first day, then the next one takes over. Use a Variant per phase to change the targets: 5 a day
 			with one Variant for a week, then 1 a day with another.
 		</p>
-		<label style="width: 12rem">Starting <input type="date" bind:value={phasesStart} /></label>
+		<label>Starting <input class="w-text" type="date" bind:value={phasesStart} /></label>
 		<EditableList
 			items={phases}
 			key={(p) => p.key}
@@ -1070,7 +1072,7 @@
 				<div class="stack">
 					<div class="row">
 						{#if p.length !== null}
-							<label style="width: 6rem">For <input type="number" min="1" max="520" bind:value={p.length} aria-label="Phase length" /></label>
+							<label>For <input class="w-num" type="number" min="1" max="520" bind:value={p.length} aria-label="Phase length" /></label>
 						{/if}
 						<label class="grow"
 							>{p.length === null ? 'Runs' : 'Unit'}
@@ -1116,13 +1118,13 @@
 			</select>
 		</label>
 		{#if groupTarget !== null}
-			<label style="width: 10rem">How many <input type="number" min="1" max="100" bind:value={groupTarget} /></label>
+			<label>How many <input class="w-num" type="number" min="1" max="100" bind:value={groupTarget} /></label>
 		{/if}
 		<label style="color: var(--ink)"
 			><input type="checkbox" checked={groupMinimum !== null} onchange={(e) => (groupMinimum = e.currentTarget.checked ? 1 : null)} /> A day with fewer done still counts at the Minimum</label
 		>
 		{#if groupMinimum !== null}
-			<label style="width: 10rem">Habits for the Minimum <input type="number" min="1" max="100" bind:value={groupMinimum} /></label>
+			<label>Habits for the Minimum <input class="w-num" type="number" min="1" max="100" bind:value={groupMinimum} /></label>
 		{/if}
 		<p class="muted meta">
 			{#if data.inside.length}
@@ -1185,13 +1187,13 @@
 				</select>
 			</label>
 			{#if groupTarget !== null}
-				<label style="width: 10rem">How many <input type="number" min="1" max="100" bind:value={groupTarget} /></label>
+				<label>How many <input class="w-num" type="number" min="1" max="100" bind:value={groupTarget} /></label>
 			{/if}
 			<label style="color: var(--ink)"
 				><input type="checkbox" checked={groupMinimum !== null} onchange={(e) => (groupMinimum = e.currentTarget.checked ? 1 : null)} /> A day with fewer done still counts at the Minimum</label
 			>
 			{#if groupMinimum !== null}
-				<label style="width: 10rem">Habits for the Minimum <input type="number" min="1" max="100" bind:value={groupMinimum} /></label>
+				<label>Habits for the Minimum <input class="w-num" type="number" min="1" max="100" bind:value={groupMinimum} /></label>
 			{/if}
 			<p class="muted meta">
 				Inside: {data.inside.map((x) => x.name + (x.archived ? ' (archived)' : '')).join(', ')}. Done on Today marks the ones due done; a day none of
@@ -1212,9 +1214,9 @@
 
 {#snippet cuePart()}
 	<div class="row">
-		<label style="width: 8rem"
+		<label
 			>Time
-			<input type="time" value={h.cue.time ?? ''} disabled={!!timeBlock}
+			<input class="w-time" type="time" value={h.cue.time ?? ''} disabled={!!timeBlock}
 				oninput={(e) => (h.cue.time = e.currentTarget.value || null)} />
 		</label>
 		{#if data.ranges.length}
@@ -1267,7 +1269,7 @@
 	>
 	{#if remindBlock && !h.remind}<p class="meta muted">{remindBlock.reason}, or a time of its own here.</p>{/if}
 	<div class="row">
-		<label style="width: 9rem">Time of its own <input type="time" value={r.time ?? ''} onchange={(e) => change({ time: e.currentTarget.value || null })} /></label>
+		<label>Time of its own <input class="w-time" type="time" value={r.time ?? ''} onchange={(e) => change({ time: e.currentTarget.value || null })} /></label>
 		<label class="grow">What it says <input value={r.text} maxlength="120" placeholder="The place, and the Minimum" oninput={(e) => change({ text: e.currentTarget.value })} /></label>
 	</div>
 	<p class="meta muted">Without a time it follows When and where. The notification offers Done{h.levels.enabled ? ', and what is ticked here' : ', and Snooze if you like'}.</p>
@@ -1313,8 +1315,8 @@
 			><input type="radio" name="type" checked={type === 'break'} onchange={() => ((h.direction = 'break'), (h.scoring = 'habit'))} disabled={!!directionLocked && h.direction !== 'break'} /> Break: something to stop, with
 			a slip counter</label
 		>
-		{#if directionLocked}<p class="muted meta" style="margin: 0.25rem 0 0">{directionLocked}.</p>{/if}
-		{#if noTrack && type !== 'track' && type !== 'break'}<p class="muted meta" style="margin: 0.25rem 0 0">Track: {noTrack.charAt(0).toLowerCase() + noTrack.slice(1)}.</p>{/if}
+		{#if directionLocked}<p class="muted meta" style="margin: var(--space-tight) 0 0">{directionLocked}.</p>{/if}
+		{#if noTrack && type !== 'track' && type !== 'break'}<p class="muted meta" style="margin: var(--space-tight) 0 0">Track: {noTrack.charAt(0).toLowerCase() + noTrack.slice(1)}.</p>{/if}
 	</fieldset>
 {/snippet}
 
@@ -1354,7 +1356,7 @@
 			</select>
 		</label>
 		{#if parent}
-			<p class="muted meta" style="margin-top: -0.25rem">
+			<p class="muted meta" style="margin-top: calc(-1 * var(--space-tight))">
 				{#if parent.routine}
 					On Today it shows inside {parent.name}, and {parent.name}'s days count it. Under How often it can follow {parent.name}'s days.
 				{:else}
@@ -1401,8 +1403,8 @@
 {#snippet costPart()}
 	{#if h.cost}
 		<div class="row">
-			<label style="width: 7rem">Cost per slip <input type="number" min="0" step="any" bind:value={h.cost.amount} /></label>
-			<label style="width: 6rem">Unit <input bind:value={h.cost.unit} placeholder="€, kcal, min" /></label>
+			<label>Cost per slip <input class="w-num" type="number" min="0" step="any" bind:value={h.cost.amount} /></label>
+			<label>Unit <input class="w-text" bind:value={h.cost.unit} placeholder="€, kcal, min" /></label>
 			<label class="grow"
 				>Slips a day before you started
 				<input type="number" min="0" step="any" value={h.cost.perDay ?? ''}
@@ -1426,7 +1428,7 @@
 	>
 	{#if h.limit}
 		<div class="row">
-			<label style="width: 6rem">Up to <input type="number" min="0" max="1000" bind:value={h.limit.max} /></label>
+			<label>Up to <input class="w-num" type="number" min="0" max="1000" bind:value={h.limit.max} /></label>
 			<label class="grow"
 				>Per
 				<select bind:value={h.limit.period}>
@@ -1444,7 +1446,7 @@
 		>
 		{#if h.limit.taper}
 			<div class="row">
-				<label style="width: 6rem">By <input type="number" min="1" max="100" bind:value={h.limit.taper.by} /></label>
+				<label>By <input class="w-num" type="number" min="1" max="100" bind:value={h.limit.taper.by} /></label>
 				<label class="grow"
 					>Every
 					<select bind:value={h.limit.taper.every}>
@@ -1452,7 +1454,7 @@
 						<option value="month">month</option>
 					</select>
 				</label>
-				<label style="width: 7rem">Down to <input type="number" min="0" max="1000" bind:value={h.limit.taper.floor} /></label>
+				<label>Down to <input class="w-num" type="number" min="0" max="1000" bind:value={h.limit.taper.floor} /></label>
 			</div>
 		{/if}
 		{#if limitPreview}<p class="muted meta">{limitPreview}</p>{/if}
@@ -1511,7 +1513,7 @@
 			</label>
 			{#if h.streakRule.kind === 'grace'}
 				<div class="row">
-					<label style="width: 6rem">Misses <input type="number" min="1" max="15" bind:value={h.streakRule.misses} /></label>
+					<label>Misses <input class="w-num" type="number" min="1" max="15" bind:value={h.streakRule.misses} /></label>
 					<label class="grow"
 						>Per
 						<select bind:value={h.streakRule.period}>
@@ -1521,7 +1523,7 @@
 					</label>
 				</div>
 			{:else if h.streakRule.kind === 'consistency'}
-				<label style="width: 10rem">Over the last N days <input type="number" min="7" max="365" bind:value={h.streakRule.days} /></label>
+				<label>Over the last N days <input class="w-num" type="number" min="7" max="365" bind:value={h.streakRule.days} /></label>
 			{/if}
 			{#if h.direction === 'build' && (kind !== 'group' || groupMinimum !== null)}
 				<fieldset class="card">
@@ -1533,7 +1535,7 @@
 					<label style="color: var(--ink)"
 						><input type="radio" bind:group={h.minimumCounts} value={false} /> Only the full target counts</label
 					>
-					<p class="muted meta" style="margin: 0.25rem 0 0" hidden={kind === 'group'}>
+					<p class="muted meta" style="margin: var(--space-tight) 0 0" hidden={kind === 'group'}>
 						{h.minimumCounts
 							? h.levels.enabled
 								? 'Doing the Minimum keeps the streak alive. Less than that is a miss once the day is over.'
@@ -1552,7 +1554,7 @@
 				<label style="color: var(--ink)"
 					><input type="radio" bind:group={h.unlogged} value="ignore" /> Don't count them: only what you log counts</label
 				>
-				<p class="muted meta" style="margin: 0.25rem 0 0">
+				<p class="muted meta" style="margin: var(--space-tight) 0 0">
 					{h.unlogged === 'ignore'
 						? 'A day you forget leaves your streak and consistency as they were. Logging it later still counts.'
 						: 'Streaks, consistency, the chain and Stats treat a forgotten day as a miss. Log or skip it later to change that.'}
@@ -1605,8 +1607,8 @@
 		>
 		{#if h.reward.jar && !tracker}
 			<div class="row">
-				<label style="width: 7rem">Each time, add <input type="number" min="0" step="any" bind:value={h.reward.jar.amount} /></label>
-				<label style="width: 5rem">Unit <input bind:value={h.reward.jar.unit} placeholder="€, points" /></label>
+				<label>Each time, add <input class="w-num" type="number" min="0" step="any" bind:value={h.reward.jar.amount} /></label>
+				<label>Unit <input class="w-text" bind:value={h.reward.jar.unit} placeholder="€, points" /></label>
 				<label class="grow">Saving for <input bind:value={h.reward.jar.goal} placeholder="new running shoes" /></label>
 			</div>
 			<p class="muted meta">A pretend jar that fills up as you go. Treat yourself when it's full.</p>
@@ -1616,11 +1618,11 @@
 {#snippet raisePart()}
 			{#if h.progression}
 				<div class="row">
-					<label style="width: 8rem">After hitting them <input type="number" min="2" max="60" bind:value={h.progression.after} /></label>
-					<span style="padding-bottom: 0.6rem">times in a row, raise by</span>
-					<label style="width: 5rem"><input type="number" min="0" step="any" bind:value={h.progression.by} aria-label="Raise by" /></label>
-					<label style="width: 7rem"
-						><select bind:value={h.progression.unit} aria-label="Raise unit">
+					<label>After hitting them <input class="w-num" type="number" min="2" max="60" bind:value={h.progression.after} /></label>
+					<span style="padding-bottom: calc((var(--control-md) - 1lh) / 2)">times in a row, raise by</span>
+					<label><input class="w-num" type="number" min="0" step="any" bind:value={h.progression.by} aria-label="Raise by" /></label>
+					<label
+						><select class="w-num" bind:value={h.progression.unit} aria-label="Raise unit">
 							<option value="percent">%</option>
 							<option value="steps">steps</option>
 						</select></label
@@ -2002,7 +2004,7 @@
 	}
 	.intention {
 		font-style: italic;
-		margin: 0.25rem 0;
+		margin: var(--space-tight) 0;
 	}
 	.targets {
 		width: 100%;
@@ -2015,15 +2017,15 @@
 		font-weight: 500;
 	}
 	.targets td {
-		padding: 0.15rem 0.25rem 0.15rem 0;
+		padding: var(--space-tight) var(--space-tight) var(--space-tight) 0;
 		font-size: var(--font-size-label);
 	}
 	.steps {
 		display: flex;
-		gap: 0.75rem;
+		gap: var(--space-group);
 		list-style: none;
 		padding: 0;
-		margin: 0 0 0.5rem;
+		margin: 0 0 var(--space-inline);
 		flex-wrap: wrap;
 	}
 	.steps li button {

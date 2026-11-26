@@ -42,7 +42,7 @@
 	}
 	th,
 	td {
-		padding: 0.3rem 0.4rem;
+		padding: var(--space-tight) var(--space-inline);
 		text-align: right;
 		border-bottom: 1px solid var(--chart-grid);
 		vertical-align: top;

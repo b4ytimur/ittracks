@@ -71,10 +71,10 @@
 
 <style>
 	.tools {
-		margin-bottom: 0.75rem;
+		margin-bottom: var(--space-group);
 	}
 	.foot {
-		margin-top: 1.5rem;
+		margin-top: var(--space-section);
 		text-align: center;
 	}
 </style>

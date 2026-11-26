@@ -313,7 +313,7 @@
 		gap: 0 var(--space-tight);
 		margin: 0;
 		color: var(--ink-muted);
-		line-height: 2rem;
+		line-height: var(--control-md); /* each line is an M control tall, and each word in it an S control (24) */
 	}
 	/* A word keeps its comma: no gap inside a part, only between parts. */
 	.part {
@@ -336,7 +336,7 @@
 	}
 	.shown {
 		border-bottom: 1px dashed var(--line-control);
-		line-height: 1.5rem;
+		line-height: var(--control-sm);
 		overflow-wrap: anywhere;
 	}
 	.name {
@@ -365,11 +365,11 @@
 		font: inherit;
 		cursor: pointer;
 	}
-	/* Under a coarse pointer a ruled word's hit area is its 2rem line, not Button's 44px: lines are 2rem apart, so a
+	/* Under a coarse pointer a ruled word's hit area is its line (control-md), not Button's 44px: lines are 32px apart, so a
 	   taller area would take the bottom of the word (or the date) above it. */
 	@media (pointer: coarse) {
 		.view-sentence :global(.word-button)::before {
-			inset-block: calc((100% - 2rem) / 2);
+			inset-block: calc((100% - var(--control-md)) / 2);
 		}
 	}
 	.naming {
@@ -383,7 +383,7 @@
 		color: var(--ink);
 		font: inherit;
 		font-weight: 600;
-		line-height: 1.5rem;
+		line-height: var(--control-sm);
 	}
 	.hint {
 		margin: var(--space-tight) 0 0;

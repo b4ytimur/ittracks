@@ -1,7 +1,7 @@
 /* Field: one value's frame and its control box (D3.20). Owns the box of every text, number, time and date input, select
    and textarea (moved out of base in the foundations round), .field (label, optional hint, the control, one message
-   slot), .field-hint, .field-inline (label left, control right, from bp-phone of its container) and .field-group
-   (fieldset + legend on Layout's .l-stack). The invalid look and its message slot are States'; the blocked look and its line, BlockedReason's;
+   slot), .field-hint, .field-inline (label left, control right, from bp-phone of its container), .field-group
+   (fieldset + legend on Layout's .l-stack) and the widths (.w-num, .w-time, .w-text, .row > .grow). The invalid look and its message slot are States'; the blocked look and its line, BlockedReason's;
    boxes and radios, Checkbox's; choice pills, Chip's; the toggle's editor, Segmented's.
    Markup:
      <div class="field">
@@ -31,6 +31,15 @@
 /* A textarea gets its padding back: one line is 1 + 3 + 24 + 3 + 1 = 32 and each line adds a whole line, so every rows
    count stays on the pitch (2 rows 56, 3 rows 80). */
 :where(textarea) { padding-block: calc(var(--space-tight) - 1px); resize: vertical; }
+
+/* ---------- Widths: by what the field holds, set on the control ---------- */
+/* A number 5rem, a time 7rem, a short text or a date 10rem; anything longer keeps the box's 100%. The width sits on the
+   control, never on its label, so a label over it is as wide as its words; display: block keeps the control under them,
+   as a full-width one is. In a .row, .grow on the row's item (a label, or a bare control) takes what the others leave. */
+:where(input, select).w-num { display: block; width: var(--field-num); }
+:where(input, select).w-time { display: block; width: var(--field-time); }
+:where(input, select).w-text { display: block; width: var(--field-text); }
+.row > .grow { flex: 1; min-width: 8rem; }
 
 /* ---------- Hover: the edge turns ink, never a fill; only where a pointer hovers (States). .hover: the previews' stand-in ---------- */
 /* A control that can't act (BlockedReason) or is read-only (States) takes no hover; an invalid edge stays danger (States

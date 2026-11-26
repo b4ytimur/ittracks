@@ -523,7 +523,7 @@
 		display: grid;
 		/* A wide chart scrolls in its box; it never widens the form. */
 		grid-template-columns: minmax(0, 1fr);
-		gap: 1rem;
+		gap: var(--space-group);
 	}
 	@media (min-width: 900px) {
 		.builder {
@@ -532,7 +532,7 @@
 		}
 		.preview {
 			position: sticky;
-			top: 1rem;
+			top: var(--space-group);
 		}
 	}
 	.preview h3 {
@@ -540,7 +540,7 @@
 		font-size: var(--font-size-card-title);
 	}
 	.preview > div:nth-child(2) {
-		margin-bottom: 0.6rem;
+		margin-bottom: var(--space-inline);
 	}
 	.stale {
 		opacity: 0.55;
@@ -555,33 +555,33 @@
 		font-size: var(--font-size-label);
 		color: var(--ink-muted);
 		padding: 0;
-		margin-bottom: 0.1rem;
+		margin-bottom: var(--space-tight);
 	}
 	.grid2 {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-		gap: 0.6rem;
+		gap: var(--space-inline);
 	}
 	.inline {
 		display: flex;
 		align-items: center;
-		gap: 0.2rem;
+		gap: var(--space-tight);
 		color: var(--ink);
 	}
 	.inline.off {
 		color: var(--ink-muted);
 	}
 	.mode {
-		margin: 0.5rem 0 0.25rem;
-		gap: 1rem;
+		margin: var(--space-inline) 0 var(--space-tight);
+		gap: var(--space-group);
 	}
 	.fields {
 		max-height: 16rem;
 		overflow: auto;
-		margin-top: 0.4rem;
+		margin-top: var(--space-inline);
 	}
 	.group + .group {
-		margin-top: 0.5rem;
+		margin-top: var(--space-inline);
 	}
 	details summary {
 		cursor: pointer;
@@ -589,11 +589,11 @@
 		font-size: var(--font-size-label);
 	}
 	.inner {
-		margin-top: 0.6rem;
+		margin-top: var(--space-inline);
 	}
 	.issues {
 		margin: 0;
-		padding-left: 1.1rem;
+		padding-left: var(--space-indent);
 		font-size: var(--font-size-meta);
 	}
 </style>

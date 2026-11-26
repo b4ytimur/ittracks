@@ -72,13 +72,13 @@
 		font-size: var(--font-size-meta);
 		color: var(--ink-muted);
 		font-weight: 500;
-		margin: 0.8rem 0 0.3rem;
+		margin: var(--space-group) 0 var(--space-tight);
 	}
 	.item {
 		display: flex;
 		align-items: center;
-		gap: 0.6rem;
-		padding: 0.35rem 0;
+		gap: var(--space-inline);
+		padding: var(--space-inline) 0;
 		border-bottom: 1px solid var(--chart-grid);
 	}
 	.list li + li {

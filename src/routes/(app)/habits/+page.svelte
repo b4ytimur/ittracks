@@ -366,6 +366,6 @@
 <style>
 	.added {
 		border-color: var(--accent);
-		margin-bottom: 0.75rem;
+		margin-bottom: var(--space-group);
 	}
 </style>

@@ -92,6 +92,9 @@
 	--chosen-width: 2px;
 	--band-height: 2rem;
 	--page-width: 40rem;
+	--field-num: 5rem; /* field widths by what they hold (Field): a number, a time, a short text or a date */
+	--field-time: 7rem;
+	--field-text: 10rem;
 	--control-sm: 1.5rem;
 	--control-md: 2rem;
 	--glyph-md: 1rem;

@@ -89,14 +89,14 @@
 
 <style>
 	.notebox {
-		margin-top: 0.25rem;
+		margin-top: var(--space-tight);
 	}
 	.head {
 		flex-wrap: wrap;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 0.5rem;
+		gap: var(--space-inline);
 	}
 	.lbl {
 		flex: 1;
@@ -113,9 +113,8 @@
 		padding-inline: 0;
 	}
 	textarea {
-		margin-top: 0.25rem;
+		margin-top: var(--space-tight);
 		resize: vertical;
-		line-height: 1.4;
 	}
 	/* Under a coarse pointer the tools' and the switch's hit areas reach 6px under their 32px line, so the box starts
 	   8px under it, where taps are its own. */
@@ -125,15 +124,15 @@
 		}
 	}
 	.preview {
-		margin-top: 0.25rem;
+		margin-top: var(--space-tight);
 		min-height: 3.2rem;
-		padding: 0.5rem 0.6rem;
+		padding: calc(var(--space-tight) - 1px) var(--space-inline); /* the text starts where the textarea's does */
 		border: 1px dashed var(--line);
-		border-radius: 8px;
+		border-radius: var(--radius-control);
 		background: var(--surface-raised);
 	}
 	.hint {
 		font-size: var(--font-size-chip);
-		margin: 0.2rem 0 0;
+		margin: var(--space-tight) 0 0;
 	}
 </style>

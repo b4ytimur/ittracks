@@ -76,7 +76,7 @@
 	}
 	.axis {
 		fill: var(--ink-muted);
-		font-size: 10px;
+		font-size: var(--font-size-note);
 	}
 	.c {
 		fill: var(--chart-grid);
@@ -93,7 +93,7 @@
 		stroke: var(--danger);
 		stroke-width: 1.5;
 		background: transparent;
-		box-shadow: inset 0 0 0 1.5px var(--danger);
+		box-shadow: inset 0 0 0 var(--chosen-width) var(--danger);
 	}
 	.c.future {
 		fill: transparent;
@@ -108,21 +108,21 @@
 	.key {
 		display: flex;
 		align-items: center;
-		gap: 3px;
+		gap: var(--space-tight);
 		font-size: var(--font-size-note);
-		margin-top: 0.3rem;
+		margin-top: var(--space-tight);
 	}
 	.key i {
 		display: inline-block;
 		width: 10px;
 		height: 10px;
-		border-radius: 2px;
+		border-radius: var(--radius-indicator);
 	}
 	.key span {
-		margin-left: 0.6rem;
+		margin-left: var(--space-inline);
 		display: inline-flex;
 		align-items: center;
-		gap: 3px;
+		gap: var(--space-tight);
 	}
 	.tip {
 		position: absolute;
@@ -130,7 +130,7 @@
 		background: var(--surface-raised);
 		border: 1px solid var(--line);
 		border-radius: var(--radius-control);
-		padding: 0.35rem 0.5rem;
+		padding: var(--space-inline);
 		font-size: var(--font-size-chip);
 		box-shadow: var(--shadow-tooltip);
 		z-index: var(--z-raised);

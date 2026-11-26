@@ -231,8 +231,8 @@
 			{#if openSlip === b.habitId}
 				<form method="POST" action="?/slip" class="row-line row" use:enhance={after}>
 					<input type="hidden" name="habit" value={b.habitId} />
-					<label class="count">Count <input name="count" type="number" min="1" max="1000" step="1" value="1" required /></label>
-					<label class="time">Time <input name="time" type="time" /></label>
+					<label>Count <input class="w-num" name="count" type="number" min="1" max="1000" step="1" value="1" required /></label>
+					<label>Time <input class="w-time" name="time" type="time" /></label>
 					<button>{b.limit ? 'Log' : 'Add slip'}</button>
 				</form>
 			{/if}
@@ -355,12 +355,6 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-inline);
-	}
-	.count {
-		width: 5rem;
-	}
-	.time {
-		width: 7rem;
 	}
 	.variant {
 		display: inline-flex;

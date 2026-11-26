@@ -824,11 +824,11 @@
 						>
 							<input type="hidden" name="habit" value={b.habitId} />
 							<div class="row">
-								<label style="width: 5rem">Count <input name="count" type="number" min="1" max="1000" step="1" value="1" required /></label>
+								<label>Count <input class="w-num" name="count" type="number" min="1" max="1000" step="1" value="1" required /></label>
 								<label class="grow"
 									>Date <input name="date" type="date" value={data.today} min={b.startDate} max={data.today} required /></label
 								>
-								<label style="width: 7rem">Time <input name="time" type="time" value={nowTime()} /></label>
+								<label>Time <input class="w-time" name="time" type="time" value={nowTime()} /></label>
 							</div>
 							<div>
 								<span class="muted meta">How were you feeling? (optional)</span>
@@ -931,18 +931,18 @@
 
 <style>
 	.headline-pick {
-		margin-top: 0.5rem;
+		margin-top: var(--space-inline);
 	}
 	.nudge {
 		align-items: center;
-		margin-bottom: 0.75rem;
+		margin-bottom: var(--space-group);
 		border-color: var(--accent);
 	}
 	:global(.elist > li.stacked) {
 		margin-inline-start: var(--space-indent);
 	}
 	.slip {
-		margin-top: 0.75rem;
+		margin-top: var(--space-group);
 	}
 	.grow,
 	.card strong {
@@ -1009,9 +1009,9 @@
 	:global(.row-fold) {
 		position: absolute;
 		inset-inline-start: 0;
-		top: calc(50% - 0.75rem); /* centred on the row, like the grip and the verb */
+		top: calc(50% - var(--control-sm) / 2); /* centred on the row, like the grip and the verb */
 		inline-size: var(--space-group);
-		min-height: 1.5rem;
+		min-height: var(--control-sm);
 		padding: 0;
 		border: 0;
 		background: none;

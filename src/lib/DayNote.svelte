@@ -69,11 +69,11 @@
 
 <style>
 	.daynote {
-		margin-top: 1.25rem;
+		margin-top: var(--space-group);
 	}
 	.foot {
 		display: flex;
 		justify-content: space-between;
-		margin-top: 0.3rem;
+		margin-top: var(--space-tight);
 	}
 </style>

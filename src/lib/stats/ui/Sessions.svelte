@@ -25,10 +25,10 @@
 		list-style: none;
 		padding: 0;
 		margin: 0;
-		font-size: 0.88rem;
+		font-size: var(--font-size-label);
 	}
 	li {
-		padding: 0.35rem 0;
+		padding: var(--space-inline) 0;
 		border-bottom: 1px solid var(--chart-grid);
 	}
 	li:last-child {
@@ -36,7 +36,7 @@
 	}
 	.head {
 		display: flex;
-		gap: 0.5rem;
+		gap: var(--space-inline);
 		align-items: center;
 		flex-wrap: wrap;
 	}

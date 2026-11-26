@@ -232,8 +232,8 @@
 	.templates {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-		gap: 0.5rem;
-		margin-bottom: 0.75rem;
+		gap: var(--space-inline);
+		margin-bottom: var(--space-group);
 	}
 	.templates li + li {
 		margin-top: 0;
@@ -244,13 +244,13 @@
 		text-align: left;
 		display: flex;
 		flex-direction: column;
-		gap: 0.2rem;
+		gap: var(--space-tight);
 	}
 	.filters {
 		display: flex;
-		gap: 0.5rem;
+		gap: var(--space-inline);
 		align-items: center;
-		margin-bottom: 0.75rem;
+		margin-bottom: var(--space-group);
 		flex-wrap: wrap;
 	}
 	/* The range pills and Filter share one line, so the chips' own top margin goes. */
@@ -278,10 +278,10 @@
 	}
 	.empty {
 		text-align: center;
-		margin-bottom: 0.75rem;
+		margin-bottom: var(--space-group);
 	}
 	.foot {
-		margin-top: 1.5rem;
+		margin-top: var(--space-section);
 		text-align: center;
 	}
 	.boards {

@@ -46,13 +46,13 @@
 
 <style>
 	dialog {
-		width: min(36rem, calc(100vw - 2rem));
+		width: min(36rem, calc(100vw - 2 * var(--space-group)));
 		max-height: 80dvh;
 		border: 1px solid var(--line);
 		border-radius: var(--radius-card);
 		background: var(--surface-raised);
 		color: var(--ink);
-		padding: 1rem;
+		padding: var(--space-group);
 	}
 	dialog::backdrop {
 		background: var(--scrim);
@@ -63,9 +63,9 @@
 	}
 	.row-item {
 		display: flex;
-		gap: 0.6rem;
+		gap: var(--space-inline);
 		align-items: center;
-		padding: 0.35rem 0;
+		padding: var(--space-inline) 0;
 		border-bottom: 1px solid var(--chart-grid);
 	}
 	.list li + li {

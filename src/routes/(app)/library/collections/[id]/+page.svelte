@@ -108,10 +108,10 @@
 		max-height: 50vh;
 		overflow: auto;
 		border: 1px solid var(--line);
-		border-radius: 8px;
-		padding: 0.5rem;
+		border-radius: var(--radius-control);
+		padding: var(--space-inline);
 	}
 	.picks label + label {
-		margin-top: 0.35rem;
+		margin-top: var(--space-inline);
 	}
 </style>

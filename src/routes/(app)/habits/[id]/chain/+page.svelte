@@ -97,9 +97,9 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="grid" style="--weeks: {data.weeks}" role="group" aria-label="The last {data.weeks} weeks, a column a week" bind:this={grid} onkeydown={keys}>
 	<span aria-hidden="true"></span>
-	{#each columns(data.weeks) as w (w)}<span class="month muted" aria-hidden="true">{monthLabel(w)}</span>{/each}
+	{#each columns(data.weeks) as w (w)}<span class="month note muted" aria-hidden="true">{monthLabel(w)}</span>{/each}
 	{#each weekdayNames as day, d (day)}
-		<span class="weekday muted" aria-hidden="true">{d % 2 === 0 ? day : ''}</span>
+		<span class="weekday note muted" aria-hidden="true">{d % 2 === 0 ? day : ''}</span>
 		{#each columns(data.weeks) as w (w)}
 			{@const i = w * 7 + d}
 			{@const x = tiles[i]}
@@ -132,11 +132,6 @@
 		gap: 2px;
 		align-items: center;
 		max-width: 30rem;
-	}
-	.weekday,
-	.month {
-		font-size: var(--font-size-note);
-		line-height: 1rem;
 	}
 	.month {
 		white-space: nowrap;

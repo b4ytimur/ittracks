@@ -44,7 +44,7 @@
 
 <style>
 	.value {
-		font-size: 1.9rem;
+		font-size: var(--font-size-figure-lg);
 		font-weight: 600;
 		line-height: 1.15;
 		font-variant-numeric: tabular-nums;
@@ -52,11 +52,11 @@
 	}
 	.delta {
 		color: var(--ink);
-		margin-top: 0.15rem;
+		margin-top: var(--space-tight);
 	}
 	.delta span {
-		font-size: 0.65rem;
-		margin-right: 0.15rem;
+		font-size: var(--font-size-note);
+		margin-right: var(--space-tight);
 	}
 	.delta.good span {
 		color: var(--good);
@@ -68,7 +68,7 @@
 		display: block;
 		width: 100%;
 		height: 28px;
-		margin-top: 0.4rem;
+		margin-top: var(--space-inline);
 	}
 	.spark path {
 		fill: none;

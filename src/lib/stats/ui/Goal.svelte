@@ -42,7 +42,7 @@
 		margin: 0;
 	}
 	li + li {
-		margin-top: 0.6rem;
+		margin-top: var(--space-inline);
 	}
 	button {
 		display: block;
@@ -55,7 +55,7 @@
 	.head {
 		display: flex;
 		justify-content: space-between;
-		gap: 0.5rem;
+		gap: var(--space-inline);
 		font-size: var(--font-size-label);
 	}
 	.goal-name {
@@ -66,9 +66,9 @@
 	.track {
 		position: relative;
 		height: 10px;
-		border-radius: 5px;
+		border-radius: var(--radius-pill);
 		background: var(--seq-1);
-		margin: 0.3rem 0 0.15rem;
+		margin: var(--space-tight) 0;
 		overflow: hidden;
 	}
 	.fill {
@@ -76,7 +76,7 @@
 		left: 0;
 		top: 0;
 		bottom: 0;
-		border-radius: 5px;
+		border-radius: var(--radius-pill);
 		background: var(--accent);
 	}
 	.fill.reached {

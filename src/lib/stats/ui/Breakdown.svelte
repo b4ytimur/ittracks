@@ -30,20 +30,20 @@
 		display: flex;
 		gap: 2px;
 		height: 14px;
-		margin-bottom: 0.5rem;
+		margin-bottom: var(--space-inline);
 	}
 	.seg span {
 		flex-basis: 0;
 		min-width: 3px;
 	}
 	.seg span:first-child {
-		border-radius: 4px 0 0 4px;
+		border-radius: var(--radius-mark) 0 0 var(--radius-mark);
 	}
 	.seg span:last-child {
-		border-radius: 0 4px 4px 0;
+		border-radius: 0 var(--radius-mark) var(--radius-mark) 0;
 	}
 	.seg span:only-child {
-		border-radius: 4px;
+		border-radius: var(--radius-mark);
 	}
 	.parts {
 		list-style: none;
@@ -55,11 +55,11 @@
 		display: grid;
 		grid-template-columns: 10px 1fr auto 3rem;
 		align-items: center;
-		gap: 0.45rem;
+		gap: var(--space-inline);
 		width: 100%;
 		border: none;
 		background: none;
-		padding: 0.2rem 0;
+		padding: var(--space-tight) 0;
 		text-align: left;
 	}
 	/* The lines touch, so Button's grown touch area would take the next line's taps: each line is its own target. */
@@ -69,7 +69,7 @@
 	i {
 		width: 10px;
 		height: 10px;
-		border-radius: 2px;
+		border-radius: var(--radius-indicator);
 	}
 	.part-name {
 		overflow: hidden;
