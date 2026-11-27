@@ -55,7 +55,8 @@
 	});
 </script>
 
-<h2 class="group-heading section-title" class:stuck class:slotted bind:this={el}>
+<!-- With a grip inside, the heading is named by its title alone, never "Move X X" (a heading reads as its title). -->
+<h2 class="group-heading section-title" aria-labelledby={grip ? `${id}-t` : undefined} class:stuck class:slotted bind:this={el}>
 	{#if onfold}
 		<button type="button" class="fold" aria-expanded={!folded} aria-labelledby="{id}-t" onclick={onfold}><span class="chev" aria-hidden="true">›</span></button>
 	{/if}

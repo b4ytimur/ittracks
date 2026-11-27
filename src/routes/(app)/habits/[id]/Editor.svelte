@@ -794,8 +794,9 @@
 	}
 	async function resetSections() {
 		await arrange(undefined, `Reset the order of sections, ${everyOne}.`);
-		// A new habit's ⋯ held only this and goes with it: the focus goes to the first section's grip, never the page.
-		if (document.activeElement === document.body) document.querySelector<HTMLElement>('.elist.sections .handle')?.focus();
+		// A new habit's ⋯ held only this and goes with it: the focus goes to the first section's grip (or the name when
+		// one section shows and has no grip), never the page.
+		if (document.activeElement === document.body) (document.querySelector<HTMLElement>('.elist.sections .handle') ?? document.getElementById('habit-name'))?.focus();
 	}
 	// Which lines every new one of this kind starts with.
 	const FEATURE: Partial<Record<string, Parameters<typeof off>[0]>> = { levels: 'levels', raise: 'progression', cost: 'cost', identity: 'identities', treat: 'rewards', reward: 'rewards', prep: 'prep', reframe: 'reframe', instead: 'ifThen' };
@@ -830,7 +831,8 @@
 			opened[id] = false;
 		}
 	}
-	const resetOrder = $derived<Way[]>(customOrder(data.detail[pageKind]) ? [{ label: 'Reset section order', onselect: () => void resetSections() }] : []);
+	// Only where the sections show (the full editor): the step-by-step new habit has none to reset.
+	const resetOrder = $derived<Way[]>(mode === 'full' && customOrder(data.detail[pageKind]) ? [{ label: 'Reset section order', onselect: () => void resetSections() }] : []);
 	const menu = $derived<(Way | '-')[]>(
 		data.isNew
 			? resetOrder
