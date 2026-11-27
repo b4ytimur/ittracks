@@ -29,7 +29,13 @@
 		const statement = name?.trim();
 		if (!statement) return;
 		const r = await run<{ added: string | null }>('add', { statement });
-		if (r?.added) showToast(`Added “${statement}”.`, undoWith('/identities?/delete', { id: r.added }));
+		const added = r?.added;
+		if (added)
+			showToast(`Added “${statement}”.`, async () => {
+				// An Undo of a Delete may have given it that one's habits since: then it stays, and the band says so.
+				const u = await runAction<{ kept: boolean }>('/identities?/unadd', { id: added });
+				return u.ok && (u.data?.kept ? `Not undone: “${statement}” has habits now, so it stays.` : true);
+			});
 		else if (r) showToast(`“${statement}” is there already.`);
 	}
 	async function rename(i: Row, statement: string) {

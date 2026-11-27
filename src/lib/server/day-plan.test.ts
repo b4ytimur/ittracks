@@ -119,7 +119,8 @@ describe('swapping a Slot for the day', () => {
 			return (await (actions.swap as unknown as (e: unknown) => Promise<unknown>)(event)) as { status?: number; data?: { error: string } } | undefined;
 		};
 		swapSlot(app, day(today), auto.id, incline);
-		expect(await swap({ slot: auto.id, task: '' })).toBeUndefined();
+		// It says the pick it took away, for an Undo to put back.
+		expect(await swap({ slot: auto.id, task: '' })).toEqual({ was: incline });
 		expect(auto.id in picks()).toBe(false);
 		expect(await swap({ slot: fixed.id, task: '' })).toMatchObject({ status: 400, data: { error: expect.stringMatching(/own Task/) } });
 		expect(() => swapSlot(app, day(today), fixed.id, null)).toThrow(/own Task/);
@@ -143,7 +144,7 @@ describe('swapping a Slot for the day', () => {
 		expect(picksOf()).toBeNull();
 		// Open again, it swaps.
 		db.update(occurrence).set({ status: 'due' }).where(eq(occurrence.id, id)).run();
-		expect(await post('swap', { slot: fixed.id, task: incline })).toBeUndefined();
+		expect(await post('swap', { slot: fixed.id, task: incline })).toEqual({ was: null });
 		expect(picksOf()?.[fixed.id]).toBe(incline);
 		db.delete(occurrence).where(eq(occurrence.id, id)).run();
 	});
@@ -420,7 +421,7 @@ describe('Keep in the plan and Replace…: what the Task kept aims for, as one c
 		expect(slotIn(before, mine.id)).toMatchObject({ taskId: taskId('Floor press'), minTargets: { [field(taskId('Floor press'), 'Weight')]: 50 }, stretchTargets: { [field(taskId('Floor press'), 'Weight')]: 65 } });
 		expect(pushDay().picks?.[mine.id]).toBe(pin);
 	});
-	it("Replace… after a Keep: the log swaps back to the Slot's own Task first, which drops the pick Keep left, so today follows the plan", async () => {
+	it("Replace… after a Keep: the log swaps back to the Slot's own Task first, which drops the pick Keep left, so today follows the plan; its Undo puts the pick back", async () => {
 		const { currentForm, patchHabit } = await import('./habit-patch');
 		const { withSlot } = await import('$lib/log/plan');
 		const { positionsOf } = await import('./positions');
@@ -432,16 +433,22 @@ describe('Keep in the plan and Replace…: what the Task kept aims for, as one c
 		change(kept, before);
 		// Kept: the pick stays (Keep's Undo needs it), and is now the Slot's own Task.
 		expect(pushDay().picks?.[mine.id]).toBe(pin);
-		// Replace…: back to the Slot's own Task, then the plan changes.
-		swapSlot(app, pushDay(), mine.id, pin);
+		// Replace…: back to the Slot's own Task, which says the pick it dropped, then the plan changes.
+		expect(swapSlot(app, pushDay(), mine.id, pin)).toBe(pin);
 		expect(pushDay().picks?.[mine.id]).toBeUndefined();
 		const replaced = withSlot(kept, mine.id, { taskId: plank, targets: {}, minTargets: {}, stretchTargets: {} });
 		change(replaced, kept);
-		expect(positionsOf(pushDay()).find((p) => p.slotId === mine.id)?.taskId).toBe(plank);
-		// Its Undo: the plan back, and today with it.
+		const shown = () => positionsOf(pushDay()).find((p) => p.slotId === mine.id)?.taskId;
+		expect(shown()).toBe(plank);
+		// Its Undo: the pick back while the plan still names Plank hold, then the plan back, and today with it.
+		expect(swapSlot(app, pushDay(), mine.id, pin)).toBeUndefined();
 		change(kept, replaced);
-		expect(positionsOf(pushDay()).find((p) => p.slotId === mine.id)?.taskId).toBe(pin);
+		expect(shown()).toBe(pin);
+		expect(pushDay().picks?.[mine.id]).toBe(pin);
+		// Then Keep's Undo: the plan back, and today stays on the Task the user was doing.
 		change(before, kept);
+		expect(currentForm(me, push)!.variants).toEqual(before);
+		expect(shown()).toBe(pin);
 	});
 	it("History: a day swapped before a Keep still names the Task it was done instead of; one done after, with the Task kept, reads plain", async () => {
 		const { currentForm, patchHabit } = await import('./habit-patch');

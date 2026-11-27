@@ -86,26 +86,18 @@
 
 <svelte:window onscroll={() => (stuck = on && !!bar && bar.getBoundingClientRect().top <= 0 && window.scrollY > 0)} onkeydown={go} />
 
-{#snippet acts()}
-	<div class="title-actions" inert={on}>
-		{@render actions?.()}
-		{#if add?.href}<a class="button primary" data-add href={add.href}>{add.label}</a>
-		{:else if add}<button type="button" class="primary" data-add onclick={add.onclick}>{add.label}</button>{/if}
-		{#if more.length}<MenuButton class="button" label="More on {title}" items={more} />{/if}
-	</div>
-{/snippet}
-
 <header class="titlebar" class:stuck={stuck && on} data-mode={on ? 'state' : 'use'} data-add-hidden={addHidden ? '' : null} bind:this={bar}>
 	{#if back}<a class="title-back" href={back.href} aria-label="Back to {back.label}"><span aria-hidden="true">‹</span> {back.label}</a>{/if}
 	<h1 class="page-title">{title}</h1>
-	{#if fromHint}
-		<!-- Done and the actions share one cell in both states, as the hint line's two texts do: the line keeps the wider one's room and never rewraps. -->
-		<div class="title-swap">
-			{#if actions || add || more.length}{@render acts()}{/if}
-			<div class="title-actions" data-done inert={!on}><button type="button" class="primary" aria-describedby="{uid}-state" bind:this={done} onclick={() => go('press')}>Done</button></div>
-		</div>
+	{#if fromHint && on}
+		<div class="title-actions" data-done><button type="button" class="primary" aria-describedby="{uid}-state" bind:this={done} onclick={() => go('press')}>Done</button></div>
 	{:else if actions || add || more.length}
-		{@render acts()}
+		<div class="title-actions" inert={on}>
+			{@render actions?.()}
+			{#if add?.href}<a class="button primary" data-add href={add.href}>{add.label}</a>
+			{:else if add}<button type="button" class="primary" data-add onclick={add.onclick}>{add.label}</button>{/if}
+			{#if more.length}<MenuButton class="button" label="More on {title}" items={more} />{/if}
+		</div>
 	{/if}
 	{#if second && !fromHint}<button type="button" class="toggle" aria-pressed={on} bind:this={toggle} onclick={() => go('press')}><span data-reserve={second.label}>{second.label}</span></button>{/if}
 </header>

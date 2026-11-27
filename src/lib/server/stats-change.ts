@@ -160,7 +160,8 @@ export function changeStats(accountId: string, raw: unknown, tz?: string): Stats
 			if (s.boards.length >= MAX_BOARDS) throw new ActionError('invalid', `At most ${MAX_BOARDS} boards`);
 			const boards = [...s.boards];
 			boards.splice(Math.min(b.index, boards.length), 0, b.board);
-			s = { ...s, boards, open: b.open ? b.board.id : s.open };
+			// Opening with it again only while Stats still opens as the delete left it: a board picked since stays.
+			s = { ...s, boards, open: b.open && s.open === 'last' ? b.board.id : s.open };
 			break;
 		}
 		case 'card.save': {

@@ -95,27 +95,24 @@ describe('TitleLine, a state entered from the hint line', () => {
 	const html = (pressed: boolean) =>
 		render(TitleLine, { props: { title: 'Gym', back: { href: '/', label: 'Today' }, more: [{ label: 'All open', checked: false }], hint: 'Push day A · Saved', state: plan(pressed) } }).body.replace(/<!--.*?-->/g, '');
 
-	it('off: the way in ends the hint line, quiet; no pressed button, Done inert in the ⋯\'s cell, the ⋯ live', () => {
+	it('off: the way in ends the hint line, quiet; no pressed button, no Done, the ⋯ live', () => {
 		const b = html(false);
 		expect(b).not.toContain('aria-pressed');
-		expect(b).toMatch(/<div class="title-swap"><div class="title-actions">[^]*More on Gym[^]*?<\/div>\s*<div class="title-actions" data-done="" inert=""><button[^>]*>Done<\/button><\/div><\/div>/);
+		expect(b).not.toContain('>Done<');
+		expect(b).toMatch(/<div class="title-actions">[^]*More on Gym/);
 		expect(b).toMatch(/<span data-hint="use">Push day A · Saved<span class="hint-tools"><button type="button" class="quiet">Change the plan<\/button><\/span><\/span>/);
 	});
-	it('on: the line pins with Done live in the actions\' place, the one primary, and the hint says what changes', () => {
+	it('on: the line pins with Done alone in the actions, the one primary, and the hint says what changes', () => {
 		const b = html(true);
 		expect(b).toMatch(/<header class="titlebar[^"]*" data-mode="state"/);
 		const id = b.match(/<span data-hint="state" id="([^"]+)">/)?.[1];
 		expect(id).toBeTruthy();
 		// Done says what changes: it is described by the state's hint.
 		expect(b).toContain(`<div class="title-actions" data-done=""><button type="button" class="primary" aria-describedby="${id}">Done</button></div>`);
-		// The ⋯ keeps its cell beside Done, inert, so the line keeps one width in both states and never rewraps.
-		expect(b).toMatch(/<div class="title-swap"><div class="title-actions" inert="">[^]*More on Gym[^]*Done<\/button><\/div><\/div>\s*<\/header>/);
+		expect(b).toMatch(/Done<\/button><\/div>\s*<\/header>/);
+		expect(b).not.toContain('More on Gym');
 		expect(b.match(/primary/g)).toHaveLength(1);
 		expect(b).toMatch(/<span data-hint="use" inert[^>]*>Push day A · Saved<span class="hint-tools">/);
 		expect(b).toMatch(/<span data-hint="state" id="[^"]+">Changing Push day A, from now on\. Esc also leaves\.<\/span>/);
-	});
-	it('a Log with no ⋯ still keeps Done\'s room while off, so turning it on moves nothing', () => {
-		const b = render(TitleLine, { props: { title: 'Gym', back: { href: '/', label: 'Today' }, hint: 'Saved', state: plan(false) } }).body.replace(/<!--.*?-->/g, '');
-		expect(b).toMatch(/<div class="title-swap">\s*<div class="title-actions" data-done="" inert=""><button[^>]*>Done<\/button><\/div><\/div>/);
 	});
 });

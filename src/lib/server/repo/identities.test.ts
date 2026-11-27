@@ -6,7 +6,7 @@ import { db } from '../db';
 import { habitIdentity } from '../db/schema';
 import { createAccount } from '../auth';
 import { saveHabit } from './habits';
-import { deleteIdentity, identityFor, listIdentities, restoreIdentity } from './identities';
+import { deleteIdentity, identityFor, listIdentities, restoreIdentity, unaddIdentity } from './identities';
 import { habitForm } from '$lib/forms';
 
 let me: string;
@@ -27,4 +27,12 @@ it('Undo of a Delete, after one that says the same was added, gives that one the
 	restoreIdentity(me, deleted);
 	expect(listIdentities(me)).toEqual([{ id: now, statement: 'i run' }]);
 	expect(db.select().from(habitIdentity).where(eq(habitIdentity.habitId, h)).all()).toEqual([{ habitId: h, identityId: now }]);
+	// Then the Undo of that Add: the habit it has now came from the Delete's Undo, so it stays, with its habit.
+	expect(unaddIdentity(me, now)).toBe(false);
+	expect(listIdentities(me)).toEqual([{ id: now, statement: 'i run' }]);
+	expect(db.select().from(habitIdentity).where(eq(habitIdentity.habitId, h)).all()).toEqual([{ habitId: h, identityId: now }]);
+	// With no habit, the Undo of an Add takes it away.
+	const empty = identityFor(me, 'I read');
+	expect(unaddIdentity(me, empty)).toBe(true);
+	expect(listIdentities(me).map((i) => i.statement)).toEqual(['i run']);
 });

@@ -450,7 +450,10 @@ export const actions: Actions = {
 		return { targets, aim: aimText(s.sets, to, targets) };
 	},
 
-	/** Use a Task of your choice in a Slot, for this Occurrence only; an empty `task` takes an auto-filled Slot's pick away. */
+	/**
+	 * Use a Task of your choice in a Slot, for this Occurrence only; an empty `task` takes an auto-filled Slot's pick away.
+	 * `was`: the pick it replaced, so an Undo can put it back.
+	 */
 	swap: async ({ request, locals, params, cookies }) => {
 		const o = ownedOccurrence(locals.account!.id, params.id);
 		if (!o || !o.occ.variantId) error(404);
@@ -458,7 +461,7 @@ export const actions: Actions = {
 		if (o.occ.status === 'done') return fail(400, { error: FINISHED });
 		const f = await request.formData();
 		try {
-			swapSlot(appActor(locals.account!.id, cookies.get('tz')), o.occ, String(f.get('slot')), String(f.get('task') ?? '') || null);
+			return { was: swapSlot(appActor(locals.account!.id, cookies.get('tz')), o.occ, String(f.get('slot')), String(f.get('task') ?? '') || null) ?? null };
 		} catch (e) {
 			if (!(e instanceof ActionError)) throw e;
 			if (e.code === 'not_found') error(404);

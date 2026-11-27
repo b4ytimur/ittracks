@@ -96,13 +96,14 @@ export function insteadIn(occIds: string[]): (e: { occurrenceId: string; taskId:
 
 /**
  * Use a Task in a Slot for this day. Back to the Slot's own Task there is no pick, so a later change to the plan reaches it;
- * none (null) leaves an auto-filled Slot without a pick, as it was when no Task matched.
+ * none (null) leaves an auto-filled Slot without a pick, as it was when no Task matched. Returns the pick it replaced.
  */
-function setPick(actor: Actor, occ: OccLike, s: typeof slot.$inferSelect, taskId: string | null, what: 'swap' | 'reroll') {
-	const { [s.id]: _, ...rest } = ensurePicks(occ.id) ?? {};
+function setPick(actor: Actor, occ: OccLike, s: typeof slot.$inferSelect, taskId: string | null, what: 'swap' | 'reroll'): string | undefined {
+	const { [s.id]: was, ...rest } = ensurePicks(occ.id) ?? {};
 	const picks = !taskId || taskId === ownTask(occ, s.id, s) ? rest : { ...rest, [s.id]: taskId };
 	db.update(occurrence).set({ picks }).where(eq(occurrence.id, occ.id)).run();
 	emit(actor, 'plan.changed', { habitId: occ.habitId, date: occ.date, data: { what, occurrenceId: occ.id, slotId: s.id, taskId } });
+	return was;
 }
 
 /** Pick a different Task for an auto-filled Slot, for this day only. Returns the Task picked. */
@@ -125,9 +126,9 @@ export function rerollSlot(actor: Actor, occ: OccLike, slotId: string): string {
 
 /**
  * Use a Task of your choice in a Slot, for this day only. No Task: an auto-filled Slot goes back to none, the Undo of a
- * swap into one that had no Task to match.
+ * swap into one that had no Task to match. Returns the pick it replaced, if there was one.
  */
-export function swapSlot(actor: Actor, occ: OccLike, slotId: string, taskId: string | null) {
+export function swapSlot(actor: Actor, occ: OccLike, slotId: string, taskId: string | null): string | undefined {
 	const s = slotOf(occ, slotId);
 	if (!taskId) {
 		if (!s.fillRule) throw new ActionError('invalid', 'That Slot has its own Task: swap it back to that.');
@@ -139,7 +140,7 @@ export function swapSlot(actor: Actor, occ: OccLike, slotId: string, taskId: str
 		.where(and(eq(task.id, taskId), eq(task.accountId, actor.accountId), isNull(task.parentTaskId)))
 		.get();
 	if (!t) throw new ActionError('not_found', 'No such Task');
-	setPick(actor, occ, s, t.id, 'swap');
+	return setPick(actor, occ, s, t.id, 'swap');
 }
 
 /** A Task used in a Slot on an earlier day: that day, and its first set done there in words ("50 kg × 8"), or "". */

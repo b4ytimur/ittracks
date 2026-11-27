@@ -109,7 +109,8 @@ export function changeViews(accountId: string, raw: unknown): ViewsChanged {
 			const p = b.view.page;
 			const saved = [...v.saved];
 			if (!saved.some((s) => s.id === b.view.id)) saved.splice(Math.min(b.index, saved.length), 0, b.view);
-			next = { ...v, saved, active: { ...v.active, [p]: b.view.id }, open: b.open ? { ...v.open, [p]: b.view.id } : v.open };
+			// What the page opens with comes back only while it is still what the delete left (none): a choice since stays.
+			next = { ...v, saved, active: { ...v.active, [p]: b.view.id }, open: b.open && v.open[p] === undefined ? { ...v.open, [p]: b.view.id } : v.open };
 			break;
 		}
 		case 'rename':

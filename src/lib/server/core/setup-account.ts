@@ -13,7 +13,7 @@ import { getStats } from '../stats';
 import { changeStats, type StatsChanged } from '../stats-change';
 import { addPause, pausesOf, removePause, restorePause, type PauseRow } from '../pauses';
 import { addArea, changeArea, deleteArea, listAreas, moveAreas, restoreArea, type DeletedArea } from '../repo/areas';
-import { addIdentity, deleteIdentity, listIdentities, orderIdentities, renameIdentity, restoreIdentity, type DeletedIdentity } from '../repo/identities';
+import { addIdentity, deleteIdentity, listIdentities, orderIdentities, renameIdentity, restoreIdentity, unaddIdentity, type DeletedIdentity } from '../repo/identities';
 import { addTag, listTags, moveTag, removeTag, renameTag } from '../repo/tags';
 import { deleteCollection, listCollections, restoreCollection, saveCollection, type CollectionRow } from '../repo/collections';
 import { deleteSavedTemplate, listSavedTemplates, restoreSavedTemplate, savedTemplateRow } from '../repo/saved-templates';
@@ -503,7 +503,7 @@ export function undoAccount(actor: Actor, u: AccountUndo, today: string): string
 			return null;
 		case 'identity':
 			if (u.order) orderIdentities(accountId, u.order);
-			else if (u.added) deleteIdentity(accountId, u.added);
+			else if (u.added) return unaddIdentity(accountId, u.added) ? null : 'an identity added then has habits now, so it stays';
 			else if (u.deleted) restoreIdentity(accountId, u.deleted);
 			else if (u.id && u.before && !renameIdentity(accountId, u.id, u.before)) return 'another identity says what one said before, so it keeps its new words';
 			return null;

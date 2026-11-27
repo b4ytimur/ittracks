@@ -41,6 +41,17 @@ it('brings the view back where it stood, the page on it and opening with it, and
 	expect(getViews(me).open.habits).toBe('last');
 });
 
+it("Undo of Delete view keeps what the page opens with when that was chosen after the delete", () => {
+	const mine = changeViews(me, { op: 'save', page: 'habits', name: 'Picked', state: viewState.parse({ sort: 'name' }) }).id!;
+	changeViews(me, { op: 'open', page: 'habits', value: mine });
+	const view = getViews(me).saved.find((s) => s.id === mine)!;
+	changeViews(me, { op: 'delete', id: mine });
+	changeViews(me, { op: 'open', page: 'habits', value: 'default' });
+	changeViews(me, { op: 'undelete', view, index: 0, open: true });
+	expect(getViews(me).saved.some((s) => s.id === mine)).toBe(true);
+	expect(getViews(me).open.habits).toBe('default');
+});
+
 it("undoing one habit's Number keeps the number picked for another since", () => {
 	changeViews(me, { op: 'patch', today: { headlineFor: {} } });
 	const pick = (id: string, v: Parameters<typeof ownNumber>[3]) => changeViews(me, { op: 'patch', today: { headlineFor: ownNumber(getViews(me).today.headlineFor, id, id, v).next } });

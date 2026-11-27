@@ -64,6 +64,13 @@ export function deleteIdentity(accountId: string, id: string): DeletedIdentity |
 	});
 }
 
+/** The Undo of an Add, which gave it no habits: false, and it stays, when a habit has it by now (an Undo of a Delete gave it one). */
+export function unaddIdentity(accountId: string, id: string): boolean {
+	if (db.select().from(habitIdentity).where(eq(habitIdentity.identityId, id)).get()) return false;
+	deleteIdentity(accountId, id);
+	return true;
+}
+
 /** Put a deleted identity back with its habits. One that says the same by now (added since) gets its habits instead, so two never read the same. */
 export function restoreIdentity(accountId: string, d: DeletedIdentity) {
 	db.transaction((tx) => {

@@ -88,4 +88,15 @@ it('undoing Delete board brings back "Stats opens with this board" when it did, 
 	changeStats(me, { op: 'board.restore', board: copy, index });
 	expect(getStats(me).open).toBe('last');
 	changeStats(me, { op: 'board.delete', id });
+
+	// Another board picked to open with after the delete: the Undo keeps that one.
+	const other = changeStats(me, { op: 'board.add', name: 'Other' }).id!;
+	changeStats(me, { op: 'board.restore', board: copy, index });
+	changeStats(me, { op: 'open', value: id });
+	changeStats(me, { op: 'board.delete', id });
+	changeStats(me, { op: 'open', value: other });
+	changeStats(me, { op: 'board.restore', board: copy, index, open: true });
+	expect(getStats(me).open).toBe(other);
+	changeStats(me, { op: 'board.delete', id });
+	changeStats(me, { op: 'board.delete', id: other });
 });
