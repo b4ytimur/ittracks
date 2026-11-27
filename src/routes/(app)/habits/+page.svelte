@@ -254,7 +254,6 @@
 		page="habits"
 		bind:views
 		bind:current={view}
-		{mode}
 		words={habitsWords(view, { areas: data.areas, identities: identitiesOn ? identityNames : [], lines: views.habits.lines, setLines })}
 	/>
 	{#if !wide.current}<details class="disclosure side-fold"><summary class="meta"><span class="chev" aria-hidden="true">›</span>{sideSays}</summary><div>{@render side()}</div></details>{/if}

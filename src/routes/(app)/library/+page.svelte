@@ -182,7 +182,7 @@
 	{#if view.query}<button type="button" class="quiet glyph search-clear focus-inset" aria-label="Clear search" onclick={() => ((view.query = ''), document.getElementById('li-q')?.focus())}>×</button>{/if}
 </div>
 
-<ViewSentence page="library" bind:views bind:current={view} {mode} words={libraryWords(view, { areas: data.areas.length > 0 })} />
+<ViewSentence page="library" bind:views bind:current={view} words={libraryWords(view, { areas: data.areas.length > 0 })} />
 {#if !wide.current}<details class="disclosure side-fold"><summary class="meta"><span class="chev" aria-hidden="true">›</span>{sideSays}</summary><div>{@render side()}</div></details>{/if}
 
 <!-- The side column, beside the list from 64rem and folded under the sentence on a phone (TS.15). -->

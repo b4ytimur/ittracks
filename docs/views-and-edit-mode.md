@@ -29,8 +29,9 @@ Today, Habits, Library and History each show their view as a sentence, such as "
 - Grouping includes **Area**, **Part of day**, **Identity** and **Build / break**.
 - Each page has views: **Default** and the ones you make. The page is always on exactly one of them. The sentence starts with its name: press it for the views, the one you are on shown with a ✓, and press another to switch.
 - **New view** (the dashed item after the views) makes a copy of the view you are on, and you type its name where it stands. On Today it can start from a template instead.
-- A word you change changes the view you are on, and the line above the tabs says so, with **Undo** and **Keep as new view**. Every change is saved to that view as you make it, including the search and filters on the page itself and a drag that switches the sort to **My order**. In Edit, a view you made can be renamed in place, and **Delete view** removes it and puts the page back on **Default**.
-- The last item under the views says what the page opens with: **the view I was on last**, **Default** or one of your views. Press it to change it.
+- A word you change changes the view you are on, and the line above the tabs says so, with **Undo** and **Keep as new view**. Every change is saved to that view as you make it, including the search and filters on the page itself and a drag that switches the sort to **My order**.
+- The view's own housekeeping is in the same menu, after **New view**, whatever the page is doing: on a view you made, **Rename view** opens its name where it stands, and **Delete view** removes it and puts the page back on **Default**, with Undo. On Today, while Default differs from how it came, **Reset view** puts it back, with Undo.
+- The last item under the views says what the page opens with: **the view I was on last**, **Default** or one of your views. Press it for the next one: the line above the tabs says what the page opens with now, with Undo.
 - On the Habits page, the sentence also says which lines each habit shows (schedule, time, Area, consistency, last done).
 
 ## Edit mode
@@ -45,7 +46,6 @@ The sentence at the top of Today is its view: what it shows (everything, what is
 - Each kind of line under a row (the Minimum, treats, reframe lines, jars and savings, identities, suggestions to raise) has **Hide** or **Show**. It belongs to the view, so each saved view has its own. When and where, and the number, follow the sentence's words for rows and the number.
 - **Headline** under a habit gives it a number of its own instead of the view's.
 - The **Breaking** heading has **Move first** or **Move last**.
-- **Reset view** puts the Default view back as it came, with Undo.
 
 Sections and groups fold, and stay folded. Every count on Today (the count under the title, each section, the week strip) counts the habits themselves: a group or routine counts through the habits inside it. A group that is done by its rule while a habit inside is still due stays with what is still to do, so that habit isn't filed under Done.
 

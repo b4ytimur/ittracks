@@ -542,7 +542,7 @@
 
 <svelte:head><title>Today · ittracks</title></svelte:head>
 
-<EditChrome title="Today" bind:mode modes={['use', 'edit']} hints={{ edit: 'Drag ⠿ to move. Order is shared with Habits.' }} onreset={() => sentenceBar?.resetDefault()} resetLabel="Reset view" atDefault={!sentenceBar?.canReset()}>
+<EditChrome title="Today" bind:mode modes={['use', 'edit']} hints={{ edit: 'Drag ⠿ to move. Order is shared with Habits.' }}>
 	{#snippet useHint()}
 		<span class="today-line">
 			{#if wide.current}<span class="date">{dateLabel}</span>{:else}<button type="button" class="date" aria-expanded={strip} aria-controls="today-strip" onclick={() => (strip = !strip)}>{dateLabel} <span class="chev" aria-hidden="true">›</span></button>{/if}
@@ -611,7 +611,7 @@
 		<div class="l-cluster"><a class="button" href="/gallery">Gallery</a><a class="button" href="/habits/import">Add a file</a><a class="quiet" href="/habits/new">Step by step</a></div>
 	</section>
 {:else}
-	<ViewSentence bind:this={sentenceBar} page="today" bind:views bind:current={view} {words} starters={STARTERS()} {mode} reset={fromTemplate(views.template).defaults.today} say={(s) => sentence(todayWords(s, wordsCtx))} />
+	<ViewSentence bind:this={sentenceBar} page="today" bind:views bind:current={view} {words} starters={STARTERS()} reset={fromTemplate(views.template).defaults.today} say={(s) => sentence(todayWords(s, wordsCtx))} />
 	{#if hint && !retired.includes(hint) && mode === 'use'}
 		<div class="notice ob-hint" role="note"><span class="notice-text">{HINTS[hint]}</span><span class="notice-acts"><button type="button" class="quiet" onclick={() => hint && retire(hint)}>Got it</button></span></div>
 	{/if}
