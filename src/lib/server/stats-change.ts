@@ -23,6 +23,8 @@ export const statsChange = z.discriminatedUnion('op', [
 	z.object({ op: z.literal('board.patch'), id, name: z.string().trim().min(1).max(40).optional(), range: rangeValue.optional(), filter: boardFilter.optional() }),
 	z.object({ op: z.literal('board.delete'), id }),
 	z.object({ op: z.literal('board.move'), id, dir: z.union([z.literal(-1), z.literal(1)]) }),
+	/** Put the boards in this order (a tab dragged, or Move… in the Boards ⋯). Boards not listed keep their order after these. */
+	z.object({ op: z.literal('board.order'), ids: z.array(id).max(MAX_BOARDS) }),
 	z.object({ op: z.literal('board.restore'), board, index: z.number().int().min(0).max(MAX_BOARDS) }),
 	z.object({ op: z.literal('card.save'), where: cardWhere, card: statCard, index: z.number().int().min(0).max(MAX_CARDS).optional() }),
 	z.object({ op: z.literal('card.delete'), where: cardWhere, id }),
@@ -136,6 +138,9 @@ export function changeStats(accountId: string, raw: unknown, tz?: string): Stats
 			break;
 		case 'board.move':
 			s = { ...s, boards: move(s.boards, s.boards.findIndex((x) => x.id === b.id), b.dir) };
+			break;
+		case 'board.order':
+			s = { ...s, boards: manualOrder(s.boards, b.ids, (x) => x.id) };
 			break;
 		case 'board.restore': {
 			if (s.boards.some((x) => x.id === b.board.id)) break;

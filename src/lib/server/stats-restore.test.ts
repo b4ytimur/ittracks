@@ -1,4 +1,5 @@
-// A habit's Stats tab: "Back to the automatic cards" and the Undo that puts its own cards back.
+// A habit's Stats tab: "Back to the automatic cards" and the Undo that puts its own cards back. And boards put in order
+// (a tab dragged, or Move…), whose Undo is the order before.
 import { beforeAll, expect, it } from 'vitest';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { randomUUID } from 'node:crypto';
@@ -71,4 +72,17 @@ it('refuses to undo the reset once the tab has its own cards again, and changes 
 	const since = getStats(me).habitCards[run];
 	expect(() => changeStats(me, { op: 'habit.restore', habit: run, ...was })).toThrow(/changed since/);
 	expect(getStats(me).habitCards[run]).toEqual(since);
+});
+
+it('puts the boards in the order given, the rest after them, and back again', () => {
+	for (const name of ['A', 'B', 'C']) changeStats(me, { op: 'board.add', name });
+	const ids = () => getStats(me).boards.map((b) => b.id);
+	const was = ids();
+	const [a, b, c] = ['A', 'B', 'C'].map((n) => getStats(me).boards.find((x) => x.name === n)!.id);
+	changeStats(me, { op: 'board.order', ids: [c, a] });
+	expect(ids().slice(0, 2)).toEqual([c, a]);
+	expect(ids().slice(2)).toEqual(was.filter((x) => x !== c && x !== a));
+	expect(ids()).toContain(b);
+	changeStats(me, { op: 'board.order', ids: was });
+	expect(ids()).toEqual(was);
 });

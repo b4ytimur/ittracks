@@ -3,16 +3,16 @@
 	import { showToast } from '$lib/toast.svelte';
 	import { statsOp } from '$lib/stats/client';
 	import { RANGES, rangeLabel, type BoardFilter } from '$lib/stats/model';
+	import BoardTabs from '$lib/stats/ui/BoardTabs.svelte';
 	import CardGrid from '$lib/stats/ui/CardGrid.svelte';
-	import EditChrome from '$lib/ui/EditChrome.svelte';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
-	import InlineText from '$lib/ui/InlineText.svelte';
-	import MenuButton, { type Way } from '$lib/ui/MenuButton.svelte';
+	import TitleLine from '$lib/ui/TitleLine.svelte';
+	import type { Way } from '$lib/ui/MenuButton.svelte';
 
 	let { data } = $props();
 
-	/** Edit mode is a flag on this same page: the grid shows handles, sizes and Edit on each card. */
-	let editing = $state(false);
+	// No Edit: a card's words, chart and size change where they stand, its grip moves it, and the board's own acts
+	// (rename, move, delete) are in the Boards ⋯, with its tabs dragged to move them (BoardTabs).
 	let adding = $state(false);
 	let newBoard = $state(false);
 	let boardName = $state('');
@@ -34,11 +34,7 @@
 		}
 	}
 
-	function pick(id: string) {
-		statsOp({ op: 'last', id }).catch(() => {});
-		goto(`?board=${id}`, { keepFocus: true, noScroll: true });
-	}
-	const patch = (p: { name?: string; range?: string; filter?: BoardFilter }) => board && op({ op: 'board.patch', id: board.id, ...p });
+	const patch = (p: { range?: string; filter?: BoardFilter }) => board && op({ op: 'board.patch', id: board.id, ...p });
 	const setFilter = (f: Partial<BoardFilter>) => board && patch({ filter: { ...board.filter, ...f } });
 	const toggle = <T,>(xs: T[], x: T) => (xs.includes(x) ? xs.filter((y) => y !== x) : [...xs, x]);
 
@@ -48,11 +44,8 @@
 			newBoard = false;
 			boardName = '';
 			await goto(`?board=${r.id}`);
-			// In Use, also when made from Edit: after Close, the title line's New card is still there.
-			if (!template) {
-				editing = false;
-				adding = true;
-			}
+			// An empty board opens its card picker; Close leaves the title line's New card.
+			if (!template) adding = true;
 		}
 	}
 	async function deleteBoard() {
@@ -61,8 +54,7 @@
 		const copy = $state.snapshot(board);
 		const r = await op({ op: 'board.delete', id: board.id });
 		if (r) {
-			editing = false;
-			await goto('/stats');
+			await goto('/stats', { keepFocus: true }); // focus stays on the Boards ⋯, as a board pick keeps it
 			showToast(`Deleted the board “${copy.name}”`, async () => {
 				await statsOp({ op: 'board.restore', board: copy, index });
 				await goto(`/stats?board=${copy.id}`);
@@ -70,47 +62,33 @@
 		}
 	}
 	const csv = (cardId: string) => `/stats/export?board=${board?.id}&card=${cardId}`;
-	const boardMenu = $derived<(Way | '-')[]>([
-		{ label: 'New board…', onselect: () => (newBoard = true) },
-		...(board
+	const opensWith = $derived<Way[]>(
+		board
 			? [
-					'-' as const,
-					...(data.boards[0]?.id !== board.id ? [{ label: 'Move left', onselect: () => void op({ op: 'board.move', id: board.id, dir: -1 }) }] : []),
-					...(data.boards.at(-1)?.id !== board.id ? [{ label: 'Move right', onselect: () => void op({ op: 'board.move', id: board.id, dir: 1 }) }] : []),
-					{ label: 'Delete this board', onselect: deleteBoard },
-					'-' as const,
 					{ label: 'Stats opens with the last board', checked: data.open === 'last', onselect: () => void op({ op: 'open', value: 'last' }) },
 					{ label: 'Stats opens with this board', checked: data.open === board.id, onselect: () => void op({ op: 'open', value: board.id }) }
 				]
-			: [])
-	]);
+			: []
+	);
+	/** The title line's ⋯: what reaches past this board. */
+	const more: Way[] = [
+		{ label: 'Download every log as CSV', href: '/stats/export?all=1', download: true },
+		{ label: 'Your measures', href: '/settings#measures' }
+	];
 </script>
 
 <svelte:head><title>Stats · ittracks</title></svelte:head>
 
 <div class="stats-page page-wide">
-	<EditChrome
+	<TitleLine
 		title="Stats"
-		mode={editing ? 'edit' : 'use'}
-		modes={board ? ['use', 'edit'] : ['use']}
-		onmode={(m) => ((editing = m === 'edit'), (adding = false))}
-		hints={{ use: board ? `${board.cards.length} ${board.cards.length === 1 ? 'card' : 'cards'}` : '', edit: 'Drag a card to move it. Press a word to change it.' }}
+		hint={board ? `${board.cards.length} ${board.cards.length === 1 ? 'card' : 'cards'}` : ''}
 		add={board ? { label: 'New card', onclick: () => (adding = true) } : undefined}
 		addHidden={adding}
+		{more}
 	/>
 
-	<nav class="subtabs boards" aria-label="Boards">
-		<div class="subtabs-row">
-			{#each data.boards as b (b.id)}
-				{#if editing && b.id === board?.id}
-					<span class="tab" aria-current="page"><InlineText value={b.name} editing label="Name of this board" maxlength={40} onsave={(v) => patch({ name: v })} /></span>
-				{:else}
-					<a class="tab" href="?board={b.id}" data-reserve={b.name} aria-current={b.id === board?.id ? 'page' : undefined} onclick={(e) => (e.preventDefault(), pick(b.id))}>{b.name}</a>
-				{/if}
-			{/each}
-		</div>
-		<span class="board-more"><MenuButton label="Boards" items={boardMenu} /></span>
-	</nav>
+	<BoardTabs boards={data.boards} current={board?.id ?? null} before={[{ label: 'New board…', onselect: () => (newBoard = true) }]} after={opensWith} ondelete={deleteBoard} />
 
 	{#if newBoard}
 		<section class="card new">
@@ -211,15 +189,9 @@
 			hidden={data.hidden}
 			suggested={data.suggested}
 			gallery={data.gallery}
-			{editing}
 			bind:adding
 			{csv}
 		/>
-
-		<p class="muted meta foot">
-			<a href="/stats/export?all=1" download>Download every log as CSV</a> ·
-			<a href="/settings#measures">Your measures</a>
-		</p>
 	{/if}
 </div>
 
@@ -274,22 +246,5 @@
 		left: 0;
 		width: min(22rem, calc(100vw - 2 * var(--space-group)));
 		box-shadow: var(--shadow-popover);
-	}
-	.foot {
-		margin-top: var(--space-section);
-		text-align: center;
-	}
-	.boards {
-		justify-content: space-between;
-		margin-block-end: var(--space-inline);
-	}
-	.boards .subtabs-row {
-		flex-wrap: wrap;
-	}
-	.boards :global(button.inline-text::after) {
-		width: 0;
-	}
-	.board-more {
-		position: relative;
 	}
 </style>
