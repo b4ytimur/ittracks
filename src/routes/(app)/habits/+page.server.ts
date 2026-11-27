@@ -28,7 +28,7 @@ export const load: PageServerLoad = ({ locals, url, cookies }) => {
 		.where(eq(habit.accountId, accountId))
 		.all())
 		marks.set(m.habitId, [...(marks.get(m.habitId) ?? []), m]);
-	// Habits with Tasks of their own can't hold habits (yet): what edit mode may drop inside.
+	// Habits with Tasks of their own can't hold habits (yet): what a drag may drop inside.
 	const slotted = new Set(
 		db
 			.selectDistinct({ id: variant.habitId })

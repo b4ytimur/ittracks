@@ -32,7 +32,6 @@
 .ghost-slot > .name { flex: 1; min-width: 0; color: var(--ink); } /* the typed name is text, not a hint */
 .ghost-slot textarea::placeholder { color: var(--words); font-weight: 400; } /* the words stay visible in an empty open slot (CF.5); States sets opacity 1 */
 button.ghost-slot { cursor: text; }
-.ghost-slot.hover { border-color: var(--ink); color: var(--ink); } /* .hover: the previews' stand-in */
 @media (hover: hover) { .ghost-slot:hover { border-color: var(--ink); color: var(--ink); } } /* never a sticky look after a tap (States) */
 /* A drop into an empty list or shelf: the slot is the landing (DragHandle puts .drop-target on this li,
    never on the holder), so the holder's outline stays as it is. */

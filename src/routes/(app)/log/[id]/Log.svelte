@@ -1226,7 +1226,7 @@
 {/snippet}
 
 {#snippet stations(c: Circuit, k: number, word: string)}
-	<ul class="elist lg-stations" data-mode="use" style="--gap: 0px; --depth: 1" aria-label="In {word} {k + 1}">
+	<ul class="elist lg-stations" style="--gap: 0px; --depth: 1" aria-label="In {word} {k + 1}">
 		{#each c.rounds[k] as j (placeKey(items[j]))}
 			{@const x = items[j]}
 			{@const t = x.task}
@@ -1276,7 +1276,7 @@
 {#if editing}
 	<EditPlaces places={editPlaces} open={items.find((it) => placeKey(it) === row?.key)?.slotId ?? null} onorder={editOrder} onname={editName} onnumber={editNumber} onrows={editRows} onremove={editRemove} onadd={editAdd} onreplace={(p) => (picking = { it: items.find((x) => x.slotId === p.id && x.depth === 0)!, from: document.activeElement as HTMLElement | null, plan: true })} library={data.library.filter((l) => !l.archived)} />
 {:else}
-<ul class="elist lg-page lg-places" data-mode="use" aria-label="What to log">
+<ul class="elist lg-page lg-places" aria-label="What to log">
 	{#each items as it, i (placeKey(it))}
 		{@const t = it.task}
 		{@const key = placeKey(it)}
@@ -1451,13 +1451,13 @@
 	</section>
 {/if}
 	{#if stage === 'run' && unticked}
-		<div class="notice" data-tone={setsDone ? 'warn' : undefined}>
+		<div class="notice lg-before" data-tone={setsDone ? 'warn' : undefined}>
 			<span class="notice-text">{!setsDone ? `No ${oneWord} is ticked yet, so Finish would save none.` : unticked === 1 ? `1 planned ${oneWord} isn’t ticked, so it won’t be saved.` : `${unticked} planned ${allWords} aren’t ticked, so they won’t be saved.`}</span>
 			<span class="notice-acts"><button type="button" class="quiet" onclick={tickAll}>Tick {unticked === 1 ? 'it' : `all ${unticked}`}</button></span>
 		</div>
 	{/if}
 	{#if stage === 'run' && suggested.length}
-		<div class="notice" data-tone="warn">
+		<div class="notice lg-before" data-tone="warn">
 			<span class="notice-text">{suggested.length > 4 ? `${suggested.slice(0, 4).join(', ')} and ${suggested.length - 4} more` : suggested.join(', ')} still {suggested.length === 1 ? 'shows' : 'show'} last time’s values or targets. Nothing is logged there, so it won’t be saved.</span>
 			<span class="notice-acts"><button type="button" class="quiet" onclick={() => (suggestionsConfirmed = true)}>Keep {suggested.length === 1 ? 'it' : 'them'}</button></span>
 		</div>
@@ -1537,8 +1537,9 @@
 	.lg-form {
 		display: grid;
 	}
-	/* What logs or ends the log, and the level, stay where they are, out of reach while changing the plan. */
-	.lg-editing :is(.lg-form, .lg-wide, .lg-level) {
+	/* What logs or ends the log, what it asks before Finish (Tick all, Keep them), and the level stay where they are,
+	   out of reach while changing the plan. */
+	.lg-editing :is(.lg-form, .lg-wide, .lg-before, .lg-level) {
 		visibility: hidden;
 	}
 	.lg-heading {

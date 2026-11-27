@@ -1,15 +1,12 @@
 /* FilePicker: the native file input in Field's frame, one box with the browser's own button as its leading part.
-   Owns input[type='file'], its ::file-selector-button and .file-holds (what the file holds, before it is used). The frame and the box are Field's, the refusal States' message
+   Owns input[type='file'] and its ::file-selector-button. The frame and the box are Field's, the refusal States' message
    slot, the check's button Button's.
    Markup:
      <div class="field">
        <label class="label" for="fp">Export file</label>
        <p class="field-hint meta" id="fp-h">A .json file you downloaded here.</p>
        <input id="fp" type="file" name="file" accept=".json,application/json" aria-describedby="fp-h" required>
-     </div>
-     <section class="file-holds l-stack" style="--gap: var(--space-tight)" tabindex="-1" aria-labelledby="fp-t">
-       <h3 class="card-title" id="fp-t">ittracks-2026-11-23.json</h3> <p class="label">…</p>
-     </section> */
+     </div> */
 
 /* The box's own padding goes, so the button fills its leading end and the file's name follows it. */
 input[type='file'] { padding: 0; overflow: hidden; cursor: pointer; }
@@ -20,6 +17,3 @@ input[type='file']::file-selector-button {
 	height: auto; min-height: calc(var(--control-md) - 2px); margin: 0; margin-inline-end: var(--space-inline); padding: 0 calc(var(--space-inline) + var(--space-tight));
 	border: 0 solid; border-color: inherit; border-inline-end-width: 1px; border-radius: 0;
 }
-
-/* What the file holds: its whole name (the box shortens it) and the facts. A name has no spaces to break at. */
-.file-holds { overflow-wrap: anywhere; }

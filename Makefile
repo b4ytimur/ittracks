@@ -48,7 +48,7 @@ up:
 
 seed:
 	$(prepare)
-	@node scripts/seed-demo.mjs --db $(DATABASE_PATH) --create-user $(SEED_USER):$(SEED_PASSWORD)
+	@node scripts/seed-demo.mjs --db "$(DATABASE_PATH)" --create-user $(SEED_USER):$(SEED_PASSWORD)
 
 # The address is make up's. The key is made in the app (Settings → Keys), so the config keeps a
 # place for it.

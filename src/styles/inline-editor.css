@@ -1,10 +1,9 @@
 /* InlineEditor: text that edits where it stands. Owns .inline-text (the closed button and the open box) and its rule.
    Closed: <button class="inline-text" aria-label="Name of Gym: Gym">Gym</button>
-   Open:   <textarea class="inline-text" rows="1" aria-label="Name of Gym" aria-describedby="(the hint line's edit text)"
-             style="--open-w: 256px; --open-h: 24px">Gym</textarea>
+   Open:   <input class="inline-text" aria-label="Name of Gym" style="--open-w: max(256px, 24ch)" value="Gym">
    It sits inside the line it edits (span.name in a row, span.title in a group heading, h3.card-title on a block card)
-   and takes that line's font, weight and line height. The hint goes to EditChrome's hint line. DragHandle hides the
-   closed rule while dragging (html.el-dragging .inline-text), which works because that rule is the button's border. */
+   and takes that line's font, weight and line height. DragHandle hides the closed rule while dragging
+   (html.el-dragging .inline-text), which works because that rule is the button's border. */
 
 /* --slot-pad: on a line shorter than target-min (a 20px card title) the box reaches this far past the line, so it is
      24px tall around it; on a 24px name line it is 0. Margins cancel it, so the line keeps its height (F.6).
@@ -37,25 +36,24 @@ button.inline-text::after {
 	margin-top: calc(-1 * var(--rule-raise)); font-weight: 600;
 }
 /* The floor only where the slot has its line to itself. Beside a tag, a compact meta line or a heading's count it
-   would push them along or onto a new line when edit mode starts; there the rule is the text's width. */
+   would push them along or onto a new line when the slot appears; there the rule is the text's width. */
 .content:has(> .tags) > .name > button.inline-text::after,
 .elist[data-density='compact'] button.inline-text::after,
 .group-heading button.inline-text::after { width: 0; }
 
-/* Hover: the edge changes, never a fill; only where hover exists (States). .hover: the previews' stand-in. */
-button.inline-text.hover { border-bottom-color: var(--ink); }
+/* Hover: the edge changes, never a fill; only where hover exists (States). */
 @media (hover: hover) { button.inline-text:hover { border-bottom-color: var(--ink); } }
 /* Keyboard focus: the ring hugs the slot and replaces the rule, so a dashed line never sits on the ring. */
-button.inline-text:focus-visible, button.inline-text.focus { outline-offset: 0; border-bottom-color: transparent; }
+button.inline-text:focus-visible { outline-offset: 0; border-bottom-color: transparent; }
 
 /* ---------- Open: the same box; the rule becomes the 2px focus line ---------- */
-/* --open-w and --open-h are the closed box's size, measured on open, so a wrapped name opens wrapped and the box is
-   as tall as the closed one; the 24ch fallback matches every name that fits in the slot. field-sizing lets the box
+/* --open-w is the closed box's width, measured on open (InlineText), never under 24ch; the 24ch fallback matches every
+   name that fits in the slot. field-sizing lets the box
    grow down as lines are typed. The text sits where the closed text sat, and the line is drawn as a background on
    the closed rule's pixel row plus the one above it, so it thickens upward, never toward the next line. */
 input.inline-text, textarea.inline-text, select.inline-text {
 	display: block;
-	width: var(--open-w, 24ch); max-width: 100%; min-height: var(--open-h, 0px);
+	width: var(--open-w, 24ch); max-width: 100%; min-height: 0;
 	padding: var(--slot-pad) 0;
 	margin-block: calc(-1 * var(--slot-pad));
 	border: 0; border-radius: 0;

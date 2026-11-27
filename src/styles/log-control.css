@@ -30,7 +30,7 @@
 /* The half under the pointer, focus or an open menu comes to the front, so its whole edge and its focus ring
    show over the shared seam. A primary half only rises for focus: rising on hover would cover the seam. Its ring's
    2px offset is Button's focus on a fill (surface-raised), so the ring keeps its contrast across the accent sibling. */
-.log-control > :focus-visible, .log-control > .focus,
+.log-control > :focus-visible,
 .log-control > [aria-expanded='true']:not(.primary) { z-index: 1; }
 @media (hover: hover) { .log-control > :hover:not(.primary) { z-index: 1; } }
 .log-control > .log-more[aria-expanded='true']:not(.primary) { border-color: var(--ink); } /* open: the hover edge, held */

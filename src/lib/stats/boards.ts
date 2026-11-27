@@ -1,5 +1,7 @@
-// Moving a Stats board among its tabs (BoardTabs.svelte): the places Move… offers, and what the band says after.
+// Moving a Stats board among its tabs (BoardTabs.svelte): the places Move… offers, and what the band says after. And
+// what it says when the board's range or filter changes.
 import { moveBy, moveKey } from '$lib/ui/list';
+import { rangeLabel, type BoardFilter } from './model';
 
 export interface Named {
 	id: string;
@@ -27,4 +29,16 @@ export function movedSaid(boards: Named[], order: string[], id: string): string 
 export function keyMoved(ids: string[], id: string, k: { key: string; altKey: boolean }, rtl: boolean): string[] | null {
 	if (!k.altKey || (k.key !== 'ArrowLeft' && k.key !== 'ArrowRight')) return null;
 	return moveBy(ids, id, (k.key === 'ArrowLeft') !== rtl ? -1 : 1);
+}
+
+/** How many filters a board has on: Filter's count. */
+export const filtersOn = (f: BoardFilter) => f.areas.length + f.tags.length + (f.habit ? 1 : 0) + (f.identity ? 1 : 0) + (f.direction !== 'all' ? 1 : 0);
+
+/** The band's line once a board's range pill or Filter changed it: the range by name; the filter changed, or cleared. */
+export function boardSaid(name: string, p: { range: string } | { filter: BoardFilter }): string {
+	if ('range' in p) {
+		const r = rangeLabel(p.range);
+		return `Changed the range of “${name}” to ${r[0].toLowerCase()}${r.slice(1)}.`;
+	}
+	return filtersOn(p.filter) ? `Changed the filter of “${name}”.` : `Cleared the filter of “${name}”.`;
 }

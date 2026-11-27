@@ -28,7 +28,7 @@ export const statsChange = z.discriminatedUnion('op', [
 	z.object({ op: z.literal('board.restore'), board, index: z.number().int().min(0).max(MAX_BOARDS) }),
 	z.object({ op: z.literal('card.save'), where: cardWhere, card: statCard, index: z.number().int().min(0).max(MAX_CARDS).optional() }),
 	z.object({ op: z.literal('card.delete'), where: cardWhere, id }),
-	/** Put the cards in this order (a drag in edit mode). Cards not listed keep their order after these. */
+	/** Put the cards in this order (a card's ⠿ dragged or moved). Cards not listed keep their order after these. */
 	z.object({ op: z.literal('card.order'), where: cardWhere, ids: z.array(id).max(MAX_CARDS) }),
 	z.object({ op: z.literal('habit.reset'), habit: id }),
 	/** Undo of habit.reset: the habit's own cards back, and its Today number unless one was picked since. */

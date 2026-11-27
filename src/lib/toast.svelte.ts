@@ -2,7 +2,7 @@
 // covers the end of a list. Quick actions happen at once and offer Undo, instead of asking first.
 import type { Snippet } from 'svelte';
 import { deserialize } from '$app/forms';
-import { dropEntry, pushEntry, setHeld, type Entry } from './echo';
+import { dropEntry, oneStop, pushEntry, setHeld, type Entry } from './echo';
 
 let next = 1;
 
@@ -11,7 +11,7 @@ export const band = $state<{ entries: Entry[]; select: Snippet | null }>({ entri
 
 const post = (e: Omit<Entry, 'id'>) => {
 	const id = next++;
-	band.entries = pushEntry(band.entries, { id, ...e });
+	band.entries = pushEntry(band.entries, { id, ...e, text: oneStop(e.text) });
 	return id;
 };
 

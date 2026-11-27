@@ -1,11 +1,10 @@
 /* NumberField: one number, typed or stepped, in Field's frame (D3.20, D4.1). Owns .stepper (the Stepper part: −, the value's
-   box, +), .value-caption (the caption under a value: where it came from, or how it was read) and .number-cell (the bare
-   form, for TargetMatrix and Table cells). The frame, the box and its hover are Field's; the buttons Button's; invalid and
-   read-only States'; the blocked look and its line BlockedReason's; a label renamed in Edit InlineEditor's.
+   box, +) and .value-caption (the caption under a value: where it came from, or how it was read). The frame, the box and
+   its hover are Field's; the buttons Button's; invalid and read-only States'; the blocked look and its line BlockedReason's.
    Markup:
      <div class="field">
        <label class="label" for="w2">Weight (kg)</label>
-       <div class="stepper" [data-mode="edit|select"]>
+       <div class="stepper">
          <button type="button" tabindex="-1" aria-label="2.5 kg less, Weight, set 2 of Bench press">−</button>
          <input id="w2" class="num" type="text" inputmode="decimal" enterkeyhint="next" autocomplete="off" value="62.5"
            aria-label="Weight (kg), set 2 of Bench press" aria-describedby="w2-m">          a plain text box (D4.28)
@@ -13,7 +12,6 @@
        </div>
        <p class="value-caption meta" id="w2-m">Last time</p>      one slot: the message, the reason, the reading or the caption
      </div>
-     <input class="number-cell num" type="text" inputmode="decimal" autocomplete="off" aria-label="Weight (kg) Minimum, Bench press" value="60">   the cell: TargetMatrix's markup
    Pitch (P.7): 20 + 4 + 32 = 56, 80 with a caption or a message; every part is Field's own. */
 
 /* ---------- The Stepper part: −, the value, + ---------- */
@@ -34,40 +32,19 @@
 }
 /* The value sits between its buttons, so it is centred. 16px whatever the line it sits in: smaller text makes iOS zoom the
    page on focus. plaintext keeps "−3.5" in its own order in RTL. Digits line up through base's .num. */
-.stepper > input, .number-cell { font-size: var(--font-size-body); line-height: 1.5rem; unicode-bidi: plaintext; }
-.stepper > input { text-align: center; }
+.stepper > input { font-size: var(--font-size-body); line-height: 1.5rem; unicode-bidi: plaintext; text-align: center; }
 /* Under 10rem (320px at 200% text) the three don't fit on one line: the value takes the first, − and + the second. */
 @container stepper (width < 10rem) {
 	.stepper > input { grid-area: 1 / 1 / auto / -1; }
 	.stepper > button { grid-row: 2; }
 	.stepper > button:last-of-type { grid-column: 3; }
 }
-/* In Field's inline form it takes five controls, and the number 5rem of them. */
-@container (min-width: 28rem) { /* bp-phone */
-	.field-inline > .stepper { grid-area: 1 / 2; inline-size: calc(5 * var(--control-md)); margin-block-start: 0; }
-}
-
-/* ---------- The bare form: a cell among numbers ---------- */
-/* No − and +: a level's column is 79px on a phone. Named by the words its cell shows (TargetMatrix); digits end on one edge. */
-.number-cell { text-align: end; }
 
 /* ---------- The caption: one meta line under the value ---------- */
 /* "Last time", "Target", "1 min 30 s", "225 lb is 102.058 kg". A field that opened with a caption keeps its line when the
    words go (1lh), so a change never moves what is under it. ink-muted on page and raised; ink on a light shelf or band (S.2). */
 .value-caption { min-block-size: 1lh; color: var(--ink-muted); overflow-wrap: anywhere; }
 .shelf .value-caption, .band .value-caption { color: var(--ink); }
-
-/* ---------- Modes: − and + hide in place; in Edit the value is text in the same box (S.11, F.6) ---------- */
-/* data-mode on the stepper itself (D4.13), from `mode`, which only a log's row passes; never read from an ancestor: a form's
-   fields stay live in every mode (D3.30), and a card builder opens inside a grid in Edit.
-   Edit's box is the same input, readonly: no fill and no edge, so it doesn't offer what it can't do. One class more than
-   States' [readonly], which comes later in the bundle. */
-.stepper:is([data-mode='edit'], [data-mode='select']) > button { visibility: hidden; }
-.stepper[data-mode='edit'] > input.num[readonly] { border-color: transparent; background: none; }
-/* Its label renamed where it stands: the unit's brackets share the line, so the slot is the name's width, as beside a tag
-   (InlineEditor), and the 20px line keeps its height. */
-.field:has(> .stepper) > .label > button.inline-text { display: inline-flex; vertical-align: top; }
-.field:has(> .stepper) > .label > button.inline-text::after { width: 0; }
 
 /* Hover, focus, invalid, blocked, forced colours and motion are Field's, Button's, States' and BlockedReason's: nothing here
    moves, and the number changes without a transition. */

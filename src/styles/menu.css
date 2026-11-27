@@ -1,12 +1,12 @@
 /* Menu: the one menu box every menu and panel uses (R2.13), its items and marks (R2.14), and the CSS half of the
-   placement rule (D2.4, R2.6). Moved out of LogControl. Consumers: LogControl's ⋯, the layout chooser
-   (.menu.layout-menu, TodayLayouts), DragHandle's Move menu (.menu.move-menu, or .menu.start in a bare row), Card's ⋯ panel (a role-less .menu in a
-   details, R2.12), Combobox's panel (.menu.combo-panel). Owns .menu, .menu[hidden], .menu[data-side='up'], the items (.menu > [role^='menuitem'], and a
-   role-less panel's button and a), .menu-label, .menu-value, .menu-note, .menu-check, .menu > hr, the open row's rise.
+   placement rule (D2.4, R2.6). Moved out of LogControl. Consumers: LogControl's ⋯, DragHandle's Move menu
+   (.menu.move-menu, or .menu.start in a bare row), Card's ⋯ panel (a role-less .menu in a details, R2.12), Combobox's
+   panel (.menu.combo-panel). Owns .menu, .menu[hidden], .menu[data-side='up'], the items (.menu > [role^='menuitem'], and a
+   role-less panel's button and a), .menu-label, .menu-note, .menu-check, .menu > hr, the open row's rise.
    Markup:
      <div class="menu" role="menu" id="m-gym" aria-label="More ways to log Gym" [data-side="up"] hidden>
-       <button role="menuitem" tabindex="-1"><span class="menu-label">Minimum</span> <span class="menu-value label num">10 min</span></button>
-       <button role="menuitem" tabindex="-1"><span class="menu-label">Target</span> <span class="menu-value label num">45 min</span> <span class="menu-note note">What Done logs</span></button>
+       <button role="menuitem" tabindex="-1"><span class="menu-label">Minimum</span></button>
+       <button role="menuitem" tabindex="-1"><span class="menu-label">Target</span> <span class="menu-note note">What Done logs</span></button>
        <a role="menuitem" tabindex="-1" href="/log/…"><span class="menu-label">Log details…</span></a>
        <hr>
        <button role="menuitem" tabindex="-1"><span class="menu-label">Skip today</span></button>
@@ -44,7 +44,7 @@
 .elist > li:has(> :is(.card, .head) [aria-haspopup='menu'][aria-expanded='true'], .move-at > [aria-expanded='true']) { z-index: var(--z-drop); }
 
 /* ---------- Items ---------- */
-/* The label at the start, its value at the end, a note under the label. 4 + 24 (+ 16 for a note) + 4: 32px, 48 with a
+/* The label at the start, a note under it. 4 + 24 (+ 16 for a note) + 4: 32px, 48 with a
    note. Row gap 0: Button's 4px gap would put a noted item at 52, off pitch. A role-less panel (Card's ⋯) uses
    plain buttons and links and gets the same item. Combobox's options are items too, at one class less, so its own rules
    (the ✓ column, a blocked option) win. Text is body (inherited); never danger (Do and don't). */
@@ -57,7 +57,6 @@
 	color: var(--ink); font-weight: 400; text-align: start; text-decoration: none; cursor: pointer;
 }
 .menu-label { grid-column: 1; }
-.menu-value { grid-column: 2; text-align: end; color: var(--ink-muted); } /* ink-muted on raised 4.80 / 6.93 */
 .menu-note { grid-column: 1; color: var(--ink-muted); }
 /* A setting (menuitemradio, menuitemcheckbox): a 1rem ✓ column before the label on every item, so names line up and
    choosing moves nothing. ✓ + 600 marks the setting that is on (R2.14); the ✓ is the consumer's aria-hidden text. */
@@ -66,15 +65,13 @@
 .menu-check ~ .menu-label, .menu-check ~ .menu-note { grid-column: 2; }
 .menu > [aria-checked='false'] > .menu-check { visibility: hidden; }
 .menu > [aria-checked='true'] > .menu-label { font-weight: 600; }
-/* Hover fills surface-hover (S.1); ink-muted is 4.03:1 on it in light, so the value and the note turn ink (14.68 / 13.04). */
+/* Hover fills surface-hover (S.1); ink-muted is 4.03:1 on it in light, so the note turns ink (13.04). */
 @media (hover: hover) {
 	.menu > [role^='menuitem']:hover, .menu > button:hover, .menu > a:hover { background: var(--surface-hover); }
-	.menu > :hover > .menu-value, .menu > :hover > .menu-note { color: var(--ink); }
+	.menu > :hover > .menu-note { color: var(--ink); }
 }
-.menu > .hover { background: var(--surface-hover); } /* .hover: the previews' static stand-in for :hover */
-.menu > .hover > .menu-value, .menu > .hover > .menu-note { color: var(--ink); }
 /* The ring is drawn inside the item (base .focus-inset), so the menu's edge never clips it (accent on raised 5.17 / 6.88). */
-.menu > :focus-visible, .menu > .focus { outline-offset: calc(-1 * var(--focus-width)); }
+.menu > :focus-visible { outline-offset: calc(-1 * var(--focus-width)); }
 /* A divider between two groups: decorative (the order and the words separate), full bleed. 3 + 1 + 4 = 8. */
 .menu > hr {
 	margin: calc(var(--space-tight) - 1px) calc(-1 * var(--space-tight)) var(--space-tight);
@@ -89,7 +86,6 @@
 /* ---------- Forced colours: the fill drops, so edges carry the box and the hovered item ---------- */
 @media (forced-colors: active) {
 	.menu { border-color: CanvasText; }
-	.menu > .hover { outline: 1px solid Highlight; outline-offset: -1px; }
 	.menu > hr { border-top-color: CanvasText; }
 }
 @media (forced-colors: active) and (hover: hover) {

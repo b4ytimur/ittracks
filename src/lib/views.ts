@@ -794,7 +794,7 @@ export function passes(s: ViewState, i: Groupable): boolean {
 /** Grouped by Area with nothing narrowing the list, every Area shows, empty ones too, so each can be kept where it stands (MO). */
 export const keepsEmptyAreas = (s: ViewState) => s.group === 'area' && !activeFilters(s);
 
-/** How many filters are on, to show on the Customize button. */
+/** How many filters are on. */
 export function activeFilters(s: ViewState): number {
 	return (
 		(s.areas.length ? 1 : 0) +

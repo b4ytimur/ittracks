@@ -91,7 +91,7 @@
 	<div class="notice"><span class="notice-text">This day is further back than Settings allow logging, so it can only be looked at.</span><span class="notice-acts"><a class="quiet" href="/settings#past">Change it in Settings</a></span></div>
 {/if}
 
-<ul class="elist lg-page lg-places" data-mode="use" aria-label="Habits in {r.name}">
+<ul class="elist lg-page lg-places" aria-label="Habits in {r.name}">
 	{#each r.steps as k (k.occurrenceId)}
 		{#if k === here}
 			<li class="holder lg-place" class:done={k.status === 'done'}>

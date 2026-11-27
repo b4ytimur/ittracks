@@ -34,7 +34,8 @@ export const actions: Actions = {
 		const f = await request.formData();
 		const statement = statementOf(f);
 		if (!statement) return fail(400, { error: 'An identity needs a sentence.' });
-		renameIdentity(locals.account!.id, String(f.get('id')), statement);
+		// Another one says it already: refused as adding it is, so two never read the same.
+		return { taken: !renameIdentity(locals.account!.id, String(f.get('id')), statement) };
 	},
 	delete: async ({ request, locals }) => {
 		const deleted = deleteIdentity(locals.account!.id, String((await request.formData()).get('id')));

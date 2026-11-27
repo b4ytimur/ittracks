@@ -33,7 +33,14 @@
 		else if (r) showToast(`“${statement}” is there already.`);
 	}
 	async function rename(i: Row, statement: string) {
-		if (await run('rename', { id: i.id, statement })) showToast(`Changed “${i.statement}”.`, undoWith('/identities?/rename', { id: i.id, statement: i.statement }));
+		const r = await run<{ taken: boolean }>('rename', { id: i.id, statement });
+		if (r?.taken) showToast(`“${statement}” is there already.`);
+		else if (r)
+			showToast(`Changed “${i.statement}”.`, async () => {
+				// Another one may say the old sentence by now: that is refused too, and the band says so.
+				const u = await runAction<{ taken: boolean }>('/identities?/rename', { id: i.id, statement: i.statement });
+				return u.ok && (u.data?.taken ? `Not undone: “${i.statement}” is there already.` : true);
+			});
 	}
 	async function remove(i: Row) {
 		const r = await run<{ deleted: object }>('delete', { id: i.id });

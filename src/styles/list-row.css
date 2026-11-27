@@ -1,8 +1,8 @@
 /* ListRow: one item in an editable list, drawn as one card (slot, content, verb).
    Owns .elist, .elist > li, the row card's layout, .slot, .content, .meta-line, .row-line, .verb placement (LogControl's place,
    and the quiet Undo, View, Start early and edit verbs),
-   .pick-hit (the slot's hit box; the box is Checkbox's .pick), the li states .picked .struck .done .skipped
-   .hidden-item .just-done, places DayTile's .week as a row line, [data-density] and the slot's slide.
+   .pick-hit (the slot's hit box; the box is Checkbox's .pick), the li states .picked .done .skipped .just-done,
+   [data-density] and the slot's slide.
    The list says what its rows offer: .grips (onmove: a grip on each), .selecting (a checkbox on each) and .slotted
    (the slot open: grips, checkboxes, or slotOpen to keep a column nearby). A static ul.elist has none of them.
    Pitch: name 24 + meta 20 + 15px padding and the 1px edge on each side = 76px (19 pitches). */
@@ -19,13 +19,13 @@
 	display: flex; flex-wrap: wrap; align-items: center; /* grip, checkbox and verb sit on the row's middle */
 	padding: calc(var(--space-group) - 1px) var(--space-group); /* the 1px edge counts toward the pitch */
 }
-/* A row with lines under its top line (a line kind, a week strip, a notice, Today's open-row inset) centres its marks and verb on the name and meta
+/* A row with lines under its top line (a line kind, a notice, Today's open-row inset) centres its marks and verb on the name and meta
    (24 + 20px), where a closed row has them, so opening a row moves nothing and nothing drifts into what hangs below. */
-.elist > li:has(> .card > .content > :is(.row-line, .week, .notice)) > .card { align-items: flex-start; }
-.elist > li:has(> .card > .content > :is(.row-line, .week, .notice)) > .card > :is(.slot, div.verb) {
+.elist > li:has(> .card > .content > :is(.row-line, .notice)) > .card { align-items: flex-start; }
+.elist > li:has(> .card > .content > :is(.row-line, .notice)) > .card > :is(.slot, div.verb) {
 	align-self: flex-start; min-height: calc(1.5rem + 1.25rem); align-items: center;
 }
-.elist > li:has(> .card > .content > :is(.row-line, .week, .notice)) > .card > :is(button, a).verb {
+.elist > li:has(> .card > .content > :is(.row-line, .notice)) > .card > :is(button, a).verb {
 	align-self: flex-start; margin-block-start: calc((1.5rem + 1.25rem - var(--target-min)) / 2);
 }
 
@@ -53,7 +53,7 @@
 .elist > li > .card.link { position: relative; }
 .card.link > .content > a.name::after { content: ''; position: absolute; inset: 0; }
 .card.link > :is(.slot, .verb) { position: relative; z-index: 1; }
-.content > .meta-line, .content > .week { flex-basis: 100%; }
+.content > .meta-line { flex-basis: 100%; }
 .meta-line { color: var(--ink-muted); }
 .meta-line > .mark { display: inline-block; } /* ✓ done, ↷ skipped: the word follows it */
 /* The row line slot (D3.4: moved from Registries, which keeps the order and the kinds). One full line under the
@@ -80,9 +80,8 @@
 	padding-block: calc(var(--space-inline) - 1px); min-height: var(--target-touch); align-items: center;
 }
 /* Compact: the meta line joins the name line when it fits and wraps under it when it doesn't, never clipped
-   (WCAG 1.4.10), so the row grows past 44px only then; the week strip hides. */
+   (WCAG 1.4.10), so the row grows past 44px only then. */
 .elist[data-density='compact'] .content > .meta-line { flex: 1 1 auto; min-width: 0; }
-.elist[data-density='compact'] .content > .week { display: none; }
 
 /* ---------- Selecting ---------- */
 .elist.selecting > li > .card { cursor: pointer; } /* a tap anywhere on the card ticks it */
@@ -118,12 +117,7 @@
 .elist:not(.selecting) > li.done > .card > .content > .name,
 .elist:not(.selecting) > li.skipped > .card > .content > .name { font-weight: 400; }
 
-/* ---------- Struck (archived in place) and hidden ---------- */
-.elist > li.struck > .card > .content > .name { color: var(--ink-muted); text-decoration: line-through; }
-.elist > li.hidden-item > .card > .content > :not(.name):not(.tags) { display: none; }
-.elist > li.hidden-item > .card > .content > .name { color: var(--ink-muted); font-weight: 400; }
-
-/* ---------- Just done: the row celebrates in place for duration-hold, then becomes .done ---------- */
+/* ---------- Just done: the row celebrates in place for a moment (Today's HOLD_MS), then becomes .done ---------- */
 /* The meta's ✓ pops; today's mark and its spark are DayTile's, run by this li's .just-done. */
 @media (prefers-reduced-motion: no-preference) {
 	.elist > li > .card > .slot { transition: width var(--duration-settle) var(--ease-settle); }

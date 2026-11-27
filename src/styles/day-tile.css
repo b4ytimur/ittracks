@@ -1,7 +1,7 @@
 /* DayTile: one day as a mark. Owns i[data-day] (the mark), .day-week (seven days in a line) and .day-cell (a calendar cell).
-     a strip in a row     <span class="week" role="img" aria-label="Gym this week: …"><i data-day="done"></i>…</span>
-     a calendar cell      <a class="day focus-inset" href="/day/2026-11-16" aria-label="Mon 16 Nov: 5 of 5 done">
-                            <span class="note muted">Mon</span><i data-day="done"></i><span class="note num">5/5</span></a>
+     seven days           <div class="day-week" role="group" aria-label="The last seven days"> a .day-cell each </div>
+     a calendar cell      <a class="day-cell" href="/day/2026-11-16" aria-label="16 Nov: 5 of 5 done. Go to that day.">
+                            <span class="note">Mon</span><i data-day="done"></i><span class="note num">16</span></a>
    One shape per meaning, so no state relies on colour: full, full with a halo, half, ring, ring with a slash,
    slash, small square, a bar ("none", CF.5), nothing. Done is good, never accent: it is data, not an act (P.13).
    Sizes come from the holder: 12px in a strip and a legend (the default), 16px in a .day-cell, 24px on the cover
@@ -14,8 +14,8 @@ i[data-day] {
 	min-inline-size: calc(3 * var(--pitch)); min-block-size: calc(3 * var(--pitch));
 	border-radius: var(--radius-indicator);
 }
-/* --day-edge: the edge of every good mark. It defaults to good itself (invisible on a good fill); a holder on a
-   sunken surface sets it to line-control, because good is 2.82:1 on light surface-sunken (NestedRow's shelf). */
+/* --day-edge: the edge of every good mark. It defaults to good itself (invisible on a good fill); a held row and
+   forced colours set it (below). */
 /* Full: done at Target, a clean day (no slips). 3.35:1 on raised, 3.21 on the page, 5.21 dark. */
 i[data-day='done'], i[data-day='clean'] {
 	background: var(--good); box-shadow: inset 0 0 0 1px var(--day-edge, var(--good));
@@ -96,10 +96,7 @@ i[data-day][aria-current='date']::before { content: ''; position: absolute; inse
 button.day-cell { border: 0; background: none; }
 /* Hover: day cells are one of the two places a fill means hover (S.1). The label turns ink, because ink-muted
    is 4.03:1 on light surface-hover (S.2). The mark keeps its colours: light good (2.82:1) and dark line-control
-   (2.96:1) dip under 3:1 only while the pointer is on the cell, since the shape still carries the state (D3.9).
-   .hover is the preview's stand-in. */
-:is(a, button).day-cell.hover { background: var(--surface-hover); }
-:is(a, button).day-cell.hover > .muted { color: var(--ink); }
+   (2.96:1) dip under 3:1 only while the pointer is on the cell, since the shape still carries the state (D3.9). */
 @media (hover: hover) {
 	:is(a, button).day-cell:hover { background: var(--surface-hover); }
 	:is(a, button).day-cell:hover > .muted { color: var(--ink); }

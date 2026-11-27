@@ -199,7 +199,7 @@
 	</div>
 	<div class="shelf lg-shelf">
 		{#if open === null}
-			<ul class="elist lg-above" data-mode="use" aria-label="{cap(words.many)} of {name}">
+			<ul class="elist lg-above" aria-label="{cap(words.many)} of {name}">
 				{#each sets as _, k (k)}{@render row(k)}{/each}
 			</ul>
 		{:else}
@@ -216,7 +216,7 @@
 						}} />
 					{/if}
 				</div>
-				<ul class="elist lg-above" id="{id}-above" hidden={!ledger} data-mode="use" aria-label="{cap(words.many)} of {name}, above">
+				<ul class="elist lg-above" id="{id}-above" hidden={!ledger} aria-label="{cap(words.many)} of {name}, above">
 					{#each above as _, k (k)}{@render row(k)}{/each}
 				</ul>
 			{:else if ledgerWords}
@@ -285,7 +285,7 @@
 				</div>
 			</div>
 			{#if below.length}
-				<ul class="elist lg-below" data-mode="use" aria-label="{cap(words.many)} of {name}, still to come">
+				<ul class="elist lg-below" aria-label="{cap(words.many)} of {name}, still to come">
 					{#each all ? below : below.slice(0, SHOWN) as k (k)}{@render row(k)}{/each}
 				</ul>
 				{#if below.length > SHOWN && !all}

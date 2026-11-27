@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canUndo, dropEntry, pushEntry, setHeld, undoShows, type Entry } from './echo';
+import { canUndo, dropEntry, inSentence, oneStop, pushEntry, setHeld, undoShows, type Entry } from './echo';
 
 const e = (id: number, o: Partial<Entry> = {}): Entry => ({ id, text: `change ${id}`, ...o });
 
@@ -25,5 +25,23 @@ describe('the band', () => {
 	});
 	it('drops one and leaves the rest', () => {
 		expect(dropEntry([e(2), e(1)], 2).map((x) => x.id)).toEqual([1]);
+	});
+});
+
+// An identity is a sentence, so a line that quotes or names one would end it twice.
+describe('one full stop', () => {
+	it('drops the line’s stop after a quoted sentence that has its own', () => {
+		expect(oneStop('Changed “I protect my focus.”.')).toBe('Changed “I protect my focus.”');
+		expect(oneStop('Deleted “I run.”. Its habits stay.')).toBe('Deleted “I run.” Its habits stay.');
+		expect(oneStop('Archived Read a page.. Its logs are kept.')).toBe('Archived Read a page. Its logs are kept.');
+		expect(oneStop('Added “Am I a runner?”.')).toBe('Added “Am I a runner?”');
+	});
+	it('leaves a line with one stop, an ellipsis and numbers as they are', () => {
+		for (const t of ['Changed “I run”.', 'Logged Read.', 'Wait...', 'Logged 2.5 km.', 'Renamed to “v1.2”.']) expect(oneStop(t)).toBe(t);
+	});
+	it('takes a name’s own stop off inside a sentence, but not an ellipsis', () => {
+		expect(`Moved ${inSentence('I am someone who trains.')} to 2 of 4.`).toBe('Moved I am someone who trains to 2 of 4.');
+		expect(inSentence('Bench press')).toBe('Bench press');
+		expect(inSentence('And then...')).toBe('And then...');
 	});
 });

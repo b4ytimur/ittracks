@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { render } from 'svelte/server';
-import { boardPlaces, keyMoved, movedSaid } from './boards';
+import { boardPlaces, boardSaid, filtersOn, keyMoved, movedSaid } from './boards';
 import BoardTabs from './ui/BoardTabs.svelte';
 
 const boards = [
@@ -75,5 +75,22 @@ describe('BoardTabs', () => {
 	it('offers no Move… for a lone board, and only the page items with no board', () => {
 		expect(labels(html({ boards: [boards[1]] }))).toEqual(['Rename this board', 'Delete board']);
 		expect(labels(html({ boards: [], current: null, before: [{ label: 'New board…' }], after: [{ label: 'x' }] }))).toEqual(['New board…']);
+	});
+});
+
+describe('boardSaid: the band line after a range pill or Filter', () => {
+	const none = { areas: [], tags: [], habit: null, identity: null, direction: 'all' as const };
+	it('names the range it shows now', () => {
+		expect(boardSaid('Overview', { range: '30d' })).toBe('Changed the range of “Overview” to last 30 days.');
+		expect(boardSaid('Overview', { range: 'all' })).toBe('Changed the range of “Overview” to all time.');
+	});
+	it('says the filter changed while one is on, and cleared when none is', () => {
+		expect(boardSaid('Gym', { filter: { ...none, areas: ['a'] } })).toBe('Changed the filter of “Gym”.');
+		expect(boardSaid('Gym', { filter: { ...none, direction: 'break' } })).toBe('Changed the filter of “Gym”.');
+		expect(boardSaid('Gym', { filter: none })).toBe('Cleared the filter of “Gym”.');
+	});
+	it('counts each filter that is on, as Filter (n) shows', () => {
+		expect(filtersOn(none)).toBe(0);
+		expect(filtersOn({ areas: ['a', 'b'], tags: ['t'], habit: 'h', identity: 'i', direction: 'build' })).toBe(6);
 	});
 });

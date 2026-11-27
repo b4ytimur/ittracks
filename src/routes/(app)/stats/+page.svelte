@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
 	import { showToast } from '$lib/toast.svelte';
-	import { statsOp } from '$lib/stats/client';
+	import { boardSaid, filtersOn } from '$lib/stats/boards';
+	import { statsOp, undoOp } from '$lib/stats/client';
 	import { RANGES, rangeLabel, type BoardFilter } from '$lib/stats/model';
 	import BoardTabs from '$lib/stats/ui/BoardTabs.svelte';
 	import CardGrid from '$lib/stats/ui/CardGrid.svelte';
@@ -18,9 +19,7 @@
 	let boardName = $state('');
 
 	const board = $derived(data.board);
-	const filterCount = $derived(
-		board ? board.filter.areas.length + board.filter.tags.length + (board.filter.habit ? 1 : 0) + (board.filter.identity ? 1 : 0) + (board.filter.direction !== 'all' ? 1 : 0) : 0
-	);
+	const filterCount = $derived(board ? filtersOn(board.filter) : 0);
 
 	async function op(body: Record<string, unknown>, done?: string) {
 		try {
@@ -34,7 +33,13 @@
 		}
 	}
 
-	const patch = (p: { range?: string; filter?: BoardFilter }) => board && op({ op: 'board.patch', id: board.id, ...p });
+	/** The board's range or filter changes in place, with its line in the band and the Undo that puts the old one back. */
+	async function patch(p: { range: string } | { filter: BoardFilter }) {
+		if (!board || ('range' in p && p.range === board.range)) return;
+		const { id, name } = board;
+		const was = 'range' in p ? { range: board.range } : { filter: board.filter };
+		if (await op({ op: 'board.patch', id, ...p })) showToast(boardSaid(name, p), undoOp({ op: 'board.patch', id, ...was }));
+	}
 	const setFilter = (f: Partial<BoardFilter>) => board && patch({ filter: { ...board.filter, ...f } });
 	const toggle = <T,>(xs: T[], x: T) => (xs.includes(x) ? xs.filter((y) => y !== x) : [...xs, x]);
 

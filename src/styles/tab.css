@@ -15,11 +15,10 @@
 	color: var(--ink-muted); /* 4.80 / 6.93 on raised, 4.59 / 7.83 on the page; never on sunken (S.2) */
 	text-align: center; text-decoration: none;
 }
-/* Hover: the label goes to ink. Never a fill, never the bar. .hover is the preview's stand-in. */
-.tab.hover { color: var(--ink); }
+/* Hover: the label goes to ink. Never a fill, never the bar. */
 @media (hover: hover) { .tab:hover { color: var(--ink); } }
 /* Focus inside: tabs touch each other and often a screen edge; -4px keeps the ring clear of the current bar. */
-.tab:focus-visible, .tab.focus { outline-offset: calc(-2 * var(--focus-width)); }
+.tab:focus-visible { outline-offset: calc(-2 * var(--focus-width)); }
 /* Current: the one chosen look (R1.1), ink and 600, plus a 2px ink bar on the edge facing what the tab shows.
    The bar's place is on .tab::before, so a composition moves it with one rule (.tabbar puts it on top). */
 .tab::before { position: absolute; inset-inline: var(--space-inline); inset-block-end: 0; }

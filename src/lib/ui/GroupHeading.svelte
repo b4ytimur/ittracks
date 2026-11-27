@@ -52,7 +52,7 @@
 	$effect(() => {
 		const h = el;
 		if (!h) return;
-		void slotted; // The slot opens with the page's Edit or Select, which pins the title line and the headings under it.
+		void slotted; // The slot opens with a grip or the page's Select, which pins the title line and the headings under it.
 		let o: IntersectionObserver | undefined;
 		const frame = requestAnimationFrame(() => {
 			const top = parseFloat(getComputedStyle(h).top) || 0;

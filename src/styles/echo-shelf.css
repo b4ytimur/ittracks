@@ -1,11 +1,11 @@
 /* EchoShelf: the tab bar and the sunken band on it that names every change; UndoToast is retired (N.5).
    Owns .tabbar (the row its Tab links sit in), .band (and its .tucked state), .echo (the band's line and its parts .echo-*), .history.
    Markup: <nav class="tabbar" aria-label="Main">
-             <div class="band" data-mode="use|edit|select">              ← always rendered: it holds the one live region
+             <div class="band" data-mode="use|select">              ← always rendered: it holds the one live region
                <p class="vh" role="status" id="echo-status">newest text</p>   ← never re-keyed; empty while idle
                {#if line}  ← an entry, or offline / syncing / an error; with no line the band draws nothing (idle)
                <div class="echo focus-inset" tabindex="-1" role="group" aria-labelledby="echo-status">   ← named by the region, so focus here reads the line
-                 .echo-text.label[aria-hidden][id] ([span.status-disc] first, inside the text, errors only: Notice)
+                 .echo-text.label[aria-hidden][id]
                  [span.echo-acts: [button.quiet.echo-more "3 earlier<span.vh> changes</span>"] [button.small.echo-act[id][aria-labelledby="own-id text-id"]]] </div>
                <ol class="history" id="…" hidden> <li> .echo-text.label[id] [button.small.echo-act[aria-labelledby]] </li> … </ol>
                {/if}
@@ -128,25 +128,11 @@ html:has(.tabbar) {
 	.echo-act::before, .echo-more::before { inset-block: calc((var(--target-min) - var(--target-touch)) / 2); }
 }
 
-/* ---------- Motion (F.12): a replacement leaves, then the new line enters; nothing times out ---------- */
-/* The layout keys the line by entry id and adds .leaving / .entering (Svelte out:/in: do the same).
-   The leaving line takes no taps; the layout ignores Undo and Retry for 2 x duration-quick after a replacement
-   (duration-quick under reduced motion), so the new line has shown for duration-quick before it can act. */
-.echo.leaving { pointer-events: none; }
+/* ---------- Motion (F.12): nothing times out ---------- */
 @media (prefers-reduced-motion: no-preference) {
 	/* the tuck and its return: one slide on the settle clock (instant under reduced motion) */
 	.tabbar .band { transition: transform var(--duration-settle) var(--ease-settle), clip-path var(--duration-settle) var(--ease-settle); }
-	.echo.leaving { position: absolute; inset: 0 var(--band-pad); animation: echo-fade var(--duration-quick) var(--ease-standard) reverse forwards; }
-	.echo.entering { animation: echo-enter var(--duration-settle) var(--ease-settle) var(--duration-quick) backwards; }
-	/* nothing to wait for (the first line of the session): it rises at once, so the new band never shows empty */
-	.tabbar .band:not(:has(> .leaving)) > .echo.entering { animation-delay: 0s; }
 }
-@media (prefers-reduced-motion: reduce) {
-	.echo.leaving { display: none; }
-	.echo.entering { animation: echo-fade var(--duration-quick) var(--ease-standard); }
-}
-@keyframes echo-enter { 0% { opacity: 0; transform: translateY(var(--space-inline)); } }
-@keyframes echo-fade { 0% { opacity: 0; } }
 
 /* ---------- Forced colours: the band's fill vanishes, so it is drawn by two lines ---------- */
 @media (forced-colors: active) {

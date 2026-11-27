@@ -20,19 +20,23 @@ export function addIdentity(accountId: string, statement: string) {
 	return id;
 }
 
+/** Two statements are one identity when they read the same, whatever the case or the spaces around them. */
+const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
 /** Find an Identity by its exact statement, or create it. Used by template import. */
 export function identityFor(accountId: string, statement: string) {
-	const hit = listIdentities(accountId).find(
-		(i) => i.statement.trim().toLowerCase() === statement.trim().toLowerCase()
-	);
+	const hit = listIdentities(accountId).find((i) => same(i.statement, statement));
 	return hit?.id ?? addIdentity(accountId, statement);
 }
 
-export function renameIdentity(accountId: string, id: string, statement: string) {
+/** Change an identity's sentence: false, and nothing changed, when another one already says it (as adding it finds that one). */
+export function renameIdentity(accountId: string, id: string, statement: string): boolean {
+	if (listIdentities(accountId).some((i) => i.id !== id && same(i.statement, statement))) return false;
 	db.update(identity)
 		.set({ statement })
 		.where(and(eq(identity.id, id), eq(identity.accountId, accountId)))
 		.run();
+	return true;
 }
 
 /** Put them in this order; any not named keep theirs after these. */

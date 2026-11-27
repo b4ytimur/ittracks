@@ -6,12 +6,11 @@
      <p class="selbar-head"><span class="selbar-count num">3 selected</span><button class="link meta">Select all 12</button><button class="link meta">Clear</button></p>
      <div class="chips selbar-acts" role="radiogroup" aria-label="Change">
        <label class="toggle on"><input class="vh" type="radio" name="bulk" checked>Pause</label> …</div>
-     <form class="selbar-form" aria-label="Pause"><label class="selbar-field"><span>From</span><input type="date"></label> …</form>
+     <form aria-label="Pause">…</form>                    the chosen action's fields: BulkForm's own
      <div class="selbar-commit"><p class="selbar-say" id="say">2 change, 1 stays.</p><button class="link meta">Jump to next</button>
        <span class="selbar-go"><button class="small primary" aria-describedby="say">Apply 2 changes</button><button class="small">Cancel</button></span></div>
    </section>
    The links carry the meta type class (F.21: scope controls are meta links after the count). The count takes base's .num.
-   A choice field's options are Checkbox's label.check > input.choice; the error line starts with Notice's .status-disc.
    Pitch (fine pointers): 4 · head 24 · 16 · actions 24 · 8 · form rows 32 (Field's box), 8 apart · 16 + 8 · commit 24 · 4.
    The band is exactly the bar's height: 32 with nothing ticked (band-height, as in Use mode), 72 with the
    actions, 160 with a one-row form and a one-line commit line; each more field adds 40, a date pair's words 24. */
@@ -49,29 +48,6 @@
 /* ---------- Actions: one single-choice set of Chip pills; the chosen one is ink, so Apply is the only fill ---------- */
 .selbar-acts { margin-top: var(--space-group); }
 
-/* ---------- The chosen action's form: attached to the set that opened it ---------- */
-/* Labels in the first column, inputs and a choice's options in the second (BulkForm's grid), so stacked fields
-   share one input edge. The label column stops at half the width, so at 200% text a label wraps, not the bar. */
-.selbar-form {
-	display: grid; grid-template-columns: fit-content(50%) minmax(0, 1fr); gap: var(--space-inline); align-items: center;
-	margin-top: var(--space-inline);
-}
-.selbar-field { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; row-gap: var(--space-inline); }
-.selbar-field > :is(input, select) { justify-self: start; width: auto; max-width: 100%; font-size: var(--font-size-body); line-height: 1.5rem; } /* Field's box: control-md, 32px, date fields included (D3.20); 16px in the band's label text, or iOS zooms the page on focus */
-.selbar-form input[type='date'] { min-inline-size: min(8.5rem, 100%); } /* TimeField's floor, but never past its column */
-.selbar-choice { align-items: first baseline; } /* the label sits on its first option's line, as every field label does */
-/* A date pair's range in words, or its message, in one place (DateRange): 4px under To, on the inputs' edge. */
-.selbar-form > :is(.field-hint, .invalid-message) { grid-column: 2; margin-block: calc(var(--space-tight) - var(--space-inline)) 0; }
-.selbar-choice > :is(label, .option-row) { grid-column: 2; } /* label.check: Checkbox draws the option, its gap and its 24/44px target; with a line each, OptionRow */
-
-/* Under 15.5rem (a phone at 200% text) a label and a date don't fit beside each other: labels stand over their inputs,
-   4px apart, as in Field's frame. */
-@container selbar (width < 15.5rem) {
-	.selbar-form { grid-template-columns: minmax(0, 1fr); }
-	.selbar-field { row-gap: var(--space-tight); }
-	.selbar-form > :is(.field-hint, .invalid-message), .selbar-choice > :is(label, .option-row) { grid-column: 1; }
-}
-
 /* ---------- Commit line: one sentence, Jump to next, then Apply and Cancel ---------- */
 .selbar-commit {
 	/* Sticks flush with the band's bottom edge (through the bar's padding), so Apply never scrolls out of the
@@ -84,7 +60,6 @@
 }
 .selbar-say { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; } /* Jump to next follows the sentence; Apply keeps the trailing end */
 .selbar-go { display: flex; flex-wrap: wrap; gap: var(--space-inline); margin-inline-start: auto; }
-.selbar-retry { color: var(--accent-ink); } /* an act: accent words on Button's raised box, as EchoShelf's Retry */
 /* Applying: the head, the set, the form and Cancel are inert (States rule 5), with no disabled on the controls inside,
    and take States' one can't-act look, forced colours included: the links and Cancel are Button's, the fields
    BlockedReason's, the pills Chip's blocked pill (each rule covers an inert region). The chosen pill keeps its words
@@ -100,14 +75,6 @@
 		--selbar-commit: calc(var(--space-inline) + var(--target-min) + 3 * var(--pitch) + var(--target-touch) + var(--selbar-pb));
 	}
 	.selbar-go > button { min-height: var(--target-touch); }
-	/* Fields keep Field's 32px drawn box (control-md's usage); the field's label row grows its hit area 6px above and
-	   below instead, as Field's frame does. The form's rows move 12px apart so the growths never overlap. */
-	.selbar-field { position: relative; isolation: isolate; }
-	.selbar-field::after {
-		content: ''; position: absolute; z-index: -1; inset-inline: 0;
-		inset-block: calc((var(--control-md) - var(--target-touch)) / 2);
-	}
-	.selbar-form { row-gap: calc(3 * var(--pitch)); }
 	.selbar-head > button::after { content: ''; position: absolute; inset: calc((var(--target-min) - var(--target-touch)) / 2) 0; }
 	/* Jump to next's hit area (Button's) reaches 10px under it; 12 keeps it off Apply when the line wraps (Chip's coarse row-gap). */
 	.selbar-commit { row-gap: calc(3 * var(--pitch)); }

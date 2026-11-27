@@ -1,21 +1,20 @@
 /* Field: one value's frame and its control box (D3.20). Owns the box of every text, number, time and date input, select
    and textarea (moved out of base in the foundations round), .field (label, optional hint, the control, one message
-   slot), .field-hint, .field-inline (label left, control right, from bp-phone of its container), .field-group
-   (fieldset + legend on Layout's .l-stack) and the widths (.w-num, .w-time, .w-text, .row > .grow). The invalid look and its message slot are States'; the blocked look and its line, BlockedReason's;
-   boxes and radios, Checkbox's; choice pills, Chip's; the toggle's editor, Segmented's.
+   slot), .field-hint, .field-group (fieldset + legend on Layout's .l-stack) and the widths (.w-num, .w-time, .w-text,
+   .row > .grow). The invalid look and its message slot are States'; the blocked look and its line, BlockedReason's;
+   boxes and radios, Checkbox's; choice pills, Chip's.
    Markup:
      <div class="field">
        <label class="label" for="f-goal">Goal per week</label>
        <p class="field-hint meta" id="f-goal-h">Days in a week, 1 to 7.</p>
        <input id="f-goal" inputmode="numeric" value="4" aria-describedby="f-goal-h">
-       <p class="invalid-message error meta" id="f-goal-m">…</p>       one slot: States' message or BlockedReason's line
+       <p class="error meta" id="f-goal-m">…</p>                       one slot: States' message or BlockedReason's line
      </div>
-     <div class="field field-inline"><label class="label" for="f-wu">Default weight unit</label> <input id="f-wu" size="6" value="kg"></div>
      <fieldset class="field-group"><legend class="label">Mood</legend> <div class="chips">…</div></fieldset>       one field, several options (D4.9)
      <fieldset class="field-group l-stack"><legend class="card-title">Reminder</legend> <div class="field">…</div> …  several fields
        <p class="field-hint meta" id="…">Every day at 07:00 at the gym.</p></fieldset>   the result line, last in a group: what its fields add up to (D4.22)
    Specificity: the box rules sit in :where(), zero, so a component that restyles a control (InlineEditor's open name,
-   SelectionBar's band form) still wins, as it did when this sat first in base; States (invalid, read-only) and
+   the band's bulk form) still wins, as it did when this sat first in base; States (invalid, read-only) and
    BlockedReason (blocked) win on their attributes whatever the order. */
 
 /* ---------- The control box: control-md, on the 4px pitch (P.7, S.3) ---------- */
@@ -41,10 +40,9 @@
 :where(input, select).w-text { display: block; width: var(--field-text); }
 .row > .grow { flex: 1; min-width: 8rem; }
 
-/* ---------- Hover: the edge turns ink, never a fill; only where a pointer hovers (States). .hover: the previews' stand-in ---------- */
+/* ---------- Hover: the edge turns ink, never a fill; only where a pointer hovers (States) ---------- */
 /* A control that can't act (BlockedReason) or is read-only (States) takes no hover; an invalid edge stays danger (States
    wins on its attribute). */
-:where(input:not([type='checkbox'], [type='radio']), select, textarea):where(:not(:disabled, [aria-disabled='true'], [readonly])).hover { border-color: var(--ink); }
 @media (hover: hover) {
 	:where(input:not([type='checkbox'], [type='radio']), select, textarea):where(:not(:disabled, [aria-disabled='true'], [readonly])):hover { border-color: var(--ink); }
 }
@@ -52,37 +50,16 @@
 
 /* ---------- The frame: label, optional hint, the control, one message slot ---------- */
 /* One column, each part 4px (space-tight: a label to its input) under the one above: a field is 20 + 4 + 32 = 56, 80
-   with a hint, 24 more with its message, all whole pitches. The slot holds States' .invalid-message or BlockedReason's
+   with a hint, 24 more with its message, all whole pitches. The slot holds States' .error message or BlockedReason's
    line, never both (a blocked control can't turn invalid); it renders only when it has words. Fields in a form stack on
    Layout's .l-stack, 16 apart (space-group). */
 .field { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; min-width: 0; }
 .field > * + * { margin-block-start: var(--space-tight); }
 .field > .vh + * { margin-block-start: 0; } /* a visually hidden label (a day note under its heading) takes no room */
-.field > .segmented { justify-self: start; } /* a group editor (the toggle's Segmented) keeps its own width */
 /* The hint: what to enter, before you enter it. ink-muted on raised and page; ink on a light shelf or band, where
    ink-muted is 4.03:1 (S.2). */
 .field-hint { color: var(--ink-muted); overflow-wrap: anywhere; }
 .shelf .field-hint, .band .field-hint { color: var(--ink); }
-
-/* ---------- Inline: label left, control right, for short settings, from bp-phone of its container (D3.34) ---------- */
-/* The container is the box the inline field sits directly in, whatever it is: the form's .l-stack or card, a
-   fieldset.field-group, an .l-region. Nothing to declare in the markup, and the width asked about is that box's own
-   content width, not the viewport: a narrow card on a wide screen stacks. Like Layout's .l-grid, such a box takes its
-   width from its parent, so an inline field never sits directly in a shrink-to-fit box. Zero specificity: a component
-   that is a container already (.l-grid) keeps its own. */
-:where(:has(> .field-inline)) { container-type: inline-size; }
-/* The row is at least control-md, so a segmented (32px, D3.6) sits in the same 32px row as a select. The control takes its
-   own width at the trailing end; the label takes the rest and wraps. The hint and the message go under the whole row.
-   Under bp-phone the field stacks, as every field does. */
-@container (min-width: 28rem) { /* bp-phone */
-	.field-inline {
-		grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: minmax(var(--control-md), auto);
-		column-gap: var(--space-group); align-items: center;
-	}
-	.field-inline > * { grid-column: 1 / -1; }
-	.field-inline > .label { grid-area: 1 / 1; }
-	.field-inline > :is(input, select, .segmented) { grid-area: 1 / 2; width: auto; margin-block-start: 0; }
-}
 
 /* ---------- A group of fields: fieldset + legend, on Layout's .l-stack ---------- */
 /* The fieldset drops its frame (the card it sits in is the bound) and its min-content floor, so long options wrap at

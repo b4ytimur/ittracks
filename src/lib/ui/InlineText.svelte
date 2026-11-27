@@ -59,16 +59,6 @@
 		if (save && v !== value && (v || !required)) onsave(v);
 		if (refocus) tick().then(() => text?.focus());
 	}
-
-	// Leaving edit mode closes a box a tap opened there, saving what was typed. A box a page opened in Use stays.
-	let wasEditing = untrack(() => editing);
-	$effect(() => {
-		const now = editing;
-		untrack(() => {
-			if (wasEditing && !now) finish(true);
-			wasEditing = now;
-		});
-	});
 </script>
 
 {#if open}

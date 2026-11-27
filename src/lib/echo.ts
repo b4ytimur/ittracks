@@ -24,3 +24,9 @@ export const setHeld = (entries: Entry[], id: number, held: boolean): Entry[] =>
 /** The band's line takes this back: its newest entry is about it and offers Undo. */
 export const undoShows = (entries: Entry[], subject: string): boolean => entries[0]?.subject === subject && canUndo(entries[0]);
 export const canUndo = (e: Entry): boolean => !!e.undo && !e.held;
+
+/** A line without the doubled stop a name that is a sentence leaves (an identity): 'Changed “I run.”.' reads 'Changed “I run.”'.
+ *  An ellipsis stays. */
+export const oneStop = (text: string): string => text.replace(/(?<!\.)([.!?])([”’"»]?)\.(?!\.)/g, '$1$2');
+/** A name inside a sentence, without its own full stop: 'Moved I run. to 2 of 4.' reads 'Moved I run to 2 of 4.' */
+export const inSentence = (name: string): string => name.replace(/(?<!\.)\.$/, '');

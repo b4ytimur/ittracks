@@ -1,12 +1,11 @@
 /* Checkbox: the checkbox and the radio as one drawn atom with three uses, each with its own look.
    Owns .pick (select, and every on/off setting), .tick (done), .choice (a radio drawn as a circle), the partly
-   state (:indeterminate, and .mixed, the preview's stand-in for a property that has no attribute) and label.check
-   (a box and its words: the label is the target).
+   state (:indeterminate) and label.check (a box and its words: the label is the target).
    Markup:
      select in a row's slot (ListRow):  <label class="pick-hit hit"><input type="checkbox" class="pick" aria-label="Select Gym"></label>
      a setting:                         <label class="check"><input type="checkbox" class="pick"> Show logged values</label>
      a tick:                            <label class="check"><input type="checkbox" class="tick"> Lay out gym clothes</label>
-     a tick alone (a set row):          <input type="checkbox" class="tick hit" aria-label="Set 2 done" [data-mode="edit|select"]>
+     a tick alone (a set row):          <input type="checkbox" class="tick hit" aria-label="Set 2 done">
      a choice:                          <div role="radiogroup" aria-labelledby="…"> <label class="check"><input type="radio" class="choice" name="type" checked> Build</label> …</div>
                                         (or a fieldset with its legend)
    Native inputs drawn with appearance: none: the element keeps its role, keyboard, form value and label click, and the
@@ -41,8 +40,8 @@
 	translate: 0 -12%; rotate: 45deg;
 }
 /* Partly: a box that stands for other boxes, some of them ticked. Ink like ticked, a bar for the ✓; wins over :checked. */
-.pick:indeterminate, .pick.mixed { background: var(--ink); border-color: var(--ink); }
-.pick:indeterminate::after, .pick.mixed::after {
+.pick:indeterminate { background: var(--ink); border-color: var(--ink); }
+.pick:indeterminate::after {
 	content: ''; width: calc(var(--box) / 2); height: 0;
 	border: solid currentColor; border-width: 2px 0 0; translate: none; rotate: none;
 }
@@ -77,11 +76,6 @@
 .pick:disabled, .tick:disabled, .choice:disabled,
 .pick[aria-disabled='true'], .tick[aria-disabled='true'], .choice[aria-disabled='true'] { --box-edge: var(--line-control); cursor: not-allowed; }
 
-/* ---------- Edit and Select: a tick is a use action, so it hides in place and its words keep their column (S.11, F.6) ---------- */
-/* data-mode on the tick itself (D4.13), never read from an ancestor: a form's tick stays live inside a list in Edit. */
-.tick[data-mode='edit'], .tick[data-mode='select'] { visibility: hidden; }
-.check:has(> .tick[data-mode='edit']), .check:has(> .tick[data-mode='select']) { pointer-events: none; } /* or the label would still tick it */
-
 @media (prefers-reduced-motion: no-preference) {
 	.pick, .tick, .choice { transition: background-color var(--duration-quick) var(--ease-standard), border-color var(--duration-quick) var(--ease-standard); }
 }
@@ -89,7 +83,7 @@
 /* ---------- Forced colours: every state drawn in system colours (fills would be dropped) ---------- */
 @media (forced-colors: active) {
 	.pick, .tick, .choice { forced-color-adjust: none; background: Canvas; border-color: CanvasText; color: HighlightText; }
-	.pick:checked, .tick:checked, .shelf .tick:checked, .pick:indeterminate, .pick.mixed { background: Highlight; border-color: Highlight; }
+	.pick:checked, .tick:checked, .shelf .tick:checked, .pick:indeterminate { background: Highlight; border-color: Highlight; }
 	.choice:checked { border-color: Highlight; }
 	.choice:checked::after { background: Highlight; }
 	.pick:disabled, .tick:disabled, .choice:disabled,

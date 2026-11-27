@@ -5,8 +5,8 @@
 
 /* ---------- The grip ---------- */
 /* The button covers the 16px slot and reaches 8px (space-inline) into the card's leading padding, so it is
-   24px at default text size. The glyph is centred in that box (x = 20, the slot's checkbox centre: Checkbox), so edit
-   and select share one leading mark and it keeps 4px clear of the name. Sizes are in rem and px together,
+   24px at default text size. The glyph is centred in that box (x = 20, the slot's checkbox centre: Checkbox), so the
+   grip and select's checkbox share one leading mark and it keeps 4px clear of the name. Sizes are in rem and px together,
    so the box grows with 200% text and never drops under target-min. */
 .handle, .move-at { --grip-w: max(var(--target-min), calc(var(--handle-slot) + var(--space-inline))); }
 .handle {
@@ -31,16 +31,11 @@
 /* A finger lifts the row by holding the grip (EditableList); until then a vertical swipe that starts on it scrolls. */
 @media (pointer: coarse) { .handle { --grip-hit: var(--target-touch); touch-action: pan-y; } }
 /* Hover only where a pointer hovers (States); an open Move menu is a state, so it stays outside the query. */
-.handle.hover, .handle[aria-expanded='true'] { color: var(--ink); }
+.handle[aria-expanded='true'] { color: var(--ink); }
 @media (hover: hover) { .handle:hover { color: var(--ink); } }
 /* Drawn inside the button (base .focus-inset's offset), so the ring never covers the name that starts where the
    slot ends. Every grip needs it, so it rides on .handle rather than a class each grip would have to carry. */
-.handle:focus-visible, .handle.focus { outline-offset: calc(-1 * var(--focus-width)); }
-/* Preview helpers: .coarse shows the coarse-pointer hit area; .show-hit outlines it with ::before alone
-   (base .show-hit would draw the 24px button as a second box inside it). */
-.handle.coarse { --grip-hit: var(--target-touch); }
-.handle.show-hit { box-shadow: none; }
-.handle.show-hit::before { box-shadow: inset 0 0 0 1px var(--ink); }
+.handle:focus-visible { outline-offset: calc(-1 * var(--focus-width)); }
 
 /* ---------- The Move menu: the single-pointer path (WCAG 2.5.7) ---------- */
 /* A tap on the grip without movement, or Enter or Space, opens the moves the keys make, by name (Move up, Move down,

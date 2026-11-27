@@ -19,9 +19,8 @@
 /* ---------- The row: the line runs the column's width, under the tabs and the act ---------- */
 .subtabs { display: flex; align-items: center; gap: var(--space-inline); border-block-end: 1px solid var(--line); }
 .subtabs > :not(.subtabs-row) { flex: none; } /* the act keeps its place at the end while the tabs scroll */
-/* 8px under the title line (3 + 1 of its own and 4 here), as the view chips' row; under the tabs, chips are 8 away. */
-:is(.titlebar, .titlebar + .title-actions) + .subtabs { margin-block-start: var(--space-tight); }
-.subtabs + .viewbar { margin-block-start: var(--space-inline); }
+/* 8px under the title line (3 + 1 of its own and 4 here); under the tabs, chips are 8 away. */
+.titlebar + .subtabs { margin-block-start: var(--space-tight); }
 .subtabs + [role='tabpanel'] { padding-block-start: var(--space-group); } /* one unit: row and panel */
 
 /* ---------- The tabs: the first label on the column, all on one line, scrolling when they run out of room ---------- */

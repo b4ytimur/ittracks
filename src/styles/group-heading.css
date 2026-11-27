@@ -9,7 +9,7 @@
        <button class="fold" aria-expanded="true" aria-labelledby="t1"><span class="chev" aria-hidden="true">›</span></button>
        <span class="slot"></span>                                                 the grip, when the headings can be moved
        <span class="icon" aria-hidden="true">⌂</span>                            an Area's icon, if it has one
-       <span class="swatch" style="--c: var(--area-2)"></span>                   Areas only
+       <span class="swatch" style="--c: #16a34a"></span>                         Areas only: the Area's colour
        <span class="title" id="t1">Health</span>                                 input.inline-text inside while renaming
        <span class="tags"><span class="tag count">2</span></span>
        <a class="quiet verb" href="/day/…">Log this day</a>                     a verb, if one is passed
@@ -39,7 +39,7 @@
 /* While its grip's Move menu or its ⋯ is open the heading rises above its section's own layers (a said line's label, 1-3)
    and the rows after it; it stays under the pinned title line and the band. */
 .group-heading:has(.move-at > [aria-expanded='true'], .more > [aria-expanded='true']) { z-index: var(--z-heading); }
-html.pinned .group-heading { top: var(--titlebar-height); } /* under the pinned title line (EditChrome) */
+html.pinned .group-heading { top: var(--titlebar-height); } /* under the pinned title line (TitleLine) */
 /* z-heading: one under the pinned title line (z-sticky), so a heading pushed out slides under it, never over it. */
 .group-heading.stuck { z-index: var(--z-heading); border-bottom-color: var(--line); }
 /* Only the innermost stuck heading shows (R1.3). Its parent stays stuck underneath, transparent and
@@ -48,7 +48,7 @@ html.pinned .group-heading { top: var(--titlebar-height); } /* under the pinned 
    shows, and its stuck descendants drop one layer so it paints over them (still under the pinned title line). */
 .group-heading:has(~ * .group-heading.stuck):not(:focus-within) { opacity: 0; pointer-events: none; }
 li:has(> .group-heading:focus-within) > * .group-heading.stuck { z-index: calc(var(--z-heading) - 1); }
-/* Use mode has no pinned line; a stuck heading (≤ 40px) never covers focus. Pinned pages: EditChrome adds the line. */
+/* Unpinned, a stuck heading (≤ 40px) never covers focus. While TitleLine's state pins its line, html.pinned adds it. */
 :where(html:has(.group-heading)) { scroll-padding-top: var(--space-page); }
 
 /* ---------- Proximity: 8 to the heading's own first row; the list of groups sets the step above ---------- */
@@ -74,7 +74,7 @@ li:has(> .group-heading:focus-within) > * .group-heading.stuck { z-index: calc(v
 }
 
 /* The whole heading line is the fold's hit area (a stretched pseudo-element on the sticky heading). A .slotted heading
-   (Today's Edit) keeps it to the chevron, so the grip, a renamable title and the verb take their own taps. The focus
+   (a grip, or rows with grips or checkboxes) keeps it to the chevron, so the grip, a renamable title and the verb take their own taps. The focus
    ring is Disclosure's, round the chevron in every state (D3.25): 10px either side of its centre, clear of ⠿. */
 .group-heading:not(.slotted) > .fold::after { content: ''; position: absolute; inset: 0; }
 
@@ -89,7 +89,6 @@ li:has(> .group-heading:focus-within) > * .group-heading.stuck { z-index: calc(v
    The swatch and the count follow it, space-inline apart, so they slide 16px with it and nothing else moves:
    InlineEditor drops its 24ch floor in a heading, so a renamable title's dashed rule is as wide as its text. */
 .group-heading > .title { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; } /* wraps, never truncates */
-.group-heading:has(+ .popover:popover-open) > .title { anchor-name: --popover; } /* an Area's icon and colour hang under its open title (Popover, manual) */
 .group-heading > .title, .group-heading > .swatch, .group-heading > .tags { margin-inline-end: var(--space-inline); }
 .group-heading > .icon { flex: none; margin-inline-end: var(--space-tight); }
 /* The swatch is Swatch's look (R2.17), lifted ring included; the heading only keeps it from shrinking. */
@@ -122,10 +121,10 @@ li:has(> .group-heading:focus-within) > * .group-heading.stuck { z-index: calc(v
 .elist > .dragging > .group-heading .tag { background: var(--surface-sunken); }
 
 /* ---------- Coarse pointers: 44px tall hit areas from pseudo-elements; widths stay 24 so targets never overlap ---------- */
-/* Every area runs from 4px above the heading (the space-tight under EditChrome's hint line, which a list's first
+/* Every area runs from 4px above the heading (the space-tight under TitleLine's hint line, which a list's first
    heading sits on) to 8px below it (its first row's edge, whose own areas start there), never centred: centred, the
-   first heading's areas reached 2px into the hint line, onto Reset layout and the layout chooser. So these ::before
-   rules take the place of Button's centred one. */
+   first heading's areas reached 2px into the hint line, onto its way in. So these ::before rules take the place of
+   Button's centred one. */
 @media (pointer: coarse) {
 	.group-heading:not(.slotted) > .fold::after { /* 31px padding box: -4 above, -9 below → 44 */
 		inset-block: calc(-1 * var(--space-tight)) calc(var(--target-min) + 3 * var(--space-tight) - 1px - var(--target-touch));
@@ -137,8 +136,8 @@ li:has(> .group-heading:focus-within) > * .group-heading.stuck { z-index: calc(v
 		inset-block: calc(-2 * var(--space-tight)) calc(var(--target-min) + 2 * var(--space-tight) - var(--target-touch));
 	}
 	/* The verb is the one heading target under the hint tools (they trail, as it does). Their 24px boxes hang 2px under
-	   the 20px meta line when they wrap onto the hint line's last line (EditChrome's -2px margins, 0 at 200% text), so
-	   the verb's area starts that much lower: 42px tall, between the chooser's box and the first row, overlapping neither. */
+	   the 20px meta line when they wrap onto the hint line's last line (TitleLine's -2px margins, 0 at 200% text), so
+	   the verb's area starts that much lower: 42px tall, between the tools' box and the first row, overlapping neither. */
 	.group-heading > .verb::before { inset-block-start: calc(-2 * var(--space-tight) + max(0px, (var(--target-min) - 1.25rem) / 2)); }
 	.group-heading .handle::before { /* DragHandle's grip, the same span (0 below once 200% text makes the grip 48px) */
 		inset-block: calc(-2 * var(--space-tight)) min(0px, calc(var(--grip-h) + 2 * var(--space-tight) - var(--grip-hit)));

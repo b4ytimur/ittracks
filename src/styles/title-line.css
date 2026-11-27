@@ -1,0 +1,130 @@
+/* TitleLine: the title line with the back link, the page's actions and its one pressed state, and the hint line under it.
+   Markup:
+     <header class="titlebar" data-mode="use|state" [data-add-hidden]>
+       a.title-back, h1.page-title, div.title-actions, then button.toggle
+     </header>
+     a.title-back               a page with a parent only (D3.31), the back prop. Its name says where it goes; the ‹ is
+                                hidden from screen readers: <a class="title-back" href="/habits"
+                                aria-label="Back to Habits"><span aria-hidden="true">‹</span> Habits</a>
+     div.title-actions          add and more, in this order on every page (TS.15): the page's one a.button.primary[data-add]
+                                (New habit), then its ⋯ MenuButton with everything else; or the page's own actions snippet
+                                (Today's frame, a day's Back to today). inert while the state is on
+     [data-add-hidden]          addHidden: the add steps back in place while another add is open (Stats' card builder)
+     button.toggle              the state: <button type="button" class="toggle" aria-pressed="true|false"><span
+                                data-reserve="Select">Select</span></button>, outside div.title-actions. Pressed, the line's
+                                data-mode is state; Esc outside a field or a second press leaves
+     div.title-actions[data-done]  a state with way 'hint' (the Log's Change the plan), while it is on: <div
+                                class="title-actions" data-done><button type="button" class="primary" aria-describedby="(the
+                                state span's id)">Done</button></div> in the actions' place, the view's one primary; Done,
+                                Esc outside a field leave. No toggle
+     <p class="hint-line meta" data-mode="…">
+       <span data-hint="use">…</span>                               words, or the hint snippet (a day's date and count)
+         <span class="hint-tools"><button class="quiet">Change the plan</button></span>   way 'hint': the state's way
+                                                            in, last in the use span, trailing
+       <span data-hint="state">…</span>                             what a tap does while the state is on
+     </p>
+   Each text is one span; a link such as "Log a past day" goes inside it. Both stay rendered.
+   The component puts .pinned on <html> while the state is on, and sets .stuck on the title line while it is pinned
+   and scrolled to the top. --titlebar-height on <html> is the fallback below: nothing measures the line yet. */
+
+/* ---------- Title line: 4 + 32 + 3 + 1 = 40px in every state, so nothing moves when the state changes ---------- */
+.titlebar {
+	display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-tight) var(--space-group);
+	padding-block: var(--space-tight) calc(var(--space-tight) - 1px);
+	border-bottom: 1px solid transparent; /* the stuck edge, kept in every state so sticking moves nothing */
+	background: var(--surface-page);
+	container-type: inline-size; /* the state's own-line rule asks how wide the line is */
+}
+.titlebar > h1 { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; } /* wraps, never truncates */
+/* Back link: leads the line in every state (D3.31, C.2), 24px, the body line, beside the h1 while both
+   fit; else the h1 wraps to the next line. It stands alone, so it underlines only on hover and :active (D3.29). */
+.titlebar > .title-back {
+	position: relative; /* its touch area, below */
+	min-width: 0; padding-block: max(0px, calc((var(--target-min) - 1lh) / 2));
+	color: var(--accent-ink); text-decoration: none; overflow-wrap: anywhere;
+}
+.titlebar > .title-back:active { text-decoration: underline; text-underline-offset: 3px; }
+@media (hover: hover) { .titlebar > .title-back:hover { text-decoration: underline; text-underline-offset: 3px; } }
+/* Buttons in one group, 8 apart; the group is 16 from the h1 and the state. A Button is control-md (32px), the h1's line. */
+/* position: a ⋯ menu in the title line hangs from these buttons, never from the page's far end (Menu). */
+.titlebar > .title-actions { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-inline); }
+/* The state: Chip's toggle at control-md, the line's button size (Chip's coarse padding on every pointer), so it never
+   changes the line's 40px; trailing. data-reserve keeps its width when it is pressed. */
+.titlebar > .toggle { --toggle-pad-block: calc(var(--space-inline) - 1px); min-height: var(--control-md); margin-inline-start: auto; }
+/* Below a 28rem line (bp-phone: a 480px phone with 16px gutters) the state takes its own line on every page. The empty
+   ::after is the break; the -4px top margin cancels the empty line's row gap, so it sits 4 under its line. */
+@container (width < 28rem) {
+	.titlebar:has(> .toggle)::after { content: ''; flex-basis: 100%; order: 1; }
+	.titlebar > .toggle { order: 2; margin-top: calc(-1 * var(--space-tight)); }
+}
+/* Under a coarse pointer it sits 12 under its line instead (target-touch - control-md): its 44px hit area and those of
+   the buttons above then meet, and the pill's area never takes the bottom of a button. */
+@media (pointer: coarse) {
+	@container (width < 28rem) { .titlebar > .toggle { margin-top: calc(var(--target-touch) - var(--control-md) - 2 * var(--space-tight)); } }
+}
+/* Pinned while the state is on. Also while keyboard focus is inside it, so pressing the state while scrolled never
+   sends the focused button off-screen; the line unpins once focus moves on. */
+.titlebar[data-mode='state'], .titlebar:has(:focus-visible) { position: sticky; top: 0; z-index: var(--z-sticky); }
+/* The actions hide while the state is on (Apply is the view's one primary). visibility keeps their space, so the state
+   never jumps and the line never rewraps. */
+.titlebar[data-mode='state'] > .title-actions { visibility: hidden; opacity: 0; }
+/* A state entered from the hint line puts Done, its one primary, in the actions' place: that group stays in sight. */
+.titlebar[data-mode='state'] > .title-actions[data-done] { visibility: visible; opacity: 1; }
+/* addHidden (another add is open, as Stats' card builder, or the list shows EmptyState's first, whose slot is then the
+   only add): the add alone hides, space kept; the ⋯ and the links stay. */
+.titlebar[data-add-hidden] > .title-actions > [data-add] { visibility: hidden; opacity: 0; }
+.titlebar.stuck { border-bottom-color: var(--line); }
+
+/* Pinned budget: the title line plus one stuck group heading. */
+html.pinned {
+	--titlebar-height: calc(var(--space-section) * 2); /* fallback until the page measures it */
+	/* ponytail: --space-page is room for one stuck group heading (≤ 40px); sum the real heights if headings grow */
+	scroll-padding-top: calc(var(--titlebar-height) + var(--space-page));
+}
+
+/* ---------- Hint line: both texts in one cell, so the line keeps one height in both states (F.6) ---------- */
+.hint-line {
+	display: grid; grid-template-columns: minmax(0, 1fr); align-items: center;
+	min-height: var(--target-min); margin: var(--space-section) 0 var(--space-tight); color: var(--ink-muted);
+}
+.hint-line[data-mode='state'] { color: var(--ink); } /* the state's figure, without a fill */
+.hint-line > [data-hint] { grid-area: 1 / 1; }
+.hint-line:not([data-mode='use']) > [data-hint='use'],
+.hint-line:not([data-mode='state']) > [data-hint='state'] { visibility: hidden; opacity: 0; }
+/* The way in floats to the trailing edge of the use text: on its line when it fits, else on the next line, still
+   trailing. -2px block margins fit its 24px box to the 20px line (0 once text zoom makes the line taller). */
+.hint-line .hint-tools {
+	float: inline-end; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 0 var(--space-inline);
+	margin-block: min(0px, (1.25rem - var(--target-min)) / 2); margin-inline-start: var(--space-inline);
+}
+
+/* ---------- Touch ---------- */
+@media (pointer: coarse) {
+	/* The back link is a link, so Button's touch area doesn't reach it: the same centred 44px, its 24px box as it is. */
+	.titlebar > .title-back::before {
+		content: ''; position: absolute;
+		inset-block: min(0px, calc((100% - var(--target-touch)) / 2));
+		inset-inline: min(0px, calc((100% - var(--target-touch)) / 2));
+	}
+	/* The way in's 44px hit area grows up into the 24px gap above, never down onto the first row's verb, so this ::before
+	   takes the place of Button's centred one. */
+	.hint-line .hint-tools button:not([role])::before { content: ''; position: absolute; inset: calc(var(--target-min) - var(--target-touch)) 0 0; }
+}
+
+/* ---------- Motion: one start for the whole change of state; reduced motion is one 150ms cross-fade ---------- */
+@media (prefers-reduced-motion: no-preference) {
+	.titlebar > .title-actions, .hint-line > * {
+		transition: opacity var(--duration-settle) var(--ease-settle), visibility var(--duration-settle) var(--ease-settle);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.titlebar > .title-actions, .hint-line > * {
+		transition: opacity var(--duration-quick) linear, visibility var(--duration-quick) linear;
+	}
+}
+/* The use text comes back visible at once and only fades in, so the way in can take focus back as Done goes;
+   leaving, visibility still waits out the fade. */
+.hint-line[data-mode='use'] > [data-hint='use'] { transition-property: opacity; }
+/* Forced colours: the back link is LinkText by itself and takes the underline, as Button's edgeless words do. The state
+   is Chip's toggle, the buttons Button's; the title line's transparent bottom border becomes a visible line by itself. */
+@media (forced-colors: active) { .titlebar > .title-back { text-decoration: underline; } }
