@@ -6,16 +6,18 @@ The **Stats** page holds boards of cards. Each card asks one question of your lo
 
 - **⋯ → New board…**, next to the boards, starts one from a template, made from the habits and Tasks you already have, or empty. The templates are plain (Overview, Measures, Time, Numbers, Breaking habits); a [pack](packs.md) you have names its own in place of the plain one (Gym, Reading, Learner).
 - Each board has a range, as buttons (**This week**, **Last 7 days**, **This month**, **Last 30 days**, **Last 90 days**, **This year**, **Last 12 months**, **All time**), and a **Filter**: building or breaking habits, one habit, an identity, Areas and tags.
-- In **Edit**, press a board's name to rename it. **⋯** moves it left or right, deletes it (with Undo), and sets whether Stats opens with the last board or with this one.
+- Drag a board's tab to move the board (on a touch screen, hold it first), or press **Alt** with **←** or **→** on a focused tab.
+- The **⋯** beside the tabs also holds **Rename this board** (its name opens as a box in the tab), **Move…** (the places it can go: **First**, **After Gym**, …), **Delete board**, and whether Stats opens with the last board or with this one. Every move, rename and delete has **Undo**.
+- The **⋯** in the title line downloads every log as CSV and opens your measures.
 
 ## Cards
 
-Under its title a card says what it shows: *Volume · Bench press · per week · the board's range*. The words are the controls: press one and pick another, in Use and in Edit. A word offers only what the logs have. When a word doesn't go with the others, the nearest one that does takes its place, and the line above the tabs says so. Every change has **Undo**.
+Under its title a card says what it shows: *Volume · Bench press · per week · the board's range*. The words are the controls: press one and pick another. A word offers only what the logs have. When a word doesn't go with the others, the nearest one that does takes its place, and the line above the tabs says so. Every change has **Undo**.
 
 - **⋯** on a card: the chart kinds that suit it, its size (**Small**, **Wide**, **Full width**), **Show as a table**, **Show the logs**, **Download CSV**, **All settings…** and **Remove**.
 - A chart says its point in a sentence ("Last 85 kg (8 Nov). Highest 90 kg (1 Nov).").
 - Press a mark to see the logs behind it, in the card: five, then **All … logs**.
-- In **Edit**, drag a card by its ⠿, or use the arrow keys on it.
+- Drag a card by its ⠿, use the arrow keys on it, or tap it for **Move earlier** and **Move later**.
 
 Press **New card** to add one:
 
@@ -71,4 +73,4 @@ Tags belong to groupings, under **Settings → Groupings**. When hard sets or vo
 
 ## Download your logs
 
-**Download every log as CSV** at the bottom of Stats. For a full export, see [Integrations](integrations.md#export-and-import).
+**Download every log as CSV** in the ⋯ of Stats' title line. For a full export, see [Integrations](integrations.md#export-and-import).

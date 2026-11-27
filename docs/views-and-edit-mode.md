@@ -68,7 +68,7 @@ Changing a habit's Area counts from today on, like moving it into a group: Stats
 
 ### Stats
 
-Drag cards, and rename the board. What a card shows is changed in its own words, in Use too. See [Stats](stats.md).
+Stats has no Edit. Every card shows its ⠿, a board's tab drags to move the board, and the ⋯ beside the tabs holds **Rename this board**, **Move…** and **Delete board**. What a card shows is changed in its own words. See [Stats](stats.md).
 
 **Select** on the Habits page and the Library is the other mode of the same list: see [Bulk editing](bulk-editing.md).
 

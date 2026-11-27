@@ -1,7 +1,7 @@
 <script lang="ts">
-	// A grid of cards with edit mode as a flag: add, edit, drag to move, resize, remove, and open
-	// the logs behind any number. Used by Stats boards and by each habit's Stats tab. The grid is
-	// the shared EditableList laid out as a grid, so moving cards works as everywhere else.
+	// A grid of cards: add, change, move by the grip, resize, remove, and open the logs behind any
+	// number. Used by Stats boards and by each habit's Stats tab. The grid is the shared EditableList
+	// laid out as a grid, so moving cards works as everywhere else.
 	import { invalidateAll } from '$app/navigation';
 	import { dismiss, showError, showToast } from '$lib/toast.svelte';
 	import type { CardResult, DrillRow, ValueKind } from '../engine';
@@ -32,7 +32,7 @@
 		hidden,
 		suggested,
 		gallery,
-		editing = false,
+		grips = true,
 		readonly = false,
 		adding = $bindable(false),
 		csv,
@@ -47,8 +47,8 @@
 		hidden: string[];
 		suggested: { group: string; cards: StatCard[] }[];
 		gallery: { group: string; cards: StatCard[] }[];
-		/** Edit mode: drag, resize, edit and remove cards. */
-		editing?: boolean;
+		/** A grip on each card: drag it, use the arrow keys, or tap it for the Move menu (a habit's tab: only in its Edit, for now). */
+		grips?: boolean;
 		/** Charts only: no editing (a Task's history). */
 		readonly?: boolean;
 		adding?: boolean;
@@ -181,7 +181,7 @@
 	label={(item) => titleOf(item.card)}
 	itemClass={(item) => `size-${item.card.look.size}`}
 	ariaLabel="Cards"
-	onmove={editing && !readonly ? (_, order, text) => (void reorder(order, text), true) : undefined}
+	onmove={grips && !readonly ? (_, order, text) => (void reorder(order, text), true) : undefined}
 >
 	{#snippet row(item, ctx)}
 		{@const title = titleOf(item.card)}

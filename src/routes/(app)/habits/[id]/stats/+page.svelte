@@ -59,7 +59,7 @@
 		hidden={data.hidden}
 		suggested={data.suggested}
 		gallery={data.gallery}
-		{editing}
+		grips={editing}
 		bind:adding
 		csv={(id) => `/stats/export?habit=${data.habit.id}&card=${id}`}
 		headlines={data.headline ? [data.headline.id] : []}

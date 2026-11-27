@@ -49,7 +49,7 @@
 		/** What its words can offer; without it the card is only looked at. */
 		offer?: Offer;
 		csvHref?: string;
-		/** While editing: the handle. */
+		/** The grip, from the grid: drag, arrow keys, or a tap for the Move menu. */
 		grip?: Snippet;
 		/** The logs behind the mark that was pressed. */
 		logs?: Logs | null;
@@ -146,7 +146,7 @@
 		gap: var(--space-inline);
 		margin-bottom: var(--space-inline);
 	}
-	/* In the card's padding, so Edit moves nothing. */
+	/* In the card's padding, so the grip moves nothing. */
 	header > .slot {
 		position: absolute;
 		inset-inline-start: 0;
