@@ -220,5 +220,18 @@ export const openingButton = (kind: TargetKind): BulkButton | null => {
  */
 export const takesAnswer = (apply: boolean, mine: number, latest: number) => apply || mine === latest;
 
+/**
+ * The bar's status line: what went wrong; Applying… while an apply is away, whatever a newer preview did, since only the
+ * apply's answer ends it; then what the preview found (`left`: items that stay as they are), or why there is none yet.
+ */
+export function barSays(o: { error: string; applying: boolean; filled: boolean; preview: { count: number; notes: string[] } | null; left: number }): string {
+	if (o.error) return o.error;
+	if (o.applying) return 'Applying…';
+	if (!o.preview) return o.filled ? 'Checking…' : 'Fill in what it needs to see what changes.';
+	const { count, notes } = o.preview;
+	if (!count) return 'Nothing would change.';
+	return `${count} ${count === 1 ? 'changes' : 'change'}${o.left ? `, ${o.left} ${o.left === 1 ? 'stays' : 'stay'}` : ''}. ${notes.join(' ')}`.trim();
+}
+
 /** Units for the unit field's suggestions. */
 export const unitOptions = (names: string[]) => names.map((u) => ({ value: u, label: u }));

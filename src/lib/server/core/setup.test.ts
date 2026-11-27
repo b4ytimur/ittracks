@@ -402,6 +402,8 @@ describe('setup: the account', () => {
 		const r2 = run('setup_read', { ref: 'settings' }) as unknown as ReturnType<typeof readAccount>;
 		expect(r2.areas.some((x) => x.name === 'Yard')).toBe(true);
 		expect(r2.identities.map((i) => i.statement)).toContain('I run');
+		// Two identities never say the same: rewording one as another's sentence is refused, as adding it finds that one.
+		fails(() => setup([{ op: 'identity', identity: 'I lift' }, { op: 'identity', identity: 'I run', statement: 'i lift' }]), 'invalid', /Another identity says “i lift” already/);
 		expect(r2.tags.some((t) => t.name === 'bum')).toBe(true);
 		expect(r2.pauses).toEqual([]);
 		expect(r2.shortcuts).toEqual([]);

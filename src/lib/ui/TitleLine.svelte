@@ -7,15 +7,21 @@
 	/** Whether the state is on after a press of its button or a key: a second press leaves, and so does Esc outside a field. */
 	export const next = (pressed: boolean, input: 'press' | Key): boolean =>
 		input === 'press' ? !pressed : pressed && !(input.key === 'Escape' && !input.defaultPrevented && !(input.target as Element | null)?.closest?.(OWN_ESC));
+
+	/** Which of the state's own controls takes focus once it changed, so focus never falls to the page: the way in and Done
+	 * take each other's place; leaving a pressed state takes away what it showed (Select's bulk bar), so focus that fell
+	 * from there (`fell`) comes back to the toggle, and focus anywhere else stays. */
+	export const refocus = (on: boolean, fromHint: boolean, fell: boolean): 'done' | 'wayIn' | 'toggle' | null =>
+		fromHint ? (on ? 'done' : 'wayIn') : !on && fell ? 'toggle' : null;
 </script>
 
 <script lang="ts">
 	// The top of a page: its back link, its title, its one add and its ⋯, with the line under it. A page with a second
 	// state (Select, Change the plan) shows it as one pressed button here. While it is on, the line pins, the other actions
 	// step back in place (so nothing moves), and the line under the title says what a tap does now. Esc or a second
-	// press leaves. Its look is title-line.css. A state that changes one line of the page (the Log's Change the plan) has
-	// its way in at the end of the hint line instead, and while it is on the title line holds one primary, Done, in the
-	// actions' place.
+	// press leaves, and focus left in what the state showed (Select's bulk bar) comes back to its button. Its look is
+	// title-line.css. A state that changes one line of the page (the Log's Change the plan) has its way in at the end of
+	// the hint line instead, and while it is on the title line holds one primary, Done, in the actions' place.
 	import { tick, type Snippet } from 'svelte';
 	import MenuButton, { type Way } from './MenuButton.svelte';
 
@@ -58,13 +64,18 @@
 	const uid = $props.id();
 	let done = $state<HTMLButtonElement>();
 	let wayIn = $state<HTMLButtonElement>();
+	let toggle = $state<HTMLButtonElement>();
 	let bar = $state<HTMLElement>();
 	let stuck = $state(false);
 	const go = (input: 'press' | Key) => {
 		if (!second || next(second.pressed, input) === second.pressed) return;
+		const had = document.activeElement;
 		second.onchange(!second.pressed);
-		// The way in and Done take each other's place, so focus goes with them instead of falling to the page.
-		if (fromHint) void tick().then(() => (on ? done : wayIn)?.focus());
+		void tick().then(() => {
+			const at = document.activeElement;
+			const to = refocus(on, fromHint, at !== had && (!at || at === document.body));
+			if (to) ({ done, wayIn, toggle })[to]?.focus();
+		});
 	};
 	$effect(() => {
 		if (!on) return;
@@ -88,7 +99,7 @@
 			{#if more.length}<MenuButton class="button" label="More on {title}" items={more} />{/if}
 		</div>
 	{/if}
-	{#if second && !fromHint}<button type="button" class="toggle" aria-pressed={on} onclick={() => go('press')}><span data-reserve={second.label}>{second.label}</span></button>{/if}
+	{#if second && !fromHint}<button type="button" class="toggle" aria-pressed={on} bind:this={toggle} onclick={() => go('press')}><span data-reserve={second.label}>{second.label}</span></button>{/if}
 </header>
 {#if hint !== undefined || second}
 	<p class="hint-line meta" data-mode={on ? 'state' : 'use'}>

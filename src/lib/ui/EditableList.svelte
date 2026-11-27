@@ -23,6 +23,7 @@
 	import { tick, type Snippet } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { prefersReducedMotion } from 'svelte/motion';
+	import { inSentence } from '$lib/echo';
 	import { menuFit, menuKeys, menuNudge } from './MenuButton.svelte';
 	import { applyMove, dropDepth, dropPosition, gridDrop, moveChoices, nearest, nestsAny, pressMoved, rangeKeys, refocusAt, withDescendants, type Move, type MoveChoice, type Position, type RowContext } from './list';
 
@@ -129,6 +130,8 @@
 	const grips = $derived(!!onmove && !selecting);
 	const scopeOf = (item: T) => (typeof selectScope === 'function' ? selectScope(item) : selectScope);
 	const nameOf = (item: T) => label?.(item) ?? key(item);
+	/** A row's name inside what is announced: a name that is a sentence (an identity) leaves its own stop out. */
+	const said = (item: T) => inSentence(nameOf(item));
 	const removeOf = (item: T) => (typeof removeLabel === 'function' ? removeLabel(item) : removeLabel);
 	const keys = $derived(items.map(key));
 	const uid = $props.id();
@@ -147,7 +150,7 @@
 		const order = applyMove(keys, m);
 		const item = items[keys.indexOf(m.key)];
 		const target = items[keys.indexOf(m.target)];
-		const text = m.position === 'inside' ? `Moved ${nameOf(item)} into ${target ? nameOf(target) : 'the row'}.` : `Moved ${nameOf(item)} to ${order.indexOf(m.key) + 1} of ${order.length}.`;
+		const text = m.position === 'inside' ? `Moved ${said(item)} into ${target ? said(target) : 'the row'}.` : `Moved ${said(item)} to ${order.indexOf(m.key) + 1} of ${order.length}.`;
 		if (onmove?.(m, order, text) !== true) announce = text;
 		if (refocus) await focusHandle(m.key);
 	}
@@ -155,7 +158,7 @@
 	async function outdent(k: string, refocus: boolean) {
 		const item = items[keys.indexOf(k)];
 		onoutdent?.(k);
-		announce = `${nameOf(item)} moved out, after the row that held it.`;
+		announce = `${said(item)} moved out, after the row that held it.`;
 		if (refocus) await focusHandle(k);
 	}
 
@@ -181,7 +184,7 @@
 
 	async function openMenu(k: string, grip: HTMLElement) {
 		if (!choicesOf(k).length) {
-			announce = `${nameOf(items[keys.indexOf(k)])} has nowhere to move here.`;
+			announce = `${said(items[keys.indexOf(k)])} has nowhere to move here.`;
 			return;
 		}
 		menuFor = k;

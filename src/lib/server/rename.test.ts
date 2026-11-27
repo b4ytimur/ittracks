@@ -1,6 +1,7 @@
-// Changes the Library and Habits lists make in place (a row's ⋯, its grip), against a real (in-memory)
-// database: rename and archive (the shared name rule, Library Tasks only, other accounts
-// untouched), and moving a habit into and out of a group or routine (the editor's rules).
+// Changes the Library, Habits and Identities lists make in place (a row's ⋯, its grip, a sentence's box), against a
+// real (in-memory) database: rename and archive (the shared name rule, Library Tasks only, other accounts untouched),
+// rewording an identity (never as another's sentence), and moving a habit into and out of a group or routine (the
+// editor's rules).
 import { beforeAll, describe, expect, it } from 'vitest';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { randomUUID } from 'node:crypto';
@@ -9,6 +10,7 @@ import { db } from './db';
 import { habit, task } from './db/schema';
 import { createAccount } from './auth';
 import { renameTask, saveTask, setTaskArchived } from './repo/tasks';
+import { identityFor, listIdentities, renameIdentity } from './repo/identities';
 import { getHabitForm, saveHabit } from './repo/habits';
 import { moveHabit } from './habit-actions';
 import { habitForm, taskForm } from '$lib/forms';
@@ -50,6 +52,20 @@ describe('renameTask', () => {
 	it("can't rename another account's Task", () => {
 		expect(renameTask(other, id, 'Mine now')).toEqual({ error: 'No such Task' });
 		expect(nameOf(id)?.name).toBe('Bench');
+	});
+});
+
+describe('renameIdentity', () => {
+	it('rewords one, its own case too, but never as another one’s sentence, as adding it finds that one', () => {
+		const runner = identityFor(me, 'I am a runner');
+		const reader = identityFor(me, 'I read.');
+		const said = () => listIdentities(me).map((i) => i.statement);
+		expect(renameIdentity(me, runner, 'I am a Runner')).toBe(true);
+		expect(renameIdentity(me, runner, '  i read.  ')).toBe(false);
+		expect(said()).toEqual(['I am a Runner', 'I read.']);
+		expect(identityFor(me, 'i read.')).toBe(reader);
+		// Another account's sentences are its own.
+		expect(renameIdentity(other, identityFor(other, 'I am a runner'), 'I read.')).toBe(true);
 	});
 });
 

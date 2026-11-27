@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { render } from 'svelte/server';
-import TitleLine, { next } from './TitleLine.svelte';
+import TitleLine, { next, refocus } from './TitleLine.svelte';
 
 // A key pressed inside `within` (a part of next's selector: textarea, dialog, [popover]), or on the page.
 const key = (k: string, { prevented = false, within = '' } = {}) => ({
@@ -28,6 +28,18 @@ describe('next: what a press or a key makes of the state', () => {
 	it('other keys change nothing, and Esc never turns it on', () => {
 		expect(next(true, key('Enter'))).toBe(true);
 		expect(next(false, key('Escape'))).toBe(false);
+	});
+});
+
+describe('refocus: where focus goes once the state changed', () => {
+	it('leaving Select with focus in what it hid (the bulk bar) puts it on the toggle; focus anywhere else stays', () => {
+		expect(refocus(false, false, true)).toBe('toggle');
+		expect(refocus(false, false, false)).toBeNull();
+		expect(refocus(true, false, true)).toBeNull();
+	});
+	it('a state entered from the hint line moves focus between its way in and Done', () => {
+		expect(refocus(true, true, false)).toBe('done');
+		expect(refocus(false, true, true)).toBe('wayIn');
 	});
 });
 

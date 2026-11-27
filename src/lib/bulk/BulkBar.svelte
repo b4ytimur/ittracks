@@ -6,7 +6,7 @@
 	import { untrack } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import { band, showToast } from '$lib/toast.svelte';
-	import { buttonsFor, openingButton, takesAnswer, TARGETS, type BulkButton, type TargetKind } from './catalog';
+	import { barSays, buttonsFor, openingButton, takesAnswer, TARGETS, type BulkButton, type TargetKind } from './catalog';
 	import { initialValues, type FieldSources } from './fields';
 	import BulkForm from './BulkForm.svelte';
 
@@ -57,6 +57,7 @@
 	let open = $state<BulkButton | null>(null);
 	let values = $state<Record<string, unknown>>({});
 	let preview = $state<Answer | null>(null);
+	/** An apply is away: the bar stays Applying… with Apply out of reach until its answer, never a preview's, ends it. */
 	let busy = $state(false);
 	let error = $state('');
 
@@ -102,12 +103,12 @@
 		if (!open || !ids.length) return;
 		const act = open.id;
 		const mine = ++asked;
-		busy = apply;
+		if (apply) busy = true;
 		error = '';
 		const r = await call('bulk', input(apply));
+		if (apply) busy = false;
 		// The selection or the input changed while it was away: an old preview is dropped, an apply's result never is.
 		if (!takesAnswer(apply, mine, asked)) return;
-		busy = false;
 		if (!r.ok) {
 			error = r.error;
 			return;
@@ -140,7 +141,6 @@
 		const on = open && ids.length;
 		preview = null;
 		asked++;
-		busy = false;
 		const t = setTimeout(() => on && (!form || form.checkValidity()) && run(false), 300);
 		return () => clearTimeout(t);
 	});
@@ -155,16 +155,7 @@
 		const changes = new Set((preview?.changes ?? []).map((c) => c.id));
 		return new Set((preview?.skipped ?? []).flatMap((s) => s.items.map((i) => i.id)).filter((id) => !changes.has(id))).size;
 	});
-	const say = $derived(
-		error ||
-			(!preview
-				? form && !form.checkValidity()
-					? 'Fill in what it needs to see what changes.'
-					: 'Checking…'
-				: preview.count
-					? `${preview.count} ${preview.count === 1 ? 'changes' : 'change'}${left ? `, ${left} ${left === 1 ? 'stays' : 'stay'}` : ''}. ${preview.notes.join(' ')}`.trim()
-					: 'Nothing would change.')
-	);
+	const say = $derived(barSays({ error, applying: busy, filled: !form || form.checkValidity(), preview, left }));
 	const ready = $derived(!!preview?.count && !busy);
 	/** Bring the next row that changes into view. */
 	let at = -1;
@@ -213,7 +204,7 @@
 					<p class="selbar-say" role="status">{say}</p>
 					{#if (preview?.count ?? 0) > 1}<button class="link meta" type="button" onclick={jump}>Jump to next</button>{/if}
 					<span class="selbar-go">
-						<button class="small primary" aria-disabled={!ready}>{busy ? 'Applying…' : preview?.count ? `Apply ${preview.count} ${preview.count === 1 ? 'change' : 'changes'}` : 'Apply'}</button>
+						<button class="small primary" aria-disabled={!ready} aria-busy={busy}>{busy ? 'Applying…' : preview?.count ? `Apply ${preview.count} ${preview.count === 1 ? 'change' : 'changes'}` : 'Apply'}</button>
 						<button class="small" type="button" onclick={close}>Cancel</button>
 					</span>
 				</div>

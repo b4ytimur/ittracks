@@ -321,7 +321,7 @@ export const ACCOUNT_OPS: { [K in AccountOp]: Op<K> } = {
 			return { op: c.op, summary: `Add the identity “${c.statement ?? c.identity}”` };
 		}
 		if (!c.statement || c.statement === hit.statement) return { op: c.op, summary: `Identity “${hit.statement}”: nothing changes` };
-		renameIdentity(run.accountId, hit.id, c.statement);
+		if (!renameIdentity(run.accountId, hit.id, c.statement)) throw invalid(`Another identity says “${c.statement}” already.`);
 		run.undo.push({ k: 'identity', id: hit.id, before: hit.statement } satisfies AccountUndo);
 		return { op: c.op, summary: `Reword the identity “${hit.statement}” as “${c.statement}”` };
 	},
@@ -502,7 +502,7 @@ export function undoAccount(actor: Actor, u: AccountUndo, today: string): string
 			if (u.order) orderIdentities(accountId, u.order);
 			else if (u.added) deleteIdentity(accountId, u.added);
 			else if (u.deleted) restoreIdentity(accountId, u.deleted);
-			else if (u.id && u.before) renameIdentity(accountId, u.id, u.before);
+			else if (u.id && u.before && !renameIdentity(accountId, u.id, u.before)) return 'another identity says what one said before, so it keeps its new words';
 			return null;
 		case 'tag': {
 			if (u.added) {
