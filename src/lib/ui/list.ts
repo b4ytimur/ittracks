@@ -4,9 +4,6 @@
 
 import type { Snippet } from 'svelte';
 
-/** A page's mode, the switch in its title line (EditChrome). A list takes no mode: see EditableList. */
-export type Mode = 'use' | 'edit' | 'select';
-
 /** What a list tells each row it renders. */
 export interface RowContext {
 	index: number;
@@ -147,18 +144,6 @@ export function rangeKeys(keys: string[], from: string, to: string): string[] {
 export function selectionState(keys: string[], selected: { has(k: string): boolean }): 'none' | 'some' | 'all' {
 	const n = keys.filter((k) => selected.has(k)).length;
 	return n === 0 ? 'none' : n === keys.length ? 'all' : 'some';
-}
-
-/**
- * The shared order after one visible list was reordered. `order` is every item in the shared
- * order, `shown` what the page shows now in its order, `part` the reordered list's keys. When
- * the page is sorted some other way, what you see becomes the starting point, so the result
- * looks like the list you dragged in.
- */
-export function reorderFrom(order: string[], shown: string[], part: string[], sortedByOrder: boolean): string[] {
-	const seen = new Set(shown);
-	const base = sortedByOrder ? order : [...shown, ...order.filter((k) => !seen.has(k))];
-	return mergeOrder(base, part);
 }
 
 interface Box {

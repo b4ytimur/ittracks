@@ -60,7 +60,7 @@
 		if (refocus) tick().then(() => text?.focus());
 	}
 
-	// Leaving edit mode closes a box a tap opened there, saving what was typed. A box a page opened in Use stays.
+	// When `editing` turns off, a box a tap opened closes, saving what was typed. A box the page opened stays.
 	let wasEditing = untrack(() => editing);
 	$effect(() => {
 		const now = editing;

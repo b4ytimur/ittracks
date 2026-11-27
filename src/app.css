@@ -6,7 +6,7 @@
 @import './styles/nested-row.css';
 @import './styles/inline-editor.css';
 @import './styles/empty-state.css';
-@import './styles/edit-chrome.css';
+@import './styles/title-line.css';
 @import './styles/page-frame.css';
 @import './styles/segmented.css';
 @import './styles/group-heading.css';
@@ -27,7 +27,6 @@
 @import './styles/log-screen.css';
 @import './styles/actions-bar.css';
 @import './styles/said-line.css';
-@import './styles/form-section.css';
 @import './styles/history-screen.css';
 @import './styles/day-tile.css';
 @import './styles/settings-screen.css';
@@ -90,11 +89,9 @@ label > input, label > select, label > textarea { margin-top: var(--space-tight)
 .page-title { font-size: var(--font-size-page-title); line-height: 2rem; font-weight: 700; }
 .section-title { font-size: var(--font-size-section-title); line-height: 1.5rem; font-weight: 700; }
 .card-title { font-size: var(--font-size-card-title); line-height: 1.25rem; font-weight: 600; }
-.figure { font-size: var(--font-size-figure); line-height: 2rem; font-weight: 600; }
 .content > .name { font-weight: 600; }
 .meta-line { font-size: var(--font-size-label); line-height: 1.25rem; }
 /* The text roles that aren't headings, each a size on its own line height. */
-.body { font-size: var(--font-size-body); line-height: 1.5rem; }
 .label { font-size: var(--font-size-label); line-height: 1.25rem; }
 .meta { font-size: var(--font-size-meta); line-height: 1.25rem; }
 .note { font-size: var(--font-size-note); line-height: 1rem; }

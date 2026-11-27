@@ -45,7 +45,7 @@ A page is always ready to use, and you change it where it stands. Today, Habits,
 - **Things for the whole page** (what History's logs show, exporting the journal) are in the title line's **⋯**.
 - **Changing many at once** is only in **Select**: see [Bulk editing](bulk-editing.md).
 
-A page has at most one other state, a pressed button in the title line: **Select** on Habits and the Library, **Select days** on History. While it is on, the title line stays at the top, its other buttons step aside, and the line under the title says what a tap does now. Esc or a second press leaves. Pages that still show **Use** and **Edit** at the top change their layout in Edit; Esc goes back to Use.
+A page has at most one other state, a pressed button in the title line: **Select** on Habits and the Library, **Select days** on History. While it is on, the title line stays at the top, its other buttons step aside, and the line under the title says what a tap does now. Esc or a second press leaves.
 
 ### Today
 

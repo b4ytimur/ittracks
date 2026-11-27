@@ -1,10 +1,10 @@
-/* Segmented: one choice among a few short options that applies at once. Any number of segments, any meaning: a mode
-   (Use, Edit, Select: EditChrome places it on the title line), a view (Write, Preview), a size, a two-way setting.
+/* Segmented: one choice among a few short options that applies at once. Any number of segments, any meaning: a view
+   (NoteBox's Write and Preview), a size, a two-way setting.
    Markup:
-     <div class="segmented" role="radiogroup" aria-label="Mode" | aria-labelledby="…" [aria-describedby="…"]>
-       <label data-reserve="Use"><input class="vh" type="radio" name="…" value="use" checked>Use</label>
+     <div class="segmented" role="radiogroup" aria-label="Notes: view" | aria-labelledby="…" [aria-describedby="…"]>
+       <label data-reserve="Write"><input class="vh" type="radio" name="…" value="write" checked>Write</label>
        …one label per option, in order, any number; exactly one radio is checked
-       <label data-reserve="Select"><input class="vh" type="radio" name="…" value="select" disabled>Select</label>
+       <label data-reserve="Preview"><input class="vh" type="radio" name="…" value="preview" disabled>Preview</label>
      </div>                                     [disabled]: can't be chosen now; BlockedReason's line says why
    data-reserve is base's utility: a hidden 600 copy of the label, so a segment never widens when it is chosen. */
 
@@ -41,8 +41,7 @@
 	/* nowrap: squeezed (200% text on a phone), the equal columns eat the padding first and the words stay whole */
 	cursor: pointer; user-select: none; white-space: nowrap;
 }
-/* Hover: a 1px ink edge, half the chosen 2px, as on a toggle chip. Never a fill. .hover is the preview's stand-in. */
-.segmented > label.hover:not(:has(:checked, :disabled)) { box-shadow: inset 0 0 0 1px var(--ink); }
+/* Hover: a 1px ink edge, half the chosen 2px, as on a toggle chip. Never a fill. */
 @media (hover: hover) {
 	.segmented > label:hover:not(:has(:checked, :disabled)) { box-shadow: inset 0 0 0 1px var(--ink); }
 }
@@ -81,8 +80,7 @@
 	.segmented::before { display: none; }
 	.segmented > label:has(:checked) { forced-color-adjust: none; background: Highlight; color: HighlightText; }
 	/* forced-color-adjust: none keeps the authored ring colour on the chosen (focused) segment, so name a system one */
-	.segmented > label:is(.focus, :has(:focus-visible)) { outline-color: CanvasText; }
-	.segmented > label.hover:not(:has(:checked, :disabled)) { outline: 1px solid CanvasText; outline-offset: -1px; }
+	.segmented > label:has(:focus-visible) { outline-color: CanvasText; }
 	.segmented > label:has(:disabled:not(:checked)) { color: GrayText; } /* a locked chosen one keeps HighlightText */
 }
 @media (forced-colors: active) and (hover: hover) {

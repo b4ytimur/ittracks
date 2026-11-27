@@ -2,19 +2,14 @@
    a day's heading and note, the end of the list, the Chain's words. Rows are ListRow, headings GroupHeading, marks DayTile,
    the grid HeatGrid, the filters FilterBar. Tokens only. From the History prototype. */
 .hi-strip { margin-block: var(--space-inline) var(--space-group); }
-.hi-head { flex-wrap: wrap; } /* at 200% text on 320 the count and the verb take a second line */
 .hi-day > .group-heading { margin-block: 0 var(--space-tight); }
 .hi-day + .hi-day { margin-block-start: var(--space-section); }
 .hi-missed > .card > .content > .name { color: var(--ink-muted); font-weight: 400; } /* the word says Missed; no red, no fade (C.6, C.7) */
-.hi-note { margin-block: var(--space-tight) 0; white-space: pre-line; overflow-wrap: anywhere; }
-.hi-day > .hi-note, .hi-day > .hi-notewrap { margin-block-end: var(--space-inline); }
-.content > .hi-note, .hi-notewrap { flex: 1 0 100%; min-inline-size: 0; } /* under the row's one line, never beside it */
+.hi-day > .hi-notewrap { margin-block-end: var(--space-inline); }
+.hi-notewrap { flex: 1 0 100%; min-inline-size: 0; } /* under the row's one line, never beside it */
 .card.link > .content > .hi-notewrap { position: relative; z-index: 1; } /* over the row's link: read, and its links pressed, where it stands */
 .hi-clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
 .hi-show { min-block-size: var(--target-min); }
 .hi-end { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-inline) var(--space-group); margin-block: var(--space-section) var(--space-group); }
-.hi-back { padding: var(--space-group); margin-block-end: var(--space-group); }
 .hi-daynote { margin-block-end: var(--space-group); }
-.hi-streak { margin-block: var(--space-group) var(--space-inline); }
-.hi-card { margin-block: var(--space-inline); padding: var(--space-group); }
 .hi-read { margin-block: var(--space-inline); }

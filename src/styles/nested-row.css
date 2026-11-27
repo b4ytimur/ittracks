@@ -16,10 +16,10 @@
 	padding-block-end: calc(var(--space-group) - 2px);
 }
 .elist[data-density='compact'] > .holder > .card { min-height: calc(var(--target-touch) - 2px); } /* 44 + 44n */
-/* A holder rendered without a shelf (every row it holds hidden by the view, or TodayLayouts' folded Not today block)
-   is one card: no seam, the card's bottom padding and its inner radius back, 1 + 15 + 44 + 15 + 1 = 76 (ListRow's
-   pitch). :has, not :last-child: DragHandle's Move menu opens as the li's next child after the card. :where keeps
-   this at the holder card's weight, so compact's padding (and its 1 + 42 + 1 = 44) still wins. */
+/* A holder rendered without a shelf (every row it holds hidden by the view) is one card: no seam, the card's bottom
+   padding and its inner radius back, 1 + 15 + 44 + 15 + 1 = 76 (ListRow's pitch). :has, not :last-child: DragHandle's
+   Move menu opens as the li's next child after the card. :where keeps this at the holder card's weight, so compact's
+   padding (and its 1 + 42 + 1 = 44) still wins. */
 .elist > .holder:where(:not(:has(> .shelf))) > .card {
 	border-bottom: 0; border-radius: calc(var(--radius-card) - 1px);
 	padding-block-end: calc(var(--space-group) - 1px);
@@ -75,7 +75,6 @@
    row states use child combinators, so a holder's state stays on its own card). */
 .shelf .elist > .holder:not(.done, .skipped) > .card > .content > .name { font-weight: 600; }
 .shelf .meta-line { color: var(--ink); }
-.shelf .elist > li.struck > .card > .content > .name { color: var(--ink); } /* the line-through and the Archived tag carry it */
 /* surface-tint is surface-sunken in light (#ecebe9), so a tag on a shelf row keeps its shape with a hairline. */
 .shelf .tag:not(.strong, .pending) { box-shadow: inset 0 0 0 1px var(--line-inset); }
 
@@ -90,7 +89,6 @@
 .shelf .ghost { padding-block: var(--space-inline); padding-inline: calc(var(--space-inline) + (var(--depth) - 1) * var(--space-indent)) var(--space-inline); }
 
 /* ---------- Holder states point at the whole unit (F.9) ---------- */
-.elist > .holder.hover { border-color: var(--line-control); } /* .hover: the previews' stand-in (States) */
 @media (hover: hover) {
 	.elist > .holder:has(> a.card:hover, > .card > .content > a.name:hover) { border-color: var(--line-control); }
 }
@@ -139,5 +137,3 @@
 	.elist > .holder.picked[data-select-scope='unit'] > .card { outline: none; }
 }
 
-/* Day marks on a shelf: good is 2.82:1 on light surface-sunken, so every good mark takes DayTile's line-control edge (3.10 light, 3.90 dark). */
-.shelf .week { --day-edge: var(--line-control); }

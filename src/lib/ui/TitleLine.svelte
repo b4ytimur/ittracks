@@ -13,9 +13,9 @@
 	// The top of a page: its back link, its title, its one add and its ⋯, with the line under it. A page with a second
 	// state (Select, Change the plan) shows it as one pressed button here. While it is on, the line pins, the other actions
 	// step back in place (so nothing moves), and the line under the title says what a tap does now. Esc or a second
-	// press leaves. It wears EditChrome's look (edit-chrome.css), so the two read the same in Use. A state that changes
-	// one line of the page (the Log's Change the plan) has its way in at the end of the hint line instead, and while it is
-	// on the title line holds one primary, Done, in the actions' place.
+	// press leaves. Its look is title-line.css. A state that changes one line of the page (the Log's Change the plan) has
+	// its way in at the end of the hint line instead, and while it is on the title line holds one primary, Done, in the
+	// actions' place.
 	import { tick, type Snippet } from 'svelte';
 	import MenuButton, { type Way } from './MenuButton.svelte';
 

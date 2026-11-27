@@ -1,4 +1,4 @@
-// Changes the Library and Habits lists make in place in edit mode, against a real (in-memory)
+// Changes the Library and Habits lists make in place (a row's ⋯, its grip), against a real (in-memory)
 // database: rename and archive (the shared name rule, Library Tasks only, other accounts
 // untouched), and moving a habit into and out of a group or routine (the editor's rules).
 import { beforeAll, describe, expect, it } from 'vitest';

@@ -1,7 +1,7 @@
 /* Disclosure: one fold (R2.8). Owns .chev (the › chevron), the bare .fold (a chevron-only button), the fold row
    (details.disclosure > summary, and a shelf's "N inside" .shelf-fold) and details.disclosure's body indent.
-   Where a fold sits stays with whoever places it: GroupHeading (.group-heading > .fold), TodayLayouts
-   (.area-block > .card > .fold), NestedRow (.shelf > .shelf-fold + .elist, the drop line, the hidden list).
+   Where a fold sits stays with whoever places it: GroupHeading (.group-heading > .fold), SaidLine
+   (.su-said > .fold), NestedRow (.shelf > .shelf-fold + .elist, the drop line, the hidden list).
    Three forms, one look:
      content (fields, help, a panel)   <details class="disclosure"><summary class="meta"><span class="chev" aria-hidden="true">›</span>How to</summary>
                                          <div>…</div></details>                                   open={…} from data
@@ -22,8 +22,7 @@
 .shelf .chev { color: var(--ink); }
 :is([aria-expanded='true'], [open] > summary) > .chev { rotate: 90deg; }
 :is([aria-expanded='true'], [open] > summary) > .chev:dir(rtl) { rotate: -90deg; } /* › mirrors to ‹ in RTL; it still opens downward */
-/* Hover: the mark darkens; nothing fills. Only where hover exists; .hover is the preview's stand-in. */
-.hover > .chev { color: var(--ink); }
+/* Hover: the mark darkens; nothing fills. Only where hover exists. */
 @media (hover: hover) { :hover > .chev { color: var(--ink); } }
 
 /* ---------- The bare fold: a chevron-only button; its box and hit area are the placer's, its focus ring is here ---------- */
@@ -36,9 +35,9 @@
 /* Focus: the ring is drawn round the chevron in every mode, wherever the fold sits (D3.25). The fold's hit area is its
    placer's and may be a whole line, so the ring is a pseudo-element in the chevron's grid cell, centred on it: a glyph-md
    box and its 2px ring, 20px in all. It isn't on .chev, so it never turns with it. A placer with less room than that sets
-   --fold-ring, the box's width (TodayLayouts). */
-.fold:is(.focus, :focus-visible) { outline: none; }
-.fold:is(.focus, :focus-visible)::before {
+   --fold-ring, the box's width (SaidLine). */
+.fold:focus-visible { outline: none; }
+.fold:focus-visible::before {
 	content: ''; grid-area: 1 / 1; place-self: center;
 	width: var(--fold-ring, var(--glyph-md)); height: var(--glyph-md); border-radius: var(--radius-mark);
 	outline: var(--focus-width) solid var(--focus-ring);
@@ -59,7 +58,6 @@
 .disclosure > summary::-webkit-details-marker { display: none; }
 .disclosure[open] > summary { margin-block-end: var(--space-inline); }
 .disclosure > summary ~ * { margin-inline-start: var(--space-indent); }
-.disclosure > summary ~ .table { margin-inline-start: 0; } /* a bare Table is as wide as its box: an indent would push it past the end */
 @media (pointer: coarse) { .disclosure > summary { min-height: var(--target-touch); } }
 
 /* The "N inside" row: first on the shelf, the band's width, 44px at every pointer like a shelf row; the chevron on the
@@ -70,11 +68,11 @@
 	border: 0; border-radius: inherit; background: none;
 }
 .shelf-fold[aria-expanded='true'] { border-radius: 0; }
-.shelf-fold:focus-visible, .shelf-fold.focus { outline-offset: calc(-1 * var(--focus-width)); } /* inside the band */
+.shelf-fold:focus-visible { outline-offset: calc(-1 * var(--focus-width)); } /* inside the band */
 
 /* ---------- Motion: the chevron turns only when motion is welcome; reduced motion, it jumps ---------- */
 @media (prefers-reduced-motion: no-preference) {
 	.chev { transition: rotate var(--duration-quick) var(--ease-standard); }
 }
 /* Forced colours: the chevron and the label are text, so they take the system colour unasked; a row's ring is base's. */
-@media (forced-colors: active) { .fold:is(.focus, :focus-visible)::before { outline-color: Highlight; } }
+@media (forced-colors: active) { .fold:focus-visible::before { outline-color: Highlight; } }

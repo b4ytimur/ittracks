@@ -17,7 +17,7 @@ To install or run your own server, see the [main README](../README.md#self-host)
 | [Units](units.md) | Your kinds and units, which convert, changing a unit |
 | [Starter packs](packs.md) | What a pack brings, taking one in and out, Task types |
 | [Bulk editing](bulk-editing.md) | Selecting many habits, Tasks or days and changing them at once, with preview and Undo |
-| [Views and edit mode](views-and-edit-mode.md) | View templates, filters and saved views, editing pages in place, switching features off |
+| [Views and changing pages in place](views-and-edit-mode.md) | View templates, filters and saved views, changing pages in place, switching features off |
 | [Templates and the Gallery](templates.md) | Sharing a habit as a file, importing one, the built-in Gallery |
 | [Notes and journal](notes-and-journal.md) | Markdown notes, journal habits, prompts, the day note, Obsidian export |
 | [Stats](stats.md) | Boards and cards, card types, your own measures, a habit's Stats tab |

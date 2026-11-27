@@ -3,7 +3,7 @@
 	// end." The view's name opens the views, New view (a ghost slot) and the starting sentences (TS.10), and the view's
 	// own housekeeping: Rename, Delete view, Reset view and what the page opens with, in any mode (MO: the switcher's
 	// menu). Every other word is the platform's select laid over it (TS.13, AP.2). A pick changes the view at once and
-	// says so in the band, with Undo and Keep as new view. Replaces the view bar's chips and Customize.
+	// says so in the band, with Undo and Keep as new view.
 	import { tick, untrack } from 'svelte';
 	import MenuButton, { type Way } from './ui/MenuButton.svelte';
 	import InlineText from './ui/InlineText.svelte';

@@ -1,10 +1,10 @@
 /* Swatch: the Area swatch (N.2), the one place an Area's colour shows (P.5, C.10). Owns .swatch.
    An area-dot (8px) fill of the Area's stored colour in a 1px line-control ring; the ring, not the hue, carries the
-   3:1 (area-7 alone is 2.81:1 on the light page), so any stored colour, off-palette ones included, stays visible.
+   3:1 (the yellow #ca8a04 alone is 2.81:1 on the light page), so any stored colour, off-palette ones included, stays visible.
    Markup, always after the Area's name, which says what the colour can't:
-     <span class="swatch" style="--c: var(--area-2)"></span>                        a heading, a block's top row
-     <span class="swatch" data-size="picker" style="--c: var(--area-2)"></span>     SwatchPicker's options
-   No role and no name beside a name; placement (flex: none, margins) is the consumer's: GroupHeading, TodayLayouts. */
+     <span class="swatch" style="--c: #16a34a"></span>                        a heading
+     <span class="swatch" data-size="picker" style="--c: #16a34a"></span>     SwatchPicker's options (AreaGroups' Colour and icon)
+   No role and no name beside a name; placement (flex: none, margins) is the consumer's: GroupHeading, AreaGroups. */
 
 .swatch {
 	display: inline-block; box-sizing: content-box; width: var(--area-dot); height: var(--area-dot);

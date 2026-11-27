@@ -40,7 +40,7 @@ button, .button {
    ink ones, under the 3:1 a link in text needs without one (WCAG 1.4.1). In a sentence = directly in a p and with no type
    class of its own, since it takes the sentence's size. A link that stands alone carries its type class (the selection
    bar's "Select all 12", link meta) or sits outside a p, and isn't underlined at rest. */
-:where(p > :is(button, .button):not(.body, .label, .meta, .note)).link { text-decoration: underline; text-underline-offset: 3px; --hover-line: 2px; } /* the line is already there, so hover and active thicken it */
+:where(p > :is(button, .button):not(.label, .meta, .note)).link { text-decoration: underline; text-underline-offset: 3px; --hover-line: 2px; } /* the line is already there, so hover and active thicken it */
 /* Quiet: the trailing verb, one look everywhere (F.20). An act, so accent words: meta size, no edge, no fill, 24px. */
 :where(button, a).quiet {
 	border: none; background: none; padding: 0 var(--space-tight); min-height: var(--target-min);
@@ -51,10 +51,10 @@ button, .button {
 :where(button, a).quiet:where(.glyph) { font-size: var(--glyph-md); min-inline-size: var(--target-min); }
 
 /* ---------- Hover and active: the edge or the words change, never a fill; hover only where a pointer hovers (States) ---------- */
-/* :active shows the same look at every pointer, so a tap on touch (no hover) still answers; .hover is the previews'
-   stand-in. Primary keeps its fill: the act's result is its answer. A button that can't act doesn't answer at all. */
-:where(button, .button):where(:not(.primary, .link, .quiet, :disabled, [aria-disabled='true'])):is(.hover, :active) { border-color: var(--ink); }
-:where(button.link, .button.link, button.quiet, a.quiet):where(:not(:disabled, [aria-disabled='true'])):is(.hover, :active) { text-decoration: underline var(--hover-line, auto); text-underline-offset: 3px; }
+/* :active shows the same look at every pointer, so a tap on touch (no hover) still answers. Primary keeps its fill:
+   the act's result is its answer. A button that can't act doesn't answer at all. */
+:where(button, .button):where(:not(.primary, .link, .quiet, :disabled, [aria-disabled='true'])):active { border-color: var(--ink); }
+:where(button.link, .button.link, button.quiet, a.quiet):where(:not(:disabled, [aria-disabled='true'])):active { text-decoration: underline var(--hover-line, auto); text-underline-offset: 3px; }
 @media (hover: hover) {
 	:where(button, .button):where(:not(.primary, .link, .quiet, :disabled, [aria-disabled='true'])):hover { border-color: var(--ink); }
 	:where(button.link, .button.link, button.quiet, a.quiet):where(:not(:disabled, [aria-disabled='true'])):hover { text-decoration: underline var(--hover-line, auto); text-underline-offset: 3px; }
@@ -69,7 +69,7 @@ button, .button {
 
 /* ---------- Focus on a fill: base's ring sits 2px out; the gap is surface-raised, so the ring never meets accent ---------- */
 /* The ring keeps 5.17 / 6.88:1 against that gap on any surface: the band, a joined control (LogControl), the page. */
-:where(button, .button).primary:is(:focus-visible, .focus) { box-shadow: 0 0 0 var(--focus-width) var(--surface-raised); }
+:where(button, .button).primary:focus-visible { box-shadow: 0 0 0 var(--focus-width) var(--surface-raised); }
 
 /* ---------- Can't act right now: disabled, aria-disabled, inert, and busy (which sets aria-disabled too) ---------- */
 /* No fill and muted words, because blue means act; the edge stays line-control, so it still reads as a control.
@@ -94,7 +94,7 @@ button, .button {
    Left out: parts whose ::before draws something (Chip's ✓ on .toggle, Tab's bar, Disclosure's fold ring, the selection
    bar's dot before each head link), the shelf's fold row (44px already; its ::before is the drop cap) and the log's
    .lg-fold and .lg-press, which stretch over their card and so must stay unpositioned. A part that grows its own way
-   (DragHandle's grip, LogControl, InlineEditor, GroupHeading's verb, EchoShelf's acts, EditChrome's tools) sets its
+   (DragHandle's grip, LogControl, InlineEditor, GroupHeading's verb, EchoShelf's acts, TitleLine's way in) sets its
    own ::before, which wins: :where keeps this rule at the weight of the pseudo-element alone. Menus hang from a
    button's positioned wrapper, never from the button, so position: relative here moves none of them. */
 :where(button, .button, a.quiet, .hit):where(:not(.toggle, .tab, .fold, .shelf-fold, .lg-fold, .lg-press, .selbar-head > button)) { position: relative; }
@@ -117,7 +117,7 @@ button, .button {
 	:where(button, .button).link, :where(button, a).quiet { color: LinkText; text-decoration: underline; }
 	:where(button, .button):is(:disabled, [aria-disabled='true'], [inert], [inert] *) { color: GrayText; border-color: GrayText; }
 	/* Box-shadow is dropped: pressed draws a 2px Highlight outline inside. Focused, base's outset ring takes over. */
-	:where(button, .button)[aria-pressed='true']:where(:not(:focus-visible, .focus)) {
+	:where(button, .button)[aria-pressed='true']:where(:not(:focus-visible)) {
 		outline: var(--chosen-width) solid Highlight; outline-offset: calc(-1 * var(--chosen-width));
 	}
 }

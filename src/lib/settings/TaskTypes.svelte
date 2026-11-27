@@ -10,6 +10,7 @@
 
 	let { types, plain, problem = $bindable(''), onsave }: { types: TaskType[]; plain: TaskType[]; problem?: string; onsave: (types: TaskType[], said: string) => void } = $props();
 
+	// Outside each line, so a type deleted and brought back with Undo comes back open, as it was.
 	let open = $state<Record<string, boolean>>({});
 	let rows = $state(untrack(() => $state.snapshot(types)));
 	$effect(() => {

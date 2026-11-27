@@ -23,14 +23,6 @@
 	--warn: #b45309;
 	--good: #0ca30c;
 	--scrim: rgba(0, 0, 0, 0.35);
-	--area-1: #65a30d;
-	--area-2: #16a34a;
-	--area-3: #dc2626;
-	--area-4: #9333ea;
-	--area-5: #ea580c;
-	--area-6: #0891b2;
-	--area-7: #ca8a04;
-	--area-8: #db2777;
 	--series-1: #2a78d6;
 	--series-2: #eb6834;
 	--series-3: #1baf7a;
@@ -115,7 +107,6 @@
 	--duration-settle: 200ms;
 	--duration-pop: 250ms;
 	--duration-celebrate: 1100ms;
-	--duration-hold: 4500ms;
 
 	/* easing */
 	--ease-standard: ease-out;

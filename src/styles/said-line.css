@@ -1,20 +1,7 @@
 /* SaidLine: a value of a record as a line of words that opens where it stands (D3.30, SU.1). HeldChange: what a change would do,
    its one question, Save and Cancel. Class prefix .su-; tokens only. From the setup prototype. */
 /* ---------- Page ---------- */
-.su-secs { margin-block-start: var(--space-inline); }
-.su-secs > .su-sec { container-type: inline-size; }
 .su-tabs > .subtabs-row { flex-wrap: wrap; } /* three tabs: at 200% text on 320 they take two rows, so none is out of view */
-.su-foot { margin-block-start: var(--space-section); }
-.su-gap { margin-block-start: var(--space-group); }
-.su-caption { color: var(--ink-muted); margin-block-end: var(--space-inline); }
-.su-lead-note { margin-block-end: var(--space-group); } /* what leads a page: a change that is back, archived, fixed on load */
-.su-parts { margin-block: var(--space-inline) var(--space-group); }
-.su-top + .su-parts { margin-block-start: var(--space-group); } /* switch 4, Tabs: the row of parts */
-.su-gap8 { margin-block-start: var(--space-inline); }
-.su-grow { flex: 1 1 12rem; }
-.su-asks { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-inline); }
-* + .su-asks { margin-block-start: var(--space-inline); }
-.su-folded { margin-block-start: var(--space-inline); cursor: pointer; overflow-wrap: anywhere; } /* a folded part: pressing its sentence opens it too; the heading's › is its control */
 
 /* ---------- The line: label over the sentence its value means; the words are the closed value and the open result line ---------- */
 .card.su-lines { padding-block: calc(var(--space-tight) - 1px); }
@@ -28,24 +15,17 @@
 	--fold-ring: calc(var(--space-inline) + var(--focus-width)); justify-content: start; align-content: start;
 	padding-block-start: var(--space-tight); line-height: 1.25rem; min-height: 0; cursor: pointer;
 }
-.su-said > .fold > .chev, .su-row > .card > .fold > .chev { line-height: inherit; }
+.su-said > .fold > .chev { line-height: inherit; }
 .su-text { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); overflow-wrap: anywhere; pointer-events: none; }
 .su-text :is(a, button, textarea, input) { position: relative; z-index: 1; pointer-events: auto; }
-.su-text > .su-lab, .su-row > .card:not(.link) > .content > .name { position: relative; z-index: 1; } /* over the turned ›, whose backplate forced colours draws */
+.su-text > .su-lab { position: relative; z-index: 1; } /* over the turned ›, whose backplate forced colours draws */
 .su-lab { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-inline); min-height: 1.25rem; }
 .su-always > .su-said .su-label { color: var(--ink); font-weight: 600; } /* always open: the name leads, the words say what it is set to */
 .su-lab > .tag { margin-block: -1px; }
 .su-label { color: var(--ink-muted); }
-.su-step { margin-inline-start: auto; color: var(--ink-muted); }
 .su-words { text-wrap: pretty; }
 .su-lead > .su-said > .su-text > .su-words { font-weight: 600; } /* the figure at its level (S.4) */
-.su-warn { padding-block: var(--space-tight) var(--space-inline); } /* the line's last line, closed too (D3.28) */
 .su-text > textarea.inline-text { width: 100%; font: inherit; color: inherit; }
-/* a note or a How to: only › and the label open it, so its words can be read, selected and followed (2.2) */
-.su-noted > .su-said > .fold { inset-block-end: auto; block-size: var(--target-touch); }
-.su-noted > .su-said > .su-text > .su-words { pointer-events: auto; }
-.su-noted.open > .su-said { align-content: start; } /* open, its words are the box: the label stays by its › */
-.su-swatch { display: inline-flex; align-items: baseline; gap: var(--space-inline); }
 
 /* open: the body under the words; a hairline where the next line starts */
 .su-value.open::before { content: ''; position: absolute; inset: 0 calc(-1 * var(--space-group)); z-index: 3; pointer-events: none; border-block: 1px solid var(--line); }
@@ -54,25 +34,13 @@
 .su-body { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-group); padding-block: var(--space-inline) var(--space-group); min-width: 0; }
 .su-body > * { min-width: 0; }
 .su-body .chips + .chips { margin-block-start: var(--space-inline); }
-.su-past, .su-was { color: var(--ink-muted); overflow-wrap: anywhere; }
-.shelf :is(.su-past, .su-was, .su-label, .su-caption) { color: var(--ink); }
-.su-sub { margin-block-start: var(--space-group); }
-.su-links { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-tight) var(--space-group); }
-.su-links > .quiet { margin-inline-start: calc(-1 * var(--space-tight)); text-decoration: none; }
+.su-was { color: var(--ink-muted); overflow-wrap: anywhere; }
+.shelf :is(.su-was, .su-label) { color: var(--ink); }
 .l-cluster > .su-end { margin-inline: auto calc(-1 * var(--space-tight)); }
-.su-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.5rem), 1fr)); gap: var(--space-group); align-items: start; }
-.su-tight { --gap: var(--space-inline); }
-
-/* switch 1, Fields: a line's controls, standing; the hairlines are an open line's */
-.su-fieldline > .su-body { padding-block: var(--space-group); }
-.su-fieldline > .su-body > .su-lab > .su-label { color: var(--ink); }
 
 /* held: Was, what it does, its one question, Save and Cancel */
 .su-held { border-block-start: 1px solid var(--line); padding-block-start: var(--space-group); display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-group); }
 .shelf .su-held { border-block-start-color: var(--line-inset); }
-.su-effect { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-tight) var(--space-inline); min-height: 2.5rem; align-content: flex-start; }
-.su-effect > span:last-child { flex: 1 1 14rem; min-width: 0; }
-.su-effect:not(.su-two) { min-height: 1.25rem; }
 
 /* an open line taller than the room keeps its label and words in the one stuck-heading place (R1.3) */
 .su-value.open[data-stick] > .su-said { position: sticky; top: 0; z-index: 2; }
@@ -81,81 +49,21 @@ html.pinned .su-value.open[data-stick] > .su-said { top: var(--titlebar-height);
 .su-value.open[data-stick] > .su-said.stuck { z-index: var(--z-heading); }
 .su-said.stuck::after { content: ''; position: absolute; inset: auto calc(-1 * var(--space-group)) 0; border-block-end: 1px solid var(--line); }
 
-/* the days it makes */
-.su-next { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-tight); }
-.su-next > .week > .day { min-block-size: calc(10 * var(--pitch)); }
-.su-next > .week:first-of-type > .day { min-block-size: 0; }
-
-/* ---------- The same line on a shelf: a Slot, a Metric, a part ---------- */
-.su-shelf { container-type: inline-size; }
-.su-flat { border: 1px solid var(--line); border-radius: var(--radius-card); } /* one Variant: the shelf without a head */
-.su-flat > .shelf { border-radius: calc(var(--radius-card) - 1px); }
-.su-row > .card { position: relative; }
-.elist > .su-row > .card > .fold {
-	position: absolute; inset: 0; --fold-ring: calc(var(--space-inline) + var(--focus-width));
-	justify-content: start; align-content: start; line-height: 1.5rem; min-height: 0; cursor: pointer;
-	padding-block-start: var(--space-tight); padding-inline-start: calc(var(--indent-x) - var(--space-inline) - var(--space-tight));
-}
-.su-row > .card > :is(.slot, .verb, .su-body) { position: relative; z-index: 1; }
-.su-row > .card > :is(.content, .su-meta) { pointer-events: none; }
-.su-row > .card > :is(.content, .su-meta) :is(a, button, textarea) { pointer-events: auto; position: relative; z-index: 1; }
-.su-row > .card > .su-body { flex: 0 0 100%; }
-.su-row > .card > .su-meta { flex: 0 0 100%; color: var(--ink); overflow-wrap: anywhere; padding-inline-end: var(--handle-slot); text-wrap: pretty; }
-.su-row.struck > .card > .su-meta { text-decoration: line-through; }
-.elist[data-mode='edit'] > .su-row > .card > .su-meta { padding-inline: var(--handle-slot) 0; }
-.su-row > .card.link > .content a { position: static; } /* On the Task's page: the whole Slot is the link */
-.su-cells { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 5.5rem), 1fr)); gap: var(--space-group) var(--space-inline); align-items: end; }
-.su-cells .number-cell { inline-size: 100%; }
-.elist > .su-row > .card > :is(button, a).quiet.verb { align-self: flex-start; }
-.su-row.open + li { --divider: var(--line-inset); }
-.elist > .su-add { list-style: none; }
-.su-add > .chips { padding: var(--space-inline) var(--space-group); }
-.su-add > .su-body { padding: var(--space-inline) var(--space-group) var(--space-group); }
-.elist > .holder > .card > .content > h3.name { font-size: inherit; line-height: inherit; }
+/* A holder's verb slot is positioned, so a menu in it hangs from it. */
 .elist > .holder > .card > .verb { position: relative; }
 
-/* from bp-phone the label stands beside the words, Slot words take the second column */
+/* from bp-phone the label stands beside the words */
 @container (min-width: 28rem) {
 	.su-said { padding-block: calc((var(--target-touch) - 1.5rem) / 2); align-content: start; }
 	.su-said > .fold { padding-block-start: calc((var(--target-touch) - 1.5rem) / 2); line-height: 1.5rem; }
-	.shelf .elist > .su-row > .card { padding-block: calc((var(--target-touch) - 1.5rem) / 2); align-content: flex-start; }
-	.elist > .su-row > .card > .fold { padding-block-start: calc((var(--target-touch) - 1.5rem) / 2); }
 	.su-text { grid-template-columns: 8.5rem minmax(0, 1fr); column-gap: var(--space-group); align-items: baseline; }
 	.su-text > .su-lab { grid-column: 1; }
 	.su-text > :not(.su-lab) { grid-column: 2; }
-	.su-lines > .su-value > :is(.su-body, .su-warn) { margin-inline-start: calc(8.5rem + var(--space-group)); }
-	.elist > .su-row > .card > .content { flex: 0 0 calc(8.5rem + var(--space-inline) + var(--space-group)); padding-inline-end: var(--handle-slot); }
-	.elist[data-mode='edit'] > .su-row > .card > .content { flex-basis: calc(8.5rem + var(--space-inline)); padding-inline-end: 0; }
-	.su-row > .card > .su-meta { flex: 1 1 10rem; max-inline-size: calc(100% - 8.5rem - var(--space-section) - 5rem); padding-block: calc((1.5rem - 1.25rem) / 2); padding-inline-end: 0; } /* 5rem: Edit's verb, reserved in Use */
-	.elist[data-mode='edit'] > .su-row > .card > .su-meta { padding-inline: 0; }
-	.su-lines > .su-fieldline > :is(.su-body, .su-warn) { margin-inline-start: 0; }
-	.su-noted > .su-said > .fold { inline-size: calc(8.5rem + var(--space-section)); inset-inline-end: auto; }
-	.su-row > .card > .verb, .elist[data-mode='edit'] > .su-row > .card > .verb { order: 1; }
-	.elist[data-mode='edit'] > .su-row > .card > .su-meta { max-inline-size: calc(100% - 8.5rem - var(--space-section) - 5rem); }
-	.su-row > .card > .su-else { order: 3; }
-	.su-row > .card > .su-body, .elist[data-mode='edit'] > .su-row > .card > .su-body { order: 2; padding-inline-start: calc(8.5rem + 2 * var(--space-group)); } /* on the words' column, in both modes */
-	.elist > .su-row.su-grid > .card > .su-body { order: 0; flex: 1 1 14rem; padding-inline: 0 var(--space-inline); padding-block: 0 var(--space-tight); } /* All in one grid: the name leads, its boxes stand beside it */
+	.su-lines > .su-value > .su-body { margin-inline-start: calc(8.5rem + var(--space-group)); }
 }
 
-.su-hold { visibility: hidden; font-size: var(--font-size-meta); line-height: 1.25rem; padding-inline: var(--space-tight); } /* Edit's verb, its place kept in Use */
-.elist > li > .card > .verb.su-hold { margin-inline-end: calc(-1 * var(--space-tight)); }
-.elist > .su-row > .card > .verb.su-hold { align-self: flex-start; }
 @container (max-width: 12rem) { .su-body .option-more { margin-inline-start: 0; } } /* 200% text on 320: no step in, so a number and a date keep their boxes */
-@container (max-width: 16rem) { .su-hold { display: none; } } /* 200% text: the verb takes a line of its own, so nothing is kept for it */
-
-.su-keep[data-mode='use'] > li > .card > .content { padding-inline-end: var(--handle-slot); } /* the slot's 16, so its words wrap alike in both modes */
-
-/* rest days in a rotation */
-.su-rest { flex-wrap: wrap; justify-content: flex-end; max-inline-size: 100%; }
-.elist > li > .card > .verb.su-rest { flex: 0 1 auto; }
-.su-rest > .number-cell { inline-size: 4rem; }
-
-/* tokens, history */
-.su-hist { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: var(--space-group); }
-
-/* ---------- Beside the phone: the tester's panel (not part of the screen) ---------- */
-.su-tester { display: grid; gap: var(--space-inline); }
 
 @media (forced-colors: active) {
-	.su-value.open::before, .su-held, .su-said.stuck::after, .su-flat { border-color: CanvasText; }
+	.su-value.open::before, .su-held, .su-said.stuck::after { border-color: CanvasText; }
 }
