@@ -449,16 +449,8 @@
 	const wide = new MediaQuery('min-width: 64rem');
 	// One at a time, in the hint line: 'done' while something is due, then 'days' while the days block is on screen.
 	const hint = $derived(hintNow([...data.hints, ...retired], [...(data.build.some((b) => b.occurrence?.status === 'due') ? ['done' as const] : []), ...(wide.current || strip ? ['days' as const] : [])]));
-	/** Prepare for tomorrow, Paused and Not due today: one folded line at the end (TS.7). */
-	const laterSays = $derived(
-		[
-			data.prep.length && !hidden('prep') ? `Prepare for tomorrow: ${((n) => `${n} ${n === 1 ? 'thing' : 'things'}`)(data.prep.reduce((n, p) => n + p.items.filter((i) => !i.done).length, 0))}` : '',
-			data.paused.length ? `${data.paused.length} paused` : '',
-			data.resting.length ? `${data.resting.length} not due today` : ''
-		]
-			.filter(Boolean)
-			.join(' · ')
-	);
+	/** Prepare for tomorrow, Paused and Not due today: at the end, each list under its own heading. */
+	const later = $derived((data.prep.length > 0 && !hidden('prep')) || data.paused.length > 0 || data.resting.length > 0);
 
 	// "Yesterday wasn't logged": hidden on this device until the next day, once dismissed.
 	const yesterday = $derived(addDays(data.today, -1));
@@ -694,14 +686,11 @@
 				<GroupHeading title="Tracking" slotOpen={gripped} count={String(trackingShown.length)} folded={folded('tracking')} onfold={() => fold('tracking')} />
 				{#if !folded('tracking')}{@render trackingSection()}{/if}
 			{/if}
-			{#if laterSays && view.direction === 'all' && !view.fits}
+			{#if later && view.direction === 'all' && !view.fits}
 				<section class="later" aria-label="Later and not today">
-					<button type="button" class="later-line" aria-expanded={!folded('later')} onclick={() => fold('later')}><span class="chev" aria-hidden="true">›</span><span>{laterSays}</span></button>
-					{#if !folded('later')}
-						{@render prepSection()}
-						{#if data.paused.length}<h3 class="card-title later-head">Paused</h3>{@render pausedSection()}{/if}
-						{#if data.resting.length}<h3 class="card-title later-head">Not due today</h3>{@render restingSection()}{/if}
-					{/if}
+					{@render prepSection()}
+					{#if data.paused.length}<h3 class="card-title later-head">Paused</h3>{@render pausedSection()}{/if}
+					{#if data.resting.length}<h3 class="card-title later-head">Not due today</h3>{@render restingSection()}{/if}
 				</section>
 			{/if}
 		</div>
@@ -1057,8 +1046,7 @@
 		color: var(--ink);
 		transition: rotate var(--duration-quick);
 	}
-	.today-line .date[aria-expanded='true'] .chev,
-	.later-line[aria-expanded='true'] .chev {
+	.today-line .date[aria-expanded='true'] .chev {
 		rotate: 90deg;
 	}
 	.today-line .num {
@@ -1163,10 +1151,7 @@
 			border-bottom-color: var(--ink);
 		}
 	}
-	.later {
-		margin-block-start: var(--space-group);
-	}
-	/* Each list under the end line has its heading, on the cards' name column, so its cards never run into the next list's. */
+	/* Each list at the end has its heading, on the cards' name column, so its cards never run into the next list's. */
 	.later-head {
 		margin: var(--space-section) 0 var(--space-inline);
 		padding-inline: var(--space-group);
@@ -1232,20 +1217,6 @@
 		.now-line .now {
 			flex: 1;
 		}
-	}
-	.later-line {
-		display: flex;
-		gap: var(--space-inline);
-		align-items: baseline;
-		min-height: var(--target-touch);
-		padding: 0;
-		border: 0;
-		background: none;
-		color: var(--ink-muted);
-		font: inherit;
-		font-size: var(--font-size-label);
-		text-align: start;
-		cursor: pointer;
 	}
 	/* A kind of line this view hides, in an open row: struck. On the card the words are muted too; in the inset (sunken,
 	   where nothing muted sits) they stay ink. */
