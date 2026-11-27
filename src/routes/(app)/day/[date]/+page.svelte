@@ -175,11 +175,11 @@
 
 <div class="page-cols">
 <div class="today-day">
-<GroupHeading title="Due that day" />
+<GroupHeading title="Due that day" foldColumn />
 {#if data.due.length}{@render list(sorted, 'Due that day')}{:else}<p class="empty-range">Nothing was due this day.</p>{/if}
 
 {#if data.tracking.length}
-	<GroupHeading title="Tracking" count={String(data.tracking.filter((x) => x.occurrence && (x.occurrence.status === 'done' || x.occurrence.entries)).length)} />
+	<GroupHeading title="Tracking" foldColumn count={String(data.tracking.filter((x) => x.occurrence && (x.occurrence.status === 'done' || x.occurrence.entries)).length)} />
 	{@render list(data.tracking, 'Tracking')}
 {/if}
 
@@ -189,7 +189,7 @@
 {/if}
 
 {#if data.later.length}
-	<GroupHeading title="Started later" count={String(data.later.length)} />
+	<GroupHeading title="Started later" foldColumn count={String(data.later.length)} />
 	<EditableList items={data.later} key={(l) => l.habitId} label={(l) => l.name} rowCard ariaLabel="Started later">
 		{#snippet row(l)}
 			<span class="name" id="h-{l.habitId}">{l.name}</span>
@@ -211,9 +211,9 @@
 
 </div>
 <div class="today-side">
-{#if wide.current}<GroupHeading title="Last seven days" />{@render seven()}{/if}
+{#if wide.current}<GroupHeading title="Last seven days" foldColumn />{@render seven()}{/if}
 {#if data.breaking.length}
-	<GroupHeading title={data.breaking.some((b) => b.limit) ? 'Breaking and limiting' : 'Breaking'} />
+	<GroupHeading title={data.breaking.some((b) => b.limit) ? 'Breaking and limiting' : 'Breaking'} foldColumn />
 	<EditableList items={data.breaking} key={(b) => b.habitId} label={(b) => b.name} rowCard ariaLabel="Breaking">
 		{#snippet row(b)}
 			<a class="name" id="h-{b.habitId}" href="/habits/{b.habitId}/chain">{b.name}</a>
