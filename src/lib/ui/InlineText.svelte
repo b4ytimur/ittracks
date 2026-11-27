@@ -2,11 +2,13 @@
 	// Text that edits in place: shown as text in use, and while editing a tap turns it into a box
 	// right where it stands. Enter or leaving the box saves, Escape puts it back.
 	// The page owns the value: `onsave` gets the new text and the page updates it.
+	// `open` is bindable: a page opens the box itself from a menu (an item's ⋯ › Rename), in any mode.
 	import { tick, untrack } from 'svelte';
 
 	let {
 		value,
 		editing = false,
+		open = $bindable(false),
 		onsave,
 		label = 'Name',
 		maxlength = 120,
@@ -14,6 +16,8 @@
 	}: {
 		value: string;
 		editing?: boolean;
+		/** The box is open. Set it to open the box from elsewhere (Rename in a menu); it goes false when the box closes. */
+		open?: boolean;
 		onsave: (value: string) => unknown;
 		/** What the text is, for screen readers ("Rename Gym", "Name"). */
 		label?: string;
@@ -22,19 +26,29 @@
 		required?: boolean;
 	} = $props();
 
-	let open = $state(false);
-	let draft = $state('');
+	let draft = $state(untrack(() => (open ? value : '')));
 	let box = $state<HTMLInputElement>();
 	let width = $state<number>();
+	let started = untrack(() => open);
 
-	async function begin(e: MouseEvent) {
-		width = (e.currentTarget as HTMLElement).offsetWidth;
+	async function start() {
+		started = true;
 		draft = value;
-		open = true;
 		await tick();
 		box?.focus();
 		box?.select();
 	}
+
+	function begin(e: MouseEvent) {
+		width = (e.currentTarget as HTMLElement).offsetWidth;
+		open = true;
+	}
+
+	// Opened by a tap or by the page: take the current text and focus the box.
+	$effect(() => {
+		if (open && !started) untrack(start);
+		else if (!open) started = false;
+	});
 
 	function finish(save: boolean) {
 		if (!open) return;
@@ -43,13 +57,18 @@
 		if (save && v !== value && (v || !required)) onsave(v);
 	}
 
-	// Leaving edit mode closes an open box, saving what was typed.
+	// Leaving edit mode closes a box a tap opened there, saving what was typed. A box a page opened in Use stays.
+	let wasEditing = untrack(() => editing);
 	$effect(() => {
-		if (!editing) untrack(() => finish(true));
+		const now = editing;
+		untrack(() => {
+			if (wasEditing && !now) finish(true);
+			wasEditing = now;
+		});
 	});
 </script>
 
-{#if editing && open}
+{#if open}
 	<input
 		class="inline-text"
 		bind:this={box}
