@@ -109,22 +109,27 @@
 		{/each}
 	{/snippet}
 </EditableList>
-<label class="add"
-	><span class="vh">Add a Task, from now on</span><select
-		value=""
-		onchange={(e) => {
-			const id = e.currentTarget.value;
-			e.currentTarget.value = '';
-			if (id) onadd(id);
-		}}
+<!-- In Field's frame, so a coarse pointer gets its 44px through the hidden label. -->
+<div class="field">
+	<label class="add"
+		><span class="vh">Add a Task, from now on</span><select
+			value=""
+			onchange={(e) => {
+				const id = e.currentTarget.value;
+				e.currentTarget.value = '';
+				if (id) onadd(id);
+			}}
+		>
+			<option value="">+ Task…</option>
+			{#each library as l (l.id)}<option value={l.id}>{l.name}</option>{/each}
+		</select></label
 	>
-		<option value="">+ Task…</option>
-		{#each library as l (l.id)}<option value={l.id}>{l.name}</option>{/each}
-	</select></label
->
+</div>
 
 <style>
+	/* Block, so the label is the select's own 32px box and Field's coarse area centres on it. */
 	.add > select {
+		display: block;
 		width: auto;
 		max-inline-size: 100%;
 	}

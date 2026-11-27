@@ -367,9 +367,6 @@
 	.se-sec + .se-sec {
 		margin-block-start: var(--space-section);
 	}
-	.search {
-		margin-block-start: var(--space-inline);
-	}
 	button.link {
 		padding: 0;
 		border: 0;

@@ -49,6 +49,23 @@
 		};
 	});
 
+	// The band stands out of the bar's flow, so one observer measures both, and the page's end stays clear of them
+	// whatever the band holds (a wrapped line, the selection bar): echo-shelf.css takes --tabbar-height into the reserve.
+	let bar = $state<HTMLElement>();
+	$effect(() => {
+		const tabs = bar;
+		const shelf = tabs?.querySelector<HTMLElement>(':scope > .band');
+		if (!tabs || !shelf) return;
+		const root = document.documentElement.style;
+		const measure = new ResizeObserver(() => root.setProperty('--tabbar-height', `${tabs.offsetHeight + shelf.offsetHeight}px`));
+		measure.observe(tabs, { box: 'border-box' });
+		measure.observe(shelf, { box: 'border-box' });
+		return () => {
+			measure.disconnect();
+			root.removeProperty('--tabbar-height');
+		};
+	});
+
 	const status = $derived(
 		[
 			online ? '' : 'Offline. Changes are saved on this device.',
@@ -70,7 +87,7 @@
 	<main class="main">
 		{@render children()}
 	</main>
-	<nav class="tabbar" aria-label="Main">
+	<nav class="tabbar" aria-label="Main" bind:this={bar}>
 		<Band {status} />
 		{#if !page.data.linkOnly}
 			{#each tabs as tab (tab.href)}

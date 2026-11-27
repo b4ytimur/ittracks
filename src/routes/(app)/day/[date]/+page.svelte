@@ -194,6 +194,8 @@
 		{#snippet row(l)}
 			<span class="name" id="h-{l.habitId}">{l.name}</span>
 			<p class="meta-line">Starts {short(l.startDate)}. If you really began on this day, start it from here.</p>
+		{/snippet}
+		{#snippet lines(l)}
 			{#if form?.habit === l.habitId && form?.error}<p class="row-line error meta">{form.error}</p>{/if}
 		{/snippet}
 		{#snippet actions(l)}
@@ -218,6 +220,8 @@
 			<p class="meta-line">
 				{[b.limit ? `${b.limit.used} of ${b.limit.max} ${b.limit.period === 'week' ? 'that week' : 'that day'}` : '', b.slips.length ? '' : 'Clean that day'].filter(Boolean).join(' · ')}
 			</p>
+		{/snippet}
+		{#snippet lines(b)}
 			{#if b.limit && b.limit.used > b.limit.max}<p class="row-line warn meta">Over the limit.</p>{/if}
 			{#each b.slips as s (s.id)}
 				<div class="row-line slip">
@@ -275,8 +279,11 @@
 					.filter(Boolean)
 					.join(' · ')}
 			</p>
+		{/snippet}
+		{#snippet lines(item)}
+			{@const o = item.occurrence}
 			{#if o && data.notes[o.id]}<div class="row-line"><Markdown text={data.notes[o.id]} small /></div>{/if}
-			{#if canLog && open && item.variants.length}
+			{#if canLog && notLogged(item) && item.variants.length}
 				<label class="row-line variant meta"
 					>Variant
 					<select value={variantOf(item)} onchange={(e) => (chosen[item.habitId] = e.currentTarget.value)}>

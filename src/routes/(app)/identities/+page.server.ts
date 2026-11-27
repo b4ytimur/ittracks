@@ -8,7 +8,8 @@ import {
 	deleteIdentity,
 	identityVotes,
 	renameIdentity,
-	restoreIdentity
+	restoreIdentity,
+	unaddIdentity
 } from '$lib/server/repo/identities';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -41,6 +42,8 @@ export const actions: Actions = {
 		const deleted = deleteIdentity(locals.account!.id, String((await request.formData()).get('id')));
 		return deleted ? { deleted } : fail(404, { error: 'No such identity' });
 	},
+	/** The Undo of an Add: refused while a habit has it, since the Add gave it none. */
+	unadd: async ({ request, locals }) => ({ kept: !unaddIdentity(locals.account!.id, String((await request.formData()).get('id'))) }),
 	restore: async ({ request, locals }) => {
 		const p = z
 			.object({ id: z.string().uuid(), statement: z.string().min(1).max(120), sortOrder: z.number().int(), habitIds: z.array(z.string()).max(2000) })

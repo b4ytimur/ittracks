@@ -18,7 +18,7 @@
 		onsave,
 		oncancel,
 		onremove,
-		removeLabel = 'Remove',
+		removeLabel,
 		children,
 		question
 	}: {
@@ -40,6 +40,7 @@
 		onsave?: () => void;
 		oncancel?: () => void;
 		onremove?: () => void;
+		/** The remove button's words, naming what it removes; with none it says Remove and is named for its line. */
 		removeLabel?: string;
 		children: Snippet;
 		/** The one question a held change asks. */
@@ -67,11 +68,11 @@
 					<div class="l-cluster">
 						<button type="button" aria-disabled={saving} onclick={() => !saving && onsave?.()}>{saving ? 'Saving…' : `Save ${label.toLowerCase()}`}</button>
 						<button type="button" onclick={oncancel}>Cancel</button>
-						{#if onremove}<button type="button" class="quiet su-end" onclick={onremove}>{removeLabel}</button>{/if}
+						{#if onremove}<button type="button" class="quiet su-end" aria-label={removeLabel ? undefined : `Remove ${label.toLowerCase()}`} onclick={onremove}>{removeLabel ?? 'Remove'}</button>{/if}
 					</div>
 				</div>
 			{:else if onremove}
-				<div class="l-cluster"><button type="button" class="quiet su-end" onclick={onremove}>{removeLabel}</button></div>
+				<div class="l-cluster"><button type="button" class="quiet su-end" aria-label={removeLabel ? undefined : `Remove ${label.toLowerCase()}`} onclick={onremove}>{removeLabel ?? 'Remove'}</button></div>
 			{/if}
 		</div>
 	{/if}

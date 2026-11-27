@@ -64,12 +64,22 @@ export function deleteIdentity(accountId: string, id: string): DeletedIdentity |
 	});
 }
 
+/** The Undo of an Add, which gave it no habits: false, and it stays, when a habit has it by now (an Undo of a Delete gave it one). */
+export function unaddIdentity(accountId: string, id: string): boolean {
+	if (db.select().from(habitIdentity).where(eq(habitIdentity.identityId, id)).get()) return false;
+	deleteIdentity(accountId, id);
+	return true;
+}
+
+/** Put a deleted identity back with its habits. One that says the same by now (added since) gets its habits instead, so two never read the same. */
 export function restoreIdentity(accountId: string, d: DeletedIdentity) {
 	db.transaction((tx) => {
-		tx.insert(identity).values({ id: d.id, accountId, statement: d.statement, sortOrder: d.sortOrder }).onConflictDoNothing().run();
-		if (!tx.select({ id: identity.id }).from(identity).where(and(eq(identity.id, d.id), eq(identity.accountId, accountId))).get()) return;
+		const twin = tx.select({ id: identity.id, statement: identity.statement }).from(identity).where(eq(identity.accountId, accountId)).all().find((i) => i.id !== d.id && same(i.statement, d.statement));
+		const id = twin?.id ?? d.id;
+		if (!twin) tx.insert(identity).values({ id, accountId, statement: d.statement, sortOrder: d.sortOrder }).onConflictDoNothing().run();
+		if (!tx.select({ id: identity.id }).from(identity).where(and(eq(identity.id, id), eq(identity.accountId, accountId))).get()) return;
 		const own = new Set(tx.select({ id: habit.id }).from(habit).where(eq(habit.accountId, accountId)).all().map((h) => h.id));
-		for (const habitId of d.habitIds) if (own.has(habitId)) tx.insert(habitIdentity).values({ habitId, identityId: d.id }).onConflictDoNothing().run();
+		for (const habitId of d.habitIds) if (own.has(habitId)) tx.insert(habitIdentity).values({ habitId, identityId: id }).onConflictDoNothing().run();
 	});
 }
 

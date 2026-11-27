@@ -87,7 +87,7 @@ Under a field's **When logging**:
 
 ## Auto-filled slots
 
-An auto-filled slot picks a Task from your Library each time the habit comes up, by tags. Add one with **Add an auto-filled slot** in the habit editor. Rules:
+An auto-filled slot picks a Task from your Library each time the habit comes up, by tags. Add one with **+ Auto-filled** in the habit editor. Rules:
 
 - **Must have**: a tag at **at least low**, **at least medium**, or **high** (your own levels, if you named them).
 - **Must not have**: a tag **not at all**, **at most low** or **at most medium**.
@@ -115,6 +115,6 @@ Limits: nesting goes up to 4 levels deep, and a Task can't end up inside itself.
 - **Archive** keeps the Task's history and hides it from the Library and pickers. You can also archive and rename Tasks from a Task's **⋯** in the [Library](views-and-edit-mode.md#library).
 - **Duplicate** makes a copy.
 - **Delete** removes the Task and every log of it, with no question. **Undo** in the band brings it back. Until a day later it also waits under **Show archived** in the Library and on its own page, with **Put back**; then it goes for good with its logs.
-- **History** at the top of a Task shows its charts.
+- **Last times** on a Task's page shows its charts.
 
 Several Tasks can change unit at once: see [Bulk editing](bulk-editing.md).

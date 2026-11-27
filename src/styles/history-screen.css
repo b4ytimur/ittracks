@@ -6,8 +6,8 @@
 .hi-day + .hi-day { margin-block-start: var(--space-section); }
 .hi-missed > .card > .content > .name { color: var(--ink-muted); font-weight: 400; } /* the word says Missed; no red, no fade (C.6, C.7) */
 .hi-day > .hi-notewrap { margin-block-end: var(--space-inline); }
-.hi-notewrap { flex: 1 0 100%; min-inline-size: 0; } /* under the row's one line, never beside it */
-.card.link > .content > .hi-notewrap { position: relative; z-index: 1; } /* over the row's link: read, and its links pressed, where it stands */
+.hi-notewrap { min-inline-size: 0; }
+.card.link > .lines > .hi-notewrap { position: relative; z-index: 1; } /* over the row's link: read, and its links pressed, where it stands */
 .hi-clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
 .hi-show { min-block-size: var(--target-min); }
 .hi-end { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-inline) var(--space-group); margin-block: var(--space-section) var(--space-group); }

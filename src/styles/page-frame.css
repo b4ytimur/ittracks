@@ -12,8 +12,9 @@
                                                [aria-current]>, a name, then <span class="num">
      details.disclosure.side-fold              a phone: the side blocks folded into one line under the sentence */
 .page-cols { display: grid; grid-template-columns: minmax(0, 1fr); }
-.hint-line + .page-cols, .page-wide + .page-cols, .view-sentence + .page-cols { margin-block-start: var(--space-inline); }
-[role='search'].page-wide { margin-block: var(--space-inline); } /* a search across the top, the same on every page */
+.page-wide + .page-cols, .view-sentence + .page-cols { margin-block-start: var(--space-inline); }
+/* A search across the top, the same on every page: the hint line above it owns the gap between them (TitleLine). */
+[role='search'].page-wide { margin-block: 0 var(--space-inline); }
 /* Both columns start on one line: the side's first heading drops its top margin, as a list's first heading does. */
 .page-side > .group-heading:first-child { margin-block-start: 0; }
 .side-card { padding: var(--space-tight); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface-raised); }

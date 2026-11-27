@@ -146,12 +146,13 @@
 		gap: var(--space-inline);
 		margin-bottom: var(--space-inline);
 	}
-	/* In the card's padding, so the grip moves nothing. */
+	/* ListRow's slot: in the flow, so the grip overhangs 8px into the padding (card + 9) and the title starts on the
+	   rows' name column (card + 33); the header's gap is the grip's own 8px, so the slot gives it back. */
 	header > .slot {
-		position: absolute;
-		inset-inline-start: 0;
+		flex: none;
 		width: var(--handle-slot);
 		display: flex;
+		margin-inline-end: calc(-1 * var(--space-inline));
 	}
 	.titles {
 		flex: 1;

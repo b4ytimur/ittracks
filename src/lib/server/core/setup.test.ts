@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { and, eq } from 'drizzle-orm';
 import { db } from '../db';
-import { habit, metric, task } from '../db/schema';
+import { habit, habitIdentity, metric, task } from '../db/schema';
 import { createAccount } from '../auth';
 import { getSettings, saveSettings } from '../settings';
 import { getStats } from '../stats';
@@ -428,6 +428,21 @@ describe('setup: the account', () => {
 		expect(r4.collections).toEqual([]);
 		expect(r4.pauses).toEqual([]);
 		expect(r4.shortcuts).toEqual([]);
+	});
+
+	it('undo of an identity added after one that said it was deleted: once the Delete is undone, the habits stay with it', () => {
+		setup([{ op: 'identity', identity: 'I row' }], { apply: true });
+		const row = (run('setup_read', { ref: 'settings' }) as unknown as ReturnType<typeof readAccount>).identities.find((i) => i.statement === 'I row')!;
+		db.insert(habitIdentity).values({ habitId: habitNamed('Running')!.id, identityId: row.id }).run();
+		const del = setup([{ op: 'identity', identity: 'I row', delete: true }], { apply: true });
+		const add = setup([{ op: 'identity', identity: 'i row' }], { apply: true });
+		run('setup_undo', { undo: del.undo });
+		const back = run('setup_undo', { undo: add.undo }) as unknown as { kept: string[] };
+		expect(back.kept).toEqual([expect.stringMatching(/has habits now, so it stays/)]);
+		const left = (run('setup_read', { ref: 'settings' }) as unknown as ReturnType<typeof readAccount>).identities.filter((i) => i.statement.toLowerCase() === 'i row');
+		expect(left).toHaveLength(1);
+		expect(db.select().from(habitIdentity).where(eq(habitIdentity.identityId, left[0].id)).all()).toHaveLength(1);
+		setup([{ op: 'identity', identity: 'I row', delete: true }], { apply: true });
 	});
 
 	it('deletes a habit, and setup_undo puts it back while it can', () => {

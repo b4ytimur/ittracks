@@ -191,7 +191,8 @@
 			return showToast(r.error ?? "Couldn't change it. Are you online?");
 		}
 		if (to) showToast(`Archived ${h.name}. Its logs are kept.`, undoWith('/habits?/unarchive', { id: h.id }));
-		else showToast(`${h.name} is back.`, undoWith('/habits?/archive', { id: h.id }));
+		// Undo puts a deleted one back to deleted, not just archived.
+		else showToast(`${h.name} is back.`, h.deleteAfter ? undoWith(`/habits/${h.id}?/delete`, {}) : undoWith('/habits?/archive', { id: h.id }));
 	}
 	const cueText = (c: { time: string | null; range?: string | null } | null) => c?.time ?? c?.range ?? null;
 	const ago = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' });

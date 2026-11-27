@@ -883,10 +883,13 @@
 		const res = await fetch(url, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ set, was }) }).catch(() => null);
 		return res ? { ok: res.ok, why: res.ok ? '' : String((await res.json().catch(() => ({}))).error ?? '') } : null;
 	};
-	/** Change the plan or a Task, say so, and take it back exactly. `local` is what it does to this log. */
-	async function edit(url: string, set: object, was: object, words: string, local?: (back: boolean) => void) {
+	/**
+	 * Change the plan or a Task, say so, and take it back exactly. `local` is what it does to this log. `pick`: today's pick
+	 * this change took away, put back before the plan goes back (true) and taken away again if that fails (false).
+	 */
+	async function edit(url: string, set: object, was: object, words: string, local?: (back: boolean) => void, pick?: (back: boolean) => Promise<boolean>) {
 		const a = await patch(url, set, was);
-		if (!a) return void showError('Not saved. Are you online?', () => void edit(url, set, was, words, local));
+		if (!a) return void showError('Not saved. Are you online?', () => void edit(url, set, was, words, local, pick));
 		if (!a.ok) {
 			showError(a.why || 'Not saved.');
 			return void invalidateAll();
@@ -894,14 +897,18 @@
 		local?.(false);
 		await invalidateAll();
 		showToast(words, async () => {
+			// A finished log refuses the pick and keeps its Tasks as logged: the plan still goes back.
+			const picked = await pick?.(true);
 			const b = await patch(url, was, set);
+			if (!b?.ok && picked) await pick!(false);
 			if (!b) return false;
 			if (!b.ok) return b.why || false;
 			if (mounted) local?.(true);
 			return true;
 		});
 	}
-	const editPlan = (next: Plan, words: string, local?: (back: boolean) => void) => edit(`/api/habits/${data.habitId}`, { variants: next }, { variants: data.plan }, words, local);
+	const editPlan = (next: Plan, words: string, local?: (back: boolean) => void, pick?: (back: boolean) => Promise<boolean>) =>
+		edit(`/api/habits/${data.habitId}`, { variants: next }, { variants: data.plan }, words, local, pick);
 	function editOrder(order: string[], moved: string) {
 		const name = editPlaces.find((p) => p.id === moved)?.name;
 		void editPlan(inOrder(data.plan!, order), `Moved ${name} to ${order.indexOf(moved) + 1} of ${order.length} in ${data.habitName}, from now on.`);
@@ -1056,10 +1063,17 @@
 		// of the keep would put today back on the old Task.
 		if (offlinePicks[slot] && !(await sendAhead(`/log/${data.occurrence.id}?/aim`, []))) return void showError('Not saved. Are you online?', () => void keepInPlan(slot, task));
 		const at = items.find((x) => x.slotId === slot && x.depth === 0);
+		// The pick an earlier Keep left, which this change takes away: its Undo puts it back, and Keep's Undo still finds it.
+		let dropped: string | null = null;
 		// With no swap today the place follows the plan and changes too (Replace…): what is ticked is saved first, as Remove does.
 		if (at?.task?.id === s.taskId) {
 			const first = await saveFirst();
 			if (first.kind !== 'saved') return void showError(first.kind === 'refused' ? first.why : 'Not saved. Are you online?', first.kind === 'refused' ? undefined : () => void keepInPlan(slot, task));
+			// An earlier Keep leaves today's pick on the Task it kept (its Undo needs it), and a pick wins over the plan:
+			// back to the Slot's own Task there is no pick, so the plan change reaches today.
+			const own = await runAction<{ was: string | null }>(`/log/${data.occurrence.id}?/swap`, { slot, task: s.taskId });
+			if (!own.ok) return void showError(own.error ?? 'Not saved. Are you online?', () => void keepInPlan(slot, task));
+			dropped = own.data?.was ?? null;
 		}
 		// What it did in this Slot today: in its place, and before a swap took it away.
 		const today = loggedAt([...items.flatMap((it, i) => entriesAt(it, i, false)), ...elsewhere()], task, at?.path ?? slot);
@@ -1070,7 +1084,9 @@
 		const was = plan && slotIn(plan, slot);
 		if (!plan || !was?.taskId || was.fillRule) return 'Not kept: that Slot is not in the plan any more.';
 		const variant = plan.find((v) => v.slots.some((x) => x.id === slot))?.name ?? data.variantName ?? '';
-		await editPlan(withSlot(plan, slot, { taskId: task, targets: a.data.targets, minTargets: {}, stretchTargets: {} }), keptText(nameOf(was.taskId) ?? "the plan's Task", nameOf(task) ?? 'another Task', variant, a.data.aim));
+		// While the plan still names `task`, the pick differs from it and is kept; once the plan goes back, it is Keep's again.
+		const pick = dropped ? (back: boolean) => runAction(`/log/${data.occurrence.id}?/swap`, { slot, task: back ? dropped! : task }).then((r) => r.ok) : undefined;
+		await editPlan(withSlot(plan, slot, { taskId: task, targets: a.data.targets, minTargets: {}, stretchTargets: {} }), keptText(nameOf(was.taskId) ?? "the plan's Task", nameOf(task) ?? 'another Task', variant, a.data.aim), undefined, pick);
 	}
 	/** The swap picker, for a place, and what had focus before it, to go back to. `plan`: Replace…, from now on. */
 	let picking = $state<{ it: Item; from: HTMLElement | null; plan?: boolean } | null>(null);
@@ -1155,8 +1171,9 @@
 	<div class="notice"><span class="notice-text">This day is further back than Settings allow logging, so it can only be looked at.</span><span class="notice-acts"><a class="quiet" href="/settings#past">Change it in Settings</a></span></div>
 {/if}
 
-<div class="l-cluster lg-top" class:lg-editing={editing}>
-	{#if data.levels && !quickMode}
+<!-- Only when it holds the level: empty, its 16px under the hint line's 8 would be a gap no other screen has. -->
+{#if data.levels && !quickMode}
+	<div class="l-cluster lg-top" class:lg-editing={editing}>
 		<div class="lg-level" role="group" aria-label="Level">
 			<div class="chips">
 				{#each ['minimum', 'target', 'stretch'] as const as l (l)}
@@ -1165,8 +1182,8 @@
 			</div>
 			{#if data.levels[level]}<p class="meta">{data.levels[level]}</p>{/if}
 		</div>
-	{/if}
-</div>
+	</div>
+{/if}
 
 {#snippet onceFields(it: Item, i: number, metrics: Metric[])}
 	{#each metrics as m (m.id)}

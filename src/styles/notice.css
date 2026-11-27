@@ -1,7 +1,7 @@
 /* Notice: one inline box for a fact the app tells you (a nudge, a suggestion, why a screen is read-only, a risk,
    something that couldn't be worked out).
    Owns .notice (tones notice, warn, error: data-tone), .notice-text, .notice-acts, and the notice's place as a row line
-   (.content > .notice) and on a shelf.
+   (.lines > .notice) and on a shelf.
    Markup: <div class="notice" [data-tone="warn|error"] [role="alert": an error a submit returned, only]>
              <div class="notice-text"> <p class="label">Words…</p> [p.label …] </div>
              [<div class="notice-acts"> <button class="quiet">Verb</button> … </div>]
@@ -31,8 +31,8 @@
 /* In a row: a row line under the meta line, 8px below it, full width. Positioned above a stretched name link
    (ListRow's .card.link), as the verb is, so its verbs stay reachable. On the page and in a block card it adds no
    margin: the page's stack spaces it, and a card's head keeps its own 8px. */
-.content > .notice { flex-basis: 100%; margin-top: var(--space-inline); position: relative; z-index: 1; }
+.lines > .notice { margin-top: var(--space-inline); position: relative; z-index: 1; }
 /* In a row the verbs always sit under the words (D3.24). */
-.content > .notice > .notice-acts { flex-basis: 100%; }
+.lines > .notice > .notice-acts { flex-basis: 100%; }
 
 /* Forced colours: every edge turns CanvasText, so the tones meet and their words carry them. */

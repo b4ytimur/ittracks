@@ -76,8 +76,6 @@
 <TitleLine title="Share as a template" back={{ href: `/habits/${data.id}`, label: data.name }} hint="A file someone else can add, with the questions you ask here. Your logs stay here, and a file you have sent stays sent." />
 
 <form method="POST" action="/habits/{data.id}/template.json" class="stack" onsubmit={(e) => blocking.length && e.preventDefault()}>
-	<input type="hidden" name="share" value={JSON.stringify(clean)} />
-
 	<section class="card stack">
 		<h2>About it</h2>
 		<label>Template name <input bind:value={f.name} maxlength="120" required /></label>
@@ -218,6 +216,8 @@
 		<button class="primary" aria-disabled={blocking.length > 0}>Download the template</button>
 		<button formaction="?/save" aria-disabled={blocking.length > 0}>Save to my Gallery</button>
 	</div>
+	<!-- Last: first, it would make the first card a "* + *" of .stack, and its 16px would win over the hint line's 8. -->
+	<input type="hidden" name="share" value={JSON.stringify(clean)} />
 </form>
 
 {#if preview}

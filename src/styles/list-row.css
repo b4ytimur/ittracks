@@ -1,5 +1,5 @@
 /* ListRow: one item in an editable list, drawn as one card (slot, content, verb).
-   Owns .elist, .elist > li, the row card's layout, .slot, .content, .meta-line, .row-line, .verb placement (LogControl's place,
+   Owns .elist, .elist > li, the row card's layout, .slot, .content, .meta-line, .lines, .row-line, .verb placement (LogControl's place,
    and the quiet Undo, View, Start early and edit verbs),
    .pick-hit (the slot's hit box; the box is Checkbox's .pick), the li states .picked .done .skipped .just-done,
    [data-density] and the slot's slide.
@@ -19,19 +19,16 @@
 	display: flex; flex-wrap: wrap; align-items: center; /* grip, checkbox and verb sit on the row's middle */
 	padding: calc(var(--space-group) - 1px) var(--space-group); /* the 1px edge counts toward the pitch */
 }
-/* A row with lines under its top line (a line kind, a notice, Today's open-row inset) centres its marks and verb on the name and meta
-   (24 + 20px), where a closed row has them, so opening a row moves nothing and nothing drifts into what hangs below. */
-.elist > li:has(> .card > .content > :is(.row-line, .notice)) > .card { align-items: flex-start; }
-.elist > li:has(> .card > .content > :is(.row-line, .notice)) > .card > :is(.slot, div.verb) {
-	align-self: flex-start; min-height: calc(1.5rem + 1.25rem); align-items: center;
-}
-.elist > li:has(> .card > .content > :is(.row-line, .notice)) > .card > :is(button, a).verb {
-	align-self: flex-start; margin-block-start: calc((1.5rem + 1.25rem - var(--target-min)) / 2);
-}
+/* What hangs under the name and meta (.lines: a line kind, a notice, Today's open-row inset, a note) is its own full-width
+   flex line after the content and the verb, starting on the name column. The first line holds only the slot, the name and
+   meta, and the verb, so the grip, the checkbox and the verb centre on the name and meta at any meta height. */
+.elist > li > .card > .lines { flex: 1 0 100%; min-width: 0; display: flex; flex-direction: column; overflow-wrap: anywhere; }
+.elist.slotted > li > .card > .lines { padding-inline-start: var(--handle-slot); }
+.elist > li > .card > .lines:not(:has(> *)) { display: none; } /* a row with nothing below adds no line */
 
 /* The slot is always rendered: 0 wide, handle-slot wide in a .slotted list (a grip or a checkbox in it).
    The card's edges never move; only the name slides, 16px, on one clock. It is one name line tall
-   (24px, 48px at 200% text): the grip and the checkbox centre on the row, or on its name and meta on a taller row. */
+   (24px, 48px at 200% text): the grip and the checkbox centre on the name and meta, the card's first line. */
 .elist > li > .card > .slot { flex: none; display: flex; width: 0; min-height: max(var(--target-min), 1.5rem); }
 .elist.slotted > li > .card > .slot { width: var(--handle-slot); }
 .slot > * { flex: none; } /* the grip and the pick overhang 8px into the leading padding */
@@ -58,22 +55,26 @@
 .meta-line > .mark { display: inline-block; } /* ✓ done, ↷ skipped: the word follows it */
 /* The row line slot (D3.4: moved from Registries, which keeps the order and the kinds). One full line under the
    meta line (p.row-line.label: 20px, a whole pitch). Text is ink, so it reads on a card, a shelf and a held card (S.2). */
-.content > .row-line { flex-basis: 100%; color: var(--ink); }
+.lines > .row-line { color: var(--ink); }
 /* At risk (C.7): warn as text is 5.02:1 on light raised; on a light shelf it is 4.21:1, so a shelf keeps ink. */
-.content > .row-line.warn { color: var(--warn); }
-.shelf .content > .row-line.warn { color: var(--ink); }
+.lines > .row-line.warn { color: var(--warn); }
+.shelf .lines > .row-line.warn { color: var(--ink); }
 
 /* The verb slot: one quiet verb with onremove (Button's quiet, button.quiet.verb). Otherwise, on Today a due row's
    div.verb > div.log-control (R2.19; LogControl draws the joined control and its menu, this only places it);
-   during a celebration Undo (button.quiet.verb) takes its place; a finished row with Slots shows a quiet View
-   (a.button.quiet.verb: .button drops the link underline, Button's quiet hover brings it back) and a not-due row
-   a quiet Start early (button.quiet.verb) where the app offers it (R2.4). It wraps under the content,
-   still trailing, when the content would get narrower than its basis. */
+   during a celebration Undo (div.verb > button.quiet) takes its place; a finished row with Slots shows a quiet View
+   (div.verb > a.quiet) and a not-due row a quiet Start early (div.verb > form > button.quiet) where the app offers
+   it (R2.4). It wraps under the content, still trailing, when the content would get narrower than its basis. */
 .elist > li > .card > .verb {
 	flex: none; align-self: center; margin-inline-start: auto;
 	display: inline-flex; align-items: center; gap: var(--space-inline);
 }
-.elist > li > .card > :is(button, a).quiet.verb { margin-inline-end: calc(-1 * var(--space-tight)); } /* text on the padding edge */
+/* A quiet verb's text sits on the padding edge, whether it is the verb itself (onremove) or ends the actions snippet's
+   div.verb, alone or in its form. A form there, in a row line or a row notice's verbs is only its button's box: as a
+   block it would wrap the 24px button in a 25px line box. */
+.elist > li > .card > :is(button, a).quiet.verb,
+.elist > li > .card > div.verb > :last-child:is(button.quiet, a.quiet, form:has(> button.quiet:last-child)) { margin-inline-end: calc(-1 * var(--space-tight)); }
+.elist > li > .card :is(div.verb, .row-line, .notice-acts) > form:not([hidden]) { display: flex; } /* LogControl's hidden forms stay hidden */
 
 /* ---------- Density: spacing only; gaps stay the same in every density ---------- */
 .elist[data-density='compact'] > li > .card {
@@ -121,6 +122,7 @@
 /* The meta's ✓ pops; today's mark and its spark are DayTile's, run by this li's .just-done. */
 @media (prefers-reduced-motion: no-preference) {
 	.elist > li > .card > .slot { transition: width var(--duration-settle) var(--ease-settle); }
+	.elist > li > .card > .lines { transition: padding-inline-start var(--duration-settle) var(--ease-settle); } /* slides with the name */
 	.elist > li.just-done .meta-line > .mark { animation: row-pop var(--duration-pop) var(--ease-settle); }
 }
 @keyframes row-pop { 50% { transform: scale(1.4); } }

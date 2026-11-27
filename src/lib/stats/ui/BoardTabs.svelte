@@ -322,8 +322,10 @@
 	.boards .subtabs-row {
 		flex-wrap: wrap;
 	}
+	/* The ⋯ glyph on the cards' verb edge (1px edge + card padding, less the glyph's 4px), as every other ⋯ on the screen. */
 	.board-more {
 		position: relative;
+		margin-inline-end: calc(1px + var(--space-group) - var(--space-tight));
 	}
 	/* A long press on a tab lifts it: no callout or text selection on the way. */
 	a.tab {

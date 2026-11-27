@@ -1,10 +1,23 @@
+<script lang="ts" module>
+	type Focusable = { isConnected: boolean; focus?: () => void };
+	/** Once an entry's button went with it: when focus fell to the page, back where the change was made, else to the
+	 * band itself (keepFocus's fallback), for a place that is gone or takes no focus. Focus anywhere else stays. */
+	export function refocus(doc: { activeElement: unknown; body: unknown }, ...to: (Focusable | null | undefined)[]) {
+		for (const el of to) {
+			if (doc.activeElement && doc.activeElement !== doc.body) return;
+			if (el?.isConnected) el.focus?.();
+		}
+	}
+</script>
+
 <script lang="ts">
 	// The band above the tab bar: the newest change with its Undo, how many more there are, and the
 	// connection. Nothing in it goes away on a timer; it tucks under the bar while you scroll down.
+	import { tick } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
-	import { canUndo, type Entry } from '$lib/echo';
+	import { canUndo } from '$lib/echo';
 	import { endRest, forgotten, moreRest, rest, restText } from '$lib/rest.svelte';
-	import { band, dismiss, showError } from '$lib/toast.svelte';
+	import { band, dismiss, showError, type Posted as Entry } from '$lib/toast.svelte';
 
 	let { status = '' }: { status?: string } = $props();
 
@@ -12,6 +25,8 @@
 	let open = $state(false);
 	let tucked = $state(false);
 	let said = $state('');
+	let shelf = $state<HTMLElement>();
+	const back = (e: Entry) => tick().then(() => refocus(document, e.from as HTMLElement | null, shelf));
 
 	$effect(() => {
 		if (first) {
@@ -51,24 +66,33 @@
 		y = now;
 	}
 
+	// The pressed button goes with its entry, so each ends by putting focus back (back) rather than on the page.
 	async function act(e: Entry) {
 		dismiss(e.id);
-		if (e.error) return void (await e.retry?.());
-		const r = await Promise.resolve()
-			.then(() => e.undo?.())
-			.catch(() => false);
-		if (r === false || typeof r === 'string') return void showError(typeof r === 'string' ? r : `Not undone: ${e.text}`, () => act(e));
-		said = 'Undone.';
-		await invalidateAll();
+		try {
+			if (e.error) return void (await e.retry?.());
+			const r = await Promise.resolve()
+				.then(() => e.undo?.())
+				.catch(() => false);
+			if (r === false || typeof r === 'string') return void showError(typeof r === 'string' ? r : `Not undone: ${e.text}`, () => act(e));
+			said = 'Undone.';
+			await invalidateAll();
+		} finally {
+			await back(e);
+		}
 	}
 	/** The entry's other way: it says what it did itself. */
 	async function also(e: Entry) {
 		dismiss(e.id);
-		const r = await Promise.resolve()
-			.then(() => e.also?.run())
-			.catch(() => false);
-		if (r === false || typeof r === 'string') return void showError(typeof r === 'string' ? r : `Not done: ${e.also?.label}`, () => also(e));
-		await invalidateAll();
+		try {
+			const r = await Promise.resolve()
+				.then(() => e.also?.run())
+				.catch(() => false);
+			if (r === false || typeof r === 'string') return void showError(typeof r === 'string' ? r : `Not done: ${e.also?.label}`, () => also(e));
+			await invalidateAll();
+		} finally {
+			await back(e);
+		}
 	}
 </script>
 
@@ -80,7 +104,7 @@
 	{:else if canUndo(e)}<button type="button" class="small echo-act" aria-label="Undo: {e.text}" onclick={() => act(e)}>Undo</button>{/if}
 {/snippet}
 
-<div class="band" class:tucked={tucked && !rest.now} class:clocked={rest.now && !band.select} data-mode={band.select ? 'select' : 'use'}>
+<div class="band focus-inset" tabindex="-1" bind:this={shelf} class:tucked={tucked && !rest.now} class:clocked={rest.now && !band.select} data-mode={band.select ? 'select' : 'use'}>
 	<p class="vh" role="status">{said}</p>
 	{#if rest.now && !band.select}
 		<div class="clock" role="group" aria-label={rest.now.name ?? 'Rest'}>

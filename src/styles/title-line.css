@@ -68,7 +68,9 @@
 /* The actions hide while the state is on (Apply is the view's one primary). visibility keeps their space, so the state
    never jumps and the line never rewraps. */
 .titlebar[data-mode='state'] > .title-actions { visibility: hidden; opacity: 0; }
-/* A state entered from the hint line puts Done, its one primary, in the actions' place: that group stays in sight. */
+/* A state entered from the hint line puts Done, its one primary, in the actions' place: that group stays in sight.
+   ponytail: Done is in the line only while that state is on, so a title too wide to sit beside it takes a second row
+   then. Keeping Done's room in every state would cost that row on every visit; move Done out of the line if it matters. */
 .titlebar[data-mode='state'] > .title-actions[data-done] { visibility: visible; opacity: 1; }
 /* addHidden (another add is open, as Stats' card builder, or the list shows EmptyState's first, whose slot is then the
    only add): the add alone hides, space kept; the ⋯ and the links stay. */
@@ -85,7 +87,7 @@ html.pinned {
 /* ---------- Hint line: both texts in one cell, so the line keeps one height in both states (F.6) ---------- */
 .hint-line {
 	display: grid; grid-template-columns: minmax(0, 1fr); align-items: center;
-	min-height: var(--target-min); margin: var(--space-section) 0 var(--space-tight); color: var(--ink-muted);
+	min-height: var(--target-min); margin: 0 0 var(--space-inline); color: var(--ink-muted); /* the one gap to what follows, on every screen */
 }
 .hint-line[data-mode='state'] { color: var(--ink); } /* the state's figure, without a fill */
 .hint-line > [data-hint] { grid-area: 1 / 1; }

@@ -4,7 +4,7 @@ Most logging happens on **Today**. Anything you log can be changed or undone lat
 
 ## Today
 
-Today lists your habits in sections: **Due today**, **Tracking** ([trackers](habits.md#trackers), each with its last value and **Log**), **Breaking and limiting**, **Prepare for tomorrow**, **Paused** and **Not due today**. Above them can sit widgets: progress today, this week day by day (tap a day to open it), streaks at risk, and quit counters with money saved. What shows, and in what order, is up to you: see [Views and changing pages in place](views-and-edit-mode.md).
+Today lists your habits in sections: **Due today**, **Tracking** ([trackers](habits.md#trackers), each with its last value and **Log**), **Breaking and limiting**, **Prepare for tomorrow**, **Paused** and **Not due today**. What shows, in what order and how rows look is up to you: see [Views and changing pages in place](views-and-edit-mode.md).
 
 On a new account Today asks one thing: **What do you want to track?** Write it as you would say it, in English or German: "read 10 pages every evening", "gym 3x a week", "stop smoking", "3 ducks every day". It reads back as a sentence: *Read · 10 pages · every day · in the evening*. Press a word to change it, then **Start tracking**; Undo takes all of it back. What it doesn't understand stays in the name. The box stays on Today until you have three habits.
 

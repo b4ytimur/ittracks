@@ -132,7 +132,8 @@
 			return showToast(r.error ?? "Couldn't change it. Are you online?");
 		}
 		if (to) showToast(`Archived ${t.name}. Its logs are kept.`, undoWith('/library?/unarchive', { id: t.id }));
-		else showToast(`${t.name} is back.`, undoWith('/library?/archive', { id: t.id }));
+		// Undo puts a deleted one back to deleted, not just archived.
+		else showToast(`${t.name} is back.`, deleteAfter ? undoWith(`/library/${t.id}?/delete`, {}) : undoWith('/library?/archive', { id: t.id }));
 	}
 	const metaOf = (t: Task) =>
 		t.deleteAfter
@@ -237,6 +238,8 @@
 					{:else if t.archived}<span class="tags"><StatusTag status="archived" /></span>
 					{:else if !t.usedIn.length && !t.timesLogged}<span class="tags"><StatusTag status="unused" /></span>{/if}
 					{#if o?.reason || metaOf(t)}<p class="meta-line label">{o?.reason ?? metaOf(t)}</p>{/if}
+				{/snippet}
+				{#snippet lines(t)}
 					{#if t.tags.length}
 						<span class="row-line tags">{#each t.tags as tg (tg.name)}<span class="tag">{tg.name}: {tagGroups().levelName(tg.name, tg.level)}</span>{/each}</span>
 					{/if}
