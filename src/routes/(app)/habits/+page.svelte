@@ -184,16 +184,18 @@
 
 	async function archive(h: Habit) {
 		const to = !h.archived;
+		// The row shows its own way back until editing ends; struck first, so it never leaves the list mid-request
+		// (a row that leaves moves focus to its neighbour).
+		if (to) struck.add(h.id);
 		// Put back, for a deleted one: brought back, it isn't about to go any more.
 		habits = habits.map((x) => (x.id === h.id ? { ...x, archived: to, deleteAfter: null } : x));
 		const r = await runAction(to ? '/habits?/archive' : '/habits?/unarchive', { id: h.id });
 		if (!r.ok) {
+			if (to) struck.delete(h.id);
 			habits = habits.map((x) => (x.id === h.id ? { ...x, archived: !to, deleteAfter: h.deleteAfter } : x));
 			return showToast(r.error ?? "Couldn't change it. Are you online?");
 		}
-		// The row shows its own way back until editing ends.
-		if (to) struck.add(h.id);
-		else if (!struck.delete(h.id)) showToast(`${h.name} is back.`, undoWith('/habits?/archive', { id: h.id }));
+		if (!to && !struck.delete(h.id)) showToast(`${h.name} is back.`, undoWith('/habits?/archive', { id: h.id }));
 	}
 	/** Editing ended: the struck rows go, and the band can bring them back. */
 	function leave() {

@@ -178,7 +178,10 @@
 	const menuItems = () => [...(menuEl?.querySelectorAll<HTMLElement>('[role=menuitem]') ?? [])];
 
 	async function openMenu(k: string, grip: HTMLElement) {
-		if (!choicesOf(k).length) return;
+		if (!choicesOf(k).length) {
+			announce = `${nameOf(items[keys.indexOf(k)])} has nowhere to move here.`;
+			return;
+		}
 		menuFor = k;
 		menuGrip = grip;
 		menuRoom = 0;
@@ -535,8 +538,8 @@
 					class="handle"
 					aria-label="Move {nameOf(item)}"
 					aria-describedby="{uid}-hint"
-					aria-haspopup="menu"
-					aria-expanded={menuFor === k}
+					aria-haspopup={choicesOf(k).length ? 'menu' : undefined}
+					aria-expanded={choicesOf(k).length ? menuFor === k : undefined}
 					onpointerdown={(e) => down(e, k)}
 					onpointermove={moved}
 					onpointerup={up}

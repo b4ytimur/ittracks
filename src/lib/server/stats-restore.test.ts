@@ -63,3 +63,12 @@ it('keeps a Today number picked since the reset, and restores without one', () =
 it('refuses a habit that is not there', () => {
 	expect(() => changeStats(me, { op: 'habit.restore', habit: 'nope', cards: [] })).toThrow(/No such habit/);
 });
+
+it('refuses to undo the reset once the tab has its own cards again, and changes nothing', () => {
+	const was = customize();
+	changeStats(me, { op: 'habit.reset', habit: run });
+	changeStats(me, { op: 'card.save', where: { habit: run }, card: mine('Made since') });
+	const since = getStats(me).habitCards[run];
+	expect(() => changeStats(me, { op: 'habit.restore', habit: run, ...was })).toThrow(/changed since/);
+	expect(getStats(me).habitCards[run]).toEqual(since);
+});

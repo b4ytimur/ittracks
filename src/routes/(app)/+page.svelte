@@ -74,8 +74,9 @@
 				(async () => {
 					if (!(await undo())) return void showError('Not undone. Are you online?');
 					if (entry) dismiss(entry);
-					just.delete(habitId);
+					// Due again before it loses its hold, so the row never leaves the list (focus stays its own).
 					await invalidateAll();
+					just.delete(habitId);
 					void keepFocus(nameOf(habitId));
 				})
 		});

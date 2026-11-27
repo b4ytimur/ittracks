@@ -91,7 +91,8 @@
 				return cause?.undo();
 			},
 			undefined,
-			{ label: 'Keep as new view', run: () => keep(id, before, after, called) }
+			// The order the drag made keeps its own Undo line, as it had before the two shared one.
+			{ label: 'Keep as new view', run: () => { if (cause) showToast(cause.said, cause.undo); return keep(id, before, after, called); } }
 		);
 	}
 

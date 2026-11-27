@@ -187,6 +187,8 @@ export function changeStats(accountId: string, raw: unknown, tz?: string): Stats
 		}
 		case 'habit.restore':
 			if (!P!.habits.has(b.habit)) throw notFound('No such habit');
+			// Cards made since the reset are the newer change: Undo never overwrites them.
+			if (s.habitCards[b.habit]) throw new ActionError('conflict', 'Its cards changed since. Nothing was undone.');
 			s = { ...s, habitCards: { ...s.habitCards, [b.habit]: b.cards } };
 			if (b.headline && !s.headlines[b.habit]) s = { ...s, headlines: { ...s.headlines, [b.habit]: b.headline } };
 			break;
