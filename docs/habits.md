@@ -18,7 +18,7 @@ Go to **Habits → New habit**. You choose how to start:
 - **Start blank in the full editor**: every option on one page.
 - **Start a daily journal**: see [Notes and journal](notes-and-journal.md#journal).
 
-To skip this choice and always open the full editor, untick **Ask how to start** in **Settings → New habits**. Which lines a new habit starts with is chosen at the end of its page under **On every new habit**, and on any habit's page in **Edit**: press the ones you want there from the start. It is kept per kind (habits, groups, trackers, habits you break).
+To skip this choice and always open the full editor, untick **Ask how to start** in **Settings → New habits**. Which lines a new habit starts with is chosen at the end of its page, and of any habit's page, under the fold **On every new habit**: press the ones you want there from the start. It is kept per kind (habits, groups, trackers, habits you break).
 
 ## A habit's page
 
@@ -32,7 +32,7 @@ A habit's page is one page of lines. Each line says what it means ("Weekly on Mo
 
 ## What you do: Variants, Slots and targets
 
-**Edit** on a habit's page moves its sections: drag ⠿ beside a heading. The order is the same on every habit of that kind (build habits, groups, habits you break), with Undo and **Reset layout**.
+When a habit's page shows more than one section, each heading has a ⠿: drag it, use the arrow keys on it, or tap it for **Move up** and **Move down**. The order is the same on every habit of that kind (build habits, groups, trackers, habits you break), with Undo. While it isn't the order they came in, the page's ⋯ has **Reset section order**, also with Undo.
 
 A build habit holds one or more **Variants**. Most habits have one. Add more with **Add another Variant (for A/B plans)** when you alternate plans, like Push day A and Pull day B. Each Variant can be renamed, moved, duplicated or removed. One you logged something on is archived instead: past days keep it, and **Bring back** stands under the list.
 

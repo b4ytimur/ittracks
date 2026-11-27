@@ -7,11 +7,9 @@
 	import SaidLine from '$lib/detail/SaidLine.svelte';
 	import DeviceReminders from '$lib/settings/DeviceReminders.svelte';
 	import { noReminder, reminderWords } from '$lib/reminder';
-	import { everySection, KINDS, LINES_FOR, movedSections, SECTIONS, type Kind, type Section } from '$lib/detail/sections';
+	import { customOrder, everySection, KINDS, LINES_FOR, movedSections, SECTIONS, type Kind, type Section } from '$lib/detail/sections';
 	import { saveSetting } from '$lib/settings/save';
-	import type { Mode } from '$lib/ui/list';
 	import * as W from '$lib/detail/words';
-	import EditChrome from '$lib/ui/EditChrome.svelte';
 	import TitleLine from '$lib/ui/TitleLine.svelte';
 	import GroupHeading from '$lib/ui/GroupHeading.svelte';
 	import InlineText from '$lib/ui/InlineText.svelte';
@@ -762,10 +760,12 @@
 		inside: { on: !!h.parentId || !!base.parentId, can: scored && data.groups.length > 0, clear: () => (h.parentId = null), word: 'Inside a group or routine' }
 	});
 	const shows = (id: string) => optional[id].on || (added[id] && (optional[id].can || optional[id].on)) || (data.isNew && !!data.newLines[pageKind]?.includes(id) && optional[id].can);
-	// The sections under the first card, in the order this kind of habit has them.
-	let arranging = $state<Mode>('use');
+	// The sections under the first card, in the order this kind of habit has them. That order is yours, so their headings
+	// carry the grip whenever more than one shows; Reset section order is in the title line's ⋯ while it isn't as it came.
 	const pageKind = $derived<Kind>(!build ? 'break' : isGroupKind ? 'group' : tracker ? 'track' : 'build');
-	const order = $derived(everySection(data.detail[pageKind]));
+	/** The order a move just made, shown at once while it saves, so the next arrow key moves on from it; it goes back if not saved. */
+	let moving = $state.raw<Section[] | null>(null);
+	const order = $derived(moving ?? everySection(data.detail[pageKind]));
 	const sections = $derived(
 		order.filter(
 			(x) =>
@@ -787,7 +787,16 @@
 		const why = await saveSetting({ detail: kinds }, () => ({ detail: data.detail }), said);
 		if (why) showError(why);
 	}
-	const moveSection = (x: Section, shown: Section[]) => void arrange(movedSections(order, shown), `Moved ${sectionTitle(x)} to ${shown.indexOf(x) + 1} of ${shown.length}, ${everyOne}.`);
+	async function moveSection(x: Section, shown: Section[]) {
+		const mine = (moving = movedSections(order, shown));
+		await arrange(mine, `Moved ${sectionTitle(x)} to ${shown.indexOf(x) + 1} of ${shown.length}, ${everyOne}.`);
+		if (moving === mine) moving = null; // a later move still saving keeps its own
+	}
+	async function resetSections() {
+		await arrange(undefined, `Reset the order of sections, ${everyOne}.`);
+		// A new habit's ⋯ held only this and goes with it: the focus goes to the first section's grip, never the page.
+		if (document.activeElement === document.body) document.querySelector<HTMLElement>('.elist.sections .handle')?.focus();
+	}
 	// Which lines every new one of this kind starts with.
 	const FEATURE: Partial<Record<string, Parameters<typeof off>[0]>> = { levels: 'levels', raise: 'progression', cost: 'cost', identity: 'identities', treat: 'rewards', reward: 'rewards', prep: 'prep', reframe: 'reframe', instead: 'ifThen' };
 	const startLines = $derived(LINES_FOR[pageKind].filter((id) => !FEATURE[id] || !off(FEATURE[id]!)));
@@ -821,12 +830,14 @@
 			opened[id] = false;
 		}
 	}
+	const resetOrder = $derived<Way[]>(customOrder(data.detail[pageKind]) ? [{ label: 'Reset section order', onselect: () => void resetSections() }] : []);
 	const menu = $derived<(Way | '-')[]>(
 		data.isNew
-			? []
+			? resetOrder
 			: [
 					{ label: 'Duplicate', href: `/habits/new?from=${data.id}` },
 					...(s0?.kind !== 'group' || data.inside.some((x) => !x.archived) ? [{ label: 'Share as a template', href: `/habits/${data.id}/share` }] : []),
+					...resetOrder,
 					'-' as const,
 					data.archived ? { label: 'Unarchive', action: '?/unarchive' } : { label: 'Archive', action: '?/archive' },
 					{ label: 'Delete…', onselect: () => deleteHere('habit', data.id, h.name, '/habits') }
@@ -1719,7 +1730,7 @@
 		{#if shows('instead')}{@render line('instead', insteadPart)}{/if}
 	</div>
 
-	<EditableList items={sections} key={(x) => x} label={sectionTitle} layout="bare" class="sections" ariaLabel="Sections" onmove={arranging === 'edit' ? (m, order) => (moveSection(m.key as Section, order as Section[]), true) : undefined}>
+	<EditableList items={sections} key={(x) => x} label={sectionTitle} layout="bare" class="sections" ariaLabel="Sections, in this order {everyOne}" onmove={sections.length > 1 ? (m, order) => (void moveSection(m.key as Section, order as Section[]), true) : undefined}>
 		{#snippet row(x, ctx)}
 			<GroupHeading title={sectionTitle(x)} grip={ctx.grip} />
 			<div>{@render { what: whatSection, counts: countsSection, slip: slipSection, keeps: keepsSection, about: aboutSection }[x]()}</div>
@@ -1733,17 +1744,10 @@
 		</div>
 	{/if}
 
-	{#if arranging === 'edit'}
-		<div class="field new-lines" role="group" aria-labelledby="new-lines-l">
-			<span class="label" id="new-lines-l">On every new {KINDS[pageKind]}</span>
-			{@render startToggles()}
-		</div>
-	{:else if data.isNew && mode === 'full'}
-		<details class="new-lines">
-			<summary class="meta">On every new {KINDS[pageKind]}</summary>
-			{@render startToggles()}
-		</details>
-	{/if}
+	<details class="disclosure new-lines">
+		<summary class="meta"><span class="chev" aria-hidden="true">›</span>On every new {KINDS[pageKind]}</summary>
+		<div>{@render startToggles()}</div>
+	</details>
 
 	{#each uniq(ruleCheck.errors.map((i) => i.reason)) as reason (reason)}<p class="error">{reason}</p>{/each}
 	{#each uniq(ruleCheck.warnings.map((i) => i.reason)) as reason (reason)}<p class="meta">Heads up: {reason}</p>{/each}
@@ -1780,14 +1784,10 @@
 	</ul>
 	<p class="muted meta">You can skip this choice in <a href="/settings#newhabits">Settings</a>.</p>
 {:else}
-<EditChrome
+<TitleLine
 	title={data.isNew ? (data.copiedFrom ? `Copy of ${data.copiedFrom}` : 'New habit') : h.name || 'Habit'}
 	back={{ href: '/habits', label: 'Habits' }}
-	bind:mode={arranging}
-	modes={data.isNew ? ['use'] : ['use', 'edit']}
-	onreset={data.isNew ? undefined : () => void arrange(undefined, `Reset the order of sections, ${everyOne}.`)}
-	atDefault={!data.detail[pageKind]}
-	hints={data.isNew ? {} : { edit: `Drag ⠿ to move a section, ${everyOne}.`,  use: `${now.days && build ? now.days : now.limit} ${heldIds.length ? 'A change isn’t saved yet.' : ''}`.trim() }}
+	hint={data.isNew ? undefined : `${now.days && build ? now.days : now.limit} ${heldIds.length ? 'A change isn’t saved yet.' : ''}`.trim()}
 	more={menu}
 />
 {#if !data.isNew}<RecordTabs habit={data.id} at="details" />{/if}
