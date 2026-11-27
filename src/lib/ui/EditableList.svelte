@@ -24,7 +24,7 @@
 	import { flip } from 'svelte/animate';
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { menuFit, menuKeys, menuNudge } from './MenuButton.svelte';
-	import { applyMove, dropDepth, dropPosition, gridDrop, moveChoices, nearest, pressMoved, rangeKeys, withDescendants, type Move, type MoveChoice, type Position, type RowContext } from './list';
+	import { applyMove, dropDepth, dropPosition, gridDrop, moveChoices, nearest, pressMoved, rangeKeys, refocusAt, withDescendants, type Move, type MoveChoice, type Position, type RowContext } from './list';
 
 	let {
 		items,
@@ -410,18 +410,20 @@
 	// ----- Focus when a row leaves -----
 
 	// A row removed, archived away or moved into another takes its focused control with it, and the focus
-	// would fall to the page. Before the list redraws, note where it was; after, give it to the control in
-	// the same place in the row now at that index (or the last row, or the add slot).
+	// would fall to the page. Before the list redraws, note where it was; after, give it to the control of the
+	// same kind in the row now at that index (refocusAt), or the last row, or the add slot.
 	const FOCUSABLE = 'button:not([tabindex="-1"]), a[href], input:not([type="hidden"]), select, textarea, [tabindex="0"]';
 	/** A row's own controls, in order: not those of rows nested in it, nor of an open menu. */
 	const controls = (r: Element) => [...r.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((c) => c.closest('li[data-row]') === r && !c.closest('.menu'));
-	let leaving: { key: string; index: number; at: number } | null = null;
+	/** A control's kind, to find its like in the next row: a Delete for a Delete, a grip for a grip. */
+	const kindOf = (c: Element) => `${c.tagName}.${c.className}`;
+	let leaving: { key: string; index: number; at: number; kinds: string[] } | null = null;
 	$effect.pre(() => {
 		void keys;
 		const el = document.activeElement;
 		const rs = rows();
 		const r = el ? rs.find((x) => x.contains(el)) : undefined;
-		leaving = r ? { key: r.dataset.key!, index: rs.indexOf(r), at: controls(r).indexOf(el as HTMLElement) } : null;
+		leaving = r ? { key: r.dataset.key!, index: rs.indexOf(r), at: controls(r).indexOf(el as HTMLElement), kinds: controls(r).map(kindOf) } : null;
 	});
 	$effect(() => {
 		void keys;
@@ -433,8 +435,9 @@
 		const rs = rows();
 		const next = rs[nearest(was.index, rs.length)];
 		const cs = next ? controls(next) : [];
-		(cs[nearest(was.at, cs.length)] ?? list?.querySelector<HTMLElement>(':scope > .ghost > .ghost-slot'))?.focus();
+		(cs[refocusAt(was.kinds, was.at, cs.map(kindOf))] ?? ghostSlot())?.focus();
 	});
+	const ghostSlot = () => list?.querySelector<HTMLElement>(':scope > .ghost > .ghost-slot');
 
 	// ----- Selecting -----
 
@@ -631,6 +634,7 @@
 							} else if (e.key === 'Escape') {
 								e.preventDefault();
 								naming = null;
+								tick().then(() => ghostSlot()?.focus()); // back on the slot, never on the page
 							}
 						}}
 						onblur={() => addNamed(false)}

@@ -7,6 +7,8 @@ export type Kind = keyof typeof KINDS;
 const ALL = Object.keys(SECTIONS) as Section[];
 /** Every section, the saved ones first in their order, so one that isn't shown now keeps its place. */
 export const everySection = (saved: readonly string[] = []): Section[] => [...ALL.filter((s) => saved.includes(s)).sort((a, b) => saved.indexOf(a) - saved.indexOf(b)), ...ALL.filter((s) => !saved.includes(s))];
+/** The order was moved away from the one every kind starts with, so there is something to reset. */
+export const customOrder = (saved?: readonly string[]): boolean => everySection(saved).join() !== ALL.join();
 /** The same list with the shown ones in this order. */
 export function movedSections(full: Section[], shown: Section[]): Section[] {
 	let i = 0;
