@@ -49,6 +49,7 @@
 		href,
 		holder,
 		actions,
+		lines,
 		density = 'regular',
 		title,
 		layout,
@@ -100,6 +101,9 @@
 		holder?: (item: T) => boolean;
 		/** With `rowCard`: what stands at the end of the row when it has no remove verb. */
 		actions?: Snippet<[T, RowContext]>;
+		/** With `rowCard`: what hangs under the name and meta (a line kind, a notice, a note), on its own line after the verb,
+		 * so the grip and the verb centre on the name and meta whatever hangs below. */
+		lines?: Snippet<[T, RowContext]>;
 		density?: 'regular' | 'compact';
 		/** With layout "block": the title in the bar above the row, beside the grip and remove verb. */
 		title?: Snippet<[T, RowContext]>;
@@ -597,6 +601,7 @@
 					{:else if actions && !selecting}
 						<div class="verb">{@render actions(item, ctx)}</div>
 					{/if}
+					{#if lines}<div class="lines">{@render lines(item, ctx)}</div>{/if}
 				</div>
 				{@render menu()}
 			{:else}

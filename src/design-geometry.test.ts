@@ -86,3 +86,15 @@ it('no .hit on a button or a link', () => {
 	);
 	expect(found).toEqual([]);
 });
+
+// What hangs under a row (a row line, a notice) goes in EditableList's `lines`, its own flex line after the verb. Inside the
+// row's content it makes the content taller than the name and meta, and the grip and the verb centre on all of it (ListRow).
+it('row lines hang in lines, never in a row snippet or a row card’s content', () => {
+	const hangs = /class="(?:row-line|notice)\b/;
+	const found = files.flatMap(([f, src]) =>
+		[...src.matchAll(/\{#snippet \w*[rR]ow\([^)]*\)\}([\s\S]*?)\{\/snippet\}/g), ...src.matchAll(/<div class="content">([\s\S]*?)<\/div>/g)]
+			.filter((m) => hangs.test(m[1]))
+			.map((m) => `${f}:${lineOf(src, m.index)}`)
+	);
+	expect(found).toEqual([]);
+});

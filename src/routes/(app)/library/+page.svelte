@@ -238,6 +238,8 @@
 					{:else if t.archived}<span class="tags"><StatusTag status="archived" /></span>
 					{:else if !t.usedIn.length && !t.timesLogged}<span class="tags"><StatusTag status="unused" /></span>{/if}
 					{#if o?.reason || metaOf(t)}<p class="meta-line label">{o?.reason ?? metaOf(t)}</p>{/if}
+				{/snippet}
+				{#snippet lines(t)}
 					{#if t.tags.length}
 						<span class="row-line tags">{#each t.tags as tg (tg.name)}<span class="tag">{tg.name}: {tagGroups().levelName(tg.name, tg.level)}</span>{/each}</span>
 					{/if}

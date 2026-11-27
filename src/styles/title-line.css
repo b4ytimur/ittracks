@@ -90,7 +90,7 @@ html.pinned {
 /* ---------- Hint line: both texts in one cell, so the line keeps one height in both states (F.6) ---------- */
 .hint-line {
 	display: grid; grid-template-columns: minmax(0, 1fr); align-items: center;
-	min-height: var(--target-min); margin: var(--space-section) 0 var(--space-tight); color: var(--ink-muted);
+	min-height: var(--target-min); margin: 0 0 var(--space-inline); color: var(--ink-muted); /* the one gap to what follows, on every screen */
 }
 .hint-line[data-mode='state'] { color: var(--ink); } /* the state's figure, without a fill */
 .hint-line > [data-hint] { grid-area: 1 / 1; }

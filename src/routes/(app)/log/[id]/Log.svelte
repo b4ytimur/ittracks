@@ -1159,8 +1159,9 @@
 	<div class="notice"><span class="notice-text">This day is further back than Settings allow logging, so it can only be looked at.</span><span class="notice-acts"><a class="quiet" href="/settings#past">Change it in Settings</a></span></div>
 {/if}
 
-<div class="l-cluster lg-top" class:lg-editing={editing}>
-	{#if data.levels && !quickMode}
+<!-- Only when it holds the level: empty, its 16px under the hint line's 8 would be a gap no other screen has. -->
+{#if data.levels && !quickMode}
+	<div class="l-cluster lg-top" class:lg-editing={editing}>
 		<div class="lg-level" role="group" aria-label="Level">
 			<div class="chips">
 				{#each ['minimum', 'target', 'stretch'] as const as l (l)}
@@ -1169,8 +1170,8 @@
 			</div>
 			{#if data.levels[level]}<p class="meta">{data.levels[level]}</p>{/if}
 		</div>
-	{/if}
-</div>
+	</div>
+{/if}
 
 {#snippet onceFields(it: Item, i: number, metrics: Metric[])}
 	{#each metrics as m (m.id)}

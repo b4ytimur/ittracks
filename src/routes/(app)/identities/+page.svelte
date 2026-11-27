@@ -74,6 +74,8 @@
 	{#snippet row(i)}
 		<span class="name"><InlineText value={i.statement} editing label="Change identity" onsave={(v) => rename(i, v)} /></span>
 		<p class="meta-line meta">{evidence(i)}</p>
+	{/snippet}
+	{#snippet lines(i)}
 		{#if i.habits.length}<p class="row-line meta">{#each i.habits as h, n (h.id)}{n ? ' · ' : ''}<a href="/habits/{h.id}">{h.name}</a>{/each}</p>{/if}
 	{/snippet}
 </EditableList>

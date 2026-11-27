@@ -46,7 +46,6 @@ body {
 	font: var(--font-size-body)/1.5rem var(--font-sans);
 }
 p:where(.meta-line, .row-line) { margin: 0; }
-p.hint-line { margin-block: 0; }
 h1 { font-size: var(--font-size-page-title); line-height: 2rem; margin: 0; overflow-wrap: anywhere; }
 h2 { font-size: var(--font-size-section-title); line-height: 1.5rem; margin: var(--space-section) 0 var(--space-inline); }
 a { color: var(--accent-ink); }
