@@ -24,6 +24,9 @@ describe('next: what a press or a key makes of the state', () => {
 		for (const within of ['textarea', 'select', '[popover]', 'dialog']) expect(next(true, key('Escape', { within }))).toBe(true);
 		expect(next(true, key('Escape', { prevented: true }))).toBe(true);
 	});
+	it('Esc while a row is held only puts the row back (EditableList marks <html> .el-dragging)', () => {
+		expect(next(true, key('Escape', { within: '.el-dragging' }))).toBe(true);
+	});
 	it('other keys change nothing, and Esc never turns it on', () => {
 		expect(next(true, key('Enter'))).toBe(true);
 		expect(next(false, key('Escape'))).toBe(false);
@@ -73,6 +76,34 @@ describe('TitleLine', () => {
 	it('addHidden marks the line for the add to step back', () => {
 		expect(html({ addHidden: true })).toMatch(/<header [^>]*data-add-hidden=""/);
 		expect(html({})).not.toContain('data-add-hidden');
+	});
+});
+
+// The Log's Change the plan: the way in ends the hint line, and while it is on Done is the title line's one primary.
+describe('TitleLine, a state entered from the hint line', () => {
+	const plan = (pressed: boolean) => ({ label: 'Change the plan', pressed, onchange: () => {}, hint: 'Changing Push day A, from now on. Esc also leaves.', way: 'hint' as const });
+	const html = (pressed: boolean) =>
+		render(TitleLine, { props: { title: 'Gym', back: { href: '/', label: 'Today' }, more: [{ label: 'All open', checked: false }], hint: 'Push day A · Saved', state: plan(pressed) } }).body.replace(/<!--.*?-->/g, '');
+
+	it('off: the way in ends the hint line, quiet; no pressed button, no Done, the ⋯ live', () => {
+		const b = html(false);
+		expect(b).not.toContain('aria-pressed');
+		expect(b).not.toContain('>Done<');
+		expect(b).toMatch(/<div class="title-actions">[^]*More on Gym/);
+		expect(b).toMatch(/<span data-hint="use">Push day A · Saved<span class="hint-tools"><button type="button" class="quiet">Change the plan<\/button><\/span><\/span>/);
+	});
+	it('on: the line pins with Done alone in the actions, the one primary, and the hint says what changes', () => {
+		const b = html(true);
+		expect(b).toMatch(/<header class="titlebar[^"]*" data-mode="state"/);
+		const id = b.match(/<span data-hint="state" id="([^"]+)">/)?.[1];
+		expect(id).toBeTruthy();
+		// Done says what changes: it is described by the state's hint.
+		expect(b).toContain(`<div class="title-actions" data-done=""><button type="button" class="primary" aria-describedby="${id}">Done</button></div>`);
+		expect(b).toMatch(/Done<\/button><\/div>\s*<\/header>/);
+		expect(b).not.toContain('More on Gym');
+		expect(b.match(/primary/g)).toHaveLength(1);
+		expect(b).toMatch(/<span data-hint="use" inert[^>]*>Push day A · Saved<span class="hint-tools">/);
+		expect(b).toMatch(/<span data-hint="state" id="[^"]+">Changing Push day A, from now on\. Esc also leaves\.<\/span>/);
 	});
 });
 

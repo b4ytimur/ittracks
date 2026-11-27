@@ -313,12 +313,13 @@ describe('the Tasks used in a Slot before, for its ⋯ and the swap picker', () 
 			{ id: step, accountId: me, name: 'Arm circles', parentTaskId: upper, rowOne: 'round', rowMany: 'rounds' },
 			{ id: old, accountId: me, name: 'Old thing' }
 		]).run();
-		// Round 1 of Upper circuit, then swapped for Bench press: its parts sit under the Slot. A value from before paths sits nowhere.
+		// Round 1 of Upper circuit, then swapped for Bench press: its parts sit under the Slot. A value at a Slot the plan no
+		// longer has sits nowhere (a value with no path would read as a Task added to this log, depending on the day).
 		db.insert(occurrence).values({ id, habitId: gym().id, date: addDays(today, -95), status: 'due', variantId: fixed.variantId, picks: { [fixed.id]: bench } }).run();
 		db.insert(entry).values([
 			{ id: randomUUID(), occurrenceId: id, taskId: step, path: `${fixed.id}#1/p1`, values: { done: true }, sortOrder: 0 },
 			{ id: randomUUID(), occurrenceId: id, taskId: incline, path: `${fixed.id}#1/p2`, values: { [field(incline, 'Weight')]: 40 }, sortOrder: 1 },
-			{ id: randomUUID(), occurrenceId: id, taskId: old, path: null, values: { _summary: true, note: 'x' }, sortOrder: 2 }
+			{ id: randomUUID(), occurrenceId: id, taskId: old, path: randomUUID(), values: { note: 'x' }, sortOrder: 2 }
 		]).run();
 		const data = (load as unknown as (e: unknown) => { orphanNames: string[]; orphanTasks: Record<string, { name: string; rowOne: string; rowMany: string }> })({
 			locals: { account: { id: me } },

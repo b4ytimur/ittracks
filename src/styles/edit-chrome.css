@@ -17,9 +17,15 @@
      button.toggle              TitleLine's state: <button type="button" class="toggle" aria-pressed="true|false"><span
                                 data-reserve="Select">Select</span></button>, outside div.title-actions. Pressed, the line's
                                 data-mode is state; Esc outside a field or a second press leaves
+     div.title-actions[data-done]  TitleLine's state with way 'hint' (the Log's Change the plan), while it is on: <div
+                                class="title-actions" data-done><button type="button" class="primary" aria-describedby="(the
+                                state span's id)">Done</button></div> in the actions' place, the view's one primary; Done,
+                                Esc outside a field leave. No toggle
      <div class="viewbar">…</div>
      <p class="hint-line meta" data-mode="…">
        <span data-hint="use">…</span>                               words, or TitleLine's hint snippet (a day's date and count)
+         <span class="hint-tools"><button class="quiet">Change the plan</button></span>   TitleLine's way 'hint': the
+                                                            state's way in, last in the use span, trailing as the tools
        <span data-hint="edit"><span id="…" [data-reserve="…"]>text</span>   EditChrome only. The text alone: InlineEditor
                                                             swaps it and describes by it; Today reserves its longest edit text
          <span class="hint-tools">                                  trailing; only on pages with a default or a chooser
@@ -82,6 +88,8 @@
    state. visibility keeps their space, so the switch never jumps and the line never rewraps. */
 .titlebar:is([data-mode='edit'], [data-mode='select'], [data-mode='state']) > .title-actions,
 .titlebar:is([data-mode='edit'], [data-mode='select'], [data-mode='state']) + .title-actions { visibility: hidden; opacity: 0; }
+/* A state entered from the hint line puts Done, its one primary, in the actions' place: that group stays in sight. */
+.titlebar[data-mode='state'] > .title-actions[data-done] { visibility: visible; opacity: 1; }
 /* addHidden (another add is open, as Stats' card builder, or the list shows EmptyState's first, whose slot is then the
    only add): the add alone hides, space kept; the ⋯ and the links stay. */
 .titlebar[data-add-hidden] > .title-actions > [data-add],
@@ -111,8 +119,8 @@ html.pinned {
    chooser. The copy is hidden, so it stays out of the text and out of a field's description. */
 .hint-line [data-hint] > [data-reserve] { display: inline-block; max-inline-size: 100%; vertical-align: top; } /* top: a baseline box adds 1px to the line */
 .hint-line [data-hint] > [data-reserve]::after { font-weight: inherit; } /* base's copy is 600; hint text never goes bold */
-/* The tools (Reset layout, then Today's layout chooser) float to the trailing edge of the edit text as one unit: on its
-   line when they fit, else on the next line, still trailing. Inside the edit span, so the reserved height includes them.
+/* The tools (Reset layout, then Today's layout chooser; TitleLine's way in, after the use text) float to the trailing
+   edge of the edit text as one unit: on its line when they fit, else on the next line, still trailing. Inside the edit span, so the reserved height includes them.
    -2px block margins fit their 24px boxes to the 20px line (0 once text zoom makes the line taller). Squeezed (200%
    text), the chooser wraps under Reset, trailing, rather than breaking its words. */
 .hint-line .hint-tools {
@@ -152,6 +160,9 @@ html.pinned {
 		transition: opacity var(--duration-quick) linear, visibility var(--duration-quick) linear;
 	}
 }
+/* The use text comes back visible at once and only fades in, so TitleLine's way in can take focus back as Done goes;
+   leaving, visibility still waits out the fade. */
+.hint-line[data-mode='use'] > [data-hint='use'] { transition-property: opacity; }
 /* Forced colours: the back link is LinkText by itself and takes the underline, as Button's edgeless words do. The switch
    is Segmented's, the buttons and Reset layout Button's, the chooser TodayLayouts'; the title line's transparent bottom
    border becomes a visible line by itself. */

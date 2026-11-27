@@ -10,8 +10,7 @@
 	import { inOrder, slotIn, toCount, withoutSlot, withSlot, withTask, type Plan } from '$lib/log/plan';
 	import { circuitsOf, roundWords, type Circuit } from '$lib/log/circuit';
 	import { cap, cursor, follow, rowsText, rowText, valueText, type Cursor, type Field, type RowState } from '$lib/log/run';
-	import EditChrome from '$lib/ui/EditChrome.svelte';
-	import type { Mode } from '$lib/ui/list';
+	import TitleLine from '$lib/ui/TitleLine.svelte';
 	import MenuButton, { type Way } from '$lib/ui/MenuButton.svelte';
 	import NumberField from '$lib/ui/NumberField.svelte';
 	import { endRest, startRest } from '$lib/rest.svelte';
@@ -718,7 +717,8 @@
 	// How the places stand: one open and the others a line each, or all open. Kept per habit, in the account.
 	let picked = $state<'current' | 'all' | null>(null);
 	const layout = $derived(picked ?? data.logLayouts[data.habitId] ?? 'current');
-	async function setLayout(v: string) {
+	async function setLayout(v: 'current' | 'all') {
+		if (v === layout) return;
 		picked = v === 'all' ? 'all' : 'current';
 		const { [data.habitId]: _, ...rest } = data.logLayouts;
 		const why = await saveSetting({ logLayouts: v === 'all' ? { ...rest, [data.habitId]: 'all' } : rest }, () => ({ logLayouts: data.logLayouts }), `${data.habitName} shows ${v === 'all' ? 'all of its log open' : 'one open at a time'}.`);
@@ -726,6 +726,15 @@
 		if (why) return showError(why);
 		picked = null;
 	}
+	/** In the title line's ⋯, as checked items. */
+	const layoutWays = $derived<Way[]>(
+		runPlaces.length > 1 && !quickMode
+			? [
+					{ label: 'One open at a time', checked: layout === 'current', onselect: () => void setLayout('current') },
+					{ label: 'All open', checked: layout === 'all', onselect: () => void setLayout('all') }
+				]
+			: []
+	);
 
 	/** Correcting a finished log: one Undo per visit, back to what it was. It works from any page. */
 	const was = untrack(() => ({ payload: data.occurrence.status === 'done' ? payload(true, true) : '', log: structuredClone($state.snapshot(places)), notes: data.occurrence.notes, level: data.occurrence.level, rev: data.rev }));
@@ -833,11 +842,11 @@
 		if (quickMode || layout === 'all' || !isPlace(i)) return false;
 		return row ? row.key !== placeKey(it) : stage === 'correct' || runPlaces.length > 1;
 	};
-	// ----- Edit: names, order and the plan's numbers, from now on; a row's place, for this log -----
+	// ----- Change the plan: names, order and the plan's numbers, from now on; a row's place, for this log -----
 
-	let mode = $state<Mode>('use');
+	let changing = $state(false);
 	const canEdit = $derived(stage === 'run' && !data.past && !quickMode && !!data.plan);
-	const editing = $derived(canEdit && mode === 'edit');
+	const editing = $derived(canEdit && changing);
 	const editPlaces = $derived.by((): EditPlace[] => {
 		const out: (EditPlace & { at: number[] })[] = [];
 		items.forEach((it, i) => {
@@ -947,7 +956,7 @@
 		};
 		void gone();
 	}
-	/** Keep in the plan from ⋯, or Replace… in Edit, saying why when it isn't kept (the band's Keep says that itself). */
+	/** Keep in the plan from ⋯, or Replace… while changing the plan, saying why when it isn't kept (the band's Keep says that itself). */
 	async function keepOrSay(slot: string, task: string) {
 		const r = await keepInPlan(slot, task);
 		if (typeof r === 'string') showError(r);
@@ -1063,7 +1072,7 @@
 		const variant = plan.find((v) => v.slots.some((x) => x.id === slot))?.name ?? data.variantName ?? '';
 		await editPlan(withSlot(plan, slot, { taskId: task, targets: a.data.targets, minTargets: {}, stretchTargets: {} }), keptText(nameOf(was.taskId) ?? "the plan's Task", nameOf(task) ?? 'another Task', variant, a.data.aim));
 	}
-	/** The swap picker, for a place, and what had focus before it, to go back to. `plan`: Replace… in Edit, from now on. */
+	/** The swap picker, for a place, and what had focus before it, to go back to. `plan`: Replace…, from now on. */
 	let picking = $state<{ it: Item; from: HTMLElement | null; plan?: boolean } | null>(null);
 	const nameOf = (id: string) => data.library.find((l) => l.id === id)?.name ?? data.alts[id]?.task.name;
 	const dayText = (date: string) => LIST.format(new Date(date + 'T12:00:00'));
@@ -1130,9 +1139,15 @@
 </script>
 
 <svelte:head><title>{data.habitName} · ittracks</title></svelte:head>
-<svelte:window onkeydown={(e) => e.key === 'Enter' && (e.ctrlKey || e.metaKey) && stage === 'run' && finishForm?.requestSubmit()} />
+<svelte:window onkeydown={(e) => e.key === 'Enter' && (e.ctrlKey || e.metaKey) && stage === 'run' && !editing && finishForm?.requestSubmit()} />
 
-<EditChrome title={quickMode ? `Quick log: ${data.habitName}` : data.habitName} back={{ href: data.back, label: backLabel(data.back) }} bind:mode modes={canEdit ? ['use', 'edit'] : ['use']} hints={{ use: hint, edit: 'Drag ⠿ to move. What you change, add or remove here is the plan, from now on.' }} />
+<TitleLine
+	title={quickMode ? `Quick log: ${data.habitName}` : data.habitName}
+	back={{ href: data.back, label: backLabel(data.back) }}
+	{hint}
+	more={layoutWays}
+	state={canEdit ? { label: 'Change the plan', pressed: editing, onchange: (on) => (changing = on), hint: `Changing ${data.variantName}, from now on. Esc also leaves.`, way: 'hint' } : undefined}
+/>
 {#if saveState === 'refused' && !theirs}<p class="error" role="alert">Not saved: {refusedWhy}</p>{/if}
 <p class="vh" role="status">{said}</p>
 
@@ -1140,7 +1155,7 @@
 	<div class="notice"><span class="notice-text">This day is further back than Settings allow logging, so it can only be looked at.</span><span class="notice-acts"><a class="quiet" href="/settings#past">Change it in Settings</a></span></div>
 {/if}
 
-<div class="l-cluster lg-top">
+<div class="l-cluster lg-top" class:lg-editing={editing}>
 	{#if data.levels && !quickMode}
 		<div class="lg-level" role="group" aria-label="Level">
 			<div class="chips">
@@ -1150,9 +1165,6 @@
 			</div>
 			{#if data.levels[level]}<p class="meta">{data.levels[level]}</p>{/if}
 		</div>
-	{/if}
-	{#if runPlaces.length > 1 && !quickMode}
-		<label class="lg-layout meta">Layout <select value={layout} onchange={(e) => setLayout(e.currentTarget.value)}><option value="current">One open</option><option value="all">All open</option></select></label>
 	{/if}
 </div>
 
@@ -1518,15 +1530,6 @@
 		align-items: start;
 		margin-block-end: var(--space-group);
 	}
-	.lg-layout {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-tight);
-		color: var(--ink-muted);
-	}
-	.lg-layout select {
-		width: auto;
-	}
 	.lg-end {
 		display: grid;
 		gap: var(--space-group);
@@ -1534,8 +1537,8 @@
 	.lg-form {
 		display: grid;
 	}
-	/* What logs or ends the log stays where it is, out of reach while editing. */
-	.lg-editing :is(.lg-form, .lg-wide) {
+	/* What logs or ends the log, and the level, stay where they are, out of reach while changing the plan. */
+	.lg-editing :is(.lg-form, .lg-wide, .lg-level) {
 		visibility: hidden;
 	}
 	.lg-heading {
