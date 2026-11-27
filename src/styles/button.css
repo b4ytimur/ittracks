@@ -42,7 +42,9 @@ button, .button {
    bar's "Select all 12", link meta) or sits outside a p, and isn't underlined at rest. */
 :where(p > :is(button, .button):not(.label, .meta, .note)).link { text-decoration: underline; text-underline-offset: 3px; --hover-line: 2px; } /* the line is already there, so hover and active thicken it */
 /* Quiet: the trailing verb, one look everywhere (F.20). An act, so accent words: meta size, no edge, no fill, 24px. */
+/* A quiet link (View) takes the box a button has, words centred in 24px, so it lines up with a quiet button beside it. */
 :where(button, a).quiet {
+	display: inline-flex; align-items: center; justify-content: center;
 	border: none; background: none; padding: 0 var(--space-tight); min-height: var(--target-min);
 	color: var(--accent-ink); font-size: var(--font-size-meta); line-height: 1.25rem;
 }

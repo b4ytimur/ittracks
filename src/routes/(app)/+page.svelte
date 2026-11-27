@@ -659,8 +659,14 @@
 					<li class="now-line"><span class="when num">{now}</span><span class="now">Now</span></li>
 					{#if tl.anyTime}{@render slot(tl.anyTime)}{/if}
 					{#each tl.ahead as s (s.key)}{@render slot(s)}{/each}
+					<!-- Done at the end: on the timeline's column too, under its own word. -->
+					{#if sunk.size}
+						<li class="slot">
+							<span class="when">Done</span>
+							<div class="slot-rows">{@render habitList(shownBuild.filter((b) => sunk.has(b.habitId)), 'Done today')}</div>
+						</li>
+					{/if}
 				</ol>
-				{#if sunk.size}{@render habitList(shownBuild.filter((b) => sunk.has(b.habitId)), 'Done today')}{/if}
 			{:else}
 				{#each groups as g (g.key)}
 					{@const a = view.group === 'area' ? areaOf(g.key) : undefined}
