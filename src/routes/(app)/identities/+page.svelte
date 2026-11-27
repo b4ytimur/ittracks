@@ -1,15 +1,15 @@
 <script lang="ts">
-	// Who you want to be: an editable list of sentences, each with its habits and what shows it, in words.
+	// Who you want to be: a list of sentences, each with its habits and what shows it, in words. The page exists to keep
+	// this list and a sentence opens nothing, so it is always arranged: tap a sentence to change it, its grip moves it,
+	// Delete is the row's one verb, and the slot at the end adds one. No mode.
 	import { invalidateAll } from '$app/navigation';
 	import { runAction, showError, showToast, undoWith } from '$lib/toast.svelte';
 	import EditableList from '$lib/ui/EditableList.svelte';
-	import EditChrome from '$lib/ui/EditChrome.svelte';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
 	import InlineText from '$lib/ui/InlineText.svelte';
-	import type { Mode } from '$lib/ui/list';
+	import TitleLine from '$lib/ui/TitleLine.svelte';
 
 	let { data } = $props();
-	let mode = $state<Mode>('use');
 	let order = $state.raw<string[] | null>(null);
 	const list = $derived(order ? [...data.identities].sort((a, b) => order!.indexOf(a.id) - order!.indexOf(b.id)) : data.identities);
 	type Row = (typeof data.identities)[number];
@@ -49,7 +49,7 @@
 
 <svelte:head><title>Identities · ittracks</title></svelte:head>
 
-<EditChrome title="Identities" bind:mode modes={list.length ? ['use', 'edit'] : ['use']} back={{ href: '/habits', label: 'Habits' }} hints={{ use: 'Who do you want to be? A habit stands for one when you pick it on the habit’s page.', edit: 'Press a sentence to change it.' }} />
+<TitleLine title="Identities" back={{ href: '/habits', label: 'Habits' }} hint="Who do you want to be? Press a sentence to change it." />
 
 {#if !list.length}<EmptyState text="None yet. Write one as a sentence, such as “I am someone who speaks Spanish”." />{/if}
 <EditableList
@@ -58,14 +58,14 @@
 	label={(i) => i.statement}
 	rowCard
 	ariaLabel="Identities"
-	onmove={mode === 'edit' ? (_, ids, text) => (void move(ids, text), true) : undefined}
-	onremove={mode === 'edit' ? remove : undefined}
+	onmove={(_, ids, text) => (void move(ids, text), true)}
+	onremove={remove}
 	removeLabel="Delete"
 	onadd={add}
-	addLabel="Identity"
+	addLabel="New identity"
 >
 	{#snippet row(i)}
-		<span class="name"><InlineText value={i.statement} editing={mode === 'edit'} label="Change “{i.statement}”" onsave={(v) => rename(i, v)} /></span>
+		<span class="name"><InlineText value={i.statement} editing label="Change “{i.statement}”" onsave={(v) => rename(i, v)} /></span>
 		<p class="meta-line meta">{evidence(i)}</p>
 		{#if i.habits.length}<p class="row-line meta">{#each i.habits as h, n (h.id)}{n ? ' · ' : ''}<a href="/habits/{h.id}">{h.name}</a>{/each}</p>{/if}
 	{/snippet}

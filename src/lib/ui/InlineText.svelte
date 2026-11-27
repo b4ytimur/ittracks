@@ -28,6 +28,7 @@
 
 	let draft = $state(untrack(() => (open ? value : '')));
 	let box = $state<HTMLInputElement>();
+	let text = $state<HTMLButtonElement>();
 	let width = $state<number>();
 	let started = untrack(() => open);
 
@@ -50,11 +51,13 @@
 		else if (!open) started = false;
 	});
 
-	function finish(save: boolean) {
+	/** `refocus`: Enter or Escape closed it, so the focus goes back to the text, never to the page. */
+	function finish(save: boolean, refocus = false) {
 		if (!open) return;
 		open = false;
 		const v = draft.trim();
 		if (save && v !== value && (v || !required)) onsave(v);
+		if (refocus) tick().then(() => text?.focus());
 	}
 
 	// Leaving edit mode closes a box a tap opened there, saving what was typed. A box a page opened in Use stays.
@@ -79,14 +82,14 @@
 		onkeydown={(e) => {
 			if (e.key === 'Enter') {
 				e.preventDefault();
-				finish(true);
+				finish(true, true);
 			} else if (e.key === 'Escape') {
 				e.preventDefault();
-				finish(false);
+				finish(false, true);
 			}
 		}}
 		onblur={() => finish(true)}
 	/>
 {:else if editing}
-	<button type="button" class="inline-text" onclick={begin} aria-label="{label}: {value}" data-reserve={value}><span>{value}</span></button>
+	<button type="button" class="inline-text" bind:this={text} onclick={begin} aria-label="{label}: {value}" data-reserve={value}><span>{value}</span></button>
 {:else}{value}{/if}

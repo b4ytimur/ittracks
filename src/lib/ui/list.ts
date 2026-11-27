@@ -101,6 +101,17 @@ export function nearest(i: number, n: number): number {
 	return n ? Math.max(0, Math.min(i, n - 1)) : -1;
 }
 
+/**
+ * Where the focus goes in the row taking a leaving row's place, from each row's controls by kind and the place `at` of
+ * the focused one: the control of its kind, counted the same way (a Delete for a Delete, even past a different number
+ * of links), else the one in the same place. -1 when the row has none.
+ */
+export function refocusAt(from: string[], at: number, to: string[]): number {
+	const kind = from[at];
+	const same = to.flatMap((k, i) => (k === kind ? [i] : []));
+	return same.length ? same[nearest(from.slice(0, at).filter((k) => k === kind).length, same.length)] : nearest(at, to.length);
+}
+
 /** The order a move gives in one list. A move inside another row takes the key out of this list. */
 export function applyMove(keys: string[], m: Move): string[] {
 	if (m.position === 'inside') return keys.filter((k) => k !== m.key);

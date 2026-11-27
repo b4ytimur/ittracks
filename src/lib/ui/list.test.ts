@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyMove, dropDepth, dropPosition, gridDrop, mergeOrder, moveBy, moveChoices, moveKey, nearest, pressMoved, rangeKeys, reorderFrom, selectionState, withDescendants, type Move } from './list';
+import { applyMove, dropDepth, dropPosition, gridDrop, mergeOrder, moveBy, moveChoices, moveKey, nearest, pressMoved, rangeKeys, refocusAt, reorderFrom, selectionState, withDescendants, type Move } from './list';
 
 const keys = ['a', 'b', 'c', 'd'];
 
@@ -209,5 +209,25 @@ describe('nearest', () => {
 	});
 	it('has nowhere to go when nothing is left', () => {
 		expect(nearest(0, 0)).toBe(-1);
+	});
+});
+
+describe('refocusAt', () => {
+	const grip = 'BUTTON.handle', text = 'BUTTON.inline-text', link = 'A.', del = 'BUTTON.quiet verb';
+	it('takes the same kind of control, past a different number of links', () => {
+		expect(refocusAt([grip, text, del], 2, [grip, text, link, link, del])).toBe(4);
+		expect(refocusAt([grip, text, link, link, del], 4, [grip, text, del])).toBe(2);
+	});
+	it('counts within the kind: the second link for the second link, or the last when there are fewer', () => {
+		expect(refocusAt([grip, link, link], 2, [link, grip, link, link])).toBe(2);
+		expect(refocusAt([link, link, link], 2, [grip, link])).toBe(1);
+	});
+	it('falls back to the same place when the row has none of that kind', () => {
+		expect(refocusAt([grip, text, del], 2, [grip, text, link])).toBe(2);
+		expect(refocusAt([grip, link], 1, [grip])).toBe(0);
+		expect(refocusAt([grip, del], -1, [grip, del])).toBe(0); // a control in an open menu: the row's first
+	});
+	it('has nowhere to go when the row has no controls', () => {
+		expect(refocusAt([del], 0, [])).toBe(-1);
 	});
 });
