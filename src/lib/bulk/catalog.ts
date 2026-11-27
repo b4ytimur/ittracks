@@ -207,5 +207,11 @@ export function buttonsFor(kind: TargetKind): BulkButton[] {
 	return out;
 }
 
+/** The action the bar opens on: the only one there is (a day's Skip), since there is nothing to choose. */
+export const openingButton = (kind: TargetKind): BulkButton | null => {
+	const b = buttonsFor(kind);
+	return b.length === 1 ? b[0] : null;
+};
+
 /** Units for the unit field's suggestions. */
 export const unitOptions = (names: string[]) => names.map((u) => ({ value: u, label: u }));

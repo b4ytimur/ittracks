@@ -1,4 +1,4 @@
-# Views and edit mode
+# Views and changing pages in place
 
 What each page shows, and in what order, is saved as data for your account. It survives reloads and works the same on every device you sign in on. You change it on the page itself.
 
@@ -34,9 +34,18 @@ Today, Habits, Library and History each show their view as a sentence, such as "
 - The last item under the views says what the page opens with: **the view I was on last**, **Default** or one of your views. Press it for the next one: the line above the tabs says what the page opens with now, with Undo.
 - On the Habits page, the sentence also says which lines each habit shows (schedule, time, Area, consistency, last done).
 
-## Edit mode
+## Changing a page
 
-Pages edit in place. Today, Habits and the Library have no Edit: everything changes where it stands, and each change says so in the line above the tabs, with **Undo**. The pages that still have a switch at the top (**Use** and **Edit**) turn into one you can edit with it; Esc goes back to Use. Wherever the order you see is yours, its rows carry the ⠿ handle: drag it with a mouse or pen, or hold it a moment with a finger and then drag (a swipe that starts on it still scrolls), or focus it and use the arrow keys. A tap on ⠿ (or Enter) opens the moves it can make: **Move up**, **Move down**, **Put inside** the row above and **Take out of** the row that holds it, where they apply. A layout change that can't be saved goes back, and the line above the tabs offers **Retry**.
+A page is always ready to use, and you change it where it stands. Today, Habits, the Library and History have no Edit. Each change says so in the line above the tabs, with **Undo**. Each kind of change has one place, the same on every page:
+
+- **Words and values** (a word of the sentence, a line under a row, a number) change where they stand.
+- **Order** belongs to the ⠿ grip. It shows exactly when the order you see is yours (**in my order** on Today and Habits, an Area's heading when the list is grouped by Area); in any other order there is none, and picking **in my order** brings it back. Drag it with a mouse or pen, or hold it a moment with a finger and then drag (a swipe that starts on it still scrolls), or focus it and use the arrow keys. A tap on ⠿ (or Enter) opens the moves it can make: **Move up**, **Move down**, **Put inside** the row above and **Take out of** the row that holds it, where they apply. A move that can't be saved goes back, and the line above the tabs offers **Retry**.
+- **A row's own changes** (**Rename** for a name that opens something, **Archive**, **Delete**, **Colour and icon**) are in its **⋯**. **Rename** opens the name as a box where it stands and **Colour and icon** opens the colours under it; **Archive** and **Delete** act at once.
+- **The view's own housekeeping** (**Rename view**, **Delete view**, **Reset view**, what the page opens with) is in the view-name menu.
+- **Things for the whole page** (what History's logs show, exporting the journal) are in the title line's **⋯**.
+- **Changing many at once** is only in **Select**: see [Bulk editing](bulk-editing.md).
+
+A page has at most one other state, a pressed button in the title line: **Select** on Habits and the Library, **Select days** on History. While it is on, the title line stays at the top, its other buttons step aside, and the line under the title says what a tap does now. Esc or a second press leaves. Pages that still show **Use** and **Edit** at the top change their layout in Edit; Esc goes back to Use.
 
 ### Today
 
@@ -69,11 +78,13 @@ Group Habits or the Library by Area. Each Area's heading has its ⠿ grip, to re
 
 Changing a habit's Area counts from today on, like moving it into a group: Stats and History keep its past days in the Area they had, so moving a chore from one kid to another doesn't move the credit for what was done before. The band offers **Past days too** to put every day in the new Area, with an Undo. A bulk Area change also counts from today on.
 
+### History
+
+History has no Edit. Its one other state is **Select days**, in the title line: tick days and skip them together, with Undo. See [Bulk editing](bulk-editing.md#skip). Its days are always newest first or oldest first, so they have no grips. The title line's **⋯** shows or hides what each log holds, and exports the journal.
+
 ### Stats
 
 Stats has no Edit. Every card shows its ⠿, a board's tab drags to move the board, and the ⋯ beside the tabs holds **Rename this board**, **Move…** and **Delete board**. What a card shows is changed in its own words. See [Stats](stats.md).
-
-**Select** on the Habits page and the Library is their one other state: a tap ticks a row instead of opening it. See [Bulk editing](bulk-editing.md).
 
 ## Switch features off
 

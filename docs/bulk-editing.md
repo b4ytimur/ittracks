@@ -4,15 +4,15 @@ Change many habits, Tasks or days in one go: skip a sick week, pause habits for 
 
 ## Select
 
-1. On the **Habits** page, the **Library** or **History**, press **Select** in the title line.
-2. Tick rows. A tap anywhere on a row ticks it, and Shift-click ticks a range. **Select all N shown** ticks everything the current filter shows, so filter first to select "all Fitness habits".
-3. Pick an action on the bar and fill in its form. The preview runs by itself a moment after each change, once the form has what it needs.
+1. On the **Habits** page or the **Library**, press **Select** in the title line; on **History**, press **Select days**.
+2. Tick rows. A tap anywhere on a row ticks it, and Shift-click ticks a range. **Select all N** ticks everything the current filter shows, so filter first to select "all Fitness habits".
+3. Pick an action on the bar and fill in its form (on History the bar opens on **Skip**, its only action). The preview runs by itself a moment after each change, once the form has what it needs.
 4. Each row says what will happen to it: a row that changes shows the change, and a row left as it is says why (a reminder needs a time, a group can't be paused). The bar counts what changes and what stays, and **Jump to next** brings the next row that changes into view. Press **Apply N changes**, or **Cancel**.
 5. A message confirms the change with **Undo**.
 
 Undo puts back everything the change did. Items you changed again since are kept as they are now, and the message says how many.
 
-While **Select** is on, a tap ticks a row instead of opening it, the title line stays at the top and its other buttons step aside. Esc or a second press of **Select** leaves.
+While **Select** is on, a tap ticks a row instead of opening it, the title line stays at the top and its other buttons step aside. **Apply** keeps you in Select, with the rows still ticked. Esc, or a second press of **Select** (on History, **Select days**), leaves. The Journal has no Select, so going there leaves it.
 
 ## Actions on habits
 
@@ -46,7 +46,7 @@ Each Task with a field of that name changes once, even when it is both selected 
 
 ### Skip
 
-On **History**, press **Select**, tick the days, and press **Skip**. Each ticked day is skipped, as **Skip** on the day itself: a missed day becomes skipped, which neither adds to nor breaks a streak. Done days stay done, and days after today or too far back to log are left out with the reason (you can change how far back in **Settings → Logging past days**). For every day in a date range, use **Skip days** on the Habits page instead.
+On **History**, press **Select days** and tick the days: the bar opens on **Skip** and previews it, so press **Apply**. Each ticked day is skipped, as **Skip** on the day itself: a missed day becomes skipped, which neither adds to nor breaks a streak. Done days stay done, and days after today or too far back to log are left out with the reason (you can change how far back in **Settings → Logging past days**). For every day in a date range, use **Skip days** on the Habits page instead.
 
 ## From scripts and AI assistants
 
