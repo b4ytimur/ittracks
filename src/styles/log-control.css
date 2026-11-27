@@ -19,7 +19,7 @@
 /* Same height (Button's control-md, 32px: the row verb's M size), radius-control on the outer corners only.
    nowrap: the pair wraps under the content as one piece (ListRow's verb), never between its halves. */
 .log-control { position: relative; flex: none; display: inline-flex; white-space: nowrap; }
-.log-control > .log-act { border-start-end-radius: 0; border-end-end-radius: 0; }
+.log-control > .log-act:not(:only-child) { border-start-end-radius: 0; border-end-end-radius: 0; } /* alone (a logged row with nothing behind ⋯) it keeps every corner */
 .log-control > .log-more {
 	margin-inline-start: -1px; /* the two 1px edges overlap into one seam */
 	padding-inline: var(--space-inline); /* 8 + ⋯ + 8 + 2 edges ≈ 34px; 44 under coarse pointers */
@@ -35,6 +35,17 @@
 @media (hover: hover) { .log-control > :hover:not(.primary) { z-index: 1; } }
 .log-control > .log-more[aria-expanded='true']:not(.primary) { border-color: var(--ink); } /* open: the hover edge, held */
 
+/* ---------- Logged: the act becomes what it came to ---------- */
+/* span.log-act.log-done holds the word ("✓ Target"): Button's box, but not a button, so it never answers a pointer.
+   Done fills good with on-good words (5.85:1) and an on-good seam, as primary does with accent; skipped stays the plain
+   secondary box. Its ⋯ (View, Undo) or the hold's Undo (.log-undo) is the half that acts. */
+.log-control > span.log-done { cursor: default; }
+.log-control > .log-done:not(.skipped) { background: var(--good); border-color: var(--good); color: var(--on-good); font-weight: 600; }
+.log-control > .log-more.log-done:not(.skipped) { border-inline-start-color: var(--on-good); }
+.log-control > span.log-done.skipped { border-color: var(--line-control); }
+.log-control > .log-done > .mark { display: inline-block; } /* the ✓ pops while the row is just done (ListRow) */
+.log-control > .log-undo { padding-inline: var(--space-group); }
+
 /* ---------- Coarse pointers: 44px targets ---------- */
 /* ⋯ widens to 44 (a seam can't share a grown hit area); both halves grow to 44 tall through a pseudo-element,
    so a compact row stays 44 and the name line stays 24. Height only, so this ::before takes the place of Button's
@@ -49,7 +60,7 @@
 
 /* ---------- Forced colours: fills drop, so edges carry everything ---------- */
 @media (forced-colors: active) {
-	.log-control > .log-more.primary { border-inline-start-color: CanvasText; }
+	.log-control > .log-more:is(.primary, .log-done) { border-inline-start-color: CanvasText; }
 	.log-control > .log-more[aria-expanded='true'] { outline: var(--chosen-width) solid Highlight; outline-offset: calc(-1 * var(--chosen-width)); }
 }
 /* Reduced motion: nothing here moves (the menu: Menu). The celebration's motion, and the Undo that takes this

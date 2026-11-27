@@ -123,7 +123,7 @@
 @media (prefers-reduced-motion: no-preference) {
 	.elist > li > .card > .slot { transition: width var(--duration-settle) var(--ease-settle); }
 	.elist > li > .card > .lines { transition: padding-inline-start var(--duration-settle) var(--ease-settle); } /* slides with the name */
-	.elist > li.just-done .meta-line > .mark { animation: row-pop var(--duration-pop) var(--ease-settle); }
+	.elist > li.just-done :is(.meta-line, .log-done) > .mark { animation: row-pop var(--duration-pop) var(--ease-settle); }
 }
 @keyframes row-pop { 50% { transform: scale(1.4); } }
 
