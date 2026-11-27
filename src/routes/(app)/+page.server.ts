@@ -10,6 +10,7 @@ import { takeFlash } from '$lib/server/flash';
 import { listHabits } from '$lib/server/repo/habits';
 import { PAGE_PATH, isHidden } from '$lib/views';
 import { getDayNote } from '$lib/server/journal';
+import { daysData } from '$lib/server/days';
 import { listAreas } from '$lib/server/repo/areas';
 import type { Level } from '$lib/engine/streak';
 import { ownedHabit, ownedOccurrence } from '$lib/server/owned';
@@ -66,6 +67,8 @@ export const load: PageServerLoad = ({ locals, cookies, url, request }) => {
 		packs: getPacks(accountId),
 		habitCount: listHabits(accountId).length,
 		hints: settings.hints ?? [],
+		/** The days block. */
+		block: daysData(accountId, today, views.today.days),
 		/** What a quick link just did. */
 		flash: takeFlash(cookies),
 		views,

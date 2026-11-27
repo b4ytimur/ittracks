@@ -35,7 +35,7 @@ The user guide is in [docs/](docs/README.md): habits, schedules, Tasks, logging,
 - "Same as last time" on Today logs the last values in one tap, with Undo.
 - The log saves as you go, and keeps working offline: changes wait on the device and sync when the connection is back.
 - Quick-log links `/q/<habit id>` open a short log with only the fields marked "Show on quick logs". Add `?go=1` to log "same as last time" at once, or `?value=250` to add a number. Pinned habits appear as home screen shortcuts (long-press the app icon). With a key (see Integrations) the same links work from Shortcuts, Siri, NFC tags and QR codes without signing in.
-- Forgot a day? "Log a past day" on Today (or a day in History, the week strip or a habit's chain) opens that day: mark habits done, skipped or "same as last time", open the full log, or add a slip. A late log counts like one made on the day, streaks included, and "same as last time" copies the log from before that day. Today mentions yesterday when it was left unlogged. Settings can limit how far back you can log, or turn it off.
+- Forgot a day? "Log a past day" on Today (or a day in History, the days block or a habit's chain) opens that day: mark habits done, skipped or "same as last time", open the full log, or add a slip. A late log counts like one made on the day, streaks included, and "same as last time" copies the log from before that day. Today mentions yesterday when it was left unlogged. Settings can limit how far back you can log, or turn it off.
 
 ## Notes and journal
 

@@ -1,6 +1,7 @@
 // Hints stand once, beside their thing, and are gone for good when it is done or "Got it" is pressed.
 export const HINTS = {
-	done: 'When you did it, press the button on its row; Undo takes its place. ⋯ skips it or logs it in full. Its name opens everything about it.'
+	done: 'When you did it, press the button on its row; Undo takes its place. ⋯ skips it or logs it in full. Its name opens everything about it.',
+	days: 'Press a day to go to it.'
 } as const;
 export type HintId = keyof typeof HINTS;
 

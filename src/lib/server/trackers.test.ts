@@ -8,7 +8,8 @@ import { db } from './db';
 import { habit, occurrence } from './db/schema';
 import { createAccount } from './auth';
 import { saveSettings } from './settings';
-import { loadToday, settleAll, userToday, weekStrip } from './today';
+import { loadToday, settleAll, userToday } from './today';
+import { dayCounts } from './days';
 import { getHabitForm } from './repo/habits';
 import { addDays } from '$lib/engine/dates';
 import { appActor, type Actor } from './core/actor';
@@ -70,7 +71,7 @@ describe('a tracker', () => {
 		expect(t.build.some((x) => x.name === 'Weight')).toBe(false);
 		expect(w.last).toMatch(/^82\.4 kg, yesterday · −0\.\d kg in a week$/);
 		expect(w.stats.consistency).toBeNull();
-		expect(weekStrip(me, today).every((day) => day.of === 0)).toBe(true);
+		expect(Object.values(dayCounts(me, addDays(today, -6), today)).every(([, of]) => of === 0)).toBe(true);
 		const dayLog = occs(named('Weight').id).find((o) => o.date === d(-1))!;
 		expect(dayCount([{ ...dayLog, scoring: 'track', direction: 'build' } as never])).toEqual({ done: 0, of: 0 });
 	});

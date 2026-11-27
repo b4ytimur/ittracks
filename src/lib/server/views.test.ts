@@ -61,3 +61,13 @@ it("undoing one habit's Number keeps the number picked for another since", () =>
 	pick('read', '');
 	expect(getViews(me).today.headlineFor).toEqual({ gym: 'total' });
 });
+
+it("undoing the days block's choice of what it shows keeps the habit chosen since, on another page", () => {
+	changeViews(me, { op: 'patch', today: { days: { show: 'year', habit: null } } });
+	changeViews(me, { op: 'patch', today: { days: { show: 'month' } } });
+	changeViews(me, { op: 'patch', today: { days: { habit: 'gym' } } });
+	expect(getViews(me).today.days).toEqual({ show: 'month', habit: 'gym' });
+	// The first line's Undo: what it showed before, and nothing else.
+	changeViews(me, { op: 'patch', today: { days: { show: 'year' } } });
+	expect(getViews(me).today.days).toEqual({ show: 'year', habit: 'gym' });
+});

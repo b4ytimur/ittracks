@@ -7,6 +7,7 @@
      <div class="page-cols">
        <div class="page-main">…</div>          the page's own list
        <aside class="page-side" aria-label="…">GroupHeading, then a .side-card per block</aside>
+                                               History's holds the days block, named by its own heading, so no label
      </div>
      .side-card.side-list                      a block of rows: <button class="side-row" aria-pressed> or <a class="side-row"
                                                [aria-current]>, a name, then <span class="num">

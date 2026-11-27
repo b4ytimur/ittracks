@@ -765,6 +765,8 @@ export interface TodayItem {
 		variantName: string | null;
 		slotCount: number;
 		level: Level | null;
+		/** Logged on a day it wasn't due: shown, never counted. */
+		extra: boolean;
 	} | null;
 	streak: string;
 	/** Never miss twice: the last one was missed. */
@@ -998,7 +1000,8 @@ export function loadToday(accountId: string, today: string) {
 							? db.select({ id: slot.id }).from(slot).where(eq(slot.variantId, occ.variantId)).all()
 									.length
 							: 0,
-						level: occ.level ?? null
+						level: occ.level ?? null,
+						extra: occ.extra
 					}
 				: null,
 			streak: st ? describeStreak(st, rule) : '',
@@ -1089,24 +1092,7 @@ export function loadToday(accountId: string, today: string) {
 	const doneToday = new Set(build.filter((b) => b.occurrence?.status === 'done').map((b) => b.habitId));
 	for (const b of build)
 		b.upNext = !!b.afterHabitId && doneToday.has(b.afterHabitId) && b.occurrence?.status === 'due';
-	return { build, tracking, resting, paused, breaking, week: weekStrip(accountId, today) };
-}
-
-/** Done and scheduled on each of seven days ending `end`: Today's last seven days (TS.5), and around a day Today travels to. */
-export function weekStrip(accountId: string, end: string) {
-	const monday = addDays(end, -6);
-	const rows = db
-		.select({ date: occurrence.date, status: occurrence.status })
-		.from(occurrence)
-		.innerJoin(habit, eq(occurrence.habitId, habit.id))
-		// A group's day is already counted in the habits inside it, and a tracker's never counts.
-		.where(and(eq(habit.accountId, accountId), eq(habit.scoring, 'habit'), isNull(occurrence.rollup), gte(occurrence.date, monday), lte(occurrence.date, addDays(monday, 6))))
-		.all();
-	return Array.from({ length: 7 }, (_, i) => {
-		const date = addDays(monday, i);
-		const day = rows.filter((r) => r.date === date && r.status !== 'skipped');
-		return { date, done: day.filter((r) => r.status === 'done').length, of: day.length };
-	});
+	return { build, tracking, resting, paused, breaking };
 }
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];

@@ -1,7 +1,6 @@
-/* HistoryScreen: one page of days, a Day, the notes and a habit's Chain (P.34, HI.1–HI.7). Owns .hi-*: the week strip's place,
+/* HistoryScreen: one page of days, a Day, the notes and a habit's Chain (P.34, HI.1–HI.7). Owns .hi-*: the day a strip went to,
    a day's heading and note, the end of the list, the Chain's words. Rows are ListRow, headings GroupHeading, marks DayTile,
    the grid HeatGrid, the filters FilterBar. Tokens only. From the History prototype. */
-.hi-strip { margin-block: var(--space-inline) var(--space-group); }
 .hi-day > .group-heading { margin-block: 0 var(--space-tight); }
 .hi-day + .hi-day { margin-block-start: var(--space-section); }
 .hi-missed > .card > .content > .name { color: var(--ink-muted); font-weight: 400; } /* the word says Missed; no red, no fade (C.6, C.7) */
@@ -13,3 +12,6 @@
 .hi-end { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-inline) var(--space-group); margin-block: var(--space-section) var(--space-group); }
 .hi-daynote { margin-block-end: var(--space-group); }
 .hi-read { margin-block: var(--space-inline); }
+/* The day the year strip or the days block went to: the chosen bar at its heading's start, inside the 1px edge before the
+   name column, so nothing moves. */
+.hi-day:target > .group-heading { box-shadow: inset var(--chosen-width) 0 0 var(--ink); }

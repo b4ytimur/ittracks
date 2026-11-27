@@ -34,6 +34,8 @@
 	import { keepFocus, rowOf } from '$lib/ui/focus';
 	import { mergeOrder } from '$lib/ui/list';
 	import { usualWay } from '$lib/log/usual';
+	import DaysBlock from '$lib/days/DaysBlock.svelte';
+	import { countedRows, statusCount } from '$lib/days/days';
 	import {
 		STARTERS,
 		STATS,
@@ -229,12 +231,12 @@
 	}
 	// A hint stands once, and goes for good when its thing is done.
 	const anyDone = $derived(data.build.some((b) => b.occurrence?.status === 'done'));
-	const hint = $derived(hintNow(data.hints, data.build.some((b) => b.occurrence?.status === 'due') ? ['done'] : []));
 	let retired = $state<string[]>([]);
 	function retire(id: HintId) {
 		if (retired.includes(id)) return;
+		const was = [...data.hints, ...retired.filter((h) => !data.hints.includes(h))];
 		retired = [...retired, id];
-		void fetch('/api/settings', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ set: { hints: [...data.hints, id] }, was: { hints: data.hints } }) }).catch(() => null);
+		void fetch('/api/settings', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ set: { hints: [...was, id] }, was: { hints: was } }) }).catch(() => null);
 	}
 	$effect(() => {
 		if (anyDone && !data.hints.includes('done')) untrack(() => retire('done'));
@@ -403,26 +405,20 @@
 	const identityNames = $derived([...new Set([...data.build, ...data.breaking].flatMap((b) => b.identities))].sort());
 	const wordsCtx = $derived({ areas: data.areas, identities: hidden('identities') ? [] : identityNames, parts: data.ranges.length > 0, breaking: data.breaking.length > 0 });
 	const words = $derived(todayWords(view, wordsCtx));
-	// A group is counted through the habits inside it, as the strip counts.
-	const dueLeaves = $derived(data.build.filter((b) => !b.group));
+	// Counted as the days block and History count a day.
+	const dueLeaves = $derived(countedRows(data.build));
 	const doneCount = $derived(dueLeaves.filter(isDone).length);
 	/** Everything due is done or skipped. */
 	const allDone = $derived(dueLeaves.length > 0 && doneCount === dueLeaves.length && view.direction !== 'break');
 	/** The view lets nothing through though there is something today. */
 	const nothingShown = $derived(!shownBuild.length && !doneFolded.length && !breakingShown.length && !timeHidden.size && !allDone);
 
-	// ----- The date opens the last seven days (TS.5), History's strip -----
+	// ----- The date opens the days block (TS.5) -----
 	let strip = $state(false);
-	/** From 64rem the side column holds the seven days, always shown (TS.11). */
+	/** From 64rem the side column holds the days block, always shown (TS.11). */
 	const wide = new MediaQuery('min-width: 64rem');
-	const weekdayShort = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'narrow' });
-	const markOf = (d: { date: string; done: number; of: number }) => {
-		const today = d.date === data.today;
-		const done = today ? doneCount : d.done;
-		const of = today ? dueLeaves.length : d.of;
-		if (!of) return null;
-		return done >= of ? 'done' : done > 0 ? 'partial' : today ? 'due' : 'missed';
-	};
+	// One at a time, in the hint line: 'done' while something is due, then 'days' while the days block is on screen.
+	const hint = $derived(hintNow([...data.hints, ...retired], [...(data.build.some((b) => b.occurrence?.status === 'due') ? ['done' as const] : []), ...(wide.current || strip ? ['days' as const] : [])]));
 	/** Prepare for tomorrow, Paused and Not due today: one folded line at the end (TS.7). */
 	const laterSays = $derived(
 		[
@@ -556,7 +552,7 @@
 
 <svelte:head><title>Today · ittracks</title></svelte:head>
 
-<!-- No second state: Today keeps its own ⋯ and, under the title, the date (which opens the last seven days) and the count. -->
+<!-- No second state: Today keeps its own ⋯ and, under the title, the date (which opens the days block) and the count. -->
 {#snippet dayLine()}
 	<span class="today-line">
 		{#if wide.current}<span class="date">{dateLabel}</span>{:else}<button type="button" class="date" aria-expanded={strip} aria-controls="today-strip" onclick={() => (strip = !strip)}>{dateLabel} <span class="chev" aria-hidden="true">›</span></button>{/if}
@@ -576,19 +572,12 @@
 </TitleLine>
 
 {#if strip && !wide.current}
-	<div class="day-week today-strip" id="today-strip" role="group" aria-label="The last seven days">{@render sevenDays()}</div>
+	<div class="today-strip" id="today-strip">{@render days()}</div>
 {/if}
 
-{#snippet sevenDays()}
-	{#each data.week as d (d.date)}
-		{@const mark = markOf(d)}
-		{@const words = `${shortDate(d.date)}: ${d.of ? `${d.date === data.today ? doneCount : d.done} of ${d.date === data.today ? dueLeaves.length : d.of} done` : 'nothing due'}`}
-		{#if d.date < data.today && data.canBackfill}
-			<a class="day-cell" href="/day/{d.date}" aria-label="{words}. Go to that day."><span class="note">{weekdayShort(d.date)}</span><i data-day={mark}></i><span class="note num">{Number(d.date.slice(8))}</span></a>
-		{:else}
-			<span class="day-cell" aria-current={d.date === data.today ? 'date' : undefined} aria-label={words} role="img"><span class="note">{weekdayShort(d.date)}</span><i data-day={mark}></i><span class="note num">{Number(d.date.slice(8))}</span></span>
-		{/if}
-	{/each}
+{#snippet days()}
+	<!-- Today as the server counts a day (a skip is neither done nor due), with what was just pressed. -->
+	<DaysBlock {...data.block} todayCount={statusCount(dueLeaves.map((b) => statusOf(b.occurrence!)))} href={(d) => (d < data.today ? `/day/${d}` : null)} onused={() => retire('days')} slotOpen={gripped && wide.current} />
 {/snippet}
 
 {#if data.askDay}
@@ -627,7 +616,7 @@
 	</section>
 {:else}
 	<ViewSentence bind:this={sentenceBar} page="today" bind:views bind:current={view} {words} starters={STARTERS()} reset={fromTemplate(views.template).defaults.today} say={(s) => sentence(todayWords(s, wordsCtx))} />
-	{#if hint && !retired.includes(hint)}
+	{#if hint}
 		<div class="notice ob-hint" role="note"><span class="notice-text">{HINTS[hint]}</span><span class="notice-acts"><button type="button" class="quiet" onclick={() => hint && retire(hint)}>Got it</button></span></div>
 	{/if}
 
@@ -653,8 +642,7 @@
 		</div>
 		<div class="today-side">
 			{#if wide.current}
-				<GroupHeading title="Last seven days" slotOpen={gripped} foldColumn />
-				<div class="day-week week-side" role="group" aria-label="The last seven days">{@render sevenDays()}</div>
+				{@render days()}
 			{/if}
 			{#if !view.first && breakingShown.length}{@render breaking()}{/if}
 			{#if trackingShown.length}
@@ -995,7 +983,7 @@
 		min-width: 0;
 		overflow-wrap: anywhere;
 	}
-	/* Under the title: the date, which opens the last seven days, and the one count (TS.5). */
+	/* Under the title: the date, which opens the days block, and the one count (TS.5). */
 	.today-line {
 		display: flex;
 		align-items: center;
@@ -1030,13 +1018,6 @@
 	   a phone the side column comes under the day, a section below it. */
 	.today-side:not(:empty) {
 		margin-block-start: var(--space-section);
-	}
-	/* The seven days as a block at the top of the side column: as wide as the column, one card. */
-	.week-side {
-		padding: var(--space-inline);
-		border: 1px solid var(--line);
-		border-radius: var(--radius-card);
-		background: var(--surface-raised);
 	}
 	@media (min-width: 64rem) {
 		.today-side:not(:empty) {

@@ -50,9 +50,10 @@ i[data-day='unlogged'] { background: linear-gradient(var(--line-control), var(--
 .dragging i[data-day] { --line-control: var(--ink-muted); --day-edge: var(--ink-muted); }
 
 /* Today: a 2px ink bar 2px under the tile, so a strip is 12 + 2 + 2 = one 16px line. On the mark in a strip,
-   on the cell (aria-current belongs to the element that is read) in a calendar. */
+   on the cell (aria-current belongs to the element that is read) in a calendar and on a month's tile (the days block). */
 i[data-day][aria-current='date']::after,
-.day-cell[aria-current='date'] > i[data-day]::after {
+.day-cell[aria-current='date'] > i[data-day]::after,
+.days-tile[aria-current='date'] > i[data-day]::after {
 	content: ''; position: absolute; inset-inline: 0; top: calc(100% + 2px); height: 2px; background: var(--ink);
 }
 

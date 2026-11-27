@@ -93,7 +93,7 @@ Features you never use can be hidden app-wide in **Settings → Features**. See 
 
 A tracker only keeps what you log. Pick **Track** under **Kind** on the habit's page (or in the full editor when you make one). It has Tasks and fields like any habit, but:
 
-- Nothing it logs is done or missed. It has no streak, targets, Levels, One-tap Done, raises or jar, and never counts toward the day's progress, the week strip, consistency, groups or Stats done-rates.
+- Nothing it logs is done or missed. It has no streak, targets, Levels, One-tap Done, raises or jar, and never counts toward the day's progress, the days block, consistency, groups or Stats done-rates.
 - You can log it any day. Its days (shown as **Asks**) only say when its reminder asks.
 - Today lists it under **Tracking**, with its last value: "82.4 kg, yesterday · −0.6 kg in a week". The value is the first number, count, duration or choice it logs once per log; the change compares with the latest value a week or more before.
 - It can't sit in a group or routine, or hold habits.

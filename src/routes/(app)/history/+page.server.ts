@@ -19,6 +19,8 @@ import { joinRow } from '$lib/rowtext';
 import { isHidden } from '$lib/views';
 import { insteadIn } from '$lib/server/day-plan';
 import { insteadLine } from '$lib/log/places';
+import { dayCounts, daysData } from '$lib/server/days';
+import { yearStart } from '$lib/days/days';
 import type { PageServerLoad } from './$types';
 
 const DAYS = 90;
@@ -187,8 +189,11 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		areas: listAreas(accountId),
 		views,
 		initial: initialState(views, 'history'),
-		/** The last seven days, whether or not anything was logged, for the strip. */
-		strip: Array.from({ length: 7 }, (_, i) => addDays(today, i - 6)),
+		/** For yesterday's count under the title. */
+		yesterday: addDays(today, -1),
+		/** The days block in the side column, and the last 12 months across the top, every habit counted. */
+		block: daysData(accountId, today, views.today.days),
+		year: { open: views.history.year, counts: dayCounts(accountId, yearStart(today), today) },
 		history: shown,
 		openToday
 	};
