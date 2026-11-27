@@ -5,6 +5,7 @@
 	import Segmented from './Segmented.svelte';
 	import MenuButton, { type Way } from './MenuButton.svelte';
 	import type { Mode } from './list';
+	import { next } from './TitleLine.svelte';
 
 	let {
 		title,
@@ -64,7 +65,8 @@
 <svelte:window
 	onscroll={() => (stuck = mode !== 'use' && !!bar && bar.getBoundingClientRect().top <= 0 && window.scrollY > 0)}
 	onkeydown={(e) => {
-		if (mode !== 'use' && e.key === 'Escape' && !e.defaultPrevented && !(e.target as HTMLElement)?.closest?.('input:not([type=radio], [type=checkbox]), textarea, select, [popover]')) set('use');
+		// Esc leaves Edit as it leaves TitleLine's state: not in a field, a popover or a dialog (a sheet opened in Edit), which close themselves.
+		if (mode !== 'use' && !next(true, e)) set('use');
 	}}
 />
 

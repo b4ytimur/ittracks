@@ -9,13 +9,14 @@ import { currentForm } from '$lib/server/habit-patch';
 import { ensurePicks, lastEntries, recount, userToday } from '$lib/server/today';
 import { finishAs } from '$lib/server/progress';
 import { PATH_RE, place, startsRound } from '$lib/engine/parts';
+import { aimFor, aimText, goneFrom } from '$lib/log/places';
 import { partIdsIn, plannedSlots, positionsOf } from '$lib/server/positions';
 import { getSettings, getUnits } from '$lib/server/settings';
 import { recapFor } from '$lib/server/stats';
 import { planOfToday, replanToday, windowFor } from '$lib/server/backfill';
 import { NOTE_MAX, type ScheduleForm } from '$lib/forms';
 import { ActionError, appActor } from '$lib/server/core/actor';
-import { rerollSlot, swapSlot } from '$lib/server/day-plan';
+import { hasParts, ownTask, rerollSlot, swapLibrary, swapSlot, usedBefore, type Used } from '$lib/server/day-plan';
 import { emit } from '$lib/server/core/events';
 import { doneOcc, leftOpen, reopenOcc, skipOcc, undoClears } from '$lib/server/core/log';
 import { routineDay, routineSteps, undoRoutine, withRoutineUndo } from '$lib/server/routine-day';
@@ -35,6 +36,10 @@ export interface LogTask {
 	roundHead: string | null;
 	/** An auto-filled Slot: can be rerolled. Only a Slot's own Task can be rerolled or swapped. */
 	open: boolean;
+	/** The Task its Slot has in the plan, without this log's swap: null for an auto-filled one. */
+	own: string | null;
+	/** An open log's fixed Slot: the other Tasks used in it before, newest first, for its ⋯ and the swap picker. */
+	used: Used[];
 	sets: number | null;
 	targets: Record<string, number>;
 	minTargets: Record<string, number>;
@@ -117,6 +122,21 @@ function loadTask(id: string, kept: Set<string>) {
 	};
 }
 
+/** The Library, for the done lines' names, the plan editor and, in an open log, the swap picker: its Tags and last time too. */
+function libraryFor(accountId: string, occ: { id: string; date: string }, swaps: boolean) {
+	const rows = db
+		.select({ id: task.id, name: task.name, archived: task.archived, rowOne: task.rowOne, rowMany: task.rowMany })
+		.from(task)
+		.where(and(eq(task.accountId, accountId), isNull(task.parentTaskId), isNull(task.deleteAfter)))
+		.orderBy(asc(task.name))
+		.all();
+	const { tags, last } = swaps ? swapLibrary(accountId, occ) : { tags: {}, last: {} };
+	return rows.map((r) => ({ ...r, tags: tags[r.id] ?? [], last: last[r.id] ?? null }));
+}
+
+/** Why a finished log refuses a swap or Pick another: what it counted is settled. */
+const FINISHED = 'This log is finished: its Tasks stay as logged.';
+
 /** Where to go back to: a page of this app, or null. */
 const safeBack = (v: string | null | undefined) => (v && /^\/(?!\/)[\w\-/.?=&%]*$/.test(v) && v.length <= 200 ? v : null);
 
@@ -169,6 +189,8 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 			kids: p.kids,
 			roundHead: head,
 			open: p.depth === 0 && !!s?.fillRule,
+			own: ownTask(o.occ, p.slotId, s),
+			used: [],
 			sets: p.sets,
 			targets: p.targets ?? {},
 			minTargets: p.minTargets ?? {},
@@ -184,16 +206,35 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 	for (const s of plan)
 		if (!s.taskId) {
 			const at = items.findIndex((it) => plan.findIndex((x) => x.slotId === it.slotId) > plan.indexOf(s));
-			const empty: LogTask = { path: s.slotId, slotId: s.slotId, depth: 0, kids: 0, roundHead: null, open: !!slots.find((x) => x.id === s.slotId)?.fillRule, sets: s.sets, targets: {}, minTargets: {}, stretchTargets: {}, task: null, saved: [], previous: [] };
+			const empty: LogTask = { path: s.slotId, slotId: s.slotId, depth: 0, kids: 0, roundHead: null, open: !!slots.find((x) => x.id === s.slotId)?.fillRule, own: null, used: [], sets: s.sets, targets: {}, minTargets: {}, stretchTargets: {}, task: null, saved: [], previous: [] };
 			if (at < 0) items.push(empty);
 			else items.splice(at, 0, empty);
+		}
+	// An open log can swap: each fixed Slot's ⋯ lists the plan's Task and up to 2 used there before. Their fields and
+	// last time come along (Tasks with parts don't: their places are the server's), so a swap to one shows at once offline.
+	const canLog = win === 'ok' || win === 'today';
+	const alts: Record<string, { task: NonNullable<LogTask['task']>; previous: Record<string, unknown>[] }> = {};
+	if (o.occ.status !== 'done' && canLog)
+		for (const it of items) {
+			if (it.depth || it.open || !it.own) continue;
+			it.used = usedBefore(o.occ, it.slotId).filter((u) => u.taskId !== it.own && u.taskId !== it.task?.id);
+			for (const id of [...(it.task?.id === it.own ? [] : [it.own]), ...it.used.slice(0, 2).map((u) => u.taskId)]) {
+				const t = alts[id] || hasParts(id) ? null : taskOf(id);
+				if (t) alts[id] = { task: t, previous: lastEntries(id, o.occ.id, it.slotId) };
+			}
 		}
 	// What this log holds that no place in it shows now (a part removed, a Slot swapped):
 	// sent back with every save, so it is never lost.
 	const orphans = placed.orphans.map((e) => ({ taskId: e.taskId, path: e.path, values: e.values }));
-	const orphanNames = [...new Set(orphans.map((e) => e.taskId))]
-		.map((id) => db.select({ name: task.name }).from(task).where(eq(task.id, id)).get()?.name)
-		.filter((n): n is string => !!n);
+	// Their Tasks' names and words, steps inside a Task too, which the Library leaves out.
+	const orphanTasks = Object.fromEntries(
+		[...new Set(orphans.map((e) => e.taskId))].flatMap((id) => {
+			const t = db.select({ name: task.name, rowOne: task.rowOne, rowMany: task.rowMany }).from(task).where(eq(task.id, id)).get();
+			return t ? [[id, t] as const] : [];
+		})
+	);
+	// Done in a Slot before it was swapped is shown in that Slot: only what has no place shown is gone from the habit.
+	const orphanNames = [...new Set(goneFrom(orphans, items).map((e) => e.taskId))].flatMap((id) => (orphanTasks[id] ? [orphanTasks[id].name] : []));
 
 	return {
 		routine: null,
@@ -211,7 +252,7 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		/** A past day: no autosave or timer, and Back goes to that day. */
 		past,
 		/** False for a past day outside the window in Settings: only a finished log can be changed. */
-		canLog: win === 'ok' || win === 'today',
+		canLog,
 		back,
 		levels: o.habit.levels?.enabled ? o.habit.levels : null,
 		variantName: v?.name ?? null,
@@ -220,21 +261,18 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		/** The plan this log follows, to change where it stands: an open log of today only. */
 		plan: !past && o.occ.status === 'due' && v && !v.archived ? (currentForm(accountId, o.habit.id)?.variants ?? null) : null,
 		items,
+		alts,
 		orphans,
+		orphanTasks,
 		orphanNames,
 		/** "Last time … · best …" per Task. */
 		recap: recapFor(
 			accountId,
-			items.flatMap((it) => (it.task ? [it.task.id] : [])),
+			[...items.flatMap((it) => (it.task ? [it.task.id] : [])), ...Object.keys(alts)],
 			o.occ.id,
 			o.occ.date
 		),
-		library: db
-			.select({ id: task.id, name: task.name, archived: task.archived })
-			.from(task)
-			.where(and(eq(task.accountId, accountId), isNull(task.parentTaskId), isNull(task.deleteAfter)))
-			.orderBy(asc(task.name))
-			.all()
+		library: libraryFor(accountId, o.occ, o.occ.status !== 'done' && canLog)
 	};
 };
 
@@ -375,6 +413,7 @@ export const actions: Actions = {
 	reroll: async ({ request, locals, params, cookies }) => {
 		const o = ownedOccurrence(locals.account!.id, params.id);
 		if (!o || !o.occ.variantId) error(404);
+		if (o.occ.status === 'done') return fail(400, { error: FINISHED });
 		const slotId = String((await request.formData()).get('slot'));
 		try {
 			rerollSlot(appActor(locals.account!.id, cookies.get('tz')), o.occ, slotId);
@@ -385,16 +424,45 @@ export const actions: Actions = {
 		}
 	},
 
-	/** Use a Task of your choice in a Slot, for this Occurrence only. */
+	/**
+	 * What a Task would aim for as a fixed Slot's own (Keep in the plan, Replace…), by aimFor: from `today`, what it
+	 * logged in the Slot today (sent, since it may not be saved yet), else its last time. The page then changes the plan.
+	 */
+	aim: async ({ request, locals, params }) => {
+		const accountId = locals.account!.id;
+		const o = ownedOccurrence(accountId, params.id);
+		if (!o || !o.occ.variantId) error(404);
+		const f = await request.formData();
+		const s = db.select().from(slot).where(and(eq(slot.id, String(f.get('slot'))), eq(slot.variantId, o.occ.variantId))).get();
+		const t = db.select({ id: task.id }).from(task).where(and(eq(task.id, String(f.get('task'))), eq(task.accountId, accountId), isNull(task.deleteAfter), isNull(task.parentTaskId))).get();
+		if (!s || !t) error(404);
+		// An auto-filled Slot keeps its Fill rule: a Task is pinned there in the habit's editor.
+		if (!s.taskId || s.fillRule) return fail(400, { error: 'An auto-filled Slot picks its Task by its rule.' });
+		let today: Record<string, unknown>[] = [];
+		try {
+			today = z.array(z.record(z.string(), z.unknown())).max(200).parse(JSON.parse(String(f.get('today') ?? '[]')));
+		} catch {
+			/* nothing logged today that it can read: its last time */
+		}
+		const fields = (id: string) => db.select().from(metric).where(and(eq(metric.taskId, id), eq(metric.archived, false))).orderBy(asc(metric.sortOrder)).all();
+		const to = fields(t.id);
+		const targets = aimFor(fields(s.taskId), s.targets ?? {}, to, today, lastEntries(t.id, o.occ.id, s.id));
+		return { targets, aim: aimText(s.sets, to, targets) };
+	},
+
+	/** Use a Task of your choice in a Slot, for this Occurrence only; an empty `task` takes an auto-filled Slot's pick away. */
 	swap: async ({ request, locals, params, cookies }) => {
 		const o = ownedOccurrence(locals.account!.id, params.id);
 		if (!o || !o.occ.variantId) error(404);
+		// A band's Undo can still reach it after Finish.
+		if (o.occ.status === 'done') return fail(400, { error: FINISHED });
 		const f = await request.formData();
 		try {
-			swapSlot(appActor(locals.account!.id, cookies.get('tz')), o.occ, String(f.get('slot')), String(f.get('task')));
+			swapSlot(appActor(locals.account!.id, cookies.get('tz')), o.occ, String(f.get('slot')), String(f.get('task') ?? '') || null);
 		} catch (e) {
-			if (e instanceof ActionError) error(404);
-			throw e;
+			if (!(e instanceof ActionError)) throw e;
+			if (e.code === 'not_found') error(404);
+			return fail(400, { error: e.message });
 		}
 	}
 };

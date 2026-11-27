@@ -17,6 +17,8 @@ import { rollupText } from '$lib/engine/rollup';
 import { excerpt } from '$lib/markdown';
 import { joinRow } from '$lib/rowtext';
 import { isHidden } from '$lib/views';
+import { insteadIn } from '$lib/server/day-plan';
+import { insteadLine } from '$lib/log/places';
 import type { PageServerLoad } from './$types';
 
 const DAYS = 90;
@@ -117,7 +119,7 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 	for (let i = 0; i < shownOcc.length; i += 5000)
 		entries.push(
 			...db
-				.select({ occurrenceId: entry.occurrenceId, taskId: entry.taskId, task: task.name, values: entry.values })
+				.select({ occurrenceId: entry.occurrenceId, taskId: entry.taskId, task: task.name, path: entry.path, values: entry.values })
 				.from(entry)
 				.innerJoin(task, eq(entry.taskId, task.id))
 				.where(inArray(entry.occurrenceId, shownOcc.slice(i, i + 5000).map((o) => o.id)))
@@ -133,6 +135,8 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 				.all()
 		: [];
 	const entriesOf = Map.groupBy(entries, (e) => e.occurrenceId);
+	// A Slot swapped for the day says what it was done instead of.
+	const instead = insteadIn([...entriesOf.keys()]);
 	const lookBack =
 		notesOnly && !q && !mood
 			? onThisDay(today)
@@ -173,7 +177,7 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 			...shownOcc.filter((o) => o.rollup && o.status !== 'skipped').map((o) => [o.id, rollupText(o.rollup!)])
 		]),
 		// What was logged, one line per Task, for "Show values" in History.
-		values: Object.fromEntries(shownOcc.map((o) => [o.id, summarize(entriesOf.get(o.id) ?? [], metrics)])),
+		values: Object.fromEntries(shownOcc.map((o) => [o.id, summarize(entriesOf.get(o.id) ?? [], metrics, instead)])),
 		habits: db
 			.select({ id: habit.id, name: habit.name })
 			.from(habit)
@@ -192,8 +196,13 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 
 type Metric = { id: string; taskId: string; name: string; type: string; unit: string | null; times: boolean; choices: ChoiceOption[] | null };
 
-/** "Bench press: 80 kg × 8, 80 kg × 8" — one line per Task, sets in order. */
-function summarize(entries: { taskId: string; task: string; values: Record<string, unknown> }[], metrics: Metric[]): string[] {
+type Done = { occurrenceId: string; taskId: string; task: string; path: string | null; values: Record<string, unknown> };
+
+/**
+ * "Bench press: 80 kg × 8, 80 kg × 8" — one line per Task, sets in order. A Task swapped in for the day says what it
+ * was done instead of (`instead`): "Incline bench press · instead of Bench press: 50 kg × 8".
+ */
+function summarize(entries: Done[], metrics: Metric[], instead: (e: Done) => string | null): string[] {
 	const byTask = new Map<string, { task: string; sets: string[] }>();
 	for (const e of entries) {
 		const said = (m: Metric): string | null => {
@@ -207,7 +216,9 @@ function summarize(entries: { taskId: string; task: string; values: Record<strin
 			};
 		const row = joinRow(metrics.filter((m) => m.taskId === e.taskId).map((m) => ({ text: said(m) ?? '', times: m.times })));
 		if (!row) continue;
-		const t = byTask.get(e.taskId) ?? byTask.set(e.taskId, { task: e.task, sets: [] }).get(e.taskId)!;
+		const from = instead(e);
+		const k = `${e.taskId}|${from ?? ''}`;
+		const t = byTask.get(k) ?? byTask.set(k, { task: insteadLine(e.task, from), sets: [] }).get(k)!;
 		t.sets.push(row);
 	}
 	return [...byTask.values()].map((t) => `${t.task}: ${t.sets.join(', ')}`);

@@ -16,6 +16,8 @@
 		name: string;
 		/** A Task to rename; none when nothing in the Library fits the place. */
 		task: string | null;
+		/** A fixed Slot: the plan's Task, which Replace… swaps for another from now on. Null for an auto-filled one. */
+		replace: string | null;
 		numbers: PlanNumber[];
 		rows: { key: string; name: string; one: string; many: string; fields: Field[]; sets: RowState[]; previous: Record<string, unknown>[] }[];
 	}
@@ -28,6 +30,7 @@
 		onrows,
 		onremove,
 		onadd,
+		onreplace,
 		library
 	}: {
 		places: EditPlace[];
@@ -39,6 +42,8 @@
 		onrows: (key: string, rows: RowState[], moved: RowState) => void;
 		onremove: (p: EditPlace) => void;
 		onadd: (task: string) => void;
+		/** Replace…: pick another Task for a fixed Slot. */
+		onreplace: (p: EditPlace) => void;
 		/** What can be added. */
 		library: { id: string; name: string }[];
 	} = $props();
@@ -65,6 +70,7 @@
 >
 	{#snippet row(p)}
 		<h2 class="name">{#if p.task}<InlineText editing value={p.name} label="Name of the Task" onsave={(v) => onname(p, v)} />{:else}{p.name}{/if}</h2>
+		{#if p.replace}<button type="button" class="quiet" aria-label="Replace {p.replace}…" onclick={() => onreplace(p)}>Replace…</button>{/if}
 		{#if p.rows.length}<button type="button" class="fold" aria-expanded={isOpen(p)} aria-label="{cap(p.rows[0].many)} of {p.name}" onclick={() => (shown[p.id] = !isOpen(p))}><span aria-hidden="true" class="chev">›</span></button>{/if}
 		{#if p.numbers.length}
 			<p class="meta-line numbers">

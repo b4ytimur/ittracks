@@ -51,9 +51,28 @@ const field = (fields: [string, string][], k: string) => fields.find(([f]) => f 
 /**
  * Two actions with the same key replace each other: the same action on the same log, or on the
  * same habit for actions that name a habit (a past day), or on the same date for the day note.
+ * An action that names a Slot (a swap, Pick another) replaces only itself on that Slot, so a swap
+ * of another Slot in the same log is kept.
  */
-export const keyOf = (q: Pick<Queued, 'url' | 'fields'>) =>
-	q.url + '|' + (field(q.fields, 'occurrence') ?? field(q.fields, 'habit') ?? field(q.fields, 'date') ?? '');
+export const keyOf = (q: Pick<Queued, 'url' | 'fields'>) => {
+	const slot = field(q.fields, 'slot');
+	return q.url + '|' + (field(q.fields, 'occurrence') ?? field(q.fields, 'habit') ?? field(q.fields, 'date') ?? '') + (slot === undefined ? '' : `|${slot}`);
+};
+
+/**
+ * What waits from earlier on the same page, apart from older copies of this one: it is sent first,
+ * so the server gets them in the order they were made (a swap before the log's save that follows).
+ * What was refused waits for someone to look at it, and holds nothing up.
+ */
+export const ahead = (items: Queued[], q: Pick<Queued, 'url' | 'fields'>) =>
+	items.filter((x) => !x.refused && x.url.split('?')[0] === q.url.split('?')[0] && keyOf(x) !== keyOf(q)).map((x) => x.id);
+
+/**
+ * The swaps of a log (its `?/swap` url) that wait to be sent, by Slot: the Task each Slot shows until they sync.
+ * A refused one waits for someone to look at it, so the Slot shows what the server has.
+ */
+export const waitingSwaps = (items: Queued[], url: string): Record<string, string> =>
+	Object.fromEntries(items.filter((q) => q.url === url && !q.refused).flatMap((q) => [[field(q.fields, 'slot'), field(q.fields, 'task')]]).filter((p): p is [string, string] => !!p[0] && !!p[1]));
 
 /** The same save, not held back by what changed elsewhere since: the payload without the versions it grew from. */
 export function overriding(fields: [string, string][]): [string, string][] {

@@ -3,6 +3,7 @@
 	import { beforeNavigate, goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onMount, tick, untrack } from 'svelte';
+	import { online } from 'svelte/reactivity/window';
 	import Timer from './Timer.svelte';
 	import Place from '$lib/log/Place.svelte';
 	import EditPlaces, { type EditPlace } from '$lib/log/EditPlaces.svelte';
@@ -16,10 +17,12 @@
 	import { endRest, startRest } from '$lib/rest.svelte';
 	import { defaultStep } from '$lib/task-types';
 	import { units } from '$lib/units-here';
-	import { enqueue, isOffline, save } from '$lib/outbox.svelte';
-	import { postAction, showError, showToast, undoWith } from '$lib/toast.svelte';
+	import { enqueue, isOffline, outbox, save, sendAhead } from '$lib/outbox.svelte';
+	import { waitingSwaps } from '$lib/queue';
+	import { postAction, runAction, showError, showToast, undoWith } from '$lib/toast.svelte';
 	import { differs, revOf, type LogContent } from '$lib/logrev';
-	import { fromDraft, placeKey } from '$lib/log/places';
+	import { besides, carryOver, doneBefore, doneLine, fromDraft, keptText, loggedAt, placeKey, setsToDo, startedLog, swapGroups, swapText, usedText, waitingText, withWaiting, type Logged } from '$lib/log/places';
+	import SwapSheet from '$lib/log/SwapSheet.svelte';
 	import NoteBox from '$lib/NoteBox.svelte';
 	import Markdown from '$lib/Markdown.svelte';
 	import { starterFor, untouched } from '$lib/journal';
@@ -45,6 +48,28 @@
 	}
 	type Item = (typeof data.items)[number];
 	type Metric = NonNullable<Item['task']>['metrics'][number];
+
+	/** A Task whose fields and last time this page holds, so a swap to it can show at once, also offline. */
+	const onDevice = (id: string) => data.alts[id] ?? data.items.find((x) => x.depth === 0 && x.kids === 0 && x.task?.id === id);
+	/** A Task a swap can't reach now: offline, and its fields aren't on this device ("Needs a connection"). Never on the server. */
+	const away = (id: string) => online.current === false && !onDevice(id)?.task;
+	/** Swaps that wait to be sent (made offline), by Slot: shown at once, until they sync. */
+	const offlinePicks = $derived(waitingSwaps(outbox.items, `/log/${data.occurrence.id}?/swap`));
+	/** The places in the log: the server's, with a swap made offline in place of its Slot's Task (and its parts). */
+	const items = $derived(withWaiting(data.items, offlinePicks, onDevice, data.orphans.map((e) => ({ taskId: e.taskId, path: e.path ?? null, values: e.values }))));
+	// A swap that leaves the outbox reached the server (or was refused there): the Slot shows what the server holds
+	// now, which this page loads again, as a page save that sends it first doesn't.
+	let waited: Record<string, string> = {};
+	$effect(() => {
+		const now = offlinePicks;
+		if (Object.keys(waited).some((s) => !(s in now))) void invalidateAll();
+		waited = now;
+	});
+	/**
+	 * What a Task swapped in starts from when it has no last time of its own: the values the Task it replaced still
+	 * had to do, where name and unit match. By Slot; read when its place starts.
+	 */
+	let carried = $state.raw<Record<string, { id: string; from: string; fields: Metric[]; rows: Values[] }>>({});
 
 	const isSummary = (v: Values) => v._summary === true;
 	/** A Yes or no tick: an Entry that only says it was done. */
@@ -91,12 +116,16 @@
 		const single = t.metrics.filter((m) => !m.repeats);
 		const prev = it.previous.filter((v) => !isSummary(v));
 		const prevSummary = it.previous.find(isSummary) ?? {};
-		const count = repeating.length ? (it.sets ?? (prev.length || 1)) : 0;
+		// Swapped in after sets were done with another Task: only the sets still to do. Read when the place starts.
+		const before = untrack(() => setsBefore(it));
+		const count = repeating.length ? setsToDo(it.sets ?? (prev.length || 1), before) : 0;
+		// Never done: from the values the Task it replaced still had to do.
+		const from = prev.length ? prev : carriedTo(it).rows;
 		const sets = Array.from({ length: count }, (_, i) => ({
 			done: false,
 			values: Object.fromEntries(
 				repeating
-					.map((m) => [m.id, prefillValue(m, it, (prev[i] ?? prev.at(-1))?.[m.id])] as const)
+					.map((m) => [m.id, prefillValue(m, it, (from[i] ?? from.at(-1))?.[m.id])] as const)
 					.filter(([, v]) => v !== undefined)
 			) as Values
 		}));
@@ -105,6 +134,14 @@
 		) as Values;
 		// A Yes or no Task or a step starts unticked like any tick box: you tick the ones you did.
 		return { sets, summary: withStarters(summary, t), tick: false };
+	}
+
+	/** What carries over to a place from the Task its Slot had before a swap (see `carried`), and from which Task. */
+	function carriedTo(it: Item): { from: string; rows: Values[]; ids: string[] } {
+		const c = untrack(() => carried[it.slotId]);
+		const t = it.task;
+		if (!c || !t || it.depth || c.id === t.id || it.previous.some((v) => !isSummary(v))) return { from: '', rows: [], ids: [] };
+		return { from: c.from, ...carryOver(c.fields, c.rows, t.metrics.filter((m) => m.repeats)) };
 	}
 
 	/**
@@ -141,6 +178,8 @@
 		synced: boolean;
 		/** The versions it grew from (see `bases`); drafts from before this have none. */
 		bases?: string[];
+		/** See `held`; drafts from before this have none. */
+		held?: Record<string, Logged[]>;
 	}
 	const readDraft = (): Draft | null => {
 		try {
@@ -150,14 +189,20 @@
 		}
 	};
 
+	/**
+	 * What each place had logged when it was last shown, by place, so it is saved with the log when a
+	 * swap, Pick another or a reload takes the place away before that reached the server: a past day
+	 * reaches it only on Finish. Kept with the draft.
+	 */
+	let held = $state.raw<Record<string, Logged[]>>({});
 	/** What is being logged, by place. A place that goes keeps its values here, in case it comes back. */
-	const places = $state<Record<string, ItemState>>(untrack(() => Object.fromEntries(data.items.map((it) => [placeKey(it), initial(it)]))));
+	const places = $state<Record<string, ItemState>>(untrack(() => Object.fromEntries(items.map((it) => [placeKey(it), initial(it)]))));
 	/** The prefill, to show which values differ from it. */
 	const startOf = (it: Item): ItemState => (data.occurrence.status === 'done' ? initial(it) : { ...initial(it), sets: planned(it).sets });
-	let base = $state.raw<Record<string, ItemState>>(untrack(() => Object.fromEntries(data.items.map((it) => [placeKey(it), startOf(it)]))));
+	let base = $state.raw<Record<string, ItemState>>(untrack(() => Object.fromEntries(items.map((it) => [placeKey(it), startOf(it)]))));
 	// A place that comes into the log (a swap, a reroll, a part added) starts as the log does.
 	$effect.pre(() => {
-		const fresh = data.items.filter((it) => untrack(() => !places[placeKey(it)]));
+		const fresh = items.filter((it) => untrack(() => !places[placeKey(it)]));
 		untrack(() => {
 			for (const it of fresh) {
 				const s = initial(it);
@@ -167,18 +212,20 @@
 		});
 	});
 	/** The same, in the order the log shows them. */
-	const log = $derived(data.items.map((it) => places[placeKey(it)] ?? initial(it)));
-	const baseOf = (i: number): ItemState | undefined => base[placeKey(data.items[i])];
+	const log = $derived(items.map((it) => places[placeKey(it)] ?? initial(it)));
+	const baseOf = (i: number): ItemState | undefined => base[placeKey(items[i])];
 	let notes = $state(untrack(() => data.occurrence.notes));
 	let level = $state<'minimum' | 'target' | 'stretch'>(untrack(() => data.occurrence.level));
 	let problem = $state('');
 	const levelNames = { minimum: 'Minimum', target: 'Target', stretch: 'Stretch' } as const;
 	/** The target for a Metric at the chosen level, falling back to Target. */
-	const targetAt = (it: (typeof data.items)[number], id: string) =>
+	const targetAt = (it: Item, id: string) =>
 		(level === 'minimum' ? it.minTargets[id] : level === 'stretch' ? it.stretchTargets[id] : undefined) ??
 		it.targets[id];
 	// ----- Autosave: every change is kept on this device at once, and on the server shortly after -----
 	let saveTimer: ReturnType<typeof setTimeout> | undefined;
+	/** The autosave sent and not answered yet. */
+	let onTheWay: ReturnType<typeof save> | undefined;
 	let saveState = $state<'idle' | 'saving' | 'saved' | 'local' | 'refused'>('idle');
 	let refusedWhy = $state('');
 	/**
@@ -197,9 +244,10 @@
 		// Also what is planned and not logged yet, such as a weight carried to the sets still to do,
 		// as long as the server's log is still the one this draft grew from.
 		if (d && data.occurrence.status !== 'done' && (!d.synced || d.bases?.includes(data.rev))) {
-			Object.assign(places, fromDraft(d.log, data.items));
+			Object.assign(places, fromDraft(d.log, items));
 			notes = d.notes;
 			level = d.level;
+			held = d.held ?? {};
 			// Not what is on the server now: if that changed since, the save says so.
 			if (d.bases?.length) bases = d.bases;
 		}
@@ -225,8 +273,9 @@
 	});
 
 	function writeDraft(synced: boolean) {
+		held = { ...held, ...Object.fromEntries(items.map((it, i) => [placeKey(it), entriesAt(it, i, false)])) };
 		try {
-			localStorage.setItem(DRAFT, JSON.stringify({ log: $state.snapshot(places), notes, level, synced, bases }));
+			localStorage.setItem(DRAFT, JSON.stringify({ log: $state.snapshot(places), notes, level, synced, bases, held }));
 		} catch {
 			/* storage blocked */
 		}
@@ -253,7 +302,10 @@
 		}
 		const body = payload(correcting, true);
 		const mine = sending(body);
-		const a = await save(saveUrl(), [['payload', body]], data.habitName);
+		const going = save(saveUrl(), [['payload', body]], data.habitName);
+		onTheWay = going;
+		const a = await going;
+		if (onTheWay === going) onTheWay = undefined;
 		// The server holds exactly this now; what was sent after it may be there next.
 		if (a.kind === 'saved') {
 			bases = bases.slice(bases.indexOf(mine));
@@ -282,7 +334,7 @@
 		saveTimer = undefined;
 		theirs = { ...(now as LogContent & { rev: string }), from };
 	}
-	const taskName = (id: string) => data.items.find((it) => it.task?.id === id)?.task?.name ?? 'another Task';
+	const taskName = (id: string) => items.find((it) => it.task?.id === id)?.task?.name ?? 'another Task';
 	const changed = $derived(theirs ? differs(JSON.parse(payload(false, true)) as LogContent, theirs, taskName) : []);
 
 	/** Save this one over what the other device left. */
@@ -324,7 +376,7 @@
 				localStorage.setItem(ASIDE, JSON.stringify(mine));
 				return 'Open the log to bring yours back.';
 			}
-			Object.assign(places, fromDraft(mine.log, data.items));
+			Object.assign(places, fromDraft(mine.log, items));
 			notes = mine.notes;
 			level = mine.level;
 		});
@@ -357,13 +409,28 @@
 		clearTimeout(saveTimer);
 		saveTimer = undefined;
 	};
+	/**
+	 * Save the log as it is here, after a save on its way, before an action that takes a place out of
+	 * it (a swap, Pick another, out of the plan), so the server holds what was logged there. Always,
+	 * not only with a save pending: one may have waited, been refused, or a draft come back unsaved.
+	 * A past day is saved on Finish only: it is kept on this device, with what each place holds.
+	 */
+	async function saveFirst() {
+		if (data.past) {
+			writeDraft(false);
+			return { kind: 'saved' as const };
+		}
+		await onTheWay;
+		dropAutosave();
+		return autosave();
+	}
 
 	/**
 	 * What each place started with: its suggested values (last time's, or targets) and what was saved.
 	 * A finished log suggests nothing: it shows only what was saved, so whatever is typed into it is a log.
 	 */
 	const starts = $derived<PlaceStart[]>(
-		data.items.map((it) => ({ prefill: correcting ? {} : planned(it).summary, saved: it.saved.find(isSummary) ?? {}, savedAny: it.saved.length > 0 }))
+		items.map((it) => ({ prefill: correcting ? {} : planned(it).summary, saved: it.saved.find(isSummary) ?? {}, savedAny: it.saved.length > 0 }))
 	);
 	/** A once-per-log field set by hand. */
 	const setOnce = (i: number, id: string, v: unknown) => void setByHand(log[i], id, v);
@@ -380,40 +447,59 @@
 	 * not saved as you go, and on Finish only as src/lib/prefill.ts says.
 	 */
 	function payload(finish: boolean, stay = false) {
-		// Each value says where it sits, so the same Task in two places keeps its own.
-		const entries: { taskId: string; path: string | null; values: Values }[] = [];
-		data.items.forEach((it, i) => {
-			const path = it.path;
-			const t = it.task;
-			if (!t) return;
-			const s = log[i];
-			const repeatingIds = t.metrics.filter((m) => m.repeats).map((m) => m.id);
-			const counts = (set: { done: boolean; values: Values }) => set.done || (quickMode && finish);
-			const sets = repeatingIds.length ? s.sets.filter(counts) : [];
-			for (const set of sets) {
-				entries.push({
-					taskId: t.id,
-					path,
-					values: Object.fromEntries(repeatingIds.map((id) => [id, set.values[id] ?? null]))
-				});
-			}
-			// A long text field that still holds only its starter text counts as not written.
-			const longs = new Map(t.metrics.filter(isLong).map((m) => [m.id, m]));
-			const keep = stationIn.has(i) ? !!s.kept : (quickMode && finish) || keepsSuggestions(log, starts, i, { finish, confirmed: suggestionsConfirmed });
-			const filled = Object.entries(s.kept === false ? {} : s.summary).filter(
-				([k, v]) =>
-					v !== '' &&
-					v !== null &&
-					v !== undefined &&
-					!(longs.has(k) && untouched(longs.get(k)!, v, data.occurrence.date)) &&
-					(keep || !isSuggestion(s, starts[i], k))
-			);
-			if (filled.length) entries.push({ taskId: t.id, path, values: { ...Object.fromEntries(filled), _summary: true } });
-			if (s.tick && isYesNo(it)) entries.push({ taskId: t.id, path, values: { done: true } });
-		});
+		const entries = items.flatMap((it, i) => entriesAt(it, i, finish));
 		// Values for places this log no longer shows go back as they were.
-		entries.push(...data.orphans.map((e) => ({ taskId: e.taskId, path: e.path ?? null, values: e.values })));
+		entries.push(...elsewhere());
 		return JSON.stringify({ finish, stay, notes, entries, level, back: data.back, bases });
+	}
+	/** What the log holds besides the places it shows: a Slot's Task before a swap, a part removed. */
+	function elsewhere() {
+		return besides(held, items, data.orphans.map((e) => ({ taskId: e.taskId, path: e.path ?? null, values: e.values })));
+	}
+	/**
+	 * Sets done here with another Task before its Slot was swapped, at this place only: the parts of a Task with parts
+	 * swapped away get a done line each but leave the new Task its sets. Hoisted: the places start with it.
+	 */
+	function setsBefore(it: Item) {
+		return doneBefore(elsewhere().filter((e) => e.path === it.path), it).reduce((n, d) => n + d.sets, 0);
+	}
+	/** Done here with another Task before its Slot was swapped, a line each: "Bench press · 2 sets done". */
+	const doneLines = (it: Item) =>
+		doneBefore(elsewhere(), it).map(({ taskId, sets }) => {
+			const t = data.library.find((l) => l.id === taskId) ?? data.orphanTasks[taskId];
+			return doneLine(t?.name ?? 'Another Task', sets, t?.rowOne ?? 'set', t?.rowMany ?? 'sets');
+		});
+	/** What gets saved at a place. Each value says where it sits, so the same Task in two places keeps its own. */
+	function entriesAt(it: Item, i: number, finish: boolean): Logged[] {
+		const path = it.path;
+		const t = it.task;
+		if (!t) return [];
+		const entries: Logged[] = [];
+		const s = log[i];
+		const repeatingIds = t.metrics.filter((m) => m.repeats).map((m) => m.id);
+		const counts = (set: { done: boolean; values: Values }) => set.done || (quickMode && finish);
+		const sets = repeatingIds.length ? s.sets.filter(counts) : [];
+		for (const set of sets) {
+			entries.push({
+				taskId: t.id,
+				path,
+				values: Object.fromEntries(repeatingIds.map((id) => [id, set.values[id] ?? null]))
+			});
+		}
+		// A long text field that still holds only its starter text counts as not written.
+		const longs = new Map(t.metrics.filter(isLong).map((m) => [m.id, m]));
+		const keep = stationIn.has(i) ? !!s.kept : (quickMode && finish) || keepsSuggestions(log, starts, i, { finish, confirmed: suggestionsConfirmed });
+		const filled = Object.entries(s.kept === false ? {} : s.summary).filter(
+			([k, v]) =>
+				v !== '' &&
+				v !== null &&
+				v !== undefined &&
+				!(longs.has(k) && untouched(longs.get(k)!, v, data.occurrence.date)) &&
+				(keep || !isSuggestion(s, starts[i], k))
+		);
+		if (filled.length) entries.push({ taskId: t.id, path, values: { ...Object.fromEntries(filled), _summary: true } });
+		if (s.tick && isYesNo(it)) entries.push({ taskId: t.id, path, values: { done: true } });
+		return entries;
 	}
 
 	const empty = (v: unknown) => v === undefined || v === null || v === '' || v === false;
@@ -422,7 +508,7 @@
 	function untickedSets(): number {
 		if (quickMode || !isOpen) return 0;
 		let n = 0;
-		data.items.forEach((it, i) => {
+		items.forEach((it, i) => {
 			if (stationIn.has(i)) return;
 			if (circuits.has(i)) n += rowsAt(i).filter((x) => !x.done).length;
 			const ids = it.task?.metrics.filter((m) => m.repeats).map((m) => m.id) ?? [];
@@ -434,7 +520,7 @@
 	function suggestedPlaces(): string[] {
 		if (quickMode || !isOpen) return [];
 		return onlySuggested(log, starts).filter((i) => !stationIn.has(i)).map((i) => {
-			const it = data.items[i];
+			const it = items[i];
 			const round = [...it.path.matchAll(/#(\d+)/g)].at(-1)?.[1];
 			return `${it.task?.name ?? 'Task'}${round ? ` (round ${round})` : ''}`;
 		});
@@ -445,7 +531,7 @@
 	/** Required fields that are still empty, by name. */
 	function missing(): string[] {
 		const out: string[] = [];
-		data.items.forEach((it, i) => {
+		items.forEach((it, i) => {
 			const t = it.task;
 			if (!t || (stationIn.has(i) && !answered(i))) return;
 			for (const m of t.metrics.filter((x) => x.required)) {
@@ -473,29 +559,29 @@
 	const repeatingOf = (it: Item) => shownMetrics(it.task?.metrics.filter((m) => m.repeats) ?? []);
 	const inRows = (it: Item) => repeatingOf(it).length > 0;
 	/** Tasks whose parts repeat: one place each, with its rounds as rows and its parts as their stations. */
-	const circuits = $derived(quickMode ? new Map<number, Circuit>() : circuitsOf(data.items.map((it) => ({ path: it.path, kids: it.kids, inRows: inRows(it) }))));
+	const circuits = $derived(quickMode ? new Map<number, Circuit>() : circuitsOf(items.map((it) => ({ path: it.path, kids: it.kids, inRows: inRows(it) }))));
 	const stationIn = $derived(new Set([...circuits.values()].flatMap((c) => c.rounds.flat())));
 	/** A station is done: its tick, its sets, or a value you gave or left as it was with its tick. */
 	function answered(j: number): boolean {
 		const s = log[j];
-		if (isYesNo(data.items[j])) return !!s.tick;
-		return inRows(data.items[j]) ? s.sets.length > 0 && s.sets.every((x) => x.done) : (s.kept ?? hasLog(s, starts[j]));
+		if (isYesNo(items[j])) return !!s.tick;
+		return inRows(items[j]) ? s.sets.length > 0 && s.sets.every((x) => x.done) : (s.kept ?? hasLog(s, starts[j]));
 	}
-	const isPlace = (i: number) => !stationIn.has(i) && (inRows(data.items[i]) || circuits.has(i));
+	const isPlace = (i: number) => !stationIn.has(i) && (inRows(items[i]) || circuits.has(i));
 	const rowsAt = (i: number): RowState[] => circuits.get(i)?.rounds.map((r) => ({ done: r.every(answered), values: {} })) ?? log[i].sets;
 	const wordsAt = (i: number) => {
-		const t = data.items[i].task!;
+		const t = items[i].task!;
 		return circuits.has(i) ? roundWords(t) : { one: t.rowOne, many: t.rowMany };
 	};
 	/** What a station holds, in words. */
 	const stationText = (j: number) =>
-		[rowsText(repeatingOf(data.items[j]) as Field[], log[j].sets), ...(data.items[j].task?.metrics ?? []).filter((m) => !m.repeats && !isLong(m)).map((m) => valueText(m as Field, log[j].summary[m.id]))].filter(Boolean).join(' · ');
+		[rowsText(repeatingOf(items[j]) as Field[], log[j].sets), ...(items[j].task?.metrics ?? []).filter((m) => !m.repeats && !isLong(m)).map((m) => valueText(m as Field, log[j].summary[m.id]))].filter(Boolean).join(' · ');
 	function markStation(j: number, on: boolean) {
-		const s = places[placeKey(data.items[j])];
-		if (isYesNo(data.items[j])) s.tick = on;
+		const s = places[placeKey(items[j])];
+		if (isYesNo(items[j])) s.tick = on;
 		for (const x of s.sets) x.done = on;
 		// Its once-only values go with its tick, beside its rows too.
-		if (data.items[j].task?.metrics.some((m) => !m.repeats)) s.kept = on;
+		if (items[j].task?.metrics.some((m) => !m.repeats)) s.kept = on;
 	}
 	/** One press for a whole round. A number changed in it goes on to the rounds still to do. */
 	function markRound(c: Circuit, r: number, on: boolean) {
@@ -503,20 +589,22 @@
 			// What a station was answered with already stays as it is.
 			if (on !== answered(j)) markStation(j, on);
 			if (!on) return;
-			const keys = c.rounds.map((x) => placeKey(data.items[x[station]]));
+			const keys = c.rounds.map((x) => placeKey(items[x[station]]));
 			places[keys[r]].sets.forEach((_, k) => {
 				const rows = keys.map((key) => places[key].sets[k]);
 				const start = keys.map((key) => base[key]?.sets[k]);
 				if (rows.some((x) => !x) || start.some((x) => !x)) return;
-				follow(rows, start as RowState[], r, metricsOf(data.items[j])).forEach((x, n) => (places[keys[n]].sets[k] = x));
+				follow(rows, start as RowState[], r, metricsOf(items[j])).forEach((x, n) => (places[keys[n]].sets[k] = x));
 			});
 		});
 	}
-	const runPlaces = $derived(data.items.flatMap((it, i) => (isPlace(i) ? [{ key: placeKey(it), sets: rowsAt(i), i }] : [])));
+	const runPlaces = $derived(items.flatMap((it, i) => (isPlace(i) ? [{ key: placeKey(it), sets: rowsAt(i), i }] : [])));
 	const row = $derived(stage === 'run' ? cursor(runPlaces, at, here) : at);
 	const setsLeft = $derived(runPlaces.some((p) => p.sets.some((x) => !x.done)));
-	const setsDone = $derived(runPlaces.reduce((n, p) => n + p.sets.filter((x) => x.done).length, 0));
-	const setsAll = $derived(runPlaces.reduce((n, p) => n + p.sets.length, 0));
+	/** Sets done before a swap are still this log's: a swap never takes them off the count, and Finish saves them. */
+	const doneElsewhere = $derived(items.reduce((n, it) => n + setsBefore(it), 0));
+	const setsDone = $derived(doneElsewhere + runPlaces.reduce((n, p) => n + p.sets.filter((x) => x.done).length, 0));
+	const setsAll = $derived(doneElsewhere + runPlaces.reduce((n, p) => n + p.sets.length, 0));
 	/** The Tasks' own word for their rows, when they share one. */
 	const shared = (words: string[], or: string) => (new Set(words).size === 1 ? words[0] : or);
 	const oneWord = $derived(shared(runPlaces.map((p) => wordsAt(p.i).one), 'row'));
@@ -526,7 +614,7 @@
 		tick().then(() => document.querySelector(`[data-place="${CSS.escape(key)}"] .lg-open`)?.scrollIntoView({ block: 'nearest' }));
 	}
 	function openRow(i: number, set: number | null) {
-		const key = placeKey(data.items[i]);
+		const key = placeKey(items[i]);
 		here = key;
 		at = set === null ? null : { key, set };
 		if (set !== null) show(key);
@@ -535,12 +623,12 @@
 		const rows = rowsAt(i);
 		const left = rows.some((x) => !x.done) && stage === 'run';
 		openRow(i, left ? null : rows.length - 1);
-		show(placeKey(data.items[i]));
+		show(placeKey(items[i]));
 	}
 	const metricsOf = (it: Item) => repeatingOf(it) as Field[];
 
 	function doneRow(i: number, set: number, keyboard: boolean) {
-		const it = data.items[i];
+		const it = items[i];
 		const key = placeKey(it);
 		const c = circuits.get(i);
 		if (c) markRound(c, set, true);
@@ -557,8 +645,8 @@
 		const next = cursor(runPlaces, null, key);
 		// The last one stays open, so nothing that ends the log ever comes under the thumb.
 		if (!next) at = { key, set };
-		const toAt = next ? data.items.findIndex((x) => placeKey(x) === next.key) : -1;
-		const to = toAt < 0 ? undefined : data.items[toAt];
+		const toAt = next ? items.findIndex((x) => placeKey(x) === next.key) : -1;
+		const to = toAt < 0 ? undefined : items[toAt];
 		const toWord = to ? wordsAt(toAt).one : '';
 		const nextName = to ? `${next!.key === key ? '' : `${to.task?.name}, `}${toWord} ${next!.set + 1}` : '';
 		if (it.task?.restTimerEnabled && next && !data.past && stage === 'run') startRest(it.task.restTimerSeconds, `${toWord} ${next.set + 1} of ${to?.task?.name}`, `/log/${data.occurrence.id}`, it.task.betweenName);
@@ -572,13 +660,13 @@
 		}
 	}
 	function tickRow(i: number, set: number, on: boolean) {
-		const key = placeKey(data.items[i]);
+		const key = placeKey(items[i]);
 		const c = circuits.get(i);
 		if (c) markRound(c, set, on);
 		else log[i].sets[set].done = on;
 		if (on) {
-			if (!c) places[key].sets = follow(log[i].sets, baseOf(i)?.sets ?? [], set, metricsOf(data.items[i]));
-			const t = data.items[i].task;
+			if (!c) places[key].sets = follow(log[i].sets, baseOf(i)?.sets ?? [], set, metricsOf(items[i]));
+			const t = items[i].task;
 			if (t?.restTimerEnabled && stage === 'run' && !data.past) startRest(t.restTimerSeconds, t.name, `/log/${data.occurrence.id}`, t.betweenName);
 		} else {
 			endRest();
@@ -593,13 +681,13 @@
 		x.values[id] = v;
 		if (!x.own?.includes(id)) x.own = [...(x.own ?? []), id];
 		// Stepping the row keeps it open, also once it is the only one left.
-		if (stage === 'run') at = { key: placeKey(data.items[i]), set };
-		if (x.done) places[placeKey(data.items[i])].sets = follow(log[i].sets, baseOf(i)?.sets ?? [], set, metricsOf(data.items[i]));
+		if (stage === 'run') at = { key: placeKey(items[i]), set };
+		if (x.done) places[placeKey(items[i])].sets = follow(log[i].sets, baseOf(i)?.sets ?? [], set, metricsOf(items[i]));
 	}
 	/** The stations whose fields are open. */
 	let stationOpen = $state<Record<string, boolean>>({});
 	function setStation(j: number, set: number, id: string, v: unknown) {
-		const x = places[placeKey(data.items[j])].sets[set];
+		const x = places[placeKey(items[j])].sets[set];
 		x.values[id] = v;
 		if (!x.own?.includes(id)) x.own = [...(x.own ?? []), id];
 	}
@@ -609,16 +697,16 @@
 	}
 	function removeSet(i: number) {
 		const gone = log[i].sets.pop();
-		const key = placeKey(data.items[i]);
+		const key = placeKey(items[i]);
 		at = null;
 		if (gone)
-			showToast(`Removed ${data.items[i].task?.rowOne} ${log[i].sets.length + 1} of ${data.items[i].task?.name}, for this log.`, () => {
+			showToast(`Removed ${items[i].task?.rowOne} ${log[i].sets.length + 1} of ${items[i].task?.name}, for this log.`, () => {
 				if (!mounted) return 'Open the log to put it back.';
 				places[key].sets.push(gone);
 			});
 	}
 	function tickAll() {
-		for (const [i, it] of data.items.entries()) {
+		for (const [i, it] of items.entries()) {
 			const ids = it.task?.metrics.filter((m) => m.repeats).map((m) => m.id) ?? [];
 			if (!stationIn.has(i)) for (const x of log[i].sets) if (ids.some((id) => !empty(x.values[id]))) x.done = true;
 		}
@@ -671,8 +759,8 @@
 	 */
 	const isPrefill = (i: number, id: string) => isOpen && !!starts[i] && isSuggestion(log[i], starts[i], id);
 
-	/** Something is logged already: Same as last fills in only the rest. */
-	const started = $derived(data.items.some((it, i) => it.saved.length || log[i]?.sets.some((x) => x.done) || log[i]?.tick));
+	/** Something is logged already, done before a swap too: Same as last saves it first and fills in only the rest. */
+	const started = $derived(startedLog(elsewhere(), items, log));
 
 	async function sameAsLast() {
 		// What is ticked here is saved first, so it is kept.
@@ -710,7 +798,7 @@
 		goto(`${data.back}${data.back.includes('?') ? '&' : '?'}did=${data.occurrence.id}`);
 	}
 
-	const canRepeat = $derived(isOpen && data.items.some((it) => it.previous.length));
+	const canRepeat = $derived(isOpen && items.some((it) => it.previous.length));
 
 	const dateLabel = $derived(
 		new Date(data.occurrence.date + 'T12:00:00').toLocaleDateString(undefined, {
@@ -720,6 +808,9 @@
 		})
 	);
 
+	/** One day's scope, said one way: "today only", or a past open day's "Tue 18 Nov only". */
+	const oneDay = $derived(data.past ? `${dateLabel} only` : 'today only');
+
 	const LIST = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' });
 	const recapOf = (id: string, best = false) => {
 		const rc = data.recap[id];
@@ -728,17 +819,17 @@
 	const headOf = (it: Item, i: number) => {
 		const t = it.task!;
 		const c = circuits.get(i);
-		if (c) return [`${c.rounds.length} ${wordsAt(i).many}`, ...new Set(c.rounds[0].map((j) => data.items[j].task?.name ?? ''))].filter(Boolean).join(' · ');
+		if (c) return [insteadOf(it), `${c.rounds.length} ${wordsAt(i).many}`, ...new Set(c.rounds[0].map((j) => items[j].task?.name ?? ''))].filter(Boolean).join(' · ');
 		const n = log[i].sets.length;
 		const targets = repeatingOf(it).flatMap((m) => {
 			const v = targetAt(it, m.id);
 			return v === undefined ? [] : [`${v} ${m.unit ?? m.name.toLowerCase()}`];
 		});
 		const rest = t.restTimerEnabled ? `${t.betweenName.toLowerCase()} ${t.restTimerSeconds % 60 ? `${t.restTimerSeconds} s` : `${t.restTimerSeconds / 60} min`}` : '';
-		return [`${n} ${n === 1 ? t.rowOne : t.rowMany}`, ...targets, rest].filter(Boolean).join(' · ');
+		return [insteadOf(it), `${n} ${n === 1 ? t.rowOne : t.rowMany}`, ...targets, rest].filter(Boolean).join(' · ');
 	};
 	const foldedAt = (i: number) => {
-		const it = data.items[i];
+		const it = items[i];
 		if (quickMode || layout === 'all' || !isPlace(i)) return false;
 		return row ? row.key !== placeKey(it) : stage === 'correct' || runPlaces.length > 1;
 	};
@@ -749,15 +840,16 @@
 	const editing = $derived(canEdit && mode === 'edit');
 	const editPlaces = $derived.by((): EditPlace[] => {
 		const out: (EditPlace & { at: number[] })[] = [];
-		data.items.forEach((it, i) => {
+		items.forEach((it, i) => {
 			const g = out.find((x) => x.id === it.slotId);
 			if (g) return void g.at.push(i);
-			out.push({ id: it.slotId, name: it.task?.name ?? 'No matching Task', task: it.task?.id ?? null, numbers: [], rows: [], at: [i] });
+			out.push({ id: it.slotId, name: it.task?.name ?? 'No matching Task', task: it.task?.id ?? null, replace: null, numbers: [], rows: [], at: [i] });
 		});
 		for (const g of out) {
-			const it = data.items[g.at[0]];
+			const it = items[g.at[0]];
 			const s = slotIn(data.plan ?? [], g.id);
 			const t = it.task;
+			if (s?.taskId && !s.fillRule) g.replace = nameOf(s.taskId) ?? null;
 			if (s && t && (inRows(it) || s.sets)) {
 				const n = inRows(it) ? log[g.at[0]].sets.length : s.sets!;
 				const w = inRows(it) || !it.kids ? { one: t.rowOne, many: t.rowMany } : roundWords(t);
@@ -769,9 +861,9 @@
 			// The clock between rows is the Task's, everywhere.
 			if (t && (inRows(it) || it.kids)) g.numbers.push({ id: 'pause', label: t.betweenName, text: t.restTimerEnabled ? `${t.betweenName.toLowerCase()} ${t.restTimerSeconds} s` : `no ${t.betweenName.toLowerCase()}` });
 			// The rounds of a circuit keep their order.
-			if (g.at.length === 1 || !g.at.some((i) => data.items[i].roundHead || data.items[i].path.includes('#')))
+			if (g.at.length === 1 || !g.at.some((i) => items[i].roundHead || items[i].path.includes('#')))
 				for (const i of g.at) {
-					const x = data.items[i];
+					const x = items[i];
 					if (x.task && inRows(x) && log[i].sets.length > 1)
 						g.rows.push({ key: placeKey(x), name: x.task.name, one: x.task.rowOne, many: x.task.rowMany, fields: repeatingOf(x) as Field[], sets: log[i].sets, previous: x.previous.filter((v) => !isSummary(v)) });
 				}
@@ -809,8 +901,8 @@
 		void edit(`/api/tasks/${p.task}`, { name }, { name: p.name }, `Renamed ${p.name} to ${name}, everywhere.`);
 	}
 	function editNumber(p: EditPlace, id: string, n: number) {
-		const i = data.items.findIndex((it) => it.slotId === p.id);
-		const it = data.items[i];
+		const i = items.findIndex((it) => it.slotId === p.id);
+		const it = items[i];
 		const key = placeKey(it);
 		const s = slotIn(data.plan!, p.id)!;
 		if (id === 'pause') {
@@ -846,16 +938,19 @@
 	/** Out of the plan, from now on. A log that has values in it keeps it. */
 	function editRemove(p: EditPlace) {
 		if (!slotIn(data.plan!, p.id)) return void showToast(`${p.name} is not in the plan any more. This log keeps it.`);
-		const here = data.items.some((it, i) => it.slotId === p.id && hasLog(log[i], starts[i]));
+		const here = items.some((it, i) => it.slotId === p.id && hasLog(log[i], starts[i]));
 		// What is ticked here is saved first, so the log keeps its place.
 		const gone = async () => {
-			if (saveTimer !== undefined) {
-				dropAutosave();
-				if ((await autosave()).kind !== 'saved') return void showError('Not saved. Are you online?');
-			}
+			const first = await saveFirst();
+			if (first.kind !== 'saved') return void showError(first.kind === 'refused' ? first.why : 'Not saved. Are you online?');
 			await editPlan(withoutSlot(data.plan!, p.id), `Took ${p.name} out of ${data.habitName}, from now on.${here ? ' This log keeps it.' : ''}`);
 		};
 		void gone();
+	}
+	/** Keep in the plan from ⋯, or Replace… in Edit, saying why when it isn't kept (the band's Keep says that itself). */
+	async function keepOrSay(slot: string, task: string) {
+		const r = await keepInPlan(slot, task);
+		if (typeof r === 'string') showError(r);
 	}
 	function editAdd(task: string) {
 		const name = data.library.find((l) => l.id === task)?.name;
@@ -863,7 +958,7 @@
 	}
 	function editRows(key: string, rows: RowState[], moved: RowState) {
 		const before = [...places[key].sets];
-		const it = data.items.find((x) => placeKey(x) === key)!;
+		const it = items.find((x) => placeKey(x) === key)!;
 		places[key].sets = rows;
 		at = null;
 		showToast(`Moved ${it.task!.rowOne} ${before.indexOf(moved) + 1} of ${it.task!.name} to ${rows.indexOf(moved) + 1} of ${rows.length}, for this log.`, () => {
@@ -874,7 +969,106 @@
 		});
 	}
 
-	let swapping = $state<string | null>(null);
+	/** The Task swapped in is the one open, and focus goes back to its ⋯, where the swap was made. */
+	async function openSwapped(slot: string) {
+		const now = items.find((x) => x.slotId === slot && x.depth === 0);
+		if (!now) return;
+		here = placeKey(now);
+		at = null;
+		await tick();
+		document.querySelector<HTMLElement>(`[data-place="${CSS.escape(here)}"] .lg-more`)?.focus();
+	}
+	/**
+	 * Use another Task in a place's Slot for this log, or with none named, pick another for an
+	 * auto-filled Slot. What is ticked is saved first, so it is kept; offline both wait, in order.
+	 */
+	async function swapTask(it: Item, task?: string) {
+		if (task && task === it.task?.id) return;
+		// Queued, it would say the Task is in use while the card can't show it: nothing is swapped.
+		if (task && away(task)) return void showError(`Not swapped: ${nameOf(task) ?? 'that Task'} needs a connection.`);
+		const first = await saveFirst();
+		if (first.kind === 'refused') return void showError(`${first.why} Nothing was swapped.`);
+		// What was still to do here, for a Task swapped in that has no last time of its own.
+		const was = it.task;
+		if (was) carried = { ...carried, [it.slotId]: { id: was.id, from: was.name, fields: was.metrics.filter((m) => m.repeats), rows: (places[placeKey(it)]?.sets ?? []).filter((x) => !x.done).map((x) => ({ ...x.values })) } };
+		const url = `/log/${data.occurrence.id}?/swap`;
+		const label = data.habitName;
+		const a = await save(task ? url : `/log/${data.occurrence.id}?/reroll`, task ? [['slot', it.slotId], ['task', task]] : [['slot', it.slotId]], label);
+		if (a.kind === 'refused') return void showError(a.why);
+		const how = !task ? 'reroll' : task === it.own ? 'back' : 'swap';
+		// Undo swaps back to the Task it showed before (an auto-filled Slot that had none: none again), saving what is
+		// ticked first as a swap does.
+		const back = was?.id ?? (it.open ? '' : null);
+		const undo = back !== null
+			? async () => {
+					if (mounted) {
+						const first = await saveFirst();
+						if (first.kind === 'refused') return `${first.why} Nothing was swapped.`;
+					}
+					const b = await save(url, [['slot', it.slotId], ['task', back]], label);
+					if (b.kind === 'refused') return b.why;
+					// The place it puts back is the one open again.
+					if (mounted) {
+						here = placeKey({ path: it.path, task: was });
+						at = null;
+					}
+					return true;
+				}
+			: undefined;
+		// A Task swapped into a fixed Slot can stay there, from now on. Offline, Keep says it isn't saved, with Retry.
+		const keep = task && how === 'swap' && keepable(it.slotId) ? { label: 'Keep in the plan', run: () => keepInPlan(it.slotId, task) } : undefined;
+		// Offline it waits, and the place shows it at once when this page holds the Task's fields (see `items`).
+		if (a.kind === 'later') {
+			// Sent and not answered with the Task's fields not here: the card goes on showing the old one until it syncs.
+			showToast(waitingText(was?.name ?? null, task ? nameOf(task) : undefined, how, oneDay, !!task && !!onDevice(task)?.task), undo, undefined, keep);
+			return void openSwapped(it.slotId);
+		}
+		await invalidateAll();
+		const now = items.find((x) => x.slotId === it.slotId && x.depth === 0);
+		showToast(swapText(was?.name ?? null, now?.task?.name ?? 'another Task', how, oneDay), undo, undefined, keep);
+		await openSwapped(it.slotId);
+	}
+	/** A fixed Slot of the plan this log can change (today's open log): a Task swapped in there can be kept. */
+	function keepable(slot: string) {
+		const s = data.plan && slotIn(data.plan, slot);
+		return !!s?.taskId && !s.fillRule;
+	}
+	/**
+	 * Keep in the plan: a Task becomes its fixed Slot's own in this Variant, from now on, with the Slot's place and sets,
+	 * aiming for what it did here today, else its last time (see aimFor). One plan change: its Undo puts the Slot back
+	 * exactly, and today stays on the Task it shows. Offline: "Not saved. Are you online?" with Retry.
+	 */
+	async function keepInPlan(slot: string, task: string): Promise<string | void> {
+		if (!mounted) return 'Open the log to keep it in the plan.';
+		const s = data.plan && slotIn(data.plan, slot);
+		if (!s?.taskId || s.fillRule) return 'Not kept: that Slot is not in the plan any more.';
+		if (s.taskId === task) return;
+		// A swap of this Slot still waiting to be sent goes first: after the plan changed, it would be no pick, and Undo
+		// of the keep would put today back on the old Task.
+		if (offlinePicks[slot] && !(await sendAhead(`/log/${data.occurrence.id}?/aim`, []))) return void showError('Not saved. Are you online?', () => void keepInPlan(slot, task));
+		const at = items.find((x) => x.slotId === slot && x.depth === 0);
+		// With no swap today the place follows the plan and changes too (Replace…): what is ticked is saved first, as Remove does.
+		if (at?.task?.id === s.taskId) {
+			const first = await saveFirst();
+			if (first.kind !== 'saved') return void showError(first.kind === 'refused' ? first.why : 'Not saved. Are you online?', first.kind === 'refused' ? undefined : () => void keepInPlan(slot, task));
+		}
+		// What it did in this Slot today: in its place, and before a swap took it away.
+		const today = loggedAt([...items.flatMap((it, i) => entriesAt(it, i, false)), ...elsewhere()], task, at?.path ?? slot);
+		const a = await runAction<{ targets: Record<string, number>; aim: string }>(`/log/${data.occurrence.id}?/aim`, { slot, task, today: JSON.stringify(today) });
+		if (!a.ok || !a.data) return void showError(a.error ?? 'Not saved. Are you online?', () => void keepInPlan(slot, task));
+		// The plan as it stands now: it may have loaded again while that was on its way.
+		const plan = data.plan;
+		const was = plan && slotIn(plan, slot);
+		if (!plan || !was?.taskId || was.fillRule) return 'Not kept: that Slot is not in the plan any more.';
+		const variant = plan.find((v) => v.slots.some((x) => x.id === slot))?.name ?? data.variantName ?? '';
+		await editPlan(withSlot(plan, slot, { taskId: task, targets: a.data.targets, minTargets: {}, stretchTargets: {} }), keptText(nameOf(was.taskId) ?? "the plan's Task", nameOf(task) ?? 'another Task', variant, a.data.aim));
+	}
+	/** The swap picker, for a place, and what had focus before it, to go back to. `plan`: Replace… in Edit, from now on. */
+	let picking = $state<{ it: Item; from: HTMLElement | null; plan?: boolean } | null>(null);
+	const nameOf = (id: string) => data.library.find((l) => l.id === id)?.name ?? data.alts[id]?.task.name;
+	const dayText = (date: string) => LIST.format(new Date(date + 'T12:00:00'));
+	/** "Instead of Bench press, today only": a fixed Slot whose Task is swapped for this log. */
+	const insteadOf = (it: Item) => (it.depth === 0 && it.own && it.task && it.task.id !== it.own ? `Instead of ${nameOf(it.own) ?? 'the plan\'s Task'}, ${oneDay}` : '');
 	let howTo = $state<string | null>(null);
 	let finishButton = $state<HTMLButtonElement>();
 	function goToFinish() {
@@ -883,11 +1077,32 @@
 	}
 	function menuOf(it: Item): (Way | '-')[] {
 		const key = placeKey(it);
-		return [
+		const info: Way[] = [
 			...(it.task?.notes.trim() ? [{ label: howTo === key ? 'Hide how to' : 'How to', onselect: () => (howTo = howTo === key ? null : key) }] : []),
-			...(it.task ? [{ label: 'Last 7 times', href: `/library/${it.task.id}` }] : []),
-			...(stage === 'run' && it.depth === 0 ? [{ label: 'Swap…', onselect: () => (swapping = key) }] : []),
-			...(stage === 'run' && it.open ? [{ label: 'Pick another', action: '?/reroll', fields: { slot: it.slotId } }] : [])
+			...(it.task ? [{ label: 'Last 7 times', href: `/library/${it.task.id}` }] : [])
+		];
+		const swaps = stage === 'run' && it.depth === 0 ? swapWays(it) : [];
+		return [...info, ...(info.length && swaps.length ? ['-' as const] : []), ...swaps];
+	}
+	/** The swap's one home: the plan's Task, the one in use (ticked) and up to 2 used here before, then the picker. */
+	function swapWays(it: Item): (Way | '-')[] {
+		const more: Way = { label: 'Swap for another…', onselect: () => (picking = { it, from: document.activeElement as HTMLElement | null }) };
+		// An auto-filled Slot has no Task of its own: it picks again from its Fill rule.
+		if (!it.own) return [...(it.open ? [{ label: 'Pick another', onselect: () => void swapTask(it) }] : []), more];
+		const own = it.own;
+		const now = it.task?.id;
+		const plan = nameOf(own);
+		return [
+			// Offline, a Task whose fields aren't here is left out: Swap for another… lists it as needing a connection.
+			...(plan && (now === own || !away(own)) ? [{ label: plan, value: 'In the plan', checked: now === own, onselect: () => void swapTask(it, own) }] : []),
+			...(it.task && now !== own ? [{ label: it.task.name, value: cap(oneDay), checked: true }] : []),
+			...it.used
+				.filter((u) => u.taskId !== now && nameOf(u.taskId) && !away(u.taskId))
+				.slice(0, 2)
+				.map((u) => ({ label: nameOf(u.taskId)!, value: usedText(u, dayText), checked: false, onselect: () => void swapTask(it, u.taskId) })),
+			more,
+			// Later in the visit, as the band's Keep in the plan.
+			...(it.task && now !== own && keepable(it.slotId) ? ['-' as const, { label: `Keep ${it.task.name} in the plan`, onselect: () => void keepOrSay(it.slotId, now!) }] : [])
 		];
 	}
 	const hint = $derived(
@@ -904,7 +1119,7 @@
 			.join(' · ')
 	);
 
-	const prevSummary = (i: number) => data.items[i].previous.find(isSummary) ?? {};
+	const prevSummary = (i: number) => items[i].previous.find(isSummary) ?? {};
 	const num = (v: unknown) => (v === null || v === undefined || v === '' ? '' : String(v));
 	const stepOf = (m: Metric) => m.step ?? defaultStep(m.type, m.unit, units());
 	const isNumeric = (m: Metric) => m.type === 'number' || m.type === 'count' || m.type === 'duration';
@@ -1000,8 +1215,8 @@
 
 {#snippet stations(c: Circuit, k: number, word: string)}
 	<ul class="elist lg-stations" data-mode="use" style="--gap: 0px; --depth: 1" aria-label="In {word} {k + 1}">
-		{#each c.rounds[k] as j (placeKey(data.items[j]))}
-			{@const x = data.items[j]}
+		{#each c.rounds[k] as j (placeKey(items[j]))}
+			{@const x = items[j]}
 			{@const t = x.task}
 			{@const key = placeKey(x)}
 			{@const single = t?.metrics.filter((m) => !m.repeats) ?? []}
@@ -1042,24 +1257,15 @@
 
 {#snippet extraOf(it: Item)}
 	{@const t = it.task}
-	{#if swapping === placeKey(it)}
-		<form method="POST" action="?/swap" class="row lg-swap" use:enhance={() => async ({ update }) => { swapping = null; await update(); }}>
-			<input type="hidden" name="slot" value={it.slotId} />
-			<select class="grow" name="task" aria-label="Task to use instead of {t?.name ?? 'none'}">
-				{#each data.library as l (l.id)}<option value={l.id} selected={l.id === t?.id}>{l.name}</option>{/each}
-			</select>
-			<button>Use</button>
-			<button type="button" onclick={() => (swapping = null)}>Cancel</button>
-		</form>
-	{/if}
+	{#each doneLines(it) as line}<p class="meta-line">{line}</p>{/each}
 	{#if t && howTo === placeKey(it)}<div class="howto"><Markdown text={t.notes} small /></div>{/if}
 {/snippet}
 
 {#if editing}
-	<EditPlaces places={editPlaces} open={data.items.find((it) => placeKey(it) === row?.key)?.slotId ?? null} onorder={editOrder} onname={editName} onnumber={editNumber} onrows={editRows} onremove={editRemove} onadd={editAdd} library={data.library.filter((l) => !l.archived)} />
+	<EditPlaces places={editPlaces} open={items.find((it) => placeKey(it) === row?.key)?.slotId ?? null} onorder={editOrder} onname={editName} onnumber={editNumber} onrows={editRows} onremove={editRemove} onadd={editAdd} onreplace={(p) => (picking = { it: items.find((x) => x.slotId === p.id && x.depth === 0)!, from: document.activeElement as HTMLElement | null, plan: true })} library={data.library.filter((l) => !l.archived)} />
 {:else}
 <ul class="elist lg-page lg-places" data-mode="use" aria-label="What to log">
-	{#each data.items as it, i (placeKey(it))}
+	{#each items as it, i (placeKey(it))}
 		{@const t = it.task}
 		{@const key = placeKey(it)}
 		{@const single = t ? shownMetrics(t.metrics.filter((m) => !m.repeats)) : []}
@@ -1067,10 +1273,10 @@
 		{#if it.roundHead && !quickMode}<li class="lg-heading"><h2 class="card-title">{it.roundHead}</h2></li>{/if}
 		{#if t && isYesNo(it)}
 			{#if !quickMode}
-				<li class="row lg-row" class:done={log[i].tick} style:margin-inline-start="calc({it.depth} * var(--space-indent))">
+				<li class="row lg-row" class:done={log[i].tick} data-place={key} style:margin-inline-start="calc({it.depth} * var(--space-indent))">
 					<div class="card">
 						<span class="slot"></span>
-						<div class="content"><label class="lg-tick-label" for="tick-{i}">{t.name}</label>{@render extraOf(it)}</div>
+						<div class="content"><label class="lg-tick-label" for="tick-{i}">{t.name}</label>{#if insteadOf(it)}<p class="meta-line">{insteadOf(it)}</p>{/if}{@render extraOf(it)}</div>
 						<div class="verb">
 							<input id="tick-{i}" type="checkbox" class="tick hit" disabled={stage === 'read'} bind:checked={log[i].tick} aria-label="{t.name} done" />
 							{#if menuOf(it).length && stage === 'run'}<MenuButton class="quiet glyph lg-more" label="More for {t.name}" items={menuOf(it)} />{/if}
@@ -1131,6 +1337,7 @@
 						logged={logged?.key === key ? logged.set : null}
 						menu={menuOf(it)}
 						targetOf={(id) => targetAt(it, id)}
+						carried={carriedTo(it)}
 						onopen={(k) => openRow(i, k)}
 						onunfold={() => unfold(i)}
 						ondone={(k, keyboard) => doneRow(i, k, keyboard)}
@@ -1149,6 +1356,7 @@
 						<span class="slot"></span>
 						<div class="content">
 							<h2 class="name">{t?.name ?? 'No matching Task'}</h2>
+							{#if insteadOf(it)}<p class="meta-line">{insteadOf(it)}</p>{/if}
 							{#if !t}<p class="meta-line">Nothing in your <a href="/library">Library</a> matches this place's rules.</p>{:else if recapOf(t.id)}<p class="meta-line">{recapOf(t.id, true)}</p>{/if}
 							{@render extraOf(it)}
 						</div>
@@ -1191,8 +1399,24 @@
 </ul>
 {/if}
 
+{#if picking}
+	{@const p = picking}
+	{@const plan = p.it.own && nameOf(p.it.own)}
+	{@const like = plan ? { id: p.it.own!, name: plan } : p.it.task}
+	<SwapSheet
+		title={p.plan ? `Replace ${plan}` : like ? `Instead of ${like.name}` : 'A Task for this Slot'}
+		groups={(query) => swapGroups({ library: data.library, used: p.it.used, like, current: p.plan ? p.it.own : (p.it.task?.id ?? null), query, day: dayText, away: (id) => !p.plan && away(id) })}
+		onpick={(id) => void (p.plan ? keepOrSay(p.it.slotId, id) : swapTask(p.it, id))}
+		onclose={() => {
+			// Before it goes: `p` is `picking`, null once that is cleared.
+			p.from?.focus();
+			picking = null;
+		}}
+	/>
+{/if}
+
 <div class="lg-end" class:lg-editing={editing}>
-	{#if data.items.length === 0}<p class="empty-first">Nothing to log here. Add Tasks to it in the habit's editor, or finish it as it is.</p>{/if}
+	{#if items.length === 0}<p class="empty-first">Nothing to log here. Add Tasks to it in the habit's editor, or finish it as it is.</p>{/if}
 	{#if data.orphanNames.length && !quickMode}
 		<p class="notice"><span class="notice-text meta">This log also has values for {data.orphanNames.join(', ')}, which {data.orphanNames.length === 1 ? 'is' : 'are'} no longer in this habit. They are kept.</span></p>
 	{/if}
@@ -1232,7 +1456,7 @@
 		action="?/save"
 		class="lg-form"
 		bind:this={finishForm}
-		use:enhance={({ cancel }) => {
+		use:enhance={async ({ cancel }) => {
 			problem = '';
 			const gaps = missing();
 			if (gaps.length) {
@@ -1242,7 +1466,8 @@
 			}
 			endRest();
 			dropAutosave();
-			if (!navigator.onLine) {
+			// Offline, or behind what still waits from offline (a swap): it waits too, so it comes after.
+			if (!navigator.onLine || !(await sendAhead(saveUrl(), []))) {
 				cancel();
 				enqueue(saveUrl(), [['payload', payload(true, true)]], data.habitName);
 				clearDraft();
@@ -1316,8 +1541,7 @@
 	.lg-heading {
 		list-style: none;
 	}
-	.howto,
-	.lg-swap {
+	.howto {
 		flex-basis: 100%;
 		margin-block-start: var(--space-inline);
 	}

@@ -95,7 +95,7 @@ An auto-filled slot picks a Task from your Library each time the habit comes up,
 
 How it picks: Tasks that pass the must and must-not rules, minus Tasks already used in this log, ranked by preferred tags, then by least recently done (never-done first), with ties broken at random.
 
-On the log screen, **⋯ → Pick another** picks another Task and **Swap…** lets you choose one. A tag can't be in both **Must have** and **Must not have**; the editor tells you if a rule can never match.
+On the log screen, **⋯ → Pick another** picks another Task and **Swap for another…** lets you choose one, for that day only, each with **Undo**. **Keep in the plan** isn't offered there: it would replace the rule. A tag can't be in both **Must have** and **Must not have**; the editor tells you if a rule can never match.
 
 ## Tasks inside Tasks
 

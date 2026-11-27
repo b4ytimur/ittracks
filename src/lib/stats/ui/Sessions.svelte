@@ -2,17 +2,19 @@
 	// Recent sessions (W11): what was done each time, and whether the target was met.
 	import type { CardResult } from '../engine';
 	import { shortDay } from '../format';
+	import { insteadLine } from '$lib/log/places';
 
 	let { r }: { r: CardResult } = $props();
 	const met = (m: number | null) => (m === 1 ? 'Target met' : m === 0.5 ? 'Partly met' : m === 0 ? 'Not met' : null);
 </script>
 
 <ul class="sessions">
-	{#each r.sessions ?? [] as s (s.occId + s.task)}
+	<!-- Unkeyed: one log can hold the same Task twice (two Slots, or done there before a swap). -->
+	{#each r.sessions ?? [] as s}
 		<li>
 			<div class="head">
 				<strong>{shortDay(s.date)}</strong>
-				<span class="muted">{s.task}</span>
+				<span class="muted">{insteadLine(s.task, s.instead)}</span>
 				{#if met(s.met)}<span class="tag" class:strong={s.met === 1}>{met(s.met)}</span>{/if}
 			</div>
 			<div class="text">{s.text}</div>

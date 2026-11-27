@@ -84,15 +84,16 @@ export function progressOf(slots: ProgressSlot[], entries: ProgressEntry[], stat
 			less: amount.metric.better === 'less'
 		};
 	}
-	const { at } = place(slots, entries);
+	const { at, orphans } = place(slots, entries);
 	let total = 0;
 	let done = 0;
 	// Each place is a step when it has fields to fill in, or is a plain Yes or no; a Task
 	// made only of steps counts through them. A Circuit of 3 rounds has each step 3 times.
+	// What was done there with another Task, before its Slot was swapped, counts for it too.
 	for (const s of slots) {
 		if (!isStep(s, s.metrics.length)) continue;
 		total++;
-		if (at.get(s.path)?.some((e) => !(e.values._summary === true && Object.keys(e.values).length === 1))) done++;
+		if ([...(at.get(s.path) ?? []), ...orphans.filter((e) => e.path === s.path)].some((e) => !(e.values._summary === true && Object.keys(e.values).length === 1))) done++;
 	}
 	if (total < 2) return null;
 	if (!entries.length) return null;
