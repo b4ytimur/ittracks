@@ -1,15 +1,20 @@
 <script lang="ts" generics="T">
-	// The one list every editable list in the app is built from. Edit and select are modes of the
-	// same list, so the list a page shows in use is the list it edits, and the two can't drift apart.
+	// The one list every list of rows in the app is built from. A list has no mode: what a row offers
+	// follows from what the page passes, so the list a page shows is the list it changes.
 	//
-	// edit:      a handle on each row to drag (mouse, touch, pen), with the arrow keys on the
-	//            handle as the keyboard way; a remove button on each row; an add button under it.
-	// select:    a labelled checkbox on each row, and a tap anywhere on the row ticks it instead
-	//            of following its link. Shift-click ticks a range. Several lists on one page can
-	//            share one `selected` set (pass a SvelteSet); a list only adds and removes its own keys.
+	// The grip, on each row whenever there is `onmove` (and the list isn't selecting): drag it (a mouse or pen as soon as
+	// it moves; a finger after a press-and-hold, so a swipe that starts on it still scrolls the page); the arrow keys on it move one
+	// place; a tap, Enter or Space opens the Move menu, the one-pointer way (WCAG 2.5.7): Move up, Move down,
+	// Put inside {the row above}, Take out of {the row holding the list}, only those that can happen here.
+	// Every way ends in the same onmove, so the page says each move once, with its Undo.
+	// `selecting`: a labelled checkbox on each row, and a tap anywhere on the row ticks it instead of
+	// following its link. Shift-click ticks a range. Several lists on one page can share one `selected`
+	// set (pass a SvelteSet); a list only adds and removes its own keys.
+	// `onremove` puts a remove verb on each row, `onadd` an add slot at the end (a name field in place).
 	//
-	// The list knows nothing about what a row is: the page renders it with `row` and gets moves
-	// back as keys (see list.ts). Drops inside a row only happen where `canDrop` allows them.
+	// The list knows nothing about what a row is: the page renders it with `row` and gets moves back as
+	// keys (see list.ts). Drops inside a row only happen where `canDrop` allows them. A row that leaves
+	// with the focus in it hands the focus to the row taking its place, never to the page.
 	//
 	// Nesting, the outliner way: a row's `children` can hold another EditableList. While a row is
 	// held, height picks the gap and sideways travel the depth: toward the end puts it inside the row
@@ -18,25 +23,26 @@
 	import { tick, type Snippet } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { prefersReducedMotion } from 'svelte/motion';
-	import GhostSlot from './GhostSlot.svelte';
-	import { applyMove, dropDepth, dropPosition, gridDrop, rangeKeys, withDescendants, type Mode, type Move, type Position, type RowContext } from './list';
+	import { menuFit, menuKeys, menuNudge } from './MenuButton.svelte';
+	import { applyMove, dropDepth, dropPosition, gridDrop, moveChoices, nearest, pressMoved, rangeKeys, withDescendants, type Move, type MoveChoice, type Position, type RowContext } from './list';
 
 	let {
 		items,
 		key,
 		label,
-		mode = 'use',
+		selecting = false,
 		selected,
 		selectScope = 'item',
 		childKeys,
 		canDrop,
 		onmove,
 		onoutdent,
+		outOf = '',
 		onremove,
 		removeLabel = 'Remove',
 		onadd,
 		addLabel = 'Add',
-		addInUse = false,
+		slotOpen = false,
 		row,
 		rowCard = false,
 		href,
@@ -44,11 +50,10 @@
 		actions,
 		density = 'regular',
 		title,
-		children,
-		empty,
 		layout,
 		axis = 'y',
 		itemClass,
+		children,
 		ariaLabel,
 		class: klass = ''
 	}: {
@@ -57,8 +62,8 @@
 		key: (item: T) => string;
 		/** The item's name for screen readers ("Move Gym", "Select Gym"). Defaults to the key. */
 		label?: (item: T) => string;
-		/** One of three, so edit and select are never both on. */
-		mode?: Mode;
+		/** A checkbox on each row; a tap on the row ticks it. Wins over the grip where both would show. */
+		selecting?: boolean;
 		/** Ticked keys, owned by the page. Pass a SvelteSet so rows update when it changes. */
 		selected?: Set<string>;
 		/** Ticking a row ticks what is inside it too ("unit"; needs `childKeys`), or the row alone ("item"). */
@@ -68,37 +73,39 @@
 		/** Whether a move is allowed. Without it, rows can go before and after each other, never inside. */
 		canDrop?: (move: Move) => boolean;
 		/**
-		 * A row was moved. `order` is this list's keys afterwards (without the key, for a move inside a row),
-		 * `text` says it. A page that puts `text` in the band returns true: the band speaks it then, once.
+		 * Rows can be moved: a grip on each. `order` is this list's keys afterwards (without the key, for a move
+		 * inside a row), `text` says it. A page that puts `text` in the band returns true: the band speaks it then, once.
 		 */
 		onmove?: (move: Move, order: string[], text: string) => unknown;
 		/** In a list nested inside a row: the row with this key moves out, to just after the row holding the list. */
 		onoutdent?: (key: string) => void;
-		/** Shows a remove button on each row while editing. */
+		/** With onoutdent: the name of the row holding the list, for the Move menu's "Take out of {name}". */
+		outOf?: string;
+		/** A remove verb on each row. */
 		onremove?: (item: T) => void;
-		/** The remove button's word: Remove, Archive, Hide... or one per item. */
+		/** The remove verb's word: Remove, Archive, Hide... or one per item. */
 		removeLabel?: string | ((item: T) => string);
-		/** Adds to the list. With `rowCard`, an empty slot at the end of the list takes the new one's name. */
+		/** Adds to the list. With `rowCard`, a dashed slot at the end of the list takes the new one's name. */
 		onadd?: (name?: string) => void;
-		/** The slot shows in use too (a page whose list is there to be added to). */
-		addInUse?: boolean;
 		addLabel?: string;
+		/** With `rowCard`: the slot stays open with nothing in it, so names keep the column of grips nearby. */
+		slotOpen?: boolean;
 		row: Snippet<[T, RowContext]>;
-		/** The list draws the card: the handle and the verb sit inside it, and `row` renders its content only. */
+		/** The list draws the card: the grip and the verb sit inside it, and `row` renders its content only. */
 		rowCard?: boolean;
-		/** With `rowCard`, in use: the whole card follows the link on `a.name` in the row. */
+		/** With `rowCard`: the whole card follows this link (a stretched link on `a.name` in the row), except while selecting. */
 		href?: (item: T) => string | undefined;
 		/** With `rowCard`: this row holds others, so it and its `children` draw as one unit. */
 		holder?: (item: T) => boolean;
-		/** With `rowCard`, in use: what stands at the end of the row. */
+		/** With `rowCard`: what stands at the end of the row when it has no remove verb. */
 		actions?: Snippet<[T, RowContext]>;
 		density?: 'regular' | 'compact';
-		/** With layout "block": the title in the bar above the row, beside the handle and remove button. */
+		/** With layout "block": the title in the bar above the row, beside the grip and remove verb. */
 		title?: Snippet<[T, RowContext]>;
 		/**
-		 * "block": a bar with the handle, title and remove button above the row at full width,
-		 * for big items such as a page section that holds a list of its own.
-		 * "bare": `row` draws all of it and puts the handle (`ctx.grip`) where it belongs.
+		 * "block": a framed item with a bar (grip, title, remove verb) above the row at full width,
+		 * for big items such as a phase that holds fields of its own.
+		 * "bare": `row` draws all of it and puts the grip (`ctx.grip`) where it belongs.
 		 */
 		layout?: 'block' | 'bare';
 		/**
@@ -114,16 +121,13 @@
 		 * It moves with the row when the row is dragged, and drops are worked out on the row itself.
 		 */
 		children?: Snippet<[T, RowContext]>;
-		/** Shown when there are no items. */
-		empty?: Snippet;
 		ariaLabel?: string;
 		class?: string;
 	} = $props();
 
-	const editing = $derived(mode === 'edit');
-	const selecting = $derived(mode === 'select');
+	/** A grip on each row: there is onmove, and the list isn't selecting (the checkbox takes the slot then). */
+	const grips = $derived(!!onmove && !selecting);
 	const scopeOf = (item: T) => (typeof selectScope === 'function' ? selectScope(item) : selectScope);
-
 	const nameOf = (item: T) => label?.(item) ?? key(item);
 	const removeOf = (item: T) => (typeof removeLabel === 'function' ? removeLabel(item) : removeLabel);
 	const keys = $derived(items.map(key));
@@ -153,16 +157,58 @@
 		if (refocus) await focusHandle(k);
 	}
 
-	/** Moving a row can take the focus off its handle, or the row to another list: put it back. */
+	/** Moving a row can take the focus off its grip, or the row to another list: put it back. */
 	async function focusHandle(k: string) {
 		await tick();
 		const li = `li[data-key="${CSS.escape(k)}"]`;
-		// A row's own handle comes before any in what it holds.
+		// A row's own grip comes before any in what it holds.
 		const find = (from: string) => document.querySelector<HTMLElement>(`${from}${li} .handle`);
 		(find(`#${CSS.escape(uid)} > `) ?? find(''))?.focus();
 	}
 
+	// ----- The Move menu -----
+
+	let menuFor = $state<string | null>(null);
+	let menuUp = $state(false);
+	let menuRoom = $state(0);
+	let menuNudgeBy = $state(0);
+	let menuEl = $state<HTMLElement>();
+	let menuGrip: HTMLElement | null = null;
+	const choicesOf = (k: string) => moveChoices(keys, k, { allowed, nameOf: (x) => nameOf(items[keys.indexOf(x)]), outOf: onoutdent ? outOf : undefined, grid: axis === 'grid' });
+	const menuItems = () => [...(menuEl?.querySelectorAll<HTMLElement>('[role=menuitem]') ?? [])];
+
+	async function openMenu(k: string, grip: HTMLElement) {
+		if (!choicesOf(k).length) return;
+		menuFor = k;
+		menuGrip = grip;
+		menuRoom = 0;
+		await tick();
+		if (!menuEl) return;
+		// It hangs from the card (or the block's bar) it follows, or in a bare row from the grip's own wrapper.
+		const from = (menuEl.parentElement?.classList.contains('move-at') ? menuEl.parentElement : menuEl.previousElementSibling) ?? grip;
+		({ up: menuUp, room: menuRoom } = menuFit(from.getBoundingClientRect(), menuEl.scrollHeight));
+		menuNudgeBy = 0;
+		await tick();
+		if (!menuEl) return;
+		menuNudgeBy = menuNudge(menuEl.getBoundingClientRect(), 'start');
+		menuItems()[0]?.focus();
+	}
+
+	function closeMenu(refocus = true) {
+		menuFor = null;
+		if (refocus) menuGrip?.focus();
+	}
+
+	function choose(k: string, c: MoveChoice) {
+		menuFor = null;
+		if (c.move === 'out') outdent(k, true);
+		else commit(c.move, true);
+	}
+
 	// ----- Dragging -----
+
+	// ponytail: fixed ms, not a token; how long a finger holds the grip before its row lifts.
+	const HOLD_MS = 400;
 
 	let drag = $state<{
 		key: string;
@@ -178,20 +224,70 @@
 		/** Held far enough toward the start of a nested list to leave it. */
 		out: boolean;
 	} | null>(null);
+	/** A press on a grip that hasn't lifted its row yet: a tap, the start of a drag, or a finger holding it. */
+	let press: { key: string; x: number; y: number; hold: boolean; timer: number } | null = null;
+	/** The click a drag (or a swipe) ends with isn't a tap, so it opens no menu. */
+	let swallow = false;
 	let raf = 0;
 
 	const rows = () => (list ? Array.from(list.querySelectorAll<HTMLElement>(':scope > li[data-row]')) : []);
 
-	function start(e: PointerEvent, k: string) {
-		if (e.button !== 0 || !onmove) return;
-		e.preventDefault();
+	function down(e: PointerEvent, k: string) {
+		if (e.button !== 0 || !grips) return;
+		swallow = false;
+		// A finger on a touch screen holds to lift; until then the page scrolls (touch-action pan-y, DragHandle).
+		const hold = e.pointerType !== 'mouse' && matchMedia('(pointer: coarse)').matches;
+		if (!hold) e.preventDefault(); // no text selection while a mouse drags
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-		drag = { key: k, startX: e.clientX, startY: e.clientY, startScroll: window.scrollY, x: e.clientX, y: e.clientY, dx: 0, dy: 0, over: null, pos: null, out: false };
+		release();
+		press = { key: k, x: e.clientX, y: e.clientY, hold, timer: hold ? window.setTimeout(lift, HOLD_MS) : 0 };
+	}
+
+	function moved(e: PointerEvent) {
+		if (drag) return follow(e);
+		const now = press && pressMoved(e.clientX - press.x, e.clientY - press.y, press.hold);
+		if (!now || now === 'stay') return;
+		if (now === 'scroll') {
+			// A swipe, not a hold: the page scrolls, and the click it may end with is no tap.
+			swallow = true;
+			return release();
+		}
+		lift();
+		follow(e);
+	}
+
+	/** The press becomes a drag: the row lifts where the press began. */
+	function lift() {
+		if (!press) return;
+		const p = press;
+		release();
+		menuFor = null;
+		drag = { key: p.key, startX: p.x, startY: p.y, startScroll: window.scrollY, x: p.x, y: p.y, dx: 0, dy: 0, over: null, pos: null, out: false };
 		// No text gets selected while a row is held.
 		window.getSelection()?.removeAllRanges();
 		document.documentElement.classList.add('el-dragging');
 		cancelAnimationFrame(raf);
 		raf = requestAnimationFrame(scrollStep);
+	}
+
+	function release() {
+		if (press) clearTimeout(press.timer);
+		press = null;
+	}
+
+	// A list that goes mid-press or mid-drag takes its timer, its frame loop and the page's dragging class with it.
+	$effect(() => () => {
+		release();
+		stop();
+	});
+
+	/** While a row is held a finger drags it instead of scrolling the page. Svelte adds touchmove passive, so this is added by hand. */
+	function heldScroll(el: Element) {
+		const stay = (e: Event) => {
+			if (drag) e.preventDefault();
+		};
+		el.addEventListener('touchmove', stay, { passive: false });
+		return () => el.removeEventListener('touchmove', stay);
 	}
 
 	function follow(e: PointerEvent) {
@@ -262,16 +358,31 @@
 		document.documentElement.classList.remove('el-dragging');
 	}
 
-	function end() {
+	/** The pointer is up (or let go): a held row drops; a press that never lifted was a tap, and its click opens the menu. */
+	function up() {
+		release();
 		if (!drag) return;
 		const d = drag;
+		swallow = true;
 		stop();
 		if (d.out) outdent(d.key, false);
 		else if (d.over && d.pos) commit({ key: d.key, target: d.over, position: d.pos }, false);
 	}
 
 	function cancel() {
+		if (drag) swallow = true;
+		release();
 		stop();
+	}
+
+	/** A tap, Enter or Space on the grip: the Move menu. A click from the keyboard (detail 0) always counts. */
+	function tap(e: MouseEvent, k: string) {
+		if (swallow && e.detail > 0) {
+			swallow = false;
+			return;
+		}
+		if (menuFor === k) closeMenu();
+		else openMenu(k, e.currentTarget as HTMLElement);
 	}
 
 	/** The keyboard way: arrows move one place; right arrow indents into the row above where allowed, left arrow outdents. */
@@ -293,6 +404,34 @@
 		commit(m, true);
 	}
 
+	// ----- Focus when a row leaves -----
+
+	// A row removed, archived away or moved into another takes its focused control with it, and the focus
+	// would fall to the page. Before the list redraws, note where it was; after, give it to the control in
+	// the same place in the row now at that index (or the last row, or the add slot).
+	const FOCUSABLE = 'button:not([tabindex="-1"]), a[href], input:not([type="hidden"]), select, textarea, [tabindex="0"]';
+	/** A row's own controls, in order: not those of rows nested in it, nor of an open menu. */
+	const controls = (r: Element) => [...r.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((c) => c.closest('li[data-row]') === r && !c.closest('.menu'));
+	let leaving: { key: string; index: number; at: number } | null = null;
+	$effect.pre(() => {
+		void keys;
+		const el = document.activeElement;
+		const rs = rows();
+		const r = el ? rs.find((x) => x.contains(el)) : undefined;
+		leaving = r ? { key: r.dataset.key!, index: rs.indexOf(r), at: controls(r).indexOf(el as HTMLElement) } : null;
+	});
+	$effect(() => {
+		void keys;
+		const was = leaving;
+		leaving = null;
+		if (!was || keys.includes(was.key)) return;
+		const now = document.activeElement;
+		if (now && now !== document.body && now.isConnected) return;
+		const rs = rows();
+		const next = rs[nearest(was.index, rs.length)];
+		const cs = next ? controls(next) : [];
+		(cs[nearest(was.at, cs.length)] ?? list?.querySelector<HTMLElement>(':scope > .ghost > .ghost-slot'))?.focus();
+	});
 
 	// ----- Selecting -----
 
@@ -323,23 +462,36 @@
 		e.stopPropagation();
 		toggle(k, e.shiftKey);
 	}
+
+	// ----- Adding: the dashed slot at the end, a button until pressed, then a name field in the same box -----
+
+	/** Enter adds and stays open for the next name; Escape closes; leaving the field adds what was typed. */
+	let naming = $state<string | null>(null);
+	function addNamed(again: boolean) {
+		const name = naming?.trim();
+		naming = again && name ? '' : null;
+		if (name) onadd?.(name);
+	}
 </script>
 
 <svelte:window
 	onkeydown={(e) => {
 		if (drag && e.key === 'Escape') cancel();
 	}}
+	onpointerdown={(e) => {
+		if (menuFor !== null && !menuEl?.contains(e.target as Node) && !menuGrip?.contains(e.target as Node)) closeMenu(false);
+	}}
 />
 
 <ul
 	id={uid}
 	class="elist {klass}"
-	data-mode={mode}
 	data-density={density}
 	class:grid={axis === 'grid'}
 	class:block={layout === 'block'}
-	class:editing
+	class:grips
 	class:selecting
+	class:slotted={grips || selecting || slotOpen}
 	bind:this={list}
 	aria-label={ariaLabel}
 >
@@ -347,7 +499,7 @@
 		{@const k = key(item)}
 		{@const on = !!selected?.has(k)}
 		{@const dragging = drag?.key === k}
-		{@const ctx = { index, mode, editing, selecting, selected: on, dragging }}
+		{@const ctx = { index, selecting, selected: on, dragging }}
 		<li
 			data-row
 			data-key={k}
@@ -383,39 +535,65 @@
 					class="handle"
 					aria-label="Move {nameOf(item)}"
 					aria-describedby="{uid}-hint"
-					onpointerdown={(e) => start(e, k)}
-					onpointermove={follow}
-					onpointerup={end}
+					aria-haspopup="menu"
+					aria-expanded={menuFor === k}
+					onpointerdown={(e) => down(e, k)}
+					onpointermove={moved}
+					onpointerup={up}
 					onpointercancel={cancel}
-					onlostpointercapture={end}
-					onkeydown={(e) => keydown(e, k)}><span aria-hidden="true">⠿</span></button
+					onlostpointercapture={up}
+					onclick={(e) => tap(e, k)}
+					oncontextmenu={(e) => e.preventDefault()}
+					onkeydown={(e) => keydown(e, k)}
+					{@attach heldScroll}><span aria-hidden="true">⠿</span></button
 				>
 			{/snippet}
-			{#snippet gripOf()}{@render grip()}{/snippet}
+			{#snippet menu()}
+				{#if grips && menuFor === k}
+					<span
+						class="menu {layout === 'bare' ? 'start' : 'move-menu'}"
+						role="menu"
+						tabindex="-1"
+						aria-label="Move {nameOf(item)}"
+						data-side={menuUp ? 'up' : null}
+						style:--menu-room="{menuRoom}px"
+						style:--menu-nudge="{menuNudgeBy}px"
+						bind:this={menuEl}
+						onkeydown={(e) => menuKeys(e, menuItems(), closeMenu)}
+					>
+						{#each choicesOf(k) as c (c.label)}
+							<button type="button" role="menuitem" tabindex="-1" onclick={() => choose(k, c)}><span class="menu-label">{c.label}</span></button>
+						{/each}
+					</span>
+				{/if}
+			{/snippet}
+			{#snippet moveAt()}<span class="move-at">{@render grip()}{@render menu()}</span>{/snippet}
 			{#if layout === 'bare'}
-				{@render row(item, { ...ctx, grip: editing && onmove ? gripOf : undefined })}
+				{@render row(item, { ...ctx, grip: grips ? moveAt : undefined })}
 			{:else if rowCard && layout !== 'block'}
-			<div class="card" class:link={mode === 'use' && !!href?.(item)}>
-				<div class="slot">
-					{#if selecting && selected}<label class="pick-hit hit">{@render pick()}</label>
-					{:else if editing && onmove}{@render grip()}{/if}
+				<div class="card" class:link={!selecting && !!href?.(item)}>
+					<div class="slot">
+						{#if selecting && selected}<label class="pick-hit hit">{@render pick()}</label>
+						{:else if grips}{@render grip()}{/if}
+					</div>
+					<div class="content">{@render row(item, ctx)}</div>
+					{#if onremove && !selecting}
+						<button type="button" class="quiet verb" aria-label="{removeOf(item)} {nameOf(item)}" onclick={() => onremove(item)}>{removeOf(item)}</button>
+					{:else if actions && !selecting}
+						<div class="verb">{@render actions(item, ctx)}</div>
+					{/if}
 				</div>
-				<div class="content">{@render row(item, ctx)}</div>
-				{#if editing && onremove}
-					<button type="button" class="quiet verb" aria-label="{removeOf(item)} {nameOf(item)}" onclick={() => onremove(item)}>{removeOf(item)}</button>
-				{:else if mode === 'use' && actions}
-					<div class="verb">{@render actions(item, ctx)}</div>
-				{/if}
-			</div>
-			{:else if editing || selecting}
-			<div class="head">
-				{#if selecting && selected}{@render pick()}{/if}
-				{#if editing && onmove}{@render grip()}{/if}
-				<div class="title">{@render title?.(item, ctx)}</div>
-				{#if editing && onremove}
-					<button type="button" class="quiet remove" aria-label="{removeOf(item)} {nameOf(item)}" onclick={() => onremove(item)}>{removeOf(item)}</button>
-				{/if}
-			</div>
+				{@render menu()}
+			{:else}
+				<div class="head">
+					{#if selecting && selected}{@render pick()}
+					{:else if grips}{@render grip()}{/if}
+					<div class="title">{@render title?.(item, ctx)}</div>
+					{#if onremove && !selecting}
+						<button type="button" class="quiet remove" aria-label="{removeOf(item)} {nameOf(item)}" onclick={() => onremove(item)}>{removeOf(item)}</button>
+					{/if}
+				</div>
+				{@render menu()}
 			{/if}
 			{#if layout === 'block'}
 				<div class="block-body">
@@ -428,23 +606,47 @@
 				{:else}{@render children(item, ctx)}{/if}
 			{/if}
 		</li>
-	{:else}
-		{#if empty}<li class="empty">{@render empty()}</li>{/if}
 	{/each}
-	{#if rowCard && onadd && (editing || (addInUse && mode === 'use'))}
-		<li class="ghost"><GhostSlot label={addLabel} onadd={(name) => onadd?.(name)} /></li>
+	{#if rowCard && onadd && !selecting}
+		<li class="ghost">
+			{#if naming === null}
+				<button type="button" class="ghost-slot" onclick={() => (naming = '')}><span aria-hidden="true">+</span><span>{addLabel}</span></button>
+			{:else}
+				<div class="ghost-slot">
+					<span aria-hidden="true">+</span>
+					<!-- svelte-ignore a11y_autofocus -->
+					<input
+						class="inline-text name"
+						aria-label={addLabel}
+						maxlength="120"
+						autofocus
+						bind:value={naming}
+						onkeydown={(e) => {
+							if (e.key === 'Enter') {
+								e.preventDefault();
+								addNamed(true);
+							} else if (e.key === 'Escape') {
+								e.preventDefault();
+								naming = null;
+							}
+						}}
+						onblur={() => addNamed(false)}
+					/>
+				</div>
+			{/if}
+		</li>
 	{/if}
 </ul>
-{#if !rowCard && editing && onadd}
+{#if !rowCard && onadd && !selecting}
 	<button type="button" class="add" onclick={() => onadd()}>+ {addLabel}</button>
 {/if}
-{#if editing && onmove}
-	<span id="{uid}-hint" class="sr-only"
-		>Drag, or use the {axis === 'grid' ? '' : 'up and down '}arrow keys, to move.{canDrop && axis !== 'grid' ? ' The right arrow puts it inside the row above, where it fits.' : ''}{onoutdent
+{#if grips}
+	<span id="{uid}-hint" class="vh"
+		>Press to choose a move, drag, or use the {axis === 'grid' ? '' : 'up and down '}arrow keys.{canDrop && axis !== 'grid' ? ' The right arrow puts it inside the row above, where it fits.' : ''}{onoutdent
 			? ' The left arrow takes it out of this list.'
 			: ''}</span
 	>
-	<span class="sr-only" aria-live="polite">{announce}</span>
+	<span class="vh" aria-live="polite">{announce}</span>
 {/if}
 
 <style>
@@ -461,7 +663,7 @@
 		margin-inline-start: 0;
 	}
 	/* Block layout: a framed item with a title bar. */
-	.block.editing > li {
+	.block > li {
 		border: 1px dashed var(--line);
 		border-radius: var(--radius-card);
 		padding: var(--space-inline);
@@ -478,7 +680,7 @@
 		font-weight: 600;
 		color: var(--ink-muted);
 	}
-	.block.editing > li > .block-body:not(:empty) {
+	.block > li > .block-body:not(:empty) {
 		margin-top: var(--space-inline);
 	}
 	.block > li.dragging {
@@ -493,16 +695,5 @@
 	}
 	.add {
 		margin-top: var(--space-inline);
-	}
-	.empty {
-		display: block;
-	}
-	.sr-only {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		overflow: hidden;
-		clip: rect(0 0 0 0);
-		white-space: nowrap;
 	}
 </style>

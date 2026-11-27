@@ -239,12 +239,13 @@
 				items={g.items}
 				key={(t) => t.id}
 				label={(t) => t.name}
-				{mode}
+				selecting={mode === 'select'}
 				{selected}
 				rowCard
-				href={(t) => `/library/${t.id}`}
+				slotOpen={mode === 'edit'}
+				href={mode === 'use' ? (t) => `/library/${t.id}` : undefined}
 				itemClass={(t) => (struck.has(t.id) ? 'struck' : '')}
-				onremove={archive}
+				onremove={mode === 'edit' ? archive : undefined}
 				removeLabel={(t) => (t.deleteAfter ? 'Put back' : t.archived ? 'Unarchive' : 'Archive')}
 				ariaLabel={g.label || 'Tasks'}
 			>

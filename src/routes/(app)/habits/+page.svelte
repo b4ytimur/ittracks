@@ -331,19 +331,20 @@
 		{items}
 		key={(h) => h.id}
 		label={(h) => h.name}
-		{mode}
+		selecting={mode === 'select'}
 		{selected}
 		rowCard
 		holder={(h) => !!kids.get(h.id)?.length}
-		href={(h) => `/habits/${h.id}`}
+		href={mode === 'use' ? (h) => `/habits/${h.id}` : undefined}
 		selectScope={(h) => (kids.get(h.id)?.length ? 'unit' : 'item')}
 		childKeys={(k) => (kids.get(k) ?? []).map((x) => x.id)}
 		itemClass={(h) => (struck.has(h.id) ? 'struck' : '')}
 		ariaLabel={name}
 		{canDrop}
-		onmove={(m, order, text) => (m.position === 'inside' ? (indent(m.key, m.target), true) : reorder(order, text))}
-		onoutdent={holder ? (k) => outdent(k, holder) : undefined}
-		onremove={archive}
+		onmove={mode === 'edit' ? (m, order, text) => (m.position === 'inside' ? (indent(m.key, m.target), true) : reorder(order, text)) : undefined}
+		onoutdent={mode === 'edit' && holder ? (k) => outdent(k, holder) : undefined}
+		outOf={holder?.name}
+		onremove={mode === 'edit' ? archive : undefined}
 		removeLabel={(h) => (h.deleteAfter ? 'Put back' : h.archived ? 'Unarchive' : 'Archive')}
 	>
 		{#snippet row(h)}

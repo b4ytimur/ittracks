@@ -1,6 +1,6 @@
 /* Menu: the one menu box every menu and panel uses (R2.13), its items and marks (R2.14), and the CSS half of the
    placement rule (D2.4, R2.6). Moved out of LogControl. Consumers: LogControl's ⋯, the layout chooser
-   (.menu.layout-menu, TodayLayouts), DragHandle's Move menu (.menu.move-menu), Card's ⋯ panel (a role-less .menu in a
+   (.menu.layout-menu, TodayLayouts), DragHandle's Move menu (.menu.move-menu, or .menu.start in a bare row), Card's ⋯ panel (a role-less .menu in a
    details, R2.12), Combobox's panel (.menu.combo-panel). Owns .menu, .menu[hidden], .menu[data-side='up'], the items (.menu > [role^='menuitem'], and a
    role-less panel's button and a), .menu-label, .menu-value, .menu-note, .menu-check, .menu > hr, the open row's rise.
    Markup:
@@ -38,9 +38,10 @@
    data-side on open and on every echo:floor (Placement, in the README). */
 .menu[data-side='up'] { top: auto; bottom: calc(100% + var(--space-tight)); }
 /* The open row rises above the rows after it (z-drop names this layer), under a stuck heading (z-heading) and the
-   pinned title line (R1.3): a .link card's verb is its own stacking context (z 1, ListRow), so a menu inside it clears
-   later rows only if its whole row rises. Keyed on any open menu trigger in the row's own card (LogControl's ⋯, DragHandle's grip). */
-.elist > li:has(> .card [aria-haspopup='menu'][aria-expanded='true']) { z-index: var(--z-drop); }
+   pinned title line (R1.3): a .link card's verb and slot are stacking contexts (z 1, ListRow), so a menu inside one clears
+   later rows only if its whole row rises. Keyed on any open menu trigger in the row's own card or block bar (LogControl's ⋯,
+   DragHandle's grip), or on a bare row's open grip (DragHandle's .move-at). */
+.elist > li:has(> :is(.card, .head) [aria-haspopup='menu'][aria-expanded='true'], .move-at > [aria-expanded='true']) { z-index: var(--z-drop); }
 
 /* ---------- Items ---------- */
 /* The label at the start, its value at the end, a note under the label. 4 + 24 (+ 16 for a note) + 4: 32px, 48 with a

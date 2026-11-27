@@ -190,7 +190,7 @@
 
 {#if data.later.length}
 	<GroupHeading title="Started later" count={String(data.later.length)} />
-	<EditableList items={data.later} key={(l) => l.habitId} label={(l) => l.name} mode="use" rowCard ariaLabel="Started later">
+	<EditableList items={data.later} key={(l) => l.habitId} label={(l) => l.name} rowCard ariaLabel="Started later">
 		{#snippet row(l)}
 			<span class="name" id="h-{l.habitId}">{l.name}</span>
 			<p class="meta-line">Starts {short(l.startDate)}. If you really began on this day, start it from here.</p>
@@ -212,7 +212,7 @@
 {#if wide.current}<GroupHeading title="Last seven days" />{@render seven()}{/if}
 {#if data.breaking.length}
 	<GroupHeading title={data.breaking.some((b) => b.limit) ? 'Breaking and limiting' : 'Breaking'} />
-	<EditableList items={data.breaking} key={(b) => b.habitId} label={(b) => b.name} mode="use" rowCard ariaLabel="Breaking">
+	<EditableList items={data.breaking} key={(b) => b.habitId} label={(b) => b.name} rowCard ariaLabel="Breaking">
 		{#snippet row(b)}
 			<a class="name" id="h-{b.habitId}" href="/habits/{b.habitId}/chain">{b.name}</a>
 			<p class="meta-line">
@@ -262,7 +262,7 @@
 {/snippet}
 
 {#snippet list(items: Item[], name: string)}
-	<EditableList {items} key={(x) => x.habitId} label={(x) => x.name} mode="use" rowCard ariaLabel={name} itemClass={(x) => (x.occurrence?.status === 'done' ? 'done' : x.occurrence?.status === 'skipped' ? 'skipped' : '')}>
+	<EditableList {items} key={(x) => x.habitId} label={(x) => x.name} rowCard ariaLabel={name} itemClass={(x) => (x.occurrence?.status === 'done' ? 'done' : x.occurrence?.status === 'skipped' ? 'skipped' : '')}>
 		{#snippet row(item)}
 			{@const o = item.occurrence}
 			{@const open = notLogged(item)}

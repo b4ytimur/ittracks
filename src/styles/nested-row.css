@@ -40,14 +40,14 @@
 /* ---------- Plain rows: no fill, no edge, one line-inset divider inset to the name column ---------- */
 /* Every li on a shelf spans the band's full width at every depth; the indent is the row's own padding,
    so --drop-depth is the absolute depth measured from the band's edge. Right padding equals the card's,
-   so verbs line up at every depth. --row-slot is the slot's width where it stays open (select mode). */
+   so verbs line up at every depth. --row-slot is the slot's width where the dividers show beside it (selecting). */
 .shelf .elist > li > .card {
 	--indent-x: calc(var(--space-group) + (var(--depth) - 1) * var(--space-indent));
 	/* Grip, pick and verb centre on the row, as ListRow's do; a row with lines under it centres them on its name and meta. */
 	align-items: center;
 	min-height: var(--target-touch);
 	/* space-tight above and below: a one-line row stays 44px, a name + meta row becomes 52px (13 pitches),
-	   so rows keep air between them when edit mode hides the dividers (R1.5). */
+	   so rows keep air between them when grips hide the dividers (R1.5). */
 	padding-block: var(--space-tight); padding-inline: var(--indent-x) var(--space-group);
 	border: 0; border-radius: 0;
 	background: transparent;
@@ -65,8 +65,8 @@
 		no-repeat var(--divider-at, right) top / calc(100% - var(--indent-x) - var(--row-slot, 0px)) 1px;
 }
 [dir='rtl'] .shelf { --divider-at: left; }
-.shelf > .elist[data-mode='edit'] { --divider: transparent; --divider-width: 0px; } /* R1.5: no lines on lines */
-.shelf > .elist[data-mode='select'] { --row-slot: var(--handle-slot); }
+.shelf > .elist.grips { --divider: transparent; --divider-width: 0px; } /* R1.5: no lines on lines */
+.shelf > .elist.selecting { --row-slot: var(--handle-slot); }
 
 /* Weight: a child is ground (400); a holder on a shelf is the figure of its own level (600). Meta is ink:
    ink-muted on surface-sunken is 4.03:1 in light. */
@@ -84,7 +84,7 @@
    would beat the UA's [hidden] rule, so it is restated. */
 .shelf > .elist[hidden] { display: none; }
 
-/* ---------- An empty shelf (edit mode only): EmptyState's ghost slot in the child columns ---------- */
+/* ---------- A nested list's add slot (EmptyState's ghost slot) in the child columns ---------- */
 /* The li puts the slot's box 8px inside the band; EmptyState's .shelf .ghost-slot padding then puts its + on the
    grip column and its words on the name column. */
 .shelf .ghost { padding-block: var(--space-inline); padding-inline: calc(var(--space-inline) + (var(--depth) - 1) * var(--space-indent)) var(--space-inline); }
@@ -122,8 +122,8 @@
 }
 .elist > .holder.picked[data-select-scope='unit'] > .card { box-shadow: none; }
 /* An item-scope pick on the band's last row is a square ring; the shelf clips it to the outline's corners.
-   Select mode only: nothing is dragged there, so no drop line or lifted row needs to leave the band. */
-.elist[data-mode='select'] > .holder > .shelf { overflow: clip; }
+   While selecting only: nothing is dragged then, so no drop line or lifted row needs to leave the band. */
+.elist.selecting > .holder > .shelf { overflow: clip; }
 
 @media (prefers-reduced-motion: no-preference) {
 	.elist > .holder { transition: border-color var(--duration-quick) var(--ease-standard); }

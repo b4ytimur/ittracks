@@ -35,7 +35,7 @@ Today, Habits, Library and History each show their view as a sentence, such as "
 
 ## Edit mode
 
-Pages edit in place. The switch at the top of a page (**Use**, **Edit**, and **Select** where there is something to change together) turns the same list into one you can edit; Esc goes back to Use. Drag the ⠿ handle with a mouse, finger or pen, or focus it and use the arrow keys. A layout change that can't be saved goes back, and the line above the tabs offers **Retry**.
+Pages edit in place. The switch at the top of a page (**Use**, **Edit**, and **Select** where there is something to change together) turns the same list into one you can edit; Esc goes back to Use. Drag the ⠿ handle with a mouse or pen, or hold it a moment with a finger and then drag (a swipe that starts on it still scrolls), or focus it and use the arrow keys. A tap on ⠿ (or Enter) opens the moves it can make: **Move up**, **Move down**, **Put inside** the row above and **Take out of** the row that holds it, where they apply. A layout change that can't be saved goes back, and the line above the tabs offers **Retry**.
 
 ### Today
 
