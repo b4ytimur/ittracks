@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { habitsWords, historyWords, libraryWords, sentence, todayWords, type TodayCtx } from './view-words';
+import { habitsWords, historyWords, inMyOrder, libraryWords, ownNumber, sentence, todayWords, type TodayCtx } from './view-words';
 import { viewState } from './views';
 
 const ctx: TodayCtx = { areas: [{ id: 'a1', name: 'Fitness' }, { id: 'a2', name: 'Focus' }], identities: ['I am a non-smoker.'], parts: true, breaking: true };
@@ -40,6 +40,47 @@ describe("Today's sentence (TS.1)", () => {
 				expect(o.said, `${w.key} ${o.value}`).toMatch(/^(now|is) /);
 				expect(o.name.length).toBeGreaterThan(0);
 			}
+	});
+	it('where Breaking stands is the last item of "by": its words flip, it never ticks, and a pick flips it back', () => {
+		const after = word({}, 'by');
+		expect(after.options.at(-1)).toMatchObject({ value: 'breaking:first', label: 'breaking first', said: 'now puts breaking first' });
+		expect(after.pick('breaking:first')).toEqual({ ...viewState.parse({}), first: true });
+		const first = word({ first: true }, 'by');
+		expect(first.options.at(-1)).toMatchObject({ value: 'breaking:first', label: 'breaking after the day', said: 'now puts breaking after the day' });
+		expect(first.pick('breaking:first')).toMatchObject({ first: false });
+		expect(first.value).not.toBe('breaking:first');
+		// An arrangement keeps where Breaking stands.
+		expect(first.pick('name')).toMatchObject({ first: true, sort: 'name' });
+	});
+	it('nothing to break, no Breaking item', () => {
+		expect(word({}, 'by', { ...ctx, breaking: false }).options.map((o) => o.value)).not.toContain('breaking:first');
+	});
+});
+
+describe('grips on Today: while the sentence reads "in my order" (MO)', () => {
+	it('My order with no groups reads "in my order", and has grips', () => {
+		expect(inMyOrder(viewState.parse({ sort: 'manual' }))).toBe(true);
+		expect(word({ sort: 'manual' }, 'by').shown).toMatch(/^in my order/);
+	});
+	it('any other sort has none', () => {
+		for (const sort of ['cue', 'name', 'streak']) expect(inMyOrder(viewState.parse({ sort })), sort).toBe(false);
+	});
+	it('grouped, the sentence reads the grouping, so there are none even in My order', () => {
+		for (const group of ['area', 'part', 'identity']) expect(inMyOrder(viewState.parse({ sort: 'manual', group })), group).toBe(false);
+	});
+});
+
+describe("a habit's own number, from its open row", () => {
+	const all = { h1: 'streak' as const };
+	it('sets one, says it, and leaves the map it came from alone', () => {
+		expect(ownNumber(all, 'h2', 'Gym', 'week')).toEqual({ next: { h1: 'streak', h2: 'week' }, said: 'Gym now shows done this week.' });
+		expect(all).toEqual({ h1: 'streak' });
+	});
+	it("'' follows the view again", () => {
+		expect(ownNumber(all, 'h1', 'Read', '')).toEqual({ next: {}, said: "Read now shows the view's number." });
+	});
+	it('Nothing says no number', () => {
+		expect(ownNumber(all, 'h1', 'Read', 'none')).toEqual({ next: { h1: 'none' }, said: 'Read now shows no number.' });
 	});
 });
 

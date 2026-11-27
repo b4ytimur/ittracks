@@ -13,8 +13,7 @@ const files = readdirSync('src', { recursive: true, encoding: 'utf8' })
 const allowed: [file: string, declaration: string, reason: string][] = [
 	['lib/stats/ui/Breakdown.svelte', 'gap: 2px', "the hairline between one stacked bar's segments: part of the drawn mark, like its 14px height"],
 	['lib/stats/ui/Streaks.svelte', 'gap: 2px', "the hairline between a strip's days: part of the drawn mark, like its 10px cells"],
-	['routes/(app)/habits/[id]/chain/+page.svelte', 'gap: 2px', "the hairline between the chain's 16px cells, each its own target"],
-	['routes/(app)/+page.svelte', 'top: calc((1.5rem + 1.25rem - var(--control-sm)) / 2)', "centres the › on the name and meta lines (24 + 20px) as list-row.css centres the slot; type has no line-height tokens"]
+	['routes/(app)/habits/[id]/chain/+page.svelte', 'gap: 2px', "the hairline between the chain's 16px cells, each its own target"]
 ];
 
 const GEOMETRY = /^(?:margin|padding|inset)(?:-[a-z-]+)?$|^(?:gap|row-gap|column-gap|top|right|bottom|left|font|font-size|line-height|box-shadow)$|^border(?:-[a-z]+)*-radius$/;

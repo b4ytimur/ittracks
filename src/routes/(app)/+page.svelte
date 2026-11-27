@@ -10,7 +10,7 @@
 	import { outbox } from '$lib/outbox.svelte';
 	import ViewSentence from '$lib/ViewSentence.svelte';
 	import MenuButton from '$lib/ui/MenuButton.svelte';
-	import { sentence, todayWords } from '$lib/view-words';
+	import { inMyOrder, ownNumber, sentence, todayWords } from '$lib/view-words';
 	import { saveLayout } from '$lib/viewclient';
 	import { headlineKind, headlineText } from '$lib/engine/stats';
 	import { isPartial, progressText } from '$lib/engine/progress';
@@ -25,14 +25,14 @@
 	import { defaultStep } from '$lib/task-types';
 	import { units } from '$lib/units-here';
 	import EditableList from '$lib/ui/EditableList.svelte';
-	import EditChrome from '$lib/ui/EditChrome.svelte';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
 	import GroupHeading from '$lib/ui/GroupHeading.svelte';
 	import LogControl, { type Way } from '$lib/ui/LogControl.svelte';
 	import StatusTag from '$lib/ui/StatusTag.svelte';
+	import TitleLine from '$lib/ui/TitleLine.svelte';
 	import { MediaQuery, SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { keepFocus, rowOf } from '$lib/ui/focus';
-	import { reorderFrom, type Mode } from '$lib/ui/list';
+	import { mergeOrder } from '$lib/ui/list';
 	import { usualWay } from '$lib/log/usual';
 	import {
 		STARTERS,
@@ -41,6 +41,7 @@
 		groupBy,
 		initialState,
 		manualOrder,
+		movedPart,
 		partAt,
 		passes,
 		type FeatureKey,
@@ -255,13 +256,13 @@
 	/** How much a row says (TS.4): names 0, short 1, open 2, every line 3. Up next is open; a row opened by hand says it all. */
 	const RANK = { names: 0, short: 1, open: 2, full: 3 } as const;
 	const NEED: Record<LineKey, number> = { cue: 2, headline: 1, levels: 2, bundle: 2, reframe: 3, reward: 3, identities: 3, progression: 3 };
-	/** Rows opened with ›, until the page is left. */
+	/** Rows opened with ›, until the page is left: an open row says it all, with its lines' Hide and Show and its Number. */
 	const opened = new SvelteSet<string>();
 	const rankOf = (id: string) => (opened.has(id) ? 3 : Math.max(RANK[view.rows], id === upNext && view.rows !== 'names' ? 2 : 0));
 	/** A kind of line shows on a row: its feature is on, the view keeps it, and the row says that much. */
 	const shows = (id: string, k: LineKey) => featureOn(k) && !view.hide.includes(k) && rankOf(id) >= NEED[k];
-	/** In Edit a row lists the hidden kinds too, each with its verb (TS.9). */
-	const listed = (id: string, k: LineKey) => featureOn(k) && (editing ? rankOf(id) >= NEED[k] : shows(id, k));
+	/** An open row lists the hidden kinds too, each with its verb (TS.9). */
+	const listed = (id: string, k: LineKey) => featureOn(k) && (opened.has(id) || shows(id, k));
 	/** A tracker shows its last value unless it has a number of its own; its logs read "logged". */
 	const headlineOf = (item: Item, tracker = false) => {
 		if (view.rows === 'names' && !opened.has(item.habitId)) return '';
@@ -270,7 +271,7 @@
 		return data.headlines[item.habitId] ?? headlineText(kind, item.stats, item.streak, { last: item.last, tracker });
 	};
 	const LINE_SAID: Record<LineKey, string> = { cue: 'when and where', headline: 'the number', levels: 'the Minimum', bundle: 'treats', reframe: 'reframe lines', reward: 'jars and savings', identities: 'identities', progression: 'suggestions to raise' };
-	/** Hide or show one kind of line in this view, from a row in Edit. */
+	/** Hide or show one kind of line in this view, from a row opened with ›. */
 	function flipLine(k: LineKey) {
 		const off = view.hide.includes(k);
 		sentenceBar?.change({ ...view, hide: off ? view.hide.filter((x) => x !== k) : [...view.hide, k] }, `${off ? 'shows' : 'hides'} ${LINE_SAID[k]}`, off ? 'New view' : `Without ${LINE_SAID[k]}`);
@@ -284,34 +285,27 @@
 	}
 	const toggleIn = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
-	// ----- Edit mode: the same page, with habits to drag and lines to hide -----
-	let mode = $state<Mode>('use');
-	const editing = $derived(mode === 'edit');
 	const folded = (k: string) => views.today.folded.includes(foldKey(k));
 	// Stored keys are short and few; a long group name folds by its start.
 	const foldKey = (k: string) => k.slice(0, 64);
 	const fold = (k: string) => setToday({ folded: toggleIn(views.today.folded, foldKey(k)).slice(-100) });
 	/** A move, said once it is saved. */
 	const moved = (patch: Partial<typeof views.today>, said: string, undo: () => Promise<boolean>) => void setToday(patch).then((ok) => ok && showToast(said, undo));
-	/** A list of habits was reordered: it goes into the one habit order (My order), shared with the Habits page. */
-	function reorderHabits(part: string[], said: string) {
+	/** The sentence reads "in my order", so the order you see is yours: each habit and tracker has its grip (MO). In any other order there is none; picking My order brings them back. */
+	const gripped = $derived(inMyOrder(view));
+	/** A list was reordered by its grips: it goes into the one habit order (My order), shared with the Habits page. */
+	function reorderHabits(key: string, part: string[], said: string) {
 		const was = views.today.order;
-		const ids = [...data.build, ...data.resting].map((b) => b.habitId);
-		const all = [...views.today.order, ...ids.filter((id) => !views.today.order.includes(id))];
-		const order = reorderFrom(all, shownBuild.map((b) => b.habitId), part, view.sort === 'manual');
-		const undo = async () => !!(await setToday({ order: was }));
-		// A drag in another sort or grouping also puts the view in My order: one line, whose Undo takes back both.
-		if (sentenceBar && (view.sort !== 'manual' || view.group !== 'none')) {
-			void setToday({ order });
-			sentenceBar.change({ ...view, sort: 'manual', group: 'none' }, 'is in my order now, shared with the Habits page', 'My order', { said, undo });
-		} else moved({ order }, said, undo);
+		const ids = [...data.build, ...data.tracking, ...data.resting].map((b) => b.habitId);
+		moved({ order: mergeOrder([...was, ...ids.filter((id) => !was.includes(id))], movedPart(part, key, sunk)) }, said, async () => !!(await setToday({ order: was })));
 		return true;
 	}
-	function setHeadline(habitId: string, v: string) {
-		const next = { ...views.today.headlineFor };
-		if (v) next[habitId] = v as StatKey;
-		else delete next[habitId];
-		setToday({ headlineFor: next });
+	/** A habit's own number, from its open row: said in the band, with Undo. */
+	function setHeadline(item: { habitId: string; name: string }, v: StatKey | '') {
+		const was = views.today.headlineFor;
+		if ((was[item.habitId] ?? '') === v) return;
+		const { next, said } = ownNumber(was, item.habitId, item.name, v);
+		moved({ headlineFor: next }, said, async () => !!(await setToday({ headlineFor: was })));
 	}
 
 	// The time of day, for "what fits now". Ticks once a minute.
@@ -378,6 +372,8 @@
 		return list;
 	});
 	const doneFolded = $derived(view.done === 'collapse' ? sorted.filter((b) => !timeHidden.has(b.habitId) && settled(b)) : []);
+	/** Done habits sunk to the end of the list (done at the end), which a move puts back apart from the rest. */
+	const sunk = $derived(new Set(view.done === 'bottom' ? shownBuild.filter(settled).map((b) => b.habitId) : []));
 	/** The one row whose Log stands out: what is stacked on something done, or else the first one due. */
 	const upNext = $derived.by(() => {
 		const due = shownBuild.flatMap((b) => [b, ...kidsOf(b.habitId)]).filter((b) => !isDone(b) && !(b.group && !b.group.routine && kidsOf(b.habitId).length));
@@ -487,7 +483,7 @@
 			.filter(Boolean)
 			.join(' · ');
 	};
-	/** The lines under a row's meta, as much as the view and the row say (TS.4); in Edit with their verbs. */
+	/** The lines under a row's meta, as much as the view and the row say (TS.4); an open row lists the hidden kinds too (listed). */
 	const rowLines = (item: Item, st: string) => {
 		const o = item.occurrence!;
 		const out: { k: LineKey; text: string }[] = [];
@@ -542,13 +538,14 @@
 
 <svelte:head><title>Today · ittracks</title></svelte:head>
 
-<EditChrome title="Today" bind:mode modes={['use', 'edit']} hints={{ edit: 'Drag ⠿ to move. Order is shared with Habits.' }}>
-	{#snippet useHint()}
-		<span class="today-line">
-			{#if wide.current}<span class="date">{dateLabel}</span>{:else}<button type="button" class="date" aria-expanded={strip} aria-controls="today-strip" onclick={() => (strip = !strip)}>{dateLabel} <span class="chev" aria-hidden="true">›</span></button>{/if}
-			<span class="num">{doneCount} of {dueLeaves.length} done</span>
-		</span>
-	{/snippet}
+<!-- No second state: Today keeps its own ⋯ and, under the title, the date (which opens the last seven days) and the count. -->
+{#snippet dayLine()}
+	<span class="today-line">
+		{#if wide.current}<span class="date">{dateLabel}</span>{:else}<button type="button" class="date" aria-expanded={strip} aria-controls="today-strip" onclick={() => (strip = !strip)}>{dateLabel} <span class="chev" aria-hidden="true">›</span></button>{/if}
+		<span class="num">{doneCount} of {dueLeaves.length} done</span>
+	</span>
+{/snippet}
+<TitleLine title="Today" hint={dayLine}>
 	{#snippet actions()}
 		{#if data.canBackfill || !hidden('identities')}
 			<MenuButton
@@ -558,7 +555,7 @@
 			/>
 		{/if}
 	{/snippet}
-</EditChrome>
+</TitleLine>
 
 {#if strip && !wide.current}
 	<div class="day-week today-strip" id="today-strip" role="group" aria-label="The last seven days">{@render sevenDays()}</div>
@@ -612,7 +609,7 @@
 	</section>
 {:else}
 	<ViewSentence bind:this={sentenceBar} page="today" bind:views bind:current={view} {words} starters={STARTERS()} reset={fromTemplate(views.template).defaults.today} say={(s) => sentence(todayWords(s, wordsCtx))} />
-	{#if hint && !retired.includes(hint) && mode === 'use'}
+	{#if hint && !retired.includes(hint)}
 		<div class="notice ob-hint" role="note"><span class="notice-text">{HINTS[hint]}</span><span class="notice-acts"><button type="button" class="quiet" onclick={() => hint && retire(hint)}>Got it</button></span></div>
 	{/if}
 
@@ -620,34 +617,34 @@
 		<div class="today-day">
 			{#if view.first && breakingShown.length}{@render breaking()}{/if}
 			<!-- Beside Breaking, the day takes a heading of the same kind, so both columns start alike (TS.11). -->
-			{#if wide.current && !view.first && groups.length && !groups[0].label}<GroupHeading title="Due today" slotOpen={editing} />{/if}
+			{#if wide.current && !view.first && groups.length && !groups[0].label}<GroupHeading title="Due today" slotOpen={gripped} />{/if}
 			{#if allDone}<p class="all-done">Everything due today is done.</p>{/if}
 			{#if nothingShown}<EmptyState kind="filtered" text="Nothing today matches {words[0].shown ?? 'this view'}." onclear={() => sentenceBar?.change({ ...view, fits: false, status: 'all', direction: 'all', areas: [], identity: null }, 'now shows everything', 'Everything')} />{/if}
 			{#each groups as g (g.key)}
 				{@const a = view.group === 'area' ? areaOf(g.key) : undefined}
 				{#if g.label}
-					<GroupHeading title={a?.name ?? g.label} icon={a?.icon} color={g.color} slotOpen={editing} folded={folded(`group:${g.key}`)} onfold={() => fold(`group:${g.key}`)} />
+					<GroupHeading title={a?.name ?? g.label} icon={a?.icon} color={g.color} folded={folded(`group:${g.key}`)} onfold={() => fold(`group:${g.key}`)} />
 				{/if}
 				{#if !g.label || !folded(`group:${g.key}`)}{@render habitList(g.items, g.label || 'Today')}{/if}
 			{/each}
 			{@render timeLine()}
 			{#if doneFolded.length}
-				<GroupHeading title="Done" slotOpen={editing} count={String(leavesOf(doneFolded).length)} folded={folded('done')} onfold={() => fold('done')} />
+				<GroupHeading title="Done" slotOpen={gripped} count={String(leavesOf(doneFolded).length)} folded={folded('done')} onfold={() => fold('done')} />
 				{#if !folded('done')}{@render habitList(doneFolded, 'Done today')}{/if}
 			{/if}
 		</div>
 		<div class="today-side">
 			{#if wide.current}
-				<GroupHeading title="Last seven days" slotOpen={editing} />
+				<GroupHeading title="Last seven days" />
 				<div class="day-week week-side" role="group" aria-label="The last seven days">{@render sevenDays()}</div>
 			{/if}
 			{#if !view.first && breakingShown.length}{@render breaking()}{/if}
 			{#if trackingShown.length}
 				<!-- Trackers keep what you log: never due or missed, so they sit beside the day, not in it. -->
-				<GroupHeading title="Tracking" slotOpen={editing} count={String(trackingShown.length)} folded={folded('tracking')} onfold={() => fold('tracking')} />
+				<GroupHeading title="Tracking" slotOpen={gripped} count={String(trackingShown.length)} folded={folded('tracking')} onfold={() => fold('tracking')} />
 				{#if !folded('tracking')}{@render trackingSection()}{/if}
 			{/if}
-			{#if laterSays && view.direction === 'all' && !view.fits && !editing}
+			{#if laterSays && view.direction === 'all' && !view.fits}
 				<section class="later" aria-label="Later and not today">
 					<button type="button" class="later-line" aria-expanded={!folded('later')} onclick={() => fold('later')}><span class="chev" aria-hidden="true">›</span><span>{laterSays}</span></button>
 					{#if !folded('later')}
@@ -661,27 +658,43 @@
 	</div>
 {/if}
 
-{#if data.habitCount > 0 && data.habitCount < 3 && mode === 'use'}
+{#if data.habitCount > 0 && data.habitCount < 3}
 	<section class="ob-sec" aria-label="Another habit"><Box question="What else do you want to track?" /></section>
 {/if}
 
 {#snippet breaking()}
-	<GroupHeading title={limiting ? 'Breaking and limiting' : 'Breaking'} slotOpen={editing} verb={editing ? moveBreaking : undefined} />
-	{#snippet moveBreaking()}<button type="button" class="quiet verb" onclick={() => sentenceBar?.change({ ...view, first: !view.first }, view.first ? 'puts breaking after the day' : 'puts breaking first', 'Breaking first')}>{view.first ? 'Move last' : 'Move first'}</button>{/snippet}
+	<GroupHeading title={limiting ? 'Breaking and limiting' : 'Breaking'} />
 	{@render breakingSection()}
 {/snippet}
 
-{#snippet fold1(id: string, name: string)}
-	{#if !editing && rankOf(id) < 3}
+<!-- A row's ›, after its name: it opens the row until the page is left (TS.4). A habit's and a tracker's always shows,
+     since an open row holds its lines' Hide and Show and its Number; a Breaking row's only while the row says less than all. -->
+{#snippet fold1(id: string, name: string, always: boolean)}
+	{#if always || opened.has(id) || rankOf(id) < 3}
 		<button type="button" class="fold row-fold" aria-expanded={opened.has(id)} aria-label="{opened.has(id) ? 'Less' : 'More'} about {name}" onclick={() => (opened.has(id) ? opened.delete(id) : opened.add(id))}><span class="chev" aria-hidden="true">›</span></button>
-	{:else if !editing && opened.has(id)}
-		<button type="button" class="fold row-fold" aria-expanded="true" aria-label="Less about {name}" onclick={() => opened.delete(id)}><span class="chev" aria-hidden="true">›</span></button>
 	{/if}
 {/snippet}
 
-{#snippet lineOf(l: { k: LineKey; text: string; warn?: boolean })}
-	<p class="row-line meta" class:warn={l.warn} class:line-off={editing && view.hide.includes(l.k)}>
-		<span>{l.text}</span>{#if editing}<button type="button" class="quiet line-verb" aria-label="{view.hide.includes(l.k) ? 'Show' : 'Hide'} {LINE_SAID[l.k]} in this view" onclick={() => flipLine(l.k)}>{view.hide.includes(l.k) ? 'Show' : 'Hide'}</button>{/if}
+<!-- An open row's Number: the habit's own number instead of the view's, a ruled word as the sentence's are. -->
+{#snippet numberWord(item: { habitId: string; name: string }, tracker: boolean)}
+	{@const own = views.today.headlineFor[item.habitId]}
+	{@const usual = tracker ? 'last' : view.num}
+	{@const shown = STATS[own ?? usual]}
+	<p class="meta">
+		<span>Number</span>
+		<span class="number-word"
+			><MenuButton
+				class="word-button"
+				label="Number on {item.name}: {shown}"
+				menuLabel="Number on {item.name}"
+				items={[
+					{ label: "This view's", value: STATS[usual], checked: !own, onselect: () => setHeadline(item, '') },
+					'-',
+					...(Object.keys(STATS) as StatKey[]).map((k) => ({ label: STATS[k], checked: own === k, onselect: () => setHeadline(item, k) }))
+				]}
+				>{#snippet trigger()}<span class="shown">{shown.toLowerCase()}</span>{/snippet}</MenuButton
+			></span
+		>
 	</p>
 {/snippet}
 
@@ -694,8 +707,8 @@
 		holder={(b) => !!b.group && kidsOf(b.habitId).length > 0}
 		itemClass={(b) => [isDone(b) && statusOf(b.occurrence!) === 'skipped' ? 'skipped' : isDone(b) ? 'done' : '', just.has(b.habitId) ? 'just-done' : '', b.afterHabitId && view.group !== 'area' ? 'stacked' : ''].join(' ')}
 		ariaLabel={name}
-		onmove={editing ? (_, order, text) => reorderHabits(order, text) : undefined}
-		actions={editing ? undefined : verb}
+		onmove={gripped ? (m, order, text) => reorderHabits(m.key, order, text) : undefined}
+		actions={verb}
 	>
 		{#snippet row(item)}{@render habitRow(item)}{/snippet}
 		{#snippet children(item)}{@render habitList(kidsOf(item.habitId), `Inside ${item.name}`)}{/snippet}
@@ -706,10 +719,12 @@
 	{@const o = item.occurrence!}
 	{@const st = item.group ? groupNow(item).status : statusOf(o)}
 	{@const done = ended(item)}
-	{#if st === 'due' && !item.group}{@render fold1(item.habitId, item.name)}{/if}
+	{@const open = opened.has(item.habitId)}
+	{@const lines = rowLines(item, st)}
 	<a class="name" href="/habits/{item.habitId}/chain">{item.name}</a>
-	{#if (item.habitId === upNext && !editing) || (item.progression && featureOn('progression') && !view.hide.includes('progression') && !shows(item.habitId, 'progression') && st === 'due')}
-		<span class="tags">{#if item.habitId === upNext && !editing}<StatusTag status="upNext" />{/if}{#if item.progression && featureOn('progression') && !view.hide.includes('progression') && !shows(item.habitId, 'progression') && st === 'due'}<span class="tag">Raise?</span>{/if}</span>
+	{@render fold1(item.habitId, item.name, true)}
+	{#if item.habitId === upNext || (item.progression && featureOn('progression') && !view.hide.includes('progression') && !shows(item.habitId, 'progression') && st === 'due')}
+		<span class="tags">{#if item.habitId === upNext}<StatusTag status="upNext" />{/if}{#if item.progression && featureOn('progression') && !view.hide.includes('progression') && !shows(item.habitId, 'progression') && st === 'due'}<span class="tag">Raise?</span>{/if}</span>
 	{/if}
 	{#if done || meta(item)}
 		<p class="meta-line">
@@ -717,23 +732,37 @@
 		</p>
 	{/if}
 	{#if item.atRisk && st === 'due'}<p class="row-line warn meta">You missed last time. Don't miss twice{item.levels ? ': even the Minimum counts' : ''}.</p>{/if}
-	{#each rowLines(item, st) as l (l.k)}{@render lineOf(l)}{/each}
+	{#if open && (lines.length || !item.group)}
+		<!-- Open: each kind of line with Hide or Show (a hidden one struck), then the Number. Each changes this view, with Undo. -->
+		<div class="row-line open-lines">
+			{#each lines as l (l.k)}
+				{@const off = view.hide.includes(l.k)}
+				<p class="meta" class:line-off={off}>
+					<span>{l.text}</span><button type="button" class="quiet" aria-label="{off ? 'Show' : 'Hide'} {LINE_SAID[l.k]} in this view" onclick={() => flipLine(l.k)}>{off ? 'Show' : 'Hide'}</button>
+				</p>
+			{/each}
+			{#if !item.group}{@render numberWord(item, false)}{/if}
+		</div>
+	{:else}
+		{#each lines as l (l.k)}<p class="row-line meta">{l.text}</p>{/each}
+	{/if}
 	{#if item.progression && st === 'due' && listed(item.habitId, 'progression')}
 		{@const p = item.progression}
-		<div class="notice" class:line-off={editing && view.hide.includes('progression')}>
+		{@const off = view.hide.includes('progression')}
+		<div class="notice" class:line-off={off}>
 			<span class="notice-text meta"
 				>You've hit your targets {p.hits} times in a row. Raise them by {p.by}{p.unit === 'percent' ? '%' : p.by === 1 ? ' step' : ' steps'}? {p.changes.join(' · ')}</span
 			>
 			<span class="notice-acts">
-				{#if editing}<button type="button" class="quiet" aria-label="{view.hide.includes('progression') ? 'Show' : 'Hide'} {LINE_SAID.progression} in this view" onclick={() => flipLine('progression')}>{view.hide.includes('progression') ? 'Show' : 'Hide'}</button>{:else}
+				{#if !off}
 					<form method="POST" action="?/raise" use:enhance><input type="hidden" name="habit" value={item.habitId} /><button class="quiet" aria-label="Raise the targets of {item.name}">Raise</button></form>
 					<form method="POST" action="?/notYet" use:enhance><input type="hidden" name="habit" value={item.habitId} /><button class="quiet" aria-label="Not yet for {item.name}">Not yet</button></form>
 				{/if}
+				{#if open}<button type="button" class="quiet" aria-label="{off ? 'Show' : 'Hide'} {LINE_SAID.progression} in this view" onclick={() => flipLine('progression')}>{off ? 'Show' : 'Hide'}</button>{/if}
 			</span>
 		</div>
 	{/if}
 	{#if form?.raised === item.habitId}<p class="row-line meta">Targets raised. Keep going.</p>{/if}
-	{#if editing && !item.group}{@render headlinePick(item)}{/if}
 {/snippet}
 
 {#snippet verb(item: Item)}
@@ -760,16 +789,6 @@
 	{/if}
 {/snippet}
 
-{#snippet headlinePick(item: Item)}
-	<label class="headline-pick meta"
-		>Headline
-		<select value={views.today.headlineFor[item.habitId] ?? ''} onchange={(e) => setHeadline(item.habitId, e.currentTarget.value)}>
-			<option value="">This view's ({view.num === 'none' ? 'none' : STATS[view.num]})</option>
-			{#each Object.entries(STATS) as [k, label] (k)}<option value={k}>{label}</option>{/each}
-		</select>
-	</label>
-{/snippet}
-
 {#snippet timeLine()}
 	{#if timeHidden.size}
 		<p class="muted meta">
@@ -784,8 +803,8 @@
 	<EditableList items={breakingShown} key={(b) => b.habitId} label={(b) => b.name} rowCard ariaLabel={limiting ? 'Limits' : 'Breaking'}>
 		{#snippet row(b)}
 			{@const plan = b.ifThen}
-			{@render fold1(b.habitId, b.name)}
 			<a class="name" href="/habits/{b.habitId}/chain">{b.name}</a>
+			{@render fold1(b.habitId, b.name, false)}
 			<p class="meta-line">
 				{[
 					b.limit ? `${b.limit.used} of ${b.limit.max} ${b.limit.period === 'week' ? 'this week' : 'today'}` : null,
@@ -855,13 +874,11 @@
 			{/if}
 		{/snippet}
 		{#snippet actions(b)}
-			{#if !editing}
-				<LogControl
-					name={b.name}
-					act={{ label: 'Resisted', action: '?/craving', fields: { habit: b.habitId }, submit: resisted }}
-					ways={[{ label: b.limit ? 'Log one…' : 'Log a slip…', onselect: () => ((slipOpen = slipOpen === b.habitId ? null : b.habitId), (feeling = '')) }]}
-				/>
-			{/if}
+			<LogControl
+				name={b.name}
+				act={{ label: 'Resisted', action: '?/craving', fields: { habit: b.habitId }, submit: resisted }}
+				ways={[{ label: b.limit ? 'Log one…' : 'Log a slip…', onselect: () => ((slipOpen = slipOpen === b.habitId ? null : b.habitId), (feeling = '')) }]}
+			/>
 		{/snippet}
 	</EditableList>
 {/snippet}
@@ -898,11 +915,12 @@
 {/snippet}
 
 {#snippet trackingSection()}
-	<EditableList items={trackingShown} key={(x) => x.habitId} label={(x) => x.name} rowCard ariaLabel="Tracking">
+	<EditableList items={trackingShown} key={(x) => x.habitId} label={(x) => x.name} rowCard ariaLabel="Tracking" onmove={gripped ? (m, order, text) => reorderHabits(m.key, order, text) : undefined}>
 		{#snippet row(item)}
 			<span class="name">{item.name}</span>
+			{@render fold1(item.habitId, item.name, true)}
 			{#if headlineOf(item, true)}<p class="meta-line">{headlineOf(item, true)}</p>{/if}
-			{#if editing}{@render headlinePick(item)}{/if}
+			{#if opened.has(item.habitId)}<div class="row-line open-lines">{@render numberWord(item, true)}</div>{/if}
 		{/snippet}
 		{#snippet actions(item)}
 			<a class="quiet" href="/q/{item.habitId}" data-sveltekit-preload-data="off" aria-label="Log {item.name}">Log</a>
@@ -933,9 +951,6 @@
 {#if form?.error && !form?.habit}<p class="error">{form.error}</p>{/if}
 
 <style>
-	.headline-pick {
-		margin-top: var(--space-inline);
-	}
 	.nudge {
 		margin-bottom: var(--space-group);
 	}
@@ -972,8 +987,7 @@
 		transition: rotate var(--duration-quick);
 	}
 	.today-line .date[aria-expanded='true'] .chev,
-	.later-line[aria-expanded='true'] .chev,
-	:global(.row-fold[aria-expanded='true'] .chev) {
+	.later-line[aria-expanded='true'] .chev {
 		rotate: 90deg;
 	}
 	.today-line .num {
@@ -1003,30 +1017,82 @@
 		margin: var(--space-group) 0;
 		font-weight: 600;
 	}
-	/* A row's ›: hangs in the card's padding before the name, and opens the row until the page is left (TS.4). It hangs
-	   from the content, the row's first line, so it centres where the slot does: a verb wrapped under the row moves nothing. */
-	:global(.elist > li > .card > .content:has(> .row-fold)) {
+	/* A row's ›: Disclosure's fold on the name line, right after the name, so the leading slot stays the grip's (TS.4). A
+	   24px box with the chevron in its middle; under a coarse pointer it grows to 44px tall, never wider, so it takes no
+	   taps from the name beside it. The ::before is Disclosure's focus ring, so the growth is the ::after. */
+	.row-fold {
+		--fold-w: max(var(--target-min), var(--space-inline));
 		position: relative;
-	}
-	:global(.row-fold) {
-		position: absolute;
-		inset-inline-start: calc(-1 * var(--space-group));
-		top: calc(50% - var(--control-sm) / 2);
-		inline-size: var(--space-group);
-		min-height: var(--control-sm);
-		padding: 0;
-		border: 0;
-		background: none;
+		flex: none;
+		width: var(--fold-w);
+		min-height: var(--target-min);
+		justify-content: center;
 		color: var(--ink-muted);
 		cursor: pointer;
 	}
-	/* A row with lines under it centres its marks on the name and meta (list-row.css), so the › stays there too. */
-	:global(.elist > li:has(> .card > .content > :is(.row-line, .week, .notice, .headline-pick)) > .card > .content > .row-fold) {
-		top: calc((1.5rem + 1.25rem - var(--control-sm)) / 2);
+	@media (pointer: coarse) {
+		.row-fold::after {
+			content: '';
+			position: absolute;
+			inset-inline: 0;
+			inset-block: calc((100% - var(--target-touch)) / 2);
+		}
 	}
-	:global(.row-fold .chev) {
-		display: inline-block;
-		transition: rotate var(--duration-quick);
+	/* An open row's lines and its Number: one inset under the meta, each line's verb at its end (TS.9). On a shelf (a row
+	   inside a group), which is sunken already, the inset is raised instead. */
+	.open-lines {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-tight);
+		margin-block-start: var(--space-inline);
+		padding: var(--space-inline) var(--space-group);
+		border-radius: var(--radius-inset);
+		background: var(--surface-sunken);
+	}
+	:global(.shelf) .open-lines {
+		background: var(--surface-raised);
+	}
+	.open-lines > p {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-inline);
+		margin: 0;
+	}
+	/* A narrow row (a phone) wraps the line's words, never its verb's. */
+	.open-lines > p > .quiet {
+		flex: none;
+		margin-inline-end: calc(-1 * var(--space-tight)); /* the verb's words on the inset's edge, as a row's verb on its card's */
+	}
+	/* Under a coarse pointer a verb's hit area is its line and half the gap each side, not Button's 44px: the lines are
+	   28px apart, so a taller area would take taps inside the next line's verb (as the sentence's ruled words do). */
+	@media (pointer: coarse) {
+		.open-lines > p > .quiet::before,
+		.number-word > :global(.word-button)::before {
+			inset-block: calc(-1 * var(--space-tight) / 2);
+		}
+	}
+	/* The Number word: ruled, as the sentence's words are (ViewSentence); its menu hangs from it. */
+	.number-word {
+		position: relative;
+		display: inline-flex;
+	}
+	.number-word :global(.word-button) {
+		min-height: var(--target-min);
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--ink);
+		font: inherit;
+		cursor: pointer;
+	}
+	.number-word :global(.shown) {
+		border-bottom: 1px dashed var(--line-control);
+	}
+	@media (hover: hover) {
+		.number-word :global(.word-button:hover .shown) {
+			border-bottom-color: var(--ink);
+		}
 	}
 	.later {
 		margin-block-start: var(--space-group);
@@ -1045,16 +1111,16 @@
 		text-align: start;
 		cursor: pointer;
 	}
+	/* A kind of line this view hides, in an open row: struck. On the card the words are muted too; in the inset (sunken,
+	   where nothing muted sits) they stay ink. */
 	.line-off > span:not(.notice-acts) {
-		color: var(--ink-muted);
 		text-decoration: line-through;
 	}
-	.line-verb {
-		margin-inline-start: var(--space-inline);
+	.notice.line-off > span:not(.notice-acts) {
+		color: var(--ink-muted);
 	}
 	@media (prefers-reduced-motion: reduce) {
-		.today-line .chev,
-		:global(.row-fold .chev) {
+		.today-line .chev {
 			transition: none;
 		}
 	}

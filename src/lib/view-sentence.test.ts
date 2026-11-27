@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { render } from 'svelte/server';
 import ViewSentence from './ViewSentence.svelte';
-import { libraryWords } from './view-words';
+import { libraryWords, todayWords } from './view-words';
 import { viewSettings, viewState, type ViewState } from './views';
 
 const morning = { id: 'v1', name: 'Morning', page: 'library' as const, state: viewState.parse({ sort: 'name' }) };
@@ -32,5 +32,24 @@ describe('the view-name menu', () => {
 	});
 	it('a view you made never resets, however it differs', () => {
 		expect(menu({ on: 'v1', current: viewState.parse({ sort: 'newest' }), reset: came })).not.toContain('Reset view');
+	});
+});
+
+describe("Today's by word", () => {
+	it('ends with where Breaking stands, after a rule, never ticked', () => {
+		const current = viewState.parse({ sort: 'manual' });
+		const views = viewSettings.parse({});
+		const words = todayWords(current, { areas: [], identities: [], parts: false, breaking: true });
+		const body = render(ViewSentence, { props: { page: 'today', views, current, words } }).body;
+		const tail = body.slice(body.indexOf('aria-label="How it is arranged"'));
+		const rows = tail.slice(0, tail.indexOf('</div>')).match(/<hr|aria-checked="(true|false)"|<span class="menu-label">[^<]*/g) ?? [];
+		expect(rows.map((r) => (r === '<hr' ? '---' : r.replace('<span class="menu-label">', '')))).toEqual([
+			'aria-checked="false"', 'by time',
+			'aria-checked="true"', 'in my order',
+			'aria-checked="false"', 'by name',
+			'aria-checked="false"', 'at risk first',
+			'---',
+			'aria-checked="false"', 'breaking first'
+		]);
 	});
 });

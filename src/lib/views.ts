@@ -770,6 +770,13 @@ export function manualOrder<T>(items: T[], order: string[], id: (t: T) => string
 		.map((x) => x.t);
 }
 
+/**
+ * What a reordered list gives back to the shared order (mergeOrder's part), when finished rows sink to the list's end
+ * (Today, done at the end): only the rows on the moved row's side of that line. A move among the habits still to do
+ * then never sends a done one to the end of the order for good, and the done ones keep their order among themselves.
+ */
+export const movedPart = (part: string[], key: string, sunk: Set<string>) => part.filter((k) => sunk.has(k) === sunk.has(key));
+
 /** Does an item pass the Area, direction and Identity filters? */
 export function passes(s: ViewState, i: Groupable): boolean {
 	if (s.areas.length && !s.areas.includes(i.areaId ?? '')) return false;

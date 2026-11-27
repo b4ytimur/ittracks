@@ -69,26 +69,21 @@
 		});
 	});
 
-	/**
-	 * A change to the view from elsewhere on the page: saved, said in the band, with Undo and Keep as new view.
-	 * `cause` is the page's own change that brought it (a drag into My order): one line says both, and its Undo takes back both.
-	 */
-	export function change(next: ViewState, said: string, called = 'New view', cause?: { said: string; undo: () => unknown }) {
+	/** A change to the view from elsewhere on the page (a line's Hide on Today): saved, said in the band, with Undo and Keep as new view. */
+	export function change(next: ViewState, said: string, called = 'New view') {
 		const id = active;
 		const before = copy(current);
 		const after = copy(next);
 		current = after;
 		store(id, after);
 		showToast(
-			`${cause ? `${cause.said} ` : ''}${nameOf(id)} ${said}.`,
+			`${nameOf(id)} ${said}.`,
 			() => {
 				if (active === id) current = copy(before);
 				store(id, before);
-				return cause?.undo();
 			},
 			undefined,
-			// The order the drag made keeps its own Undo line, as it had before the two shared one.
-			{ label: 'Keep as new view', run: () => { if (cause) showToast(cause.said, cause.undo); return keep(id, before, after, called); } }
+			{ label: 'Keep as new view', run: () => keep(id, before, after, called) }
 		);
 	}
 

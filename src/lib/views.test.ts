@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { mergeOrder } from './ui/list';
 import {
 	TEMPLATES,
 	fromTemplate,
@@ -6,6 +7,7 @@ import {
 	initialState,
 	initialView,
 	manualOrder,
+	movedPart,
 	partAt,
 	passes,
 	readViews,
@@ -262,6 +264,19 @@ describe('views', () => {
 
 	it('puts items in my order, unknown ones after', () => {
 		expect(manualOrder(['a', 'b', 'c', 'd'], ['c', 'a'], (x) => x)).toEqual(['c', 'a', 'b', 'd']);
+	});
+
+	it('a move in a list whose done rows sink puts back only its own side of the line', () => {
+		// My order a b c; a is done, so Today shows b c a. Moving c above b leaves a first in the order.
+		const done = new Set(['a']);
+		expect(mergeOrder(['a', 'b', 'c'], movedPart(['c', 'b', 'a'], 'c', done))).toEqual(['a', 'c', 'b']);
+		// Dropped under a done row, it goes as far down as the habits still to do reach.
+		expect(mergeOrder(['a', 'b', 'c'], movedPart(['c', 'a', 'b'], 'b', done))).toEqual(['a', 'c', 'b']);
+		// A done row moves among the done ones only.
+		expect(mergeOrder(['a', 'b', 'c', 'd'], movedPart(['b', 'd', 'c', 'a'], 'c', new Set(['a', 'c'])))).toEqual(['c', 'b', 'a', 'd']);
+	});
+	it('nothing sunk: the whole list goes back', () => {
+		expect(movedPart(['c', 'a', 'b'], 'c', new Set())).toEqual(['c', 'a', 'b']);
 	});
 
 	it('finds the part of day, including ranges past midnight', () => {

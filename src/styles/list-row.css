@@ -19,13 +19,13 @@
 	display: flex; flex-wrap: wrap; align-items: center; /* grip, checkbox and verb sit on the row's middle */
 	padding: calc(var(--space-group) - 1px) var(--space-group); /* the 1px edge counts toward the pitch */
 }
-/* A row with lines under its top line (a line kind, a week strip, a notice, Today's Headline picker) centres its marks and verb on the name and meta
+/* A row with lines under its top line (a line kind, a week strip, a notice, Today's open-row inset) centres its marks and verb on the name and meta
    (24 + 20px), where a closed row has them, so opening a row moves nothing and nothing drifts into what hangs below. */
-.elist > li:has(> .card > .content > :is(.row-line, .week, .notice, .headline-pick)) > .card { align-items: flex-start; }
-.elist > li:has(> .card > .content > :is(.row-line, .week, .notice, .headline-pick)) > .card > :is(.slot, div.verb) {
+.elist > li:has(> .card > .content > :is(.row-line, .week, .notice)) > .card { align-items: flex-start; }
+.elist > li:has(> .card > .content > :is(.row-line, .week, .notice)) > .card > :is(.slot, div.verb) {
 	align-self: flex-start; min-height: calc(1.5rem + 1.25rem); align-items: center;
 }
-.elist > li:has(> .card > .content > :is(.row-line, .week, .notice, .headline-pick)) > .card > :is(button, a).verb {
+.elist > li:has(> .card > .content > :is(.row-line, .week, .notice)) > .card > :is(button, a).verb {
 	align-self: flex-start; margin-block-start: calc((1.5rem + 1.25rem - var(--target-min)) / 2);
 }
 
@@ -101,21 +101,22 @@
 .elist > li.picked > .card { box-shadow: var(--chosen-shadow); }
 
 /* ---------- Done and skipped sink to the page ---------- */
-/* A finished card keeps its 1px edge (transparent) so nothing shifts. A list with grips or checkboxes raises every
-   card again (Today's Edit). A finished holder, and a finished row on a shelf, keep their surface and show done by
-   name weight and the meta's mark (NestedRow, R1.4). */
-.elist:not(.grips, .selecting) > li.done:not(.holder) > .card:not(.shelf .card),
-.elist:not(.grips, .selecting) > li.skipped:not(.holder) > .card:not(.shelf .card) { background: var(--surface-page); border-color: transparent; }
-.elist:not(.grips, .selecting) > li.done:not(.holder) > .card:not(.shelf .card):focus-within,
-.elist:not(.grips, .selecting) > li.skipped:not(.holder) > .card:not(.shelf .card):focus-within { border-color: var(--line-control); }
+/* A finished card keeps its 1px edge (transparent) so nothing shifts. It sinks beside grips too (Today in My order:
+   MO); a held one lifts like any card (DragHandle), and a list with checkboxes raises every card again. A finished
+   holder, and a finished row on a shelf, keep their surface and show done by name weight and the meta's mark
+   (NestedRow, R1.4). */
+.elist:not(.selecting) > li.done:not(.holder, .dragging) > .card:not(.shelf .card),
+.elist:not(.selecting) > li.skipped:not(.holder, .dragging) > .card:not(.shelf .card) { background: var(--surface-page); border-color: transparent; }
+.elist:not(.selecting) > li.done:not(.holder, .dragging) > .card:not(.shelf .card):focus-within,
+.elist:not(.selecting) > li.skipped:not(.holder, .dragging) > .card:not(.shelf .card):focus-within { border-color: var(--line-control); }
 @media (hover: hover) {
-	.elist:not(.grips, .selecting) > li.done:not(.holder) > .card:not(.shelf .card):hover,
-	.elist:not(.grips, .selecting) > li.skipped:not(.holder) > .card:not(.shelf .card):hover { border-color: var(--line-control); }
+	.elist:not(.selecting) > li.done:not(.holder, .dragging) > .card:not(.shelf .card):hover,
+	.elist:not(.selecting) > li.skipped:not(.holder, .dragging) > .card:not(.shelf .card):hover { border-color: var(--line-control); }
 }
 /* Row states reach only the row's own card (child combinators all the way down): a holder's state never
    leaks onto the rows on its shelf, which keep their own state. */
-.elist:not(.grips, .selecting) > li.done > .card > .content > .name,
-.elist:not(.grips, .selecting) > li.skipped > .card > .content > .name { font-weight: 400; }
+.elist:not(.selecting) > li.done > .card > .content > .name,
+.elist:not(.selecting) > li.skipped > .card > .content > .name { font-weight: 400; }
 
 /* ---------- Struck (archived in place) and hidden ---------- */
 .elist > li.struck > .card > .content > .name { color: var(--ink-muted); text-decoration: line-through; }

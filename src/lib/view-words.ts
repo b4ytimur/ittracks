@@ -1,7 +1,7 @@
 // The words of a view's sentence (TS.1): "Default shows everything, by time, short rows with streaks, done at
 // the end." Each word is one select over the view's state; picking an option gives the next state. Pure, so the
 // sentence reads the same on the page, in the band and in tests.
-import { DONE_MODES, type ViewState } from './views';
+import { DONE_MODES, STATS, type StatKey, type ViewState } from './views';
 
 export interface WordOption {
 	value: string;
@@ -37,7 +37,7 @@ const NOTES: Record<string, string> = {
 	'scope:now': 'This part of the day, what is late, and anything without a time.',
 	'scope:due': 'Breaking and limiting stay out.',
 	time: 'What is next leads. A habit set after another follows it.',
-	mine: 'Drag in Edit. Shared with Habits.',
+	mine: 'Drag ⠿ to move. Shared with Habits.',
 	risk: 'What was missed last time leads, then by time.',
 	names: 'The name and its button.',
 	short: 'One line: its time and one number.',
@@ -123,6 +123,8 @@ const BY = {
 } as const satisfies Record<string, { label: string; state: Partial<ViewState> }>;
 type By = keyof typeof BY;
 const byOf = (s: ViewState): By => (s.group !== 'none' && s.group in BY ? (s.group as By) : (({ cue: 'time', manual: 'mine', name: 'name', streak: 'risk' }) as Record<string, By>)[s.sort] ?? 'time');
+/** Today's sentence reads "in my order": the order you see is yours, so each habit has its grip (MO). */
+export const inMyOrder = (s: ViewState) => byOf(s) === 'mine';
 
 /** How Today's view is arranged: Layout, Sort and Group as one word (TS.3). */
 export function byWord(s: ViewState, c: TodayCtx): Word {
@@ -134,9 +136,21 @@ export function byWord(s: ViewState, c: TodayCtx): Word {
 		value: by,
 		shown: BY[by].label + (s.first && c.breaking ? ', breaking first' : ''),
 		after: ',',
-		options: keys.map((k) => opt(k, BY[k].label, `is now ${BY[k].label}`)),
-		pick: (v) => ({ ...s, ...BY[v as By].state })
+		options: [
+			...keys.map((k) => opt(k, BY[k].label, `is now ${BY[k].label}`)),
+			// Where Breaking stands, after the arrangements: one item whose words flip, so it never shows a tick.
+			...(c.breaking ? [s.first ? opt('breaking:first', 'breaking after the day', 'now puts breaking after the day', 'Breaking last') : opt('breaking:first', 'breaking first', 'now puts breaking first', 'Breaking first')] : [])
+		],
+		pick: (v) => (v === 'breaking:first' ? { ...s, first: !s.first } : { ...s, ...BY[v as By].state })
 	};
+}
+
+/** A habit's own number on Today, picked in the row opened with ›: the next map, and what the band says. '' follows the view again. */
+export function ownNumber(all: Record<string, StatKey>, id: string, name: string, v: StatKey | ''): { next: Record<string, StatKey>; said: string } {
+	const next = { ...all };
+	if (v) next[id] = v;
+	else delete next[id];
+	return { next, said: `${name} now shows ${v === '' ? "the view's number" : v === 'none' ? 'no number' : STATS[v].toLowerCase()}.` };
 }
 
 const ROWS_SAID = { names: 'names only', short: 'short rows', open: 'open rows', full: 'every line' } as const;

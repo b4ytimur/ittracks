@@ -29,23 +29,25 @@ Today, Habits, Library and History each show their view as a sentence, such as "
 - Grouping includes **Area**, **Part of day**, **Identity** and **Build / break**.
 - Each page has views: **Default** and the ones you make. The page is always on exactly one of them. The sentence starts with its name: press it for the views, the one you are on shown with a ✓, and press another to switch.
 - **New view** (the dashed item after the views) makes a copy of the view you are on, and you type its name where it stands. On Today it can start from a template instead.
-- A word you change changes the view you are on, and the line above the tabs says so, with **Undo** and **Keep as new view**. Every change is saved to that view as you make it, including the search and filters on the page itself and a drag that switches the sort to **My order**.
+- A word you change changes the view you are on, and the line above the tabs says so, with **Undo** and **Keep as new view**. Every change is saved to that view as you make it, including the search and filters on the page itself.
 - The view's own housekeeping is in the same menu, after **New view**, whatever the page is doing: on a view you made, **Rename view** opens its name where it stands, and **Delete view** removes it and puts the page back on **Default**, with Undo. On Today, while Default differs from how it came, **Reset view** puts it back, with Undo.
 - The last item under the views says what the page opens with: **the view I was on last**, **Default** or one of your views. Press it for the next one: the line above the tabs says what the page opens with now, with Undo.
 - On the Habits page, the sentence also says which lines each habit shows (schedule, time, Area, consistency, last done).
 
 ## Edit mode
 
-Pages edit in place. The switch at the top of a page (**Use**, **Edit**, and **Select** where there is something to change together) turns the same list into one you can edit; Esc goes back to Use. Drag the ⠿ handle with a mouse or pen, or hold it a moment with a finger and then drag (a swipe that starts on it still scrolls), or focus it and use the arrow keys. A tap on ⠿ (or Enter) opens the moves it can make: **Move up**, **Move down**, **Put inside** the row above and **Take out of** the row that holds it, where they apply. A layout change that can't be saved goes back, and the line above the tabs offers **Retry**.
+Pages edit in place. The switch at the top of a page (**Use**, **Edit**, and **Select** where there is something to change together) turns the same list into one you can edit; Esc goes back to Use. Today has no switch: see below. Drag the ⠿ handle with a mouse or pen, or hold it a moment with a finger and then drag (a swipe that starts on it still scrolls), or focus it and use the arrow keys. A tap on ⠿ (or Enter) opens the moves it can make: **Move up**, **Move down**, **Put inside** the row above and **Take out of** the row that holds it, where they apply. A layout change that can't be saved goes back, and the line above the tabs offers **Retry**.
 
 ### Today
 
-The sentence at the top of Today is its view: what it shows (everything, what is still to do, what fits now and so on), how it is sorted or grouped, how rows look, the number on a row and where done habits go. Press a word to change it, in Use too. In Edit:
+Today has no Edit: everything changes where it stands, and each change says so in the line above the tabs, with **Undo**.
 
-- Drag habits into your order. Habit order is **My order**, shared with the Habits page. A drag while Today is sorted another way or grouped puts the view in **My order** too: the line above the tabs says both, and its **Undo** takes back both.
-- Each kind of line under a row (the Minimum, treats, reframe lines, jars and savings, identities, suggestions to raise) has **Hide** or **Show**. It belongs to the view, so each saved view has its own. When and where, and the number, follow the sentence's words for rows and the number.
-- **Headline** under a habit gives it a number of its own instead of the view's.
-- The **Breaking** heading has **Move first** or **Move last**.
+The sentence at the top of Today is its view: what it shows (everything, what is still to do, what fits now and so on), how it is sorted or grouped, how rows look, the number on a row and where done habits go. Press a word to change it.
+
+- While the sentence reads **in my order**, each habit and tracker has its ⠿ grip, to drag, move with the arrow keys or tap for its moves. Habit order is **My order**, shared with the Habits page. In any other order there are no grips; pick **in my order** to bring them back.
+- The last item of the "by" word puts Breaking first, or after the day.
+- **›** after a habit's or tracker's name opens its row. An open row lists each kind of line under it (the Minimum, treats, reframe lines, jars and savings, identities, suggestions to raise) with **Hide** or **Show**, a hidden one struck. It belongs to the view, so each saved view has its own. When and where, and the number, follow the sentence's words for rows and the number.
+- **Number** in an open row gives that habit a number of its own instead of the view's.
 
 Sections and groups fold, and stay folded. Every count on Today (the count under the title, each section, the week strip) counts the habits themselves: a group or routine counts through the habits inside it. A group that is done by its rule while a habit inside is still due stays with what is still to do, so that habit isn't filed under Done.
 
