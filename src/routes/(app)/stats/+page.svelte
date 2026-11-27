@@ -54,7 +54,7 @@
 		const copy = $state.snapshot(board);
 		const r = await op({ op: 'board.delete', id: board.id });
 		if (r) {
-			await goto('/stats');
+			await goto('/stats', { keepFocus: true }); // focus stays on the Boards ⋯, as a board pick keeps it
 			showToast(`Deleted the board “${copy.name}”`, async () => {
 				await statsOp({ op: 'board.restore', board: copy, index });
 				await goto(`/stats?board=${copy.id}`);

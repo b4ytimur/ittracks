@@ -10,7 +10,7 @@
 	import InlineText from '$lib/ui/InlineText.svelte';
 	import MenuButton, { menuFit, menuKeys, menuNudge, type Way } from '$lib/ui/MenuButton.svelte';
 	import { gridDrop, moveKey, pressMoved } from '$lib/ui/list';
-	import { statsOp } from '../client';
+	import { statsOp, undoOp } from '../client';
 	import { boardPlaces, keyMoved, movedSaid, type Named } from '../boards';
 
 	let {
@@ -64,7 +64,7 @@
 		if (focused) tick().then(() => tabOf(id)?.focus());
 		// Stats without a board in its address opens the last board, else the first: a move must not change the board shown.
 		if (current) await statsOp({ op: 'last', id: current }).catch(() => {});
-		if (await op({ op: 'board.order', ids: order })) showToast(movedSaid(was, order, id), () => op({ op: 'board.order', ids }));
+		if (await op({ op: 'board.order', ids: order })) showToast(movedSaid(was, order, id), undoOp({ op: 'board.order', ids }));
 		else shown = was;
 	}
 
@@ -91,7 +91,7 @@
 	async function saveName(v: string) {
 		const id = current;
 		const was = name;
-		if (id && (await op({ op: 'board.patch', id, name: v }))) showToast(`Renamed “${was}” to “${v}”.`, () => op({ op: 'board.patch', id, name: was }));
+		if (id && (await op({ op: 'board.patch', id, name: v }))) showToast(`Renamed “${was}” to “${v}”.`, undoOp({ op: 'board.patch', id, name: was }));
 	}
 
 	// ----- Move…: the places this board can go, in a menu under the ⋯ -----
@@ -292,7 +292,7 @@
 		{/each}
 	</div>
 	<span class="board-more" bind:this={more}>
-		<MenuButton class="quiet glyph" label="Boards" items={menu} />
+		<MenuButton class="quiet glyph" label="More on boards" menuLabel="Boards" items={menu} />
 		{#if placing}
 			<div
 				class="menu"
