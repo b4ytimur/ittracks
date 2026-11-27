@@ -3,9 +3,10 @@
 	// for this kind of row (catalog.ts). An action asks for its input, previews exactly what it
 	// will do (and what it leaves as it is, and why), then applies it in one go with Undo.
 	// It talks to the same `bulk` action as the API and the MCP server.
+	import { untrack } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import { band, showToast } from '$lib/toast.svelte';
-	import { buttonsFor, TARGETS, type BulkButton, type TargetKind } from './catalog';
+	import { buttonsFor, openingButton, takesAnswer, TARGETS, type BulkButton, type TargetKind } from './catalog';
 	import { initialValues, type FieldSources } from './fields';
 	import BulkForm from './BulkForm.svelte';
 
@@ -71,6 +72,9 @@
 		preview = null;
 		error = '';
 	}
+	/** With one action there is nothing to choose: the bar opens on it, and again after it applies. */
+	const only = $derived(openingButton(kind));
+	untrack(() => only && pick(only));
 	function selectAll() {
 		if (allShown) for (const id of visible) selected.delete(id);
 		else for (const id of visible) selected.add(id);
@@ -96,12 +100,13 @@
 	let asked = 0;
 	async function run(apply: boolean) {
 		if (!open || !ids.length) return;
+		const act = open.id;
 		const mine = ++asked;
 		busy = apply;
 		error = '';
 		const r = await call('bulk', input(apply));
-		// The selection or the input changed while it was away.
-		if (mine !== asked) return;
+		// The selection or the input changed while it was away: an old preview is dropped, an apply's result never is.
+		if (!takesAnswer(apply, mine, asked)) return;
 		busy = false;
 		if (!r.ok) {
 			error = r.error;
@@ -113,7 +118,10 @@
 			return;
 		}
 		close();
+		if (only) pick(only);
 		await onchanged();
+		// Applying made the bar inert, which drops focus: it goes back to the action's own button.
+		if (document.activeElement === document.body) document.querySelector<HTMLElement>(`.selbar [data-act="${act}"]`)?.focus();
 		if (!a.batch) return void showToast(a.summary);
 		showToast(`${a.summary}.`, async () => {
 			const u = await call('bulk_undo', { batch: a.batch });
@@ -186,7 +194,7 @@
 		{#if ids.length}
 			<div class="chips selbar-acts" role="group" aria-label="Change" inert={busy}>
 				{#each buttons as b (b.id)}
-					<button type="button" class="toggle" aria-pressed={open?.id === b.id} onclick={() => pick(b)}>{b.label}</button>
+					<button type="button" class="toggle" data-act={b.id} aria-pressed={open?.id === b.id} onclick={() => pick(b)}>{b.label}</button>
 				{/each}
 			</div>
 		{/if}

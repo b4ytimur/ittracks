@@ -81,7 +81,7 @@ Under **+ Streak and days you don't log**: how the streak counts, whether a shor
 Also on the page:
 
 - **Reframe**: a line to see on the card ("I get to do this today").
-- **Identity**: who this habit makes you ("I am a runner"). The **Identities** page lists them: tap a sentence to change it, drag its ⠿ (or tap it for **Move up** and **Move down**) to put them in your order, **Delete** one, or add one in the slot at the end. Each change has Undo, and deleting one keeps its habits. Each row says in words what stands for it. Nothing about identities is said when you log; an identity's line on Today is off for new accounts (**Today → Edit**).
+- **Identity**: who this habit makes you ("I am a runner"). The **Identities** page lists them: tap a sentence to change it, drag its ⠿ (or tap it for **Move up** and **Move down**) to put them in your order, **Delete** one, or add one in the slot at the end. Each change has Undo, and deleting one keeps its habits. Each row says in words what stands for it. Nothing about identities is said when you log; an identity's line on Today is off for new accounts (a row opened with **›** on Today has **Show** for it).
 - **Notes**: Markdown. See [Notes and journal](notes-and-journal.md).
 - **One-tap Done on Today (logs your targets)**, for habits with Tasks.
 - **In the app icon's menu**: the habit appears when you long-press the app icon. The menu holds four.
@@ -114,7 +114,7 @@ Logging slips and resisted cravings is covered in [Logging](logging.md#slips-and
 
 ## Archive, delete, duplicate
 
-- **Archive** hides the habit from Today and keeps its history. **Unarchive** brings it back. You can also archive from the Habits page in [edit mode](views-and-edit-mode.md#edit-mode).
+- **Archive** hides the habit from Today and keeps its history. **Unarchive** brings it back. You can also archive from a habit's **⋯** on the [Habits page](views-and-edit-mode.md#habits).
 - **Delete** removes the habit and its history, with no question. **Undo** in the band brings it back. Until a day later it also waits among archived habits (**Include archived** in the Habits filters) and on its own page, with **Put back**; then it goes for good with its logs.
 - **Duplicate** opens a copy in the editor.
 - **Share as template** downloads a file others can import. See [Templates](templates.md).

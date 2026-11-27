@@ -1,16 +1,17 @@
 <script lang="ts" generics="T">
-	// Groups of rows under headings. Grouped by Area, the page's Edit edits the Areas where they stand: a grip
-	// to move one (drag or its Move menu), rename, recolour, delete (with Undo), and add one at the end. In Edit
-	// and Select the headings' slot opens, so their titles keep the column of the rows' grips and checkboxes.
-	import type { Snippet } from 'svelte';
+	// Groups of rows under headings. Grouped by Area, the Areas are kept where they stand, in Use (MO): each Area's
+	// heading has a grip (drag it, or tap it for its Move menu) and a ⋯ with Rename (the name opens as a box in place),
+	// Colour and icon, and Delete, each said in the band with Undo, and a New Area slot ends the list while every Area shows
+	// (`allAreas`). None of it shows while the page selects: a tap ticks rows then. Grouped by Area every heading's slot is open, so the page opens its
+	// rows' slots too (EditableList's slotOpen); otherwise `slotOpen` says whether the rows have grips or checkboxes.
+	import { tick, type Snippet } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import { showError, showToast } from '$lib/toast.svelte';
 	import { AREA_COLORS, COLOR_NAMES } from '$lib/area-colors';
 	import EditableList from './EditableList.svelte';
 	import GroupHeading from './GroupHeading.svelte';
-	import InlineText from './InlineText.svelte';
+	import { mergeOrder } from './list';
 	import type { Group } from '$lib/views';
-	import type { Mode } from './list';
 
 	interface Area {
 		id: string;
@@ -21,21 +22,30 @@
 	let {
 		groups,
 		areas,
-		mode,
 		byArea,
+		slotOpen = false,
+		selecting = false,
+		allAreas = false,
 		group
 	}: {
 		groups: Group<T>[];
 		areas: Area[];
-		mode: Mode;
 		/** The groups are Areas. */
 		byArea: boolean;
+		/** Not by Area: the rows under the headings have grips or checkboxes, so the headings' slot opens too. */
+		slotOpen?: boolean;
+		/** The page is selecting: no grips, ⋯ or New Area. */
+		selecting?: boolean;
+		/** Every Area shows, empty ones too (keepsEmptyAreas): only then does New Area end the list, so a new one shows where it lands. */
+		allAreas?: boolean;
 		group: Snippet<[Group<T>]>;
 	} = $props();
 
 	const areaOf = (key: string) => (byArea ? areas.find((a) => a.id === key) : undefined);
-	const editing = $derived(mode === 'edit');
+	/** The Area whose name is a box now, and the one whose colours are open. */
+	let renaming = $state<string | null>(null);
 	let picking = $state<string | null>(null);
+	let picker = $state<HTMLElement>();
 	let order = $state.raw<string[] | null>(null);
 	const list = $derived(order ? [...groups].sort((a, b) => rank(a.key) - rank(b.key)) : groups);
 	const rank = (k: string) => {
@@ -73,26 +83,54 @@
 	async function move(keys: string[], said: string) {
 		const before = areas.map((a) => a.id);
 		order = keys;
-		const r = await call({ op: 'move', order: keys.filter((k) => areaOf(k)) });
+		// A filter can hide some Areas: those keep their places, and the ones shown take theirs in the new order.
+		const r = await call({ op: 'move', order: mergeOrder(before, keys.filter((k) => areaOf(k))) });
 		order = null;
 		if (r) showToast(said, undo({ op: 'move', order: before }));
 	}
+
+	/** The heading's ⋯ that opened the colours. */
+	const moreOf = (k: string) => document.querySelector<HTMLElement>(`li[data-key="${CSS.escape(k)}"] > .group-heading > .more > button`);
+	/** Colour and icon: the colours open under the heading, on the one it has; again, they close. */
+	async function pick(k: string) {
+		picking = picking === k ? null : k;
+		await tick();
+		picker?.querySelector<HTMLElement>('[aria-pressed="true"]')?.focus();
+	}
+	/** The colours close; focus left nowhere goes back to the ⋯. */
+	async function unpick(k: string) {
+		picking = null;
+		await tick();
+		if (document.activeElement === document.body) moreOf(k)?.focus();
+	}
+	const acts = (a: Area) => [
+		{ label: 'Rename', onselect: () => (renaming = a.id) },
+		{ label: 'Colour and icon', onselect: () => pick(a.id) },
+		{ label: 'Delete', onselect: () => remove(a) }
+	];
 </script>
+
+<!-- Esc in the colours closes them, with nothing changed. -->
+<svelte:window onkeydown={(e) => picking && e.key === 'Escape' && picker?.contains(e.target as Node) && (e.preventDefault(), unpick(picking))} />
 
 {#if !byArea || groups.every((g) => !g.label)}
 	{#each groups as g (g.key)}
-		{#if g.label}<GroupHeading title={g.label} color={g.color} slotOpen={mode !== 'use'} count={String(g.items.length)} />{/if}
+		{#if g.label}<GroupHeading title={g.label} color={g.color} {slotOpen} count={String(g.items.length)} />{/if}
 		{@render group(g)}
 	{/each}
 {:else}
+	<!-- rowCard here only brings the list's New Area slot: layout bare draws each Area itself. -->
 	<EditableList
 		items={list}
 		key={(g) => g.key}
 		label={(g) => areaOf(g.key)?.name ?? g.label}
 		layout="bare"
+		rowCard
 		ariaLabel="Areas"
 		canDrop={(m) => m.position !== 'inside' && !!areaOf(m.key) && (!!areaOf(m.target) || m.position === 'before')}
-		onmove={editing ? (_, keys, text) => (void move(keys, text), true) : undefined}
+		onmove={selecting ? undefined : (_, keys, text) => (void move(keys, text), true)}
+		onadd={selecting || !allAreas ? undefined : add}
+		addLabel="New Area"
 	>
 		{#snippet row(g, ctx)}
 			{@const a = areaOf(g.key)}
@@ -100,46 +138,29 @@
 				title={a?.name ?? g.label}
 				color={g.color}
 				icon={a?.icon}
-				slotOpen={mode !== 'use'}
+				slotOpen
 				count={String(g.items.length)}
 				grip={a ? ctx.grip : undefined}
-				onrename={a && editing ? (name) => change(a, { name }) : undefined}
-				after={a && editing ? swatch : undefined}
-				verb={a && editing ? del : undefined}
+				onrename={a ? (name) => change(a, { name }) : undefined}
+				bind:renaming={() => renaming === g.key, (v) => (renaming = v ? g.key : null)}
+				more={a && !selecting ? acts(a) : undefined}
 			/>
-			{#snippet swatch()}
-				<button type="button" class="quiet dot" aria-label="Colour of {a?.name}" aria-expanded={picking === g.key} onclick={() => (picking = picking === g.key ? null : g.key)}
-					><span class="swatch" style:--c={g.color}></span></button
-				>
-			{/snippet}
-			{#snippet del()}
-				<button type="button" class="quiet verb" aria-label="Delete {a?.name}" onclick={() => a && remove(a)}>Delete</button>
-			{/snippet}
-			{#if a && editing && picking === g.key}
-				<div class="colors" role="group" aria-label="Colour of {a.name}">
+			{#if a && !selecting && picking === g.key}
+				<div class="colors" role="group" aria-label="Colour and icon of {a.name}" bind:this={picker}>
 					{#each [...new Set([a.color, ...AREA_COLORS])] as c (c)}
-						<button type="button" class="pick-color" aria-pressed={c === a.color} aria-label={COLOR_NAMES[c] ?? c} onclick={() => ((picking = null), change(a, { color: c }))}
+						<button type="button" class="pick-color" aria-pressed={c === a.color} aria-label={COLOR_NAMES[c] ?? c} onclick={() => (unpick(g.key), change(a, { color: c }))}
 							><span class="swatch" data-size="picker" style:--c={c}></span></button
 						>
 					{/each}
-					<input class="icon" aria-label="Icon of {a.name}" placeholder="Icon" maxlength="8" value={a.icon} onchange={(e) => change(a, { icon: e.currentTarget.value.trim() })} />
+					<input class="icon" aria-label="Icon of {a.name}" placeholder="Icon" maxlength="8" value={a.icon} onchange={(e) => (unpick(g.key), change(a, { icon: e.currentTarget.value.trim() }))} />
 				</div>
 			{/if}
 			{@render group(g)}
 		{/snippet}
 	</EditableList>
-	{#if editing}
-		<p class="new section-title"><InlineText value="New Area" editing label="Add an Area" onsave={add} /></p>
-	{/if}
 {/if}
 
 <style>
-	.dot {
-		padding: 0;
-		min-width: var(--target-min);
-		/* Clear of the grip, which is wider than its slot: each keeps 24px of its own. */
-		margin-inline: calc(var(--target-min) - var(--handle-slot) + 2px) var(--space-tight);
-	}
 	.colors {
 		display: flex;
 		flex-wrap: wrap;
@@ -159,9 +180,5 @@
 	}
 	.icon {
 		width: 4.5rem;
-	}
-	.new {
-		margin: var(--space-section) 0 0;
-		color: var(--ink-muted);
 	}
 </style>

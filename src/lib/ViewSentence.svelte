@@ -1,8 +1,9 @@
 <script lang="ts">
 	// A page's view as one sentence (TS.1): "Default shows everything, by time, short rows with streaks, done at the
-	// end." The view's name opens the views, New view (a ghost slot) and the starting sentences (TS.10); every other
-	// word is the platform's select laid over it (TS.13, AP.2). A pick changes the view at once and says so in the
-	// band, with Undo and Keep as new view. Replaces the view bar's chips and Customize.
+	// end." The view's name opens the views, New view (a ghost slot) and the starting sentences (TS.10), and the view's
+	// own housekeeping: Rename, Delete view, Reset view and what the page opens with, in any mode (MO: the switcher's
+	// menu). Every other word is the platform's select laid over it (TS.13, AP.2). A pick changes the view at once and
+	// says so in the band, with Undo and Keep as new view. Replaces the view bar's chips and Customize.
 	import { tick, untrack } from 'svelte';
 	import MenuButton, { type Way } from './ui/MenuButton.svelte';
 	import InlineText from './ui/InlineText.svelte';
@@ -10,7 +11,6 @@
 	import { flushViews, saveView, viewOp } from './viewclient';
 	import { sentence, type Word } from './view-words';
 	import { showError, showToast } from './toast.svelte';
-	import type { Mode } from './ui/list';
 
 	let {
 		page,
@@ -18,7 +18,6 @@
 		current = $bindable(),
 		words,
 		starters = [],
-		mode = 'use',
 		reset,
 		say
 	}: {
@@ -29,19 +28,16 @@
 		words: Word[];
 		/** Sentences a new view can start from (TS.8). */
 		starters?: { name: string; state: ViewState }[];
-		mode?: Mode;
-		/**
-		 * What the page default goes back to with Reset view; none, no Reset. Reset view stands in the page's hint line
-		 * with every other reset (EditChrome's onreset, calling resetDefault and asking canReset), not in the sentence.
-		 */
+		/** What the page default goes back to with Reset view, in the view-name menu while it differs; none, no Reset. */
 		reset?: ViewState;
 		/** A view's sentence in words, for the list of views and the starting sentences. */
 		say?: (s: ViewState) => string;
 	} = $props();
 
 	let active = $state(untrack(() => initialView(views, page)));
-	/** The view whose name is being typed, right after it was made. */
-	let naming = $state<string | null>(null);
+	/** The view's name is a box where it stands: 'new' right after New view made it (with a hint), 'rename' from Rename. */
+	let naming = $state<'new' | 'rename' | null>(null);
+	let root = $state<HTMLElement>();
 	/** The view just made from New view: the starting sentences stand under it until something else is chosen (TS.10). */
 	let fresh = $state<string | null>(null);
 	const list = $derived(viewsOf(views, page));
@@ -73,26 +69,21 @@
 		});
 	});
 
-	/**
-	 * A change to the view from elsewhere on the page: saved, said in the band, with Undo and Keep as new view.
-	 * `cause` is the page's own change that brought it (a drag into My order): one line says both, and its Undo takes back both.
-	 */
-	export function change(next: ViewState, said: string, called = 'New view', cause?: { said: string; undo: () => unknown }) {
+	/** A change to the view from elsewhere on the page (a line's Hide on Today): saved, said in the band, with Undo and Keep as new view. */
+	export function change(next: ViewState, said: string, called = 'New view') {
 		const id = active;
 		const before = copy(current);
 		const after = copy(next);
 		current = after;
 		store(id, after);
 		showToast(
-			`${cause ? `${cause.said} ` : ''}${nameOf(id)} ${said}.`,
+			`${nameOf(id)} ${said}.`,
 			() => {
 				if (active === id) current = copy(before);
 				store(id, before);
-				return cause?.undo();
 			},
 			undefined,
-			// The order the drag made keeps its own Undo line, as it had before the two shared one.
-			{ label: 'Keep as new view', run: () => { if (cause) showToast(cause.said, cause.undo); return keep(id, before, after, called); } }
+			{ label: 'Keep as new view', run: () => keep(id, before, after, called) }
 		);
 	}
 
@@ -123,7 +114,7 @@
 			current = copy(after);
 			void viewOp({ op: 'select', page, view: from });
 		});
-		await askName(made);
+		await nameBox('new');
 	}
 
 	/** A new view, a copy of this one or a starting sentence; its name is typed next, where it stands. */
@@ -141,14 +132,14 @@
 			views = gone.views;
 			if (active === made) select(DEFAULT_VIEW);
 		});
-		await askName(made);
+		await nameBox('new');
 	}
 	/** The view just made takes a template's words, and its name when it still has the one it was given. */
 	async function startFrom(t: { name: string; state: ViewState }) {
 		const id = active;
 		const before = copy(current);
 		fresh = null;
-		naming = null;
+		void nameClosed(); // the box and the template pressed both go, so the focus goes back to the name
 		current = copy(t.state);
 		store(id, current);
 		const renamed = nameOf(id) === 'New view';
@@ -161,17 +152,23 @@
 			store(id, before);
 		});
 	}
-	async function askName(id: string) {
-		naming = id;
+	/** Open the name as a box (InlineText, opened by the page) and put the cursor in it. */
+	async function nameBox(kind: 'new' | 'rename') {
+		naming = kind;
 		await tick();
-		const box = document.querySelector<HTMLInputElement>('.view-sentence .naming');
+		const box = root?.querySelector<HTMLInputElement>('input.inline-text');
 		box?.focus();
 		box?.select();
+	}
+	/** The box closed: Enter or Esc leave the focus nowhere, so it goes back to the name; a press elsewhere keeps its own. */
+	async function nameClosed() {
+		naming = null;
+		await tick();
+		if (document.activeElement === document.body) root?.querySelector<HTMLElement>('.name-menu button')?.focus();
 	}
 	async function rename(id: string, to: string) {
 		const was = nameOf(id);
 		const next = to.trim();
-		naming = null;
 		if (!next || next === was) return;
 		const r = await viewOp({ op: 'rename', id, name: next });
 		if (!r) return showError(`Couldn't rename ${was}. It keeps its old name.`);
@@ -212,7 +209,7 @@
 			void viewOp({ op: 'select', page, view: id });
 		});
 	}
-	export function resetDefault() {
+	function resetDefault() {
 		if (!reset || active !== DEFAULT_VIEW) return;
 		const before = copy(current);
 		current = copy(reset);
@@ -225,22 +222,39 @@
 
 	const OPENS = $derived([{ id: 'last', name: 'the view I was on last' }, ...list.map((x) => ({ id: x.id, name: x.name }))]);
 	const opens = $derived(OPENS.find((o) => o.id === (views.open[page] ?? 'last')) ?? OPENS[0]);
-	async function nextOpens() {
-		const at = OPENS.findIndex((o) => o.id === opens.id);
-		const to = OPENS[(at + 1) % OPENS.length];
-		const r = await viewOp({ op: 'open', page, value: to.id });
+	async function setOpens(id: string) {
+		const r = await viewOp({ op: 'open', page, value: id });
 		if (r) views = r.views;
+		return !!r;
+	}
+	/** The next choice, said in the band with Undo: the menu closes on the press, so the band is where the new one shows. */
+	async function nextOpens() {
+		const was = opens;
+		const to = OPENS[(OPENS.findIndex((o) => o.id === was.id) + 1) % OPENS.length];
+		if (!(await setOpens(to.id))) return showError(`Couldn't change what ${PAGE_LABEL[page]} opens with. It still opens with ${was.name}.`);
+		showToast(`${PAGE_LABEL[page]} now opens with ${to.name}.`, () => setOpens(was.id));
 	}
 
+	/** The page default differs from what it came as, so Reset view has something to do. */
+	const changed = $derived(!!reset && active === DEFAULT_VIEW && !same(current, reset));
+	// The view's own acts after the views: a view you made renames and deletes, the page default resets while it differs.
+	const acts = $derived<Way[]>(
+		active !== DEFAULT_VIEW
+			? [
+					{ label: 'Rename view', onselect: () => nameBox('rename') },
+					{ label: 'Delete view', onselect: remove }
+				]
+			: changed
+				? [{ label: 'Reset view', value: 'Default as it came', onselect: resetDefault }]
+				: []
+	);
 	const items = $derived<(Way | '-')[]>([
 		...list.map((x) => ({ label: x.name, checked: x.id === active, value: x.id === active ? sentence(words) : undefined, onselect: () => select(x.id) })),
 		{ label: 'New view', value: starters.length ? `A copy of ${name}, or start from a template.` : `A copy of ${name}. You name it next.`, ghost: true, onselect: () => make('New view', current).then(() => (fresh = active)) },
 		'-',
+		...(acts.length ? [...acts, '-' as const] : []),
 		{ label: `${PAGE_LABEL[page]} opens with ${opens.name}`, value: 'Press to change', onselect: nextOpens }
 	]);
-	const changed = $derived(!!reset && active === DEFAULT_VIEW && !same(current, reset));
-	/** The page default differs from what it came as, so Reset view has something to do. */
-	export const canReset = () => changed;
 	const shownOf = (w: Word) => w.shown ?? w.options.find((o) => o.value === w.value)?.label ?? '';
 	const kindOf = (value: string) => (value.includes(':') ? value.slice(0, value.indexOf(':') + (value.startsWith('more:') ? 3 : 0)) : '');
 	function itemsOf(w: Word): (Way | '-')[] {
@@ -253,27 +267,18 @@
 	}
 </script>
 
-<div class="view-sentence">
+<div class="view-sentence" bind:this={root}>
 	<div class="sentence">
-		{#if naming === active}
-			<label class="word"
-				><span class="vh">Name of the view</span><input
-					class="naming"
+		{#if naming}
+			<span class="name"
+				><InlineText
 					value={name}
-					maxlength="40"
-					size={Math.max(6, name.length + 1)}
-					onkeydown={(e) => {
-						if (e.key === 'Enter') e.currentTarget.blur();
-						else if (e.key === 'Escape') {
-							e.currentTarget.value = name;
-							e.currentTarget.blur();
-						}
-					}}
-					onblur={(e) => rename(active, e.currentTarget.value)}
-				/></label
+					bind:open={() => naming !== null, (v) => !v && nameClosed()}
+					label="Name of {name}"
+					maxlength={40}
+					onsave={(v) => rename(active, v)}
+				/></span
 			>
-		{:else if mode === 'edit' && active !== DEFAULT_VIEW}
-			<span class="name"><InlineText value={name} editing label="Name of {name}" maxlength={40} onsave={(v) => rename(active, v)} /></span>
 		{:else}
 			<span class="name-menu">
 				<MenuButton class="word-button" align="start" label="{name}: the views of {PAGE_LABEL[page]}" menuLabel="Views of {PAGE_LABEL[page]}" {items}>
@@ -292,7 +297,7 @@
 			>
 		{/each}
 	</div>
-	{#if naming === active}<p class="hint meta">Name it, then press a ruled word to change what it shows.</p>{/if}
+	{#if naming === 'new'}<p class="hint meta">Name it, then press a ruled word to change what it shows.</p>{/if}
 	{#if fresh === active && starters.length}
 		<div class="starts" role="group" aria-label="Start from a template">
 			<span class="meta">Or start from</span>
@@ -300,9 +305,6 @@
 				<button type="button" class="toggle" onmousedown={(e) => e.preventDefault()} onclick={() => startFrom(t)}>{t.name}</button>
 			{/each}
 		</div>
-	{/if}
-	{#if mode === 'edit' && active !== DEFAULT_VIEW}
-		<p class="hint meta l-cluster"><button type="button" class="quiet" onclick={remove}>Delete view</button></p>
 	{/if}
 </div>
 
@@ -329,17 +331,6 @@
 	}
 	.before {
 		margin-inline-end: var(--space-tight);
-	}
-	/* The words stand as text; the control lies over them, as wide as they are (as on Stats). */
-	.word {
-		position: relative;
-		display: inline-flex;
-		align-items: center;
-		min-height: var(--target-min);
-		max-width: 100%;
-		margin: 0;
-		color: var(--ink);
-		font-size: inherit;
 	}
 	.shown {
 		border-bottom: 1px dashed var(--line-control);
@@ -378,19 +369,6 @@
 		.view-sentence :global(.word-button)::before {
 			inset-block: calc((100% - var(--control-md)) / 2);
 		}
-	}
-	.naming {
-		width: auto;
-		min-height: 0;
-		padding: 0;
-		border: 0;
-		border-bottom: 1px dashed var(--line-control);
-		border-radius: 0;
-		background: none;
-		color: var(--ink);
-		font: inherit;
-		font-weight: 600;
-		line-height: var(--control-sm);
 	}
 	.hint {
 		margin: var(--space-tight) 0 0;

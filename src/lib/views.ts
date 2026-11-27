@@ -724,7 +724,7 @@ export function groupBy<T extends Groupable>(
 	items: T[],
 	group: string,
 	ctx: { areas: { id: string; name: string; icon: string; color: string }[]; parts?: string[] },
-	opts: { /** Areas with no items show too (while editing). */ keepEmpty?: boolean } = {}
+	opts: { /** Areas with no items show too (keepsEmptyAreas). */ keepEmpty?: boolean } = {}
 ): Group<T>[] {
 	if (group === 'area') {
 		const known = (id: string | null) => !!id && ctx.areas.some((a) => a.id === id);
@@ -770,6 +770,18 @@ export function manualOrder<T>(items: T[], order: string[], id: (t: T) => string
 		.map((x) => x.t);
 }
 
+/**
+ * What a reordered list gives back to the shared order (mergeOrder's part), when finished rows sink to the list's end
+ * (Today, done at the end): only the rows on the moved row's side of that line. A move among the habits still to do
+ * then never sends a done one to the end of the order for good, and the done ones keep their order among themselves.
+ */
+export const movedPart = (part: string[], key: string, sunk: Set<string>) => part.filter((k) => sunk.has(k) === sunk.has(key));
+/**
+ * Which moves the grips offer in that list: a row goes before or after the rows on its own side of the line, never across
+ * it (movedPart would keep the order as it was) and never inside another row.
+ */
+export const sameSide = (sunk: Set<string>, m: { key: string; target: string; position: string }) => m.position !== 'inside' && sunk.has(m.key) === sunk.has(m.target);
+
 /** Does an item pass the Area, direction and Identity filters? */
 export function passes(s: ViewState, i: Groupable): boolean {
 	if (s.areas.length && !s.areas.includes(i.areaId ?? '')) return false;
@@ -778,6 +790,9 @@ export function passes(s: ViewState, i: Groupable): boolean {
 	if (s.identity && !(i.identities ?? []).includes(s.identity)) return false;
 	return true;
 }
+
+/** Grouped by Area with nothing narrowing the list, every Area shows, empty ones too, so each can be kept where it stands (MO). */
+export const keepsEmptyAreas = (s: ViewState) => s.group === 'area' && !activeFilters(s);
 
 /** How many filters are on, to show on the Customize button. */
 export function activeFilters(s: ViewState): number {

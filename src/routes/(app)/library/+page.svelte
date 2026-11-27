@@ -1,35 +1,36 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { onDestroy, untrack } from 'svelte';
+	import { untrack } from 'svelte';
 	import { MediaQuery, SvelteSet } from 'svelte/reactivity';
 	import ViewSentence from '$lib/ViewSentence.svelte';
 	import { libraryWords } from '$lib/view-words';
 	import EditableList from '$lib/ui/EditableList.svelte';
-	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import TitleLine from '$lib/ui/TitleLine.svelte';
+	import MenuButton from '$lib/ui/MenuButton.svelte';
+	import { backToMore, focusBox, keepFocus, pressedRow } from '$lib/ui/row-more';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
 	import GroupHeading from '$lib/ui/GroupHeading.svelte';
 	import StatusTag from '$lib/ui/StatusTag.svelte';
-	import type { Mode } from '$lib/ui/list';
 	import AreaGroups from '$lib/ui/AreaGroups.svelte';
 	import InlineText from '$lib/ui/InlineText.svelte';
-	import { invalidateAll } from '$app/navigation';
 	import { runAction, showToast, undoWith } from '$lib/toast.svelte';
 	import { goneAt } from '$lib/undelete';
 	import BulkBar from '$lib/bulk/BulkBar.svelte';
 	import { unitOptions } from '$lib/bulk/catalog';
 	import { units } from '$lib/units-here';
 	import { groups as tagGroups } from '$lib/groupings-here';
-	import { groupBy } from '$lib/views';
+	import { groupBy, keepsEmptyAreas } from '$lib/views';
 
 	let { data } = $props();
 
 	type Task = (typeof data.tasks)[number];
 	/** The list as shown, changed at once by edits here and refreshed from the server after. */
 	let tasks = $derived(data.tasks);
-	/** One of three on this same list. Editing renames in place and archives; the Library has no order of its own to drag. */
-	let mode = $state<Mode>('use');
-	/** Archived while editing: they stay in the list, struck, until editing ends. */
-	const struck = new SvelteSet<string>();
+	/** The page's one second state: a tap ticks a Task instead of opening it, to change several together. Tasks have no order of their own, so no grips. */
+	let selecting = $state(false);
+	/** The Task whose name is a box now (its ⋯ › Rename). */
+	let renaming = $state<string | null>(null);
+	let renamingRow: Element | null = null;
 
 	// Search, filters and sort are a view: remembered between visits and savable by name.
 	let views = $state(untrack(() => data.views));
@@ -50,7 +51,7 @@
 		const q = view.query.trim().toLowerCase();
 		const list = tasks.filter(
 			(t) =>
-				(data.showArchived || !t.archived || struck.has(t.id)) &&
+				(data.showArchived || !t.archived) &&
 				(!q || t.name.toLowerCase().includes(q) || t.tags.some((g) => g.name.toLowerCase().includes(q))) &&
 				view.tags.every((g) => t.tags.some((x) => x.name === g)) &&
 				(!areaId || t.areaId === areaId) &&
@@ -66,7 +67,10 @@
 		return [...list].sort(by);
 	});
 
-	const groups = $derived(groupBy(shown, areaId ? 'none' : view.group, { areas: data.areas }, { keepEmpty: mode === 'edit' }));
+	const byArea = $derived(view.group === 'area' && !areaId);
+	/** Grouped by Area with nothing filtering, every Area shows, empty ones too, and New Area ends them. */
+	const allAreas = $derived(keepsEmptyAreas(view));
+	const groups = $derived(groupBy(shown, areaId ? 'none' : view.group, { areas: data.areas }, { keepEmpty: allAreas }));
 
 	const topCollections = $derived(data.collections.filter((c) => !c.parentId));
 	const childrenOf = (id: string) => data.collections.filter((c) => c.parentId === id);
@@ -116,40 +120,20 @@
 		}
 		showToast(`Renamed to “${name}”.`, undoWith('/library?/rename', { id: t.id, name: before }));
 	}
+	/** Archive, Unarchive or Put back (a deleted one), from the Task's ⋯: at once, with Undo in the band. An archived Task leaves the list unless it shows the archived, and the focus goes to the next row (keepFocus). */
 	async function archive(t: Task) {
 		const to = !t.archived;
 		const { deleteAfter } = t;
-		// The row shows its own way back until editing ends; struck first, so it never leaves the list mid-request
-		// (a row that leaves moves focus to its neighbour).
-		if (to) struck.add(t.id);
 		// Put back, for a deleted one: brought back, it isn't about to go any more.
 		patch(t.id, { archived: to, deleteAfter: null });
 		const r = await runAction(to ? '/library?/archive' : '/library?/unarchive', { id: t.id });
 		if (!r.ok) {
-			if (to) struck.delete(t.id);
 			patch(t.id, { archived: !to, deleteAfter });
 			return showToast(r.error ?? "Couldn't change it. Are you online?");
 		}
-		if (!to && !struck.delete(t.id)) showToast(`${t.name} is back.`, undoWith('/library?/archive', { id: t.id }));
+		if (to) showToast(`Archived ${t.name}. Its logs are kept.`, undoWith('/library?/unarchive', { id: t.id }));
+		else showToast(`${t.name} is back.`, undoWith('/library?/archive', { id: t.id }));
 	}
-	/** Editing ended: the struck rows go, and the band can bring them back. */
-	function leave() {
-		const gone = tasks.filter((t) => struck.has(t.id));
-		struck.clear();
-		if (!gone.length) return;
-		if (navigator.onLine) invalidateAll();
-		showToast(`Archived ${gone.length === 1 ? gone[0].name : `${gone.length} Tasks`}. ${gone.length === 1 ? 'Its' : 'Their'} logs are kept.`, async () => {
-			let ok = true;
-			for (const t of gone) ok = (await runAction('/library?/unarchive', { id: t.id })).ok && ok;
-			return ok;
-		});
-	}
-	// Leaving the page ends editing too.
-	onDestroy(leave);
-	const setMode = (m: Mode) => {
-		if (mode === 'edit' && m !== 'edit') leave();
-		mode = m;
-	};
 	const metaOf = (t: Task) =>
 		t.deleteAfter
 			? `Deleted. It goes for good with its logs on ${goneAt(t.deleteAfter)}.`
@@ -158,22 +142,16 @@
 
 <svelte:head><title>Library · ittracks</title></svelte:head>
 
-<EditChrome
+<TitleLine
 	title="Library"
-	{mode}
-	modes={['use', 'edit', 'select']}
-	onmode={setMode}
-	hints={{
-		use: `${shown.length} ${shown.length === 1 ? 'Task' : 'Tasks'}`,
-		edit: 'Tap a name to rename it. Archived Tasks keep their logs.',
-		select: 'Tick Tasks to change them together.'
-	}}
+	hint="{shown.length} {shown.length === 1 ? 'Task' : 'Tasks'}"
 	add={{ label: 'New task', href: `/library/new${areaId ? `?area=${areaId}` : view.collection ? `?collection=${view.collection}` : ''}` }}
 	more={[
 		{ label: data.showArchived ? 'Hide archived' : 'Show archived', href: data.showArchived ? '/library' : '/library?archived' },
 		...(view.collection ? [{ label: 'Edit this collection', href: `/library/collections/${view.collection}` }] : []),
 		{ label: 'New collection', href: '/library/collections/new' }
 	]}
+	state={{ label: 'Select', pressed: selecting, onchange: (on) => (selecting = on), hint: 'Tick Tasks to change them together.' }}
 />
 
 <div class="search page-wide" role="search">
@@ -182,7 +160,7 @@
 	{#if view.query}<button type="button" class="quiet glyph search-clear focus-inset" aria-label="Clear search" onclick={() => ((view.query = ''), document.getElementById('li-q')?.focus())}>×</button>{/if}
 </div>
 
-<ViewSentence page="library" bind:views bind:current={view} {mode} words={libraryWords(view, { areas: data.areas.length > 0 })} />
+<ViewSentence page="library" bind:views bind:current={view} words={libraryWords(view, { areas: data.areas.length > 0 })} />
 {#if !wide.current}<details class="disclosure side-fold"><summary class="meta"><span class="chev" aria-hidden="true">›</span>{sideSays}</summary><div>{@render side()}</div></details>{/if}
 
 <!-- The side column, beside the list from 64rem and folded under the sentence on a phone (TS.15). -->
@@ -231,30 +209,30 @@
 			<EmptyState kind="filtered" text="Nothing matches." onclear={filtering ? clear : undefined} />
 		{/if}
 
-		{#if mode === 'select'}
+		{#if selecting}
 			<BulkBar kind="task" {selected} bind:outcome visible={shown.map((t) => t.id)} today={data.today} {sources} />
 		{/if}
 
-		<AreaGroups {groups} areas={data.areas} {mode} byArea={view.group === 'area' && !areaId}>
+		<AreaGroups {groups} areas={data.areas} {byArea} {selecting} {allAreas} slotOpen={selecting}>
 			{#snippet group(g)}
 			<EditableList
 				items={g.items}
 				key={(t) => t.id}
 				label={(t) => t.name}
-				selecting={mode === 'select'}
+				{selecting}
 				{selected}
 				rowCard
-				slotOpen={mode === 'edit'}
-				href={mode === 'use' ? (t) => `/library/${t.id}` : undefined}
-				itemClass={(t) => (struck.has(t.id) ? 'struck' : '')}
-				onremove={mode === 'edit' ? archive : undefined}
-				removeLabel={(t) => (t.deleteAfter ? 'Put back' : t.archived ? 'Unarchive' : 'Archive')}
+				slotOpen={byArea}
+				href={(t) => `/library/${t.id}`}
 				ariaLabel={g.label || 'Tasks'}
 			>
 				{#snippet row(t)}
 					{@const o = outcome.get(t.id)}
-					{#if mode === 'use'}<a class="name" href="/library/{t.id}">{t.name}</a>
-					{:else}<span class="name"><InlineText value={t.name} editing={mode === 'edit' && !struck.has(t.id)} label="Name of {t.name}" maxlength={120} onsave={(v) => rename(t, v)} /></span>{/if}
+					{#if renaming === t.id}<span class="name"
+							><InlineText value={t.name} bind:open={() => renaming === t.id, (v) => !v && ((renaming = null), backToMore(renamingRow))} label="Name of {t.name}" maxlength={120} onsave={(v) => rename(t, v)} /></span
+						>
+					{:else if selecting}<span class="name">{t.name}</span>
+					{:else}<a class="name" href="/library/{t.id}">{t.name}</a>{/if}
 					{#if o?.tag}<span class="tags"><span class="tag pending"><span aria-hidden="true">→</span> {o.tag}</span></span>
 					{:else if t.archived}<span class="tags"><StatusTag status="archived" /></span>
 					{:else if !t.usedIn.length && !t.timesLogged}<span class="tags"><StatusTag status="unused" /></span>{/if}
@@ -263,9 +241,31 @@
 						<span class="row-line tags">{#each t.tags as tg (tg.name)}<span class="tag">{tg.name}: {tagGroups().levelName(tg.name, tg.level)}</span>{/each}</span>
 					{/if}
 				{/snippet}
+				{#snippet actions(t)}
+					<span class="more"
+						><MenuButton
+							class="quiet glyph"
+							label="More on {t.name}"
+							items={[
+								{ label: 'Rename', onselect: () => ((renamingRow = pressedRow()), (renaming = t.id), focusBox(renamingRow)) },
+								{ label: t.deleteAfter ? 'Put back' : t.archived ? 'Unarchive' : 'Archive', onselect: () => keepFocus(() => archive(t)) }
+							]}
+						/></span
+					>
+				{/snippet}
 			</EditableList>
 			{/snippet}
 		</AreaGroups>
 	</div>
 	{#if wide.current}<aside class="page-side" aria-label="Around your Library">{@render side()}</aside>{/if}
 </div>
+
+<style>
+	/* A row's ⋯: its glyph ends on the verb edge, and its wrapper is the menu's anchor, so the menu hangs 4px under the
+	   button on a row of any height (a row with a line under its meta has a taller verb slot). */
+	.more {
+		position: relative;
+		display: flex;
+		margin-inline-end: calc(-1 * var(--space-tight));
+	}
+</style>

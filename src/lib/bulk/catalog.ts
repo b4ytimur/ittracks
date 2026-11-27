@@ -207,5 +207,18 @@ export function buttonsFor(kind: TargetKind): BulkButton[] {
 	return out;
 }
 
+/** The action the bar opens on: the only one there is (a day's Skip), since there is nothing to choose. */
+export const openingButton = (kind: TargetKind): BulkButton | null => {
+	const b = buttonsFor(kind);
+	return b.length === 1 ? b[0] : null;
+};
+
+/**
+ * Whether the bar takes an answer that came back (request `mine`, `latest` the newest asked): a preview only while nothing
+ * newer was asked, since a new selection or input made it wrong; an apply always, since the server has made the change
+ * and its Undo must be offered.
+ */
+export const takesAnswer = (apply: boolean, mine: number, latest: number) => apply || mine === latest;
+
 /** Units for the unit field's suggestions. */
 export const unitOptions = (names: string[]) => names.map((u) => ({ value: u, label: u }));

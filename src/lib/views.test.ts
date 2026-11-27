@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import { mergeOrder } from './ui/list';
 import {
 	TEMPLATES,
 	fromTemplate,
 	groupBy,
 	initialState,
 	initialView,
+	keepsEmptyAreas,
 	manualOrder,
+	movedPart,
+	sameSide,
 	partAt,
 	passes,
 	readViews,
@@ -264,6 +268,28 @@ describe('views', () => {
 		expect(manualOrder(['a', 'b', 'c', 'd'], ['c', 'a'], (x) => x)).toEqual(['c', 'a', 'b', 'd']);
 	});
 
+	it('a move in a list whose done rows sink puts back only its own side of the line', () => {
+		// My order a b c; a is done, so Today shows b c a. Moving c above b leaves a first in the order.
+		const done = new Set(['a']);
+		expect(mergeOrder(['a', 'b', 'c'], movedPart(['c', 'b', 'a'], 'c', done))).toEqual(['a', 'c', 'b']);
+		// Dropped under a done row, it goes as far down as the habits still to do reach.
+		expect(mergeOrder(['a', 'b', 'c'], movedPart(['c', 'a', 'b'], 'b', done))).toEqual(['a', 'c', 'b']);
+		// A done row moves among the done ones only.
+		expect(mergeOrder(['a', 'b', 'c', 'd'], movedPart(['b', 'd', 'c', 'a'], 'c', new Set(['a', 'c'])))).toEqual(['c', 'b', 'a', 'd']);
+	});
+	it('nothing sunk: the whole list goes back', () => {
+		expect(movedPart(['c', 'a', 'b'], 'c', new Set())).toEqual(['c', 'a', 'b']);
+	});
+	it('the grips offer no move across the done line, which would change nothing, and none inside', () => {
+		// Today shows b c a, a done: c can't go below a, nor a above c; b and c still swap.
+		const done = new Set(['a']);
+		expect(sameSide(done, { key: 'c', target: 'a', position: 'after' })).toBe(false);
+		expect(sameSide(done, { key: 'a', target: 'c', position: 'before' })).toBe(false);
+		expect(sameSide(done, { key: 'b', target: 'c', position: 'after' })).toBe(true);
+		expect(sameSide(new Set(['a', 'd']), { key: 'd', target: 'a', position: 'before' })).toBe(true);
+		expect(sameSide(new Set(), { key: 'c', target: 'b', position: 'inside' })).toBe(false);
+	});
+
 	it('finds the part of day, including ranges past midnight', () => {
 		const r = [
 			{ name: 'Morning', start: '05:00', end: '11:00' },
@@ -409,4 +435,18 @@ it('folded headings: the defaults for old views, kept over a template switch', (
 	const v = readViews(old);
 	expect(v.today.folded).toEqual(['done', 'focus:later', 'blocks:later']);
 	expect(switchTemplate({ ...v, today: { ...v.today, folded: ['area:x'] } }, 'focus', { keep: false }).today.folded).toEqual(['area:x']);
+});
+
+describe('empty Areas (MO: Areas are kept where they stand)', () => {
+	it('show while grouped by Area with nothing narrowing the list', () => {
+		expect(keepsEmptyAreas(viewState.parse({ group: 'area' }))).toBe(true);
+		expect(keepsEmptyAreas(viewState.parse({ group: 'area', sort: 'name', archived: true }))).toBe(true);
+	});
+	it('a filter or a search hides them: an empty Area matches nothing', () => {
+		for (const f of [{ areas: ['a1'] }, { direction: 'build' }, { identity: 'I read' }, { query: 'run' }, { tags: ['Legs'] }, { collection: 'c1' }])
+			expect(keepsEmptyAreas(viewState.parse({ group: 'area', ...f })), JSON.stringify(f)).toBe(false);
+	});
+	it('not grouped by Area, there are no Area headings to keep', () => {
+		for (const group of ['none', 'identity', 'direction', 'part']) expect(keepsEmptyAreas(viewState.parse({ group })), group).toBe(false);
+	});
 });

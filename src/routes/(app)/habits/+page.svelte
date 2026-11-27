@@ -1,38 +1,41 @@
 <script lang="ts">
 	import { describeAsks, describeSchedule } from '$lib/describe';
 	import { forest } from '$lib/engine/tree';
-	import { onDestroy, untrack } from 'svelte';
+	import { untrack } from 'svelte';
 	import { MediaQuery, SvelteSet } from 'svelte/reactivity';
 	import { invalidateAll } from '$app/navigation';
 	import ViewSentence from '$lib/ViewSentence.svelte';
-	import { habitsWords } from '$lib/view-words';
+	import { habitsInMyOrder, habitsWords } from '$lib/view-words';
 	import EditableList from '$lib/ui/EditableList.svelte';
 	import AreaGroups from '$lib/ui/AreaGroups.svelte';
-	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import TitleLine from '$lib/ui/TitleLine.svelte';
+	import MenuButton from '$lib/ui/MenuButton.svelte';
+	import { backToMore, focusBox, keepFocus, pressedRow } from '$lib/ui/row-more';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
 	import GroupHeading from '$lib/ui/GroupHeading.svelte';
 	import StatusTag from '$lib/ui/StatusTag.svelte';
 	import InlineText from '$lib/ui/InlineText.svelte';
 	import BulkBar from '$lib/bulk/BulkBar.svelte';
-	import { moveKey, reorderFrom, type Mode, type Move } from '$lib/ui/list';
+	import { mergeOrder, moveKey, type Move } from '$lib/ui/list';
 	import { isFollow, isGroup } from '$lib/engine/schedule';
 	import { consistencyText } from '$lib/engine/stats';
 	import { saveLayout, viewOp } from '$lib/viewclient';
 	import { runAction, showToast, undoWith } from '$lib/toast.svelte';
 	import { goneAt } from '$lib/undelete';
-	import { groupBy, manualOrder, passes, type HabitLineKey } from '$lib/views';
+	import { groupBy, keepsEmptyAreas, manualOrder, passes, type HabitLineKey } from '$lib/views';
 
 	let { data } = $props();
 
 	type Habit = (typeof data.habits)[number];
 	/** The list as shown, changed at once by edits here and refreshed from the server after. */
 	let habits = $derived(data.habits);
-	/** One of three on this same page. Editing: drag to reorder, rename in place, archive. Selecting: change several together. */
-	let mode = $state<Mode>('use');
+	/** The page's one second state: a tap ticks a habit instead of opening it, to change several together. */
+	let selecting = $state(false);
 	const selected = new SvelteSet<string>();
 	let outcome = $state(new Map<string, { tag?: string; reason?: string }>());
-	/** Archived while editing: they stay in the list, struck, until editing ends. */
-	const struck = new SvelteSet<string>();
+	/** The row whose name is a box now (its ⋯ › Rename): its group's key and the habit, as grouped by Identity a habit has a row under each. */
+	let renaming = $state<string | null>(null);
+	let renamingRow: Element | null = null;
 	const areaOptions = $derived(data.areas.map((a) => ({ value: a.id, label: a.name })));
 
 	let views = $state(untrack(() => data.views));
@@ -63,13 +66,18 @@
 	/** "My order": one order of habits, shared with Today. */
 	const mine = (list: Habit[]) => manualOrder(list, views.today.order, (h) => h.id);
 	const shown = $derived.by(() => {
-		const list = habits.filter((h) => (view.archived || !h.archived || struck.has(h.id)) && passes(view, h));
+		const list = habits.filter((h) => (view.archived || !h.archived) && passes(view, h));
 		if (view.sort === 'name') return [...list].sort((a, b) => a.name.localeCompare(b.name));
 		if (view.sort === 'consistency') return [...list].sort((a, b) => (b.consistency ?? -1) - (a.consistency ?? -1));
 		if (view.sort === 'created') return [...list].sort((a, b) => b.createdAt - a.createdAt);
 		return mine(list);
 	});
-	const groups = $derived(groupBy(shown, view.group, { areas: data.areas }, { keepEmpty: mode === 'edit' }));
+	const byArea = $derived(view.group === 'area');
+	/** Grouped by Area with nothing filtering, every Area shows, empty ones too, and New Area ends them. */
+	const allAreas = $derived(keepsEmptyAreas(view));
+	const groups = $derived(groupBy(shown, view.group, { areas: data.areas }, { keepEmpty: allAreas }));
+	/** The sentence reads "in my order", so the order you see is yours: each habit has its grip (MO). */
+	const gripped = $derived(habitsInMyOrder(view));
 	const identityNames = $derived([...new Set(habits.flatMap((h) => h.identities))].sort());
 	const identitiesOn = $derived(!views.hidden.includes('identities'));
 	/** The habits the side column counts: the ones not archived. */
@@ -77,28 +85,18 @@
 	const wide = new MediaQuery('min-width: 64rem');
 	const sideSays = $derived([data.areas.length ? 'Areas' : '', identitiesOn ? 'Identities' : '', 'Add from'].filter(Boolean).join(', '));
 
-	/**
-	 * A list of siblings was reordered. It goes into the one shared order in the places those
-	 * habits held. Dragging in another sort starts from what you see, then switches to My order.
-	 */
+	/** A list of siblings was reordered by its grips. It goes into the one shared order (My order, shared with Today) in the places those habits held. */
 	function reorder(part: string[], said: string) {
-		const order = reorderFrom(mine(habits).map((h) => h.id), shown.map((h) => h.id), part, view.sort === 'manual');
-		const before = { today: views.today, sort: view.sort };
+		const order = mergeOrder(mine(habits).map((h) => h.id), part);
+		const before = views.today.order;
+		const back = () => (views.today = { ...views.today, order: before });
 		views.today = { ...views.today, order };
-		if (view.sort !== 'manual') {
-			view.sort = 'manual';
-			said += ' Sorted by My order, shared with Today.';
-		}
-		const back = () => {
-			views.today = { ...views.today, order: before.today.order };
-			view.sort = before.sort;
-		};
 		void saveLayout({ op: 'patch', today: { order } }, back, () => void reorder(part, said)).then(
 			(ok) =>
 				ok &&
 				showToast(said, async () => {
 					back();
-					return !!(await viewOp({ op: 'patch', today: { order: before.today.order } }));
+					return !!(await viewOp({ op: 'patch', today: { order: before } }));
 				})
 		);
 		return true;
@@ -106,7 +104,7 @@
 
 	const byId = (id: string) => habits.find((h) => h.id === id);
 	/**
-	 * Which drops edit mode offers: before and after always; inside only a group or a routine
+	 * Which moves the grips offer: before and after always; inside only a group or a routine
 	 * (a build habit with no Tasks of its own), for a build habit. A group only goes in a group,
 	 * and a habit that follows its routine's schedule only in a routine. The server checks again.
 	 */
@@ -182,39 +180,19 @@
 		showToast(`Renamed to “${name}”.`, undoWith('/habits?/rename', { id: h.id, name: before }));
 	}
 
+	/** Archive, Unarchive or Put back (a deleted one), from the habit's ⋯: at once, with Undo in the band. An archived habit leaves the list unless it shows the archived, and the focus goes to the next row (keepFocus). */
 	async function archive(h: Habit) {
 		const to = !h.archived;
-		// The row shows its own way back until editing ends; struck first, so it never leaves the list mid-request
-		// (a row that leaves moves focus to its neighbour).
-		if (to) struck.add(h.id);
 		// Put back, for a deleted one: brought back, it isn't about to go any more.
 		habits = habits.map((x) => (x.id === h.id ? { ...x, archived: to, deleteAfter: null } : x));
 		const r = await runAction(to ? '/habits?/archive' : '/habits?/unarchive', { id: h.id });
 		if (!r.ok) {
-			if (to) struck.delete(h.id);
 			habits = habits.map((x) => (x.id === h.id ? { ...x, archived: !to, deleteAfter: h.deleteAfter } : x));
 			return showToast(r.error ?? "Couldn't change it. Are you online?");
 		}
-		if (!to && !struck.delete(h.id)) showToast(`${h.name} is back.`, undoWith('/habits?/archive', { id: h.id }));
+		if (to) showToast(`Archived ${h.name}. Its logs are kept.`, undoWith('/habits?/unarchive', { id: h.id }));
+		else showToast(`${h.name} is back.`, undoWith('/habits?/archive', { id: h.id }));
 	}
-	/** Editing ended: the struck rows go, and the band can bring them back. */
-	function leave() {
-		const gone = habits.filter((h) => struck.has(h.id));
-		struck.clear();
-		if (!gone.length) return;
-		if (navigator.onLine) invalidateAll();
-		showToast(`Archived ${gone.length === 1 ? gone[0].name : `${gone.length} habits`}. ${gone.length === 1 ? 'Its' : 'Their'} logs are kept.`, async () => {
-			let ok = true;
-			for (const h of gone) ok = (await runAction('/habits?/unarchive', { id: h.id })).ok && ok;
-			return ok;
-		});
-	}
-	// Leaving the page ends editing too.
-	onDestroy(leave);
-	const setMode = (m: Mode) => {
-		if (mode === 'edit' && m !== 'edit') leave();
-		mode = m;
-	};
 	const cueText = (c: { time: string | null; range?: string | null } | null) => c?.time ?? c?.range ?? null;
 	const ago = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 	const lineFor = (h: (typeof data.habits)[number]) => {
@@ -235,18 +213,12 @@
 
 <svelte:head><title>Habits · ittracks</title></svelte:head>
 
-<EditChrome
+<TitleLine
 	title="Habits"
-	{mode}
-	modes={['use', 'edit', 'select']}
-	onmode={setMode}
-	hints={{
-		use: `${shown.length} ${shown.length === 1 ? 'habit' : 'habits'}`,
-		edit: 'Drag ⠿ to reorder: sideways puts a habit inside the group or routine above it, or takes it out. Tap a name to rename it. The order is shared with Today.',
-		select: 'Tick habits to change them together.'
-	}}
+	hint="{shown.length} {shown.length === 1 ? 'habit' : 'habits'}"
 	add={{ label: 'New habit', href: '/habits/new' }}
 	more={[...(identitiesOn ? [{ label: 'Identities', href: '/identities' }] : []), { label: 'Gallery', href: '/gallery' }, { label: 'Import a template file', href: '/habits/import' }]}
+	state={{ label: 'Select', pressed: selecting, onchange: (on) => (selecting = on), hint: 'Tick habits to change them together.' }}
 />
 
 {#if habits.length}
@@ -254,7 +226,6 @@
 		page="habits"
 		bind:views
 		bind:current={view}
-		{mode}
 		words={habitsWords(view, { areas: data.areas, identities: identitiesOn ? identityNames : [], lines: views.habits.lines, setLines })}
 	/>
 	{#if !wide.current}<details class="disclosure side-fold"><summary class="meta"><span class="chev" aria-hidden="true">›</span>{sideSays}</summary><div>{@render side()}</div></details>{/if}
@@ -313,53 +284,66 @@
 			<EmptyState kind="filtered" text="No habits match these filters." />
 		{/if}
 
-		{#if mode === 'select'}
+		{#if selecting}
 			<BulkBar kind="habit" {selected} bind:outcome visible={shown.map((h) => h.id)} today={data.today} sources={{ areas: areaOptions }} />
 		{/if}
 
-		<AreaGroups {groups} areas={data.areas} {mode} byArea={view.group === 'area'}>
+		<AreaGroups {groups} areas={data.areas} {byArea} {selecting} {allAreas} slotOpen={gripped || selecting}>
 			{#snippet group(g)}
 				<!-- A habit inside a group sits in a list of its own under it; one whose group isn't listed sits at the top. -->
 				{@const tree = forest(g.items)}
-				{@render habitList(tree.roots, tree.kids, g.label || 'Habits', null)}
+				{@render habitList(tree.roots, tree.kids, g.label || 'Habits', null, g.key)}
 			{/snippet}
 		</AreaGroups>
 	</div>
 	{#if wide.current}<aside class="page-side" aria-label="Around your habits">{@render side()}</aside>{/if}
 </div>
 
-{#snippet habitList(items: Habit[], kids: Map<string, Habit[]>, name: string, holder: Habit | null)}
+{#snippet habitList(items: Habit[], kids: Map<string, Habit[]>, name: string, holder: Habit | null, gk: string)}
 	<EditableList
 		{items}
 		key={(h) => h.id}
 		label={(h) => h.name}
-		selecting={mode === 'select'}
+		{selecting}
 		{selected}
 		rowCard
+		slotOpen={byArea}
 		holder={(h) => !!kids.get(h.id)?.length}
-		href={mode === 'use' ? (h) => `/habits/${h.id}` : undefined}
+		href={(h) => `/habits/${h.id}`}
 		selectScope={(h) => (kids.get(h.id)?.length ? 'unit' : 'item')}
 		childKeys={(k) => (kids.get(k) ?? []).map((x) => x.id)}
-		itemClass={(h) => (struck.has(h.id) ? 'struck' : '')}
 		ariaLabel={name}
 		{canDrop}
-		onmove={mode === 'edit' ? (m, order, text) => (m.position === 'inside' ? (indent(m.key, m.target), true) : reorder(order, text)) : undefined}
-		onoutdent={mode === 'edit' && holder ? (k) => outdent(k, holder) : undefined}
+		onmove={gripped ? (m, order, text) => (m.position === 'inside' ? (indent(m.key, m.target), true) : reorder(order, text)) : undefined}
+		onoutdent={gripped && holder ? (k) => outdent(k, holder) : undefined}
 		outOf={holder?.name}
-		onremove={mode === 'edit' ? archive : undefined}
-		removeLabel={(h) => (h.deleteAfter ? 'Put back' : h.archived ? 'Unarchive' : 'Archive')}
 	>
 		{#snippet row(h)}
 			{@const o = outcome.get(h.id)}
-			{#if mode === 'use'}<a class="name" href="/habits/{h.id}">{h.name}</a>
-			{:else}<span class="name"><InlineText value={h.name} editing={mode === 'edit' && !struck.has(h.id)} label="Name of {h.name}" maxlength={120} onsave={(v) => rename(h, v)} /></span>{/if}
+			{#if renaming === `${gk}:${h.id}`}<span class="name"
+					><InlineText value={h.name} bind:open={() => renaming === `${gk}:${h.id}`, (v) => !v && ((renaming = null), backToMore(renamingRow))} label="Name of {h.name}" maxlength={120} onsave={(v) => rename(h, v)} /></span
+				>
+			{:else if selecting}<span class="name">{h.name}</span>
+			{:else}<a class="name" href="/habits/{h.id}">{h.name}</a>{/if}
 			{#if o?.tag}<span class="tags"><span class="tag pending"><span aria-hidden="true">→</span> {o.tag}</span></span>
 			{:else if h.archived}<span class="tags"><StatusTag status="archived" /></span>{/if}
 			{#if o?.reason || lineFor(h)}<p class="meta-line label">{o?.reason ?? lineFor(h)}</p>{/if}
 		{/snippet}
+		{#snippet actions(h)}
+			<span class="more"
+				><MenuButton
+					class="quiet glyph"
+					label="More on {h.name}"
+					items={[
+						{ label: 'Rename', onselect: () => ((renamingRow = pressedRow()), (renaming = `${gk}:${h.id}`), focusBox(renamingRow)) },
+						{ label: h.deleteAfter ? 'Put back' : h.archived ? 'Unarchive' : 'Archive', onselect: () => keepFocus(() => archive(h)) }
+					]}
+				/></span
+			>
+		{/snippet}
 		{#snippet children(h)}
 			{#if kids.get(h.id)?.length}
-				{@render habitList(kids.get(h.id)!, kids, `Inside ${h.name}`, h)}
+				{@render habitList(kids.get(h.id)!, kids, `Inside ${h.name}`, h, gk)}
 			{/if}
 		{/snippet}
 	</EditableList>
@@ -368,5 +352,12 @@
 <style>
 	.added {
 		margin-bottom: var(--space-group);
+	}
+	/* A row's ⋯: its glyph ends on the verb edge, and its wrapper is the menu's anchor, so the menu hangs 4px under the
+	   button on a row of any height (a row with a line under its meta has a taller verb slot). */
+	.more {
+		position: relative;
+		display: flex;
+		margin-inline-end: calc(-1 * var(--space-tight));
 	}
 </style>

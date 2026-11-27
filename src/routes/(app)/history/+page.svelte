@@ -8,10 +8,9 @@
 	import { historyWords } from '$lib/view-words';
 	import { showToast } from '$lib/toast.svelte';
 	import EditableList from '$lib/ui/EditableList.svelte';
-	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import TitleLine from '$lib/ui/TitleLine.svelte';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
 	import GroupHeading from '$lib/ui/GroupHeading.svelte';
-	import type { Mode } from '$lib/ui/list';
 	import BulkBar from '$lib/bulk/BulkBar.svelte';
 	import DayNote from '$lib/DayNote.svelte';
 	import Markdown from '$lib/Markdown.svelte';
@@ -24,7 +23,11 @@
 
 	let views = $state(untrack(() => data.views));
 	let view = $state(untrack(() => data.initial));
-	let mode = $state<Mode>('use');
+	/** Select days, the page's one second state. The Journal has none, so going there leaves it. */
+	let selecting = $state(false);
+	$effect.pre(() => {
+		if (data.notesOnly) selecting = false;
+	});
 	const selected = new SvelteSet<string>();
 	let outcome = $state(new Map<string, { tag?: string; reason?: string }>());
 	let q = $derived(data.q);
@@ -98,17 +101,12 @@
 
 <svelte:head><title>{data.notesOnly ? 'Journal' : 'History'} · ittracks</title></svelte:head>
 
-<EditChrome
+<TitleLine
 	title="History"
-	{mode}
-	modes={data.notesOnly ? ['use'] : ['use', 'select']}
-	onmode={(m) => (mode = m)}
-	hints={{
-		use: data.notesOnly
-			? `${days.length} ${days.length === 1 ? 'day' : 'days'} with something written`
-			: [`${withLogs} ${withLogs === 1 ? 'day' : 'days'} with logs`, yesterday.of ? `${yesterday.done} of ${yesterday.of} done yesterday` : ''].filter(Boolean).join(' · '),
-		select: 'Tick days to change them together.'
-	}}
+	hint={data.notesOnly
+		? `${days.length} ${days.length === 1 ? 'day' : 'days'} with something written`
+		: [`${withLogs} ${withLogs === 1 ? 'day' : 'days'} with logs`, yesterday.of ? `${yesterday.done} of ${yesterday.of} done yesterday` : ''].filter(Boolean).join(' · ')}
+	state={data.notesOnly ? undefined : { label: 'Select days', pressed: selecting, onchange: (on) => (selecting = on), hint: 'Tick days to skip them together.' }}
 	add={data.canBackfill ? { label: 'Log a past day', href: '/day' } : undefined}
 	more={[
 		{ label: views.history.values ? 'Hide what a log holds' : 'Show what a log holds', onselect: toggleValues },
@@ -161,7 +159,7 @@
 <div class="page-cols">
 	<div class="page-main">
 		{#if !data.notesOnly && !data.q && !wide.current}<div class="day-week hi-strip" role="group" aria-label="The last seven days">{@render week()}</div>{/if}
-		{#if mode === 'select'}
+		{#if selecting}
 			<BulkBar kind="day" {selected} bind:outcome visible={days.flatMap((d) => d.occurrences.map((o) => o.id))} today={data.today} />
 		{/if}
 
@@ -210,7 +208,7 @@
 		<div class="hi-days">
 			{#each days as day (day.date)}
 				<section class="hi-day" id="d-{day.date}">
-					<GroupHeading title={title(day.date)} slotOpen={mode === 'select'} count={!data.notesOnly && day.count.of ? `${day.count.done} of ${day.count.of}` : undefined} verb={data.canBackfill && day.date < data.today && (!data.windowFrom || day.date >= data.windowFrom) ? verb : undefined} />
+					<GroupHeading title={title(day.date)} slotOpen={selecting} count={!data.notesOnly && day.count.of ? `${day.count.done} of ${day.count.of}` : undefined} verb={data.canBackfill && day.date < data.today && (!data.windowFrom || day.date >= data.windowFrom) ? verb : undefined} />
 					{#snippet verb()}<a class="quiet verb" href="/day/{day.date}" aria-label="Log {title(day.date)}">Log this day</a>{/snippet}
 					{#each day.notes.day as it, i (i)}{@render note(it, `${day.date}:d${i}`, day.date, it.title)}{/each}
 					{#if day.moods.length}<p class="tags moods">{#each day.moods as m (m.field + m.value)}<span class="tag">{m.field}: {m.value}</span>{/each}</p>{/if}
@@ -219,7 +217,7 @@
 							items={day.occurrences}
 							key={(o) => o.id}
 							label={(o) => `${o.habit}, ${title(day.date)}`}
-							selecting={mode === 'select'}
+							{selecting}
 							{selected}
 							rowCard
 							density="compact"
@@ -229,7 +227,7 @@
 						>
 							{#snippet row(o)}
 								{@const out = outcome.get(o.id)}
-								{#if mode === 'use'}<a class="name" href={hrefOf(o, day.date)}>{o.habit}</a>{:else}<span class="name">{o.habit}</span>{/if}
+								{#if !selecting}<a class="name" href={hrefOf(o, day.date)}>{o.habit}</a>{:else}<span class="name">{o.habit}</span>{/if}
 								{#if out?.tag}<span class="tags"><span class="tag pending"><span aria-hidden="true">→</span> {out.tag}</span></span>{/if}
 								<p class="meta-line">{#if logged(o)}<span class="mark" aria-hidden="true">•</span>{' '}{:else if o.status !== 'missed'}<span class="mark" aria-hidden="true">{o.status === 'done' ? '✓' : '↷'}</span>{' '}{/if}{out?.reason ?? words(o)}</p>
 								{#each day.notes.row.get(o.id) ?? [] as it, i (i)}{@render note(it, `${o.id}:${i}`, day.date)}{/each}

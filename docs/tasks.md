@@ -112,7 +112,7 @@ Limits: nesting goes up to 4 levels deep, and a Task can't end up inside itself.
 
 ## Archive, duplicate, delete
 
-- **Archive** keeps the Task's history and hides it from the Library and pickers. You can also archive and rename Tasks in place in the Library's [edit mode](views-and-edit-mode.md#edit-mode).
+- **Archive** keeps the Task's history and hides it from the Library and pickers. You can also archive and rename Tasks from a Task's **⋯** in the [Library](views-and-edit-mode.md#library).
 - **Duplicate** makes a copy.
 - **Delete** removes the Task and every log of it, with no question. **Undo** in the band brings it back. Until a day later it also waits under **Show archived** in the Library and on its own page, with **Put back**; then it goes for good with its logs.
 - **History** at the top of a Task shows its charts.

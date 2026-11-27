@@ -89,7 +89,7 @@ export const load: PageServerLoad = ({ locals, url, cookies }) => {
 	};
 };
 
-/** Changes the list makes in place while editing. The order is a view setting (/api/views). */
+/** Changes the list makes in place: a habit's ⋯ (Rename, Archive) and its grip. The order is a view setting (/api/views). */
 export const actions: Actions = {
 	rename: async ({ request, locals }) => {
 		const f = await request.formData();
@@ -102,7 +102,7 @@ export const actions: Actions = {
 		if (!archiveHabit(locals.account!.id, id, userToday(locals.account!.id, cookies.get('tz')))) return fail(404, { error: 'No such habit' });
 		return { archived: id };
 	},
-	/** Edit mode's nest and outdent drops: `parent` empty means the top level. */
+	/** The grip's nest and outdent moves: `parent` empty means the top level. */
 	move: async ({ request, locals, cookies }) => {
 		const f = await request.formData();
 		const accountId = locals.account!.id;

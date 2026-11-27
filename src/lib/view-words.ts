@@ -1,7 +1,7 @@
 // The words of a view's sentence (TS.1): "Default shows everything, by time, short rows with streaks, done at
 // the end." Each word is one select over the view's state; picking an option gives the next state. Pure, so the
 // sentence reads the same on the page, in the band and in tests.
-import { DONE_MODES, type ViewState } from './views';
+import { DONE_MODES, STATS, type StatKey, type ViewState } from './views';
 
 export interface WordOption {
 	value: string;
@@ -37,7 +37,7 @@ const NOTES: Record<string, string> = {
 	'scope:now': 'This part of the day, what is late, and anything without a time.',
 	'scope:due': 'Breaking and limiting stay out.',
 	time: 'What is next leads. A habit set after another follows it.',
-	mine: 'Drag in Edit. Shared with Habits.',
+	mine: 'Drag ⠿ to move. Shared with Habits.',
 	risk: 'What was missed last time leads, then by time.',
 	names: 'The name and its button.',
 	short: 'One line: its time and one number.',
@@ -123,6 +123,8 @@ const BY = {
 } as const satisfies Record<string, { label: string; state: Partial<ViewState> }>;
 type By = keyof typeof BY;
 const byOf = (s: ViewState): By => (s.group !== 'none' && s.group in BY ? (s.group as By) : (({ cue: 'time', manual: 'mine', name: 'name', streak: 'risk' }) as Record<string, By>)[s.sort] ?? 'time');
+/** Today's sentence reads "in my order": the order you see is yours, so each habit has its grip (MO). */
+export const inMyOrder = (s: ViewState) => byOf(s) === 'mine';
 
 /** How Today's view is arranged: Layout, Sort and Group as one word (TS.3). */
 export function byWord(s: ViewState, c: TodayCtx): Word {
@@ -134,9 +136,21 @@ export function byWord(s: ViewState, c: TodayCtx): Word {
 		value: by,
 		shown: BY[by].label + (s.first && c.breaking ? ', breaking first' : ''),
 		after: ',',
-		options: keys.map((k) => opt(k, BY[k].label, `is now ${BY[k].label}`)),
-		pick: (v) => ({ ...s, ...BY[v as By].state })
+		options: [
+			...keys.map((k) => opt(k, BY[k].label, `is now ${BY[k].label}`)),
+			// Where Breaking stands, after the arrangements: one item whose words flip, so it never shows a tick.
+			...(c.breaking ? [s.first ? opt('breaking:first', 'breaking after the day', 'now puts breaking after the day', 'Breaking last') : opt('breaking:first', 'breaking first', 'now puts breaking first', 'Breaking first')] : [])
+		],
+		pick: (v) => (v === 'breaking:first' ? { ...s, first: !s.first } : { ...s, ...BY[v as By].state })
 	};
+}
+
+/** A habit's own number on Today, picked in the row opened with ›: the next map, and what the band says. '' follows the view again. */
+export function ownNumber(all: Record<string, StatKey>, id: string, name: string, v: StatKey | ''): { next: Record<string, StatKey>; said: string } {
+	const next = { ...all };
+	if (v) next[id] = v;
+	else delete next[id];
+	return { next, said: `${name} now shows ${v === '' ? "the view's number" : v === 'none' ? 'no number' : STATS[v].toLowerCase()}.` };
 }
 
 const ROWS_SAID = { names: 'names only', short: 'short rows', open: 'open rows', full: 'every line' } as const;
@@ -233,6 +247,10 @@ export interface HabitsCtx {
 	setLines: (lines: HabitLine[], said: string) => void;
 }
 
+const HABIT_SORT = { manual: 'in my order', name: 'by name', consistency: 'by consistency', created: 'newest first' } as const;
+/** Habits' sentence reads "in my order" (its own sort word, whatever the grouping): the order you see is yours, so each habit has its grip (MO). */
+export const habitsInMyOrder = (s: ViewState) => !(s.sort in HABIT_SORT) || s.sort === 'manual';
+
 /** Habits: "Default shows every habit, by Area in my order, with schedule and time." */
 export function habitsWords(s: ViewState, c: HabitsCtx): Word[] {
 	const areaNames = s.areas.map((id) => c.areas.find((a) => a.id === id)?.name ?? 'no Area');
@@ -253,7 +271,6 @@ export function habitsWords(s: ViewState, c: HabitsCtx): Word[] {
 		tail
 	);
 	const GROUP = { area: 'by Area', direction: 'by build and break', identity: 'by Identity', none: 'in one list' } as const;
-	const SORT = { manual: 'in my order', name: 'by name', consistency: 'by consistency', created: 'newest first' } as const;
 	const group: Word = {
 		key: 'group',
 		what: 'How it is grouped',
@@ -265,9 +282,9 @@ export function habitsWords(s: ViewState, c: HabitsCtx): Word[] {
 	const sort: Word = {
 		key: 'sort',
 		what: 'Its order',
-		value: s.sort in SORT ? s.sort : 'manual',
+		value: s.sort in HABIT_SORT ? s.sort : 'manual',
 		after: ',',
-		options: (Object.keys(SORT) as (keyof typeof SORT)[]).map((k) => opt(k, SORT[k], `is now ${SORT[k]}`)),
+		options: (Object.keys(HABIT_SORT) as (keyof typeof HABIT_SORT)[]).map((k) => opt(k, HABIT_SORT[k], `is now ${HABIT_SORT[k]}`)),
 		pick: (v) => ({ ...s, sort: v })
 	};
 	const key = (ls: HabitLine[]) => [...ls].sort().join(',') || 'none';

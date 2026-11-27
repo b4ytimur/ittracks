@@ -1,9 +1,11 @@
 <script lang="ts">
 	// The heading of a group of rows: fold it, see its swatch and its count. Its slot holds the grip when one
 	// is passed (a list of headings that can be moved), and opens empty with `slotOpen`, so the title keeps the
-	// column of rows under it that have a grip or a checkbox. With `onrename` the title is changed where it stands.
-	import type { Snippet } from 'svelte';
+	// column of rows under it that have a grip or a checkbox. `more` puts the heading's own acts in a ⋯ at its end;
+	// with `onrename` the title turns into a box where it stands while `renaming` is set (Rename in that ⋯).
+	import { tick, type Snippet } from 'svelte';
 	import InlineText from './InlineText.svelte';
+	import MenuButton, { type Way } from './MenuButton.svelte';
 
 	let {
 		title,
@@ -15,8 +17,9 @@
 		grip,
 		slotOpen = false,
 		onrename,
+		renaming = $bindable(false),
 		verb,
-		after
+		more
 	}: {
 		title: string;
 		color?: string | null;
@@ -28,12 +31,20 @@
 		/** The slot opens with no grip in it: the rows under it have grips or checkboxes. */
 		slotOpen?: boolean;
 		onrename?: (name: string) => void;
+		/** With onrename: the title is a box now. It goes false when the box closes. */
+		renaming?: boolean;
 		verb?: Snippet;
-		/** Takes the swatch's place, such as the button that opens the colours. */
-		after?: Snippet;
+		/** The heading's own acts (an Area's Rename, Colour and icon, Delete), in a ⋯ at its end. */
+		more?: (Way | '-')[];
 	} = $props();
 	const id = $props.id();
 	const slotted = $derived(slotOpen || !!grip);
+	/** The box closed: Enter or Esc leave the focus nowhere, so it goes back to the ⋯ it came from. */
+	async function closed() {
+		renaming = false;
+		await tick();
+		if (document.activeElement === document.body) el?.querySelector<HTMLElement>(':scope > .more > button')?.focus();
+	}
 
 	// Pinned to the top while its group scrolls under it: over the rows then, and with a line.
 	let el = $state<HTMLElement>();
@@ -61,9 +72,12 @@
 		<button type="button" class="fold" aria-expanded={!folded} aria-labelledby="{id}-t" onclick={onfold}><span class="chev" aria-hidden="true">›</span></button>
 	{/if}
 	<span class="slot">{@render grip?.()}</span>
-	{#if after}{@render after()}{:else if color}<span class="swatch" style:--c={color}></span>{/if}
+	{#if color}<span class="swatch" style:--c={color}></span>{/if}
 	{#if icon}<span class="icon" aria-hidden="true">{icon}</span>{/if}
-	<span class="title" id="{id}-t">{#if onrename}<InlineText value={title} editing label="Name of {title}" onsave={onrename} />{:else}{title}{/if}</span>
+	<span class="title" id="{id}-t"
+		>{#if onrename}<InlineText value={title} bind:open={() => renaming, (v) => (v ? (renaming = true) : void closed())} label="Name of {title}" onsave={onrename} />{:else}{title}{/if}</span
+	>
 	{#if count}<span class="tags"><span class="tag count">{count}</span></span>{/if}
 	{#if verb}{@render verb()}{/if}
+	{#if more?.length}<span class="more"><MenuButton class="quiet glyph" label="More on {title}" items={more} /></span>{/if}
 </h2>
