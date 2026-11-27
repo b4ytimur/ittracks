@@ -37,7 +37,7 @@
 
 /* ---------- Logged: the act becomes what it came to ---------- */
 /* span.log-act.log-done holds the word ("✓ Target"): Button's box, but not a button, so it never answers a pointer.
-   Done fills good with on-good words (5.85:1) and an on-good seam, as primary does with accent; skipped stays the plain
+   Done fills good with on-good words (5.89:1) and an on-good seam, as primary does with accent; skipped stays the plain
    secondary box. Its ⋯ (View, Undo) or the hold's Undo (.log-undo) is the half that acts. */
 .log-control > span.log-done { cursor: default; }
 .log-control > .log-done:not(.skipped) { background: var(--good); border-color: var(--good); color: var(--on-good); font-weight: 600; }
