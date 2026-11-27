@@ -78,10 +78,11 @@
 /* An input can't take a pseudo-element (Button's touch area), so its label grows instead: the label's ::after covers the whole
    frame plus 6px above and below, behind the parts (z-index -1 in the frame's own stacking context). A tap on the
    control is the control's; a tap beside it reaches the control through its label. Fields 16 apart never overlap.
-   A hidden label can't grow (.vh clips it), so it wraps its input and grows with it, on the input's own box (.search, .combo). */
+   A hidden label can't grow (.vh clips it), so it wraps its input or select and grows with it, on the control's own box
+   (.search, .combo, the Log's + Task… select). */
 @media (pointer: coarse) {
 	.field { position: relative; isolation: isolate; }
-	.field > label.label::after, .field label:has(> .vh + input)::after {
+	.field > label.label::after, .field label:has(> .vh + :is(input, select))::after {
 		content: ''; position: absolute; z-index: -1; inset-inline: 0;
 		inset-block: calc((var(--control-md) - var(--target-touch)) / 2);
 	}

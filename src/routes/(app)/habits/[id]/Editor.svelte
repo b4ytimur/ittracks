@@ -873,7 +873,7 @@
 						<div class="slot">{@render ctx.grip?.()}</div>
 						<div class="content"><input class="grow" aria-label="Name of the Variant" bind:value={v.name} required maxlength="120" /></div>
 						<div class="verb">
-							<MenuButton label="More for {v.name}" items={[{ label: 'Duplicate', onselect: () => duplicateVariant(h.variants.indexOf(v)) }, { label: usedVariant(v.id) ? 'Archive' : 'Remove', value: usedVariant(v.id) ? 'Past days keep it.' : undefined, onselect: () => removeVariant(v) }]} />
+							<MenuButton class="quiet glyph" label="More for {v.name}" items={[{ label: 'Duplicate', onselect: () => duplicateVariant(h.variants.indexOf(v)) }, { label: usedVariant(v.id) ? 'Archive' : 'Remove', value: usedVariant(v.id) ? 'Past days keep it.' : undefined, onselect: () => removeVariant(v) }]} />
 						</div>
 					</div>
 				{/if}
@@ -1590,7 +1590,7 @@
 		{#each h.prep as item, pi (item)}
 			<div class="row">
 				<span class="grow">{item}</span>
-				<button type="button" class="quiet" onclick={() => h.prep.splice(pi, 1)}>Remove</button>
+				<button type="button" class="quiet" aria-label="Remove {item}" onclick={() => h.prep.splice(pi, 1)}>Remove</button>
 			</div>
 		{/each}
 		<div class="row">

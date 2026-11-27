@@ -23,6 +23,7 @@
 	let search = $state<HTMLInputElement>();
 	let query = $state('');
 	const shown = $derived(groups(query));
+	const count = $derived(shown.reduce((n, g) => n + g.rows.length, 0));
 
 	$effect(() => {
 		if (!dialog || dialog.open) return;
@@ -80,6 +81,8 @@
 			</div>
 		</div>
 		<div class="swap-list">
+			<!-- SearchField's line, said while searching or when nothing is left; its wrapper stays mounted, so it is announced. -->
+			<div role="status">{#if query.trim() || !count}<p class="result-line meta num">{count ? `${count} ${count === 1 ? 'Task' : 'Tasks'}` : noRows(query)}</p>{/if}</div>
 			{#each shown as g, n (g.label)}
 				<h3 class="card-title" id="{uid}-g{n}">{g.label}</h3>
 				<ul aria-labelledby="{uid}-g{n}">
@@ -89,8 +92,6 @@
 						</li>
 					{/each}
 				</ul>
-			{:else}
-				<p class="meta muted">{noRows(query)}</p>
 			{/each}
 		</div>
 	</div>
@@ -108,6 +109,12 @@
 		background: var(--surface-raised);
 		color: var(--ink);
 		box-shadow: var(--shadow-lifted);
+	}
+	/* Forced colours drop the shadow, so an edge marks where the sheet meets the page (as Menu's and Ask's do). */
+	@media (forced-colors: active) {
+		.swap-sheet {
+			border: 1px solid CanvasText;
+		}
 	}
 	.swap-sheet::backdrop {
 		background: var(--scrim);

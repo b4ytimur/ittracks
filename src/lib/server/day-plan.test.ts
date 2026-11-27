@@ -420,6 +420,29 @@ describe('Keep in the plan and Replace…: what the Task kept aims for, as one c
 		expect(slotIn(before, mine.id)).toMatchObject({ taskId: taskId('Floor press'), minTargets: { [field(taskId('Floor press'), 'Weight')]: 50 }, stretchTargets: { [field(taskId('Floor press'), 'Weight')]: 65 } });
 		expect(pushDay().picks?.[mine.id]).toBe(pin);
 	});
+	it("Replace… after a Keep: the log swaps back to the Slot's own Task first, which drops the pick Keep left, so today follows the plan", async () => {
+		const { currentForm, patchHabit } = await import('./habit-patch');
+		const { withSlot } = await import('$lib/log/plan');
+		const { positionsOf } = await import('./positions');
+		const plank = taskId('Plank hold');
+		swapSlot(app, pushDay(), mine.id, pin);
+		const before = currentForm(me, push)!.variants;
+		const change = (set: typeof before, was: typeof before) => expect(patchHabit(me, push, { set: { variants: set }, was: { variants: was }, applies: 'today', keep: false }, today)).not.toHaveProperty('error');
+		const kept = withSlot(before, mine.id, { taskId: pin, targets: {}, minTargets: {}, stretchTargets: {} });
+		change(kept, before);
+		// Kept: the pick stays (Keep's Undo needs it), and is now the Slot's own Task.
+		expect(pushDay().picks?.[mine.id]).toBe(pin);
+		// Replace…: back to the Slot's own Task, then the plan changes.
+		swapSlot(app, pushDay(), mine.id, pin);
+		expect(pushDay().picks?.[mine.id]).toBeUndefined();
+		const replaced = withSlot(kept, mine.id, { taskId: plank, targets: {}, minTargets: {}, stretchTargets: {} });
+		change(replaced, kept);
+		expect(positionsOf(pushDay()).find((p) => p.slotId === mine.id)?.taskId).toBe(plank);
+		// Its Undo: the plan back, and today with it.
+		change(kept, replaced);
+		expect(positionsOf(pushDay()).find((p) => p.slotId === mine.id)?.taskId).toBe(pin);
+		change(before, kept);
+	});
 	it("History: a day swapped before a Keep still names the Task it was done instead of; one done after, with the Task kept, reads plain", async () => {
 		const { currentForm, patchHabit } = await import('./habit-patch');
 		const { withSlot } = await import('$lib/log/plan');

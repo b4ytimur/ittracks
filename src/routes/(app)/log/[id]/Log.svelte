@@ -1060,6 +1060,10 @@
 		if (at?.task?.id === s.taskId) {
 			const first = await saveFirst();
 			if (first.kind !== 'saved') return void showError(first.kind === 'refused' ? first.why : 'Not saved. Are you online?', first.kind === 'refused' ? undefined : () => void keepInPlan(slot, task));
+			// An earlier Keep leaves today's pick on the Task it kept (its Undo needs it), and a pick wins over the plan:
+			// back to the Slot's own Task there is no pick, so the plan change reaches today.
+			const own = await runAction(`/log/${data.occurrence.id}?/swap`, { slot, task: s.taskId });
+			if (!own.ok) return void showError(own.error ?? 'Not saved. Are you online?', () => void keepInPlan(slot, task));
 		}
 		// What it did in this Slot today: in its place, and before a swap took it away.
 		const today = loggedAt([...items.flatMap((it, i) => entriesAt(it, i, false)), ...elsewhere()], task, at?.path ?? slot);

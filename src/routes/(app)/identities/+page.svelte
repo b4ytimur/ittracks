@@ -72,7 +72,7 @@
 	addLabel="New identity"
 >
 	{#snippet row(i)}
-		<span class="name"><InlineText value={i.statement} editing label="Change “{i.statement}”" onsave={(v) => rename(i, v)} /></span>
+		<span class="name"><InlineText value={i.statement} editing label="Change identity" onsave={(v) => rename(i, v)} /></span>
 		<p class="meta-line meta">{evidence(i)}</p>
 		{#if i.habits.length}<p class="row-line meta">{#each i.habits as h, n (h.id)}{n ? ' · ' : ''}<a href="/habits/{h.id}">{h.name}</a>{/each}</p>{/if}
 	{/snippet}

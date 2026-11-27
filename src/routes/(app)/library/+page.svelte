@@ -132,7 +132,8 @@
 			return showToast(r.error ?? "Couldn't change it. Are you online?");
 		}
 		if (to) showToast(`Archived ${t.name}. Its logs are kept.`, undoWith('/library?/unarchive', { id: t.id }));
-		else showToast(`${t.name} is back.`, undoWith('/library?/archive', { id: t.id }));
+		// Undo puts a deleted one back to deleted, not just archived.
+		else showToast(`${t.name} is back.`, deleteAfter ? undoWith(`/library/${t.id}?/delete`, {}) : undoWith('/library?/archive', { id: t.id }));
 	}
 	const metaOf = (t: Task) =>
 		t.deleteAfter
