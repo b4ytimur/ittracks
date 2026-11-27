@@ -988,14 +988,16 @@
 		const a = await save(task ? url : `/log/${data.occurrence.id}?/reroll`, task ? [['slot', it.slotId], ['task', task]] : [['slot', it.slotId]], label);
 		if (a.kind === 'refused') return void showError(a.why);
 		const how = !task ? 'reroll' : task === it.own ? 'back' : 'swap';
-		// Undo swaps back to the Task it showed before, saving what is ticked first as a swap does.
-		const undo = was
+		// Undo swaps back to the Task it showed before (an auto-filled Slot that had none: none again), saving what is
+		// ticked first as a swap does.
+		const back = was?.id ?? (it.open ? '' : null);
+		const undo = back !== null
 			? async () => {
 					if (mounted) {
 						const first = await saveFirst();
 						if (first.kind === 'refused') return `${first.why} Nothing was swapped.`;
 					}
-					const b = await save(url, [['slot', it.slotId], ['task', was.id]], label);
+					const b = await save(url, [['slot', it.slotId], ['task', back]], label);
 					if (b.kind === 'refused') return b.why;
 					// The place it puts back is the one open again.
 					if (mounted) {

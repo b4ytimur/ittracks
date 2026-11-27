@@ -90,6 +90,9 @@ export function swapText(was: string | null, now: string, how: 'swap' | 'back' |
 	return `${how === 'reroll' ? 'Picked' : 'Using'} ${now}${was ? ` instead of ${was}` : ''}, ${scope}.`;
 }
 
+/** A Task done in a Slot in place of the plan's, as a past log lists it: "Incline bench press · instead of Bench press". */
+export const insteadLine = (name: string, plan: string | null | undefined) => (plan ? `${name} · instead of ${plan}` : name);
+
 /** A field as a swap matches it to another Task's: by name and unit, and of the same kind. */
 interface Named {
 	id: string;

@@ -12,7 +12,8 @@ import { perLogOf } from '$lib/stats/model';
 import { getStats, loadDataset } from '../stats';
 import { ensureToday, loadPrep, nextEarly, pausesOf, raiseFor, settleAll, userToday } from '../today';
 import { pauseOn } from '$lib/engine/pause';
-import { prepare, describeLog, type Dataset, type Prepared } from '$lib/stats/engine';
+import { prepare, describeLog, insteadOf, type Dataset, type Prepared } from '$lib/stats/engine';
+import { insteadLine } from '$lib/log/places';
 import { describeSchedule, groupRuleText } from '$lib/describe';
 import { progressText } from '$lib/engine/progress';
 import { rollupText } from '$lib/engine/rollup';
@@ -323,7 +324,7 @@ export function listLogs(
 			variant: o.variantId ? (P.variants.get(o.variantId)?.name ?? null) : null,
 			level: o.level ?? (o.status === 'done' ? 'target' : null),
 			progress: p ? progressText(p) : o.rollup ? rollupText(o.rollup) : null,
-			summary: logs.map((l) => `${l.task.name}: ${describeLog(l, P)}`).join(' | ') || undefined,
+			summary: logs.map((l) => `${insteadLine(l.task.name, insteadOf(l, P))}: ${describeLog(l, P)}`).join(' | ') || undefined,
 			time: o.time,
 			...(notes && occNotes.get(o.id) ? { notes: occNotes.get(o.id) } : {})
 		};

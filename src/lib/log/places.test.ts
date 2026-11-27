@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aimFor, aimText, besides, carryOver, doneBefore, doneLine, fromDraft, goneFrom, keptText, loggedAt, placeKey, setsToDo, swapGroups, swapText, usedText, withWaiting, type Pickable } from './places';
+import { aimFor, aimText, besides, carryOver, doneBefore, doneLine, fromDraft, goneFrom, insteadLine, keptText, loggedAt, placeKey, setsToDo, swapGroups, swapText, usedText, withWaiting, type Pickable } from './places';
 
 const at = (path: string, task: string | null) => ({ path, task: task ? { id: task } : null });
 const squat = at('s1', 'squat');
@@ -128,6 +128,11 @@ describe('what is being logged, by place', () => {
 			expect(swapText('Squat', 'Lunge', 'reroll', 'today only')).toBe('Picked Lunge instead of Squat, today only.');
 			expect(swapText(null, 'Lunge', 'reroll', 'today only')).toBe('Picked Lunge, today only.');
 		});
+	});
+
+	it("a past log names the plan's Task a swapped-in one was done instead of, and only then", () => {
+		expect(insteadLine('Incline bench press', 'Bench press')).toBe('Incline bench press · instead of Bench press');
+		expect(insteadLine('Incline bench press', null)).toBe('Incline bench press');
 	});
 });
 

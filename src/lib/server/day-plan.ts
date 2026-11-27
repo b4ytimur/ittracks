@@ -2,7 +2,7 @@
 // rotation's next Variant early, swapping or picking again a Slot's Task for one day, and answering
 // Today's "raise the targets?" with Raise or Not yet. Today, the log screen and the AI tools
 // (core/plan.ts, and setup's progression change) all call these, so each works the same everywhere.
-import { and, asc, desc, eq, inArray, isNull, lt, lte, max, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, lte, max, ne, sql } from 'drizzle-orm';
 import { db } from './db';
 import { entry, habit, metric, occurrence, prepTick, slot, task, taskPart, taskTag, variant, type SlotGoals } from './db/schema';
 import { candidates, createOccurrence, ensurePicks } from './today';
@@ -15,6 +15,7 @@ import { ActionError, type Actor } from './core/actor';
 import { emit } from './core/events';
 import { rowText } from '$lib/log/run';
 import { isSet } from '$lib/log/places';
+import { slotOfPath } from '$lib/engine/parts';
 
 type OccLike = { id: string; habitId: string; date: string; variantId: string | null; goals: Record<string, SlotGoals> | null };
 
@@ -52,14 +53,54 @@ function slotOf(occ: OccLike, slotId: string) {
 
 /**
  * The Task a Slot has in a day's plan, without that day's swap: the one kept with the log when the
- * plan changed since (see keepGoals), else the Slot's own. Null for an auto-filled Slot.
+ * plan changed since (see keepGoals), else the Slot's own. Null for an auto-filled Slot. Older kept goals have no
+ * Task: the Slot's own, as Stats reads them.
  */
-export const ownTask = (occ: Pick<OccLike, 'goals'>, slotId: string, s: { taskId: string | null } | undefined) => (occ.goals?.[slotId] ?? s)?.taskId ?? null;
+export function ownTask(occ: Pick<OccLike, 'goals'>, slotId: string, s: { taskId: string | null } | undefined) {
+	const g = occ.goals?.[slotId];
+	return (g && g.taskId !== undefined ? g.taskId : s?.taskId) ?? null;
+}
 
-/** Use a Task in a Slot for this day. Back to the Slot's own Task there is no pick, so a later change to the plan reaches it. */
-function setPick(actor: Actor, occ: OccLike, s: typeof slot.$inferSelect, taskId: string, what: 'swap' | 'reroll') {
+/**
+ * What these logs did in place of the plan: for an Entry, the name of its Slot's own Task in that day's plan (see
+ * ownTask) when the Entry is the Task picked there instead, else null. A pick in an auto-filled Slot is no swap, nor is
+ * one of the plan's own Task (a swap kept in the plan that day); a Task done there before a swap, or inside the Task
+ * picked, is its own.
+ */
+export function insteadIn(occIds: string[]): (e: { occurrenceId: string; taskId: string; path: string | null }) => string | null {
+	const occs: Pick<typeof occurrence.$inferSelect, 'id' | 'variantId' | 'picks' | 'goals'>[] = [];
+	for (let i = 0; i < occIds.length; i += 900)
+		occs.push(
+			...db
+				.select({ id: occurrence.id, variantId: occurrence.variantId, picks: occurrence.picks, goals: occurrence.goals })
+				.from(occurrence)
+				.where(and(inArray(occurrence.id, occIds.slice(i, i + 900)), isNotNull(occurrence.picks)))
+				.all()
+		);
+	const variantIds = [...new Set(occs.flatMap((o) => (o.variantId ? [o.variantId] : [])))];
+	const slots = new Map(variantIds.length ? db.select({ id: slot.id, taskId: slot.taskId }).from(slot).where(inArray(slot.variantId, variantIds)).all().map((s) => [s.id, s]) : []);
+	const swaps = new Map<string, { taskId: string; own: string }>();
+	for (const o of occs)
+		for (const [slotId, taskId] of Object.entries(o.picks ?? {})) {
+			const own = ownTask(o, slotId, slots.get(slotId));
+			if (own && own !== taskId) swaps.set(`${o.id}|${slotId}`, { taskId, own });
+		}
+	const ids = [...new Set([...swaps.values()].map((s) => s.own))];
+	const names = new Map(ids.length ? db.select({ id: task.id, name: task.name }).from(task).where(inArray(task.id, ids)).all().map((t) => [t.id, t.name]) : []);
+	return (e) => {
+		if (!e.path || e.path.includes('/')) return null;
+		const s = swaps.get(`${e.occurrenceId}|${slotOfPath(e.path)}`);
+		return s?.taskId === e.taskId ? (names.get(s.own) ?? null) : null;
+	};
+}
+
+/**
+ * Use a Task in a Slot for this day. Back to the Slot's own Task there is no pick, so a later change to the plan reaches it;
+ * none (null) leaves an auto-filled Slot without a pick, as it was when no Task matched.
+ */
+function setPick(actor: Actor, occ: OccLike, s: typeof slot.$inferSelect, taskId: string | null, what: 'swap' | 'reroll') {
 	const { [s.id]: _, ...rest } = ensurePicks(occ.id) ?? {};
-	const picks = taskId === ownTask(occ, s.id, s) ? rest : { ...rest, [s.id]: taskId };
+	const picks = !taskId || taskId === ownTask(occ, s.id, s) ? rest : { ...rest, [s.id]: taskId };
 	db.update(occurrence).set({ picks }).where(eq(occurrence.id, occ.id)).run();
 	emit(actor, 'plan.changed', { habitId: occ.habitId, date: occ.date, data: { what, occurrenceId: occ.id, slotId: s.id, taskId } });
 }
@@ -82,9 +123,16 @@ export function rerollSlot(actor: Actor, occ: OccLike, slotId: string): string {
 	return next;
 }
 
-/** Use a Task of your choice in a Slot, for this day only. */
-export function swapSlot(actor: Actor, occ: OccLike, slotId: string, taskId: string) {
+/**
+ * Use a Task of your choice in a Slot, for this day only. No Task: an auto-filled Slot goes back to none, the Undo of a
+ * swap into one that had no Task to match.
+ */
+export function swapSlot(actor: Actor, occ: OccLike, slotId: string, taskId: string | null) {
 	const s = slotOf(occ, slotId);
+	if (!taskId) {
+		if (!s.fillRule) throw new ActionError('invalid', 'That Slot has its own Task: swap it back to that.');
+		return setPick(actor, occ, s, null, 'swap');
+	}
 	const t = db
 		.select({ id: task.id })
 		.from(task)

@@ -98,6 +98,8 @@ describe('swapping a Slot for the day', () => {
 		// A Slot gone from the plan that the log kept.
 		expect(ownTask({ goals: { gone: { taskId: bench, sets: null, targets: null, minTargets: null, stretchTargets: null } } }, 'gone', undefined)).toBe(bench);
 		expect(ownTask({ goals: null }, 'gone', undefined)).toBeNull();
+		// Older kept goals have no Task: the Slot's own, as Stats reads them.
+		expect(ownTask({ goals: { [fixed.id]: { sets: 4, targets: null, minTargets: null, stretchTargets: null } as never } }, fixed.id, fixed)).toBe(bench);
 	});
 
 	it('Pick another, then back to the Task it showed before: an auto-filled Slot keeps that one as its pick', () => {
@@ -106,6 +108,21 @@ describe('swapping a Slot for the day', () => {
 		expect(next).not.toBe(before);
 		swapSlot(app, day(today), auto.id, before);
 		expect(picks()[auto.id]).toBe(before);
+	});
+
+	it('a swap with no Task leaves an auto-filled Slot without a pick (the Undo of a swap into one that had none); a fixed Slot refuses it', async () => {
+		const { actions } = await import('../../routes/(app)/log/[id]/+page.server');
+		const swap = async (fields: Record<string, string>) => {
+			const body = new FormData();
+			for (const [k, v] of Object.entries(fields)) body.set(k, v);
+			const event = { request: new Request('http://x/', { method: 'POST', body }), locals: { account: { id: me } }, params: { id: day(today).id }, cookies: { get: () => undefined } };
+			return (await (actions.swap as unknown as (e: unknown) => Promise<unknown>)(event)) as { status?: number; data?: { error: string } } | undefined;
+		};
+		swapSlot(app, day(today), auto.id, incline);
+		expect(await swap({ slot: auto.id, task: '' })).toBeUndefined();
+		expect(auto.id in picks()).toBe(false);
+		expect(await swap({ slot: fixed.id, task: '' })).toMatchObject({ status: 400, data: { error: expect.stringMatching(/own Task/) } });
+		expect(() => swapSlot(app, day(today), fixed.id, null)).toThrow(/own Task/);
 	});
 
 	it('what was done with each Task counts for that Task, and the Slot counts as done', () => {
@@ -349,5 +366,56 @@ describe('Keep in the plan and Replace…: what the Task kept aims for, as one c
 		expect(currentForm(me, push)!.variants).toEqual(before);
 		expect(slotIn(before, mine.id)).toMatchObject({ taskId: taskId('Floor press'), minTargets: { [field(taskId('Floor press'), 'Weight')]: 50 }, stretchTargets: { [field(taskId('Floor press'), 'Weight')]: 65 } });
 		expect(pushDay().picks?.[mine.id]).toBe(pin);
+	});
+	it("History: a day swapped before a Keep still names the Task it was done instead of; one done after, with the Task kept, reads plain", async () => {
+		const { currentForm, patchHabit } = await import('./habit-patch');
+		const { withSlot } = await import('$lib/log/plan');
+		const { load } = await import('../../routes/(app)/history/+page.server');
+		const history = () => (load as unknown as (e: unknown) => { values: Record<string, string[]> })({ locals: { account: { id: me } }, cookies: { get: () => undefined }, url: new URL('http://x/history') }).values;
+		const floor = taskId('Floor press');
+		const done = (date: string, picks: Record<string, string> | null, t: string) => {
+			const id = randomUUID();
+			db.insert(occurrence).values({ id, habitId: push, date, status: 'done', finishedAt: new Date(), variantId: mine.variantId, picks }).run();
+			set(id, t, mine.id, 55, 0);
+			return id;
+		};
+		const swapped = done(addDays(today, -20), { [mine.id]: pin }, pin);
+		const planned = done(addDays(today, -19), null, floor);
+		const before = currentForm(me, push)!.variants;
+		const kept = withSlot(before, mine.id, { taskId: pin, targets: {}, minTargets: {}, stretchTargets: {} });
+		expect(patchHabit(me, push, { set: { variants: kept }, was: { variants: before }, applies: 'today', keep: false }, today)).not.toHaveProperty('error');
+		const after = done(addDays(today, -18), null, pin);
+		const names = (id: string) => history()[id].map((l) => l.slice(0, l.indexOf(':')));
+		expect(names(swapped)).toEqual(['Pin press · instead of Floor press']);
+		expect(names(planned)).toEqual(['Floor press']);
+		expect(names(after)).toEqual(['Pin press']);
+		patchHabit(me, push, { set: { variants: before }, was: { variants: kept }, applies: 'today', keep: false }, today);
+	});
+});
+
+describe('a past log says what was done instead of the plan', () => {
+	it("History names the plan's Task a swapped-in Task replaced; sets done before the swap, an auto-filled pick and a kept swap read plain", async () => {
+		const { load } = await import('../../routes/(app)/history/+page.server');
+		const history = () =>
+			(load as unknown as (e: unknown) => { values: Record<string, string[]> })({ locals: { account: { id: me } }, cookies: { get: () => undefined }, url: new URL('http://x/history') });
+		const goal = (sortOrder: number, t: string | null) => ({ sortOrder, taskId: t, sets: 4, targets: null, minTargets: null, stretchTargets: null });
+		const lunge = taskId('Lunge');
+		// 60 days back the plan had Bench press: one set of it, then Incline bench press for the rest; the auto-filled Slot picked Lunge.
+		const swapped = randomUUID();
+		db.insert(occurrence).values({ id: swapped, habitId: gym().id, date: addDays(today, -60), status: 'done', variantId: fixed.variantId, picks: { [fixed.id]: incline, [auto.id]: lunge }, goals: { [fixed.id]: goal(0, bench), [auto.id]: goal(1, null) } }).run();
+		set(swapped, bench, fixed.id, 60, 0);
+		set(swapped, incline, fixed.id, 50, 1);
+		set(swapped, incline, fixed.id, 50, 2);
+		set(swapped, lunge, auto.id, 20, 3);
+		// The day after, the pick is the plan's own Task now: kept in the plan, it is no swap.
+		const kept = randomUUID();
+		const plan = db.select().from(slot).where(eq(slot.id, fixed.id)).get()!.taskId!;
+		db.insert(occurrence).values({ id: kept, habitId: gym().id, date: addDays(today, -59), status: 'done', variantId: fixed.variantId, picks: { [fixed.id]: plan } }).run();
+		set(kept, plan, fixed.id, 70, 0);
+		const { values } = history();
+		const names = (id: string) => values[id].map((l) => l.slice(0, l.indexOf(':')));
+		expect(names(swapped)).toEqual(['Bench press', 'Incline bench press · instead of Bench press', 'Lunge']);
+		expect(values[swapped][1]).toMatch(/50 kg.*, 50 kg/);
+		expect(names(kept)).toEqual([db.select().from(task).where(eq(task.id, plan)).get()!.name]);
 	});
 });

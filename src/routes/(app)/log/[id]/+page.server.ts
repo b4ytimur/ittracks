@@ -440,16 +440,17 @@ export const actions: Actions = {
 		return { targets, aim: aimText(s.sets, to, targets) };
 	},
 
-	/** Use a Task of your choice in a Slot, for this Occurrence only. */
+	/** Use a Task of your choice in a Slot, for this Occurrence only; an empty `task` takes an auto-filled Slot's pick away. */
 	swap: async ({ request, locals, params, cookies }) => {
 		const o = ownedOccurrence(locals.account!.id, params.id);
 		if (!o || !o.occ.variantId) error(404);
 		const f = await request.formData();
 		try {
-			swapSlot(appActor(locals.account!.id, cookies.get('tz')), o.occ, String(f.get('slot')), String(f.get('task')));
+			swapSlot(appActor(locals.account!.id, cookies.get('tz')), o.occ, String(f.get('slot')), String(f.get('task') ?? '') || null);
 		} catch (e) {
-			if (e instanceof ActionError) error(404);
-			throw e;
+			if (!(e instanceof ActionError)) throw e;
+			if (e.code === 'not_found') error(404);
+			return fail(400, { error: e.message });
 		}
 	}
 };

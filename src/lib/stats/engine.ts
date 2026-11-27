@@ -293,7 +293,8 @@ export function prepare(ds: Dataset): Prepared {
 		let slot: DsSlot | null = top ?? null;
 		for (const seg of segs.slice(1)) {
 			const p = partById.get(seg.id);
-			if (!p) return null;
+			// A part of another Task: done there before its Slot was swapped, so not this place's.
+			if (!p || p.taskId !== taskId) return null;
 			taskId = p.childTaskId;
 			slot = { id: p.id, variantId: '', taskId: p.childTaskId, sets: p.sets, targets: p.targets, minTargets: p.minTargets, stretchTargets: p.stretchTargets };
 		}
@@ -312,10 +313,12 @@ export function prepare(ds: Dataset): Prepared {
 			// Each Task it sits inside has one more part with something logged.
 			for (let at = e.path, up = parentPath(at); up; at = up, up = parentPath(at)) {
 				const outer = placeOf(o, up);
-				if (!outer) break;
+				const part = parsePath(at).at(-1)!.id;
+				// Done inside a Task its Slot was swapped away from: it adds no part to the Task there now.
+				const of = partById.get(part)?.taskId;
+				if (!outer || (of && of !== outer.task.id)) break;
 				const k = `${o.id}|@${withoutRounds(up)}`;
 				const done = partsDone.get(k) ?? new Set<string>();
-				const part = parsePath(at).at(-1)!.id;
 				if (!done.has(part)) {
 					done.add(part);
 					mkLog(o, outer.task, k, outer.slot).subsDone++;
@@ -325,7 +328,9 @@ export function prepare(ds: Dataset): Prepared {
 			// A private step only counts in its parent.
 			if (t.parentTaskId) continue;
 			const here = placeOf(o, e.path);
-			const l = mkLog(o, t, `${o.id}|@${withoutRounds(e.path)}`, here?.task.id === t.id ? here.slot : null);
+			// Done there with another Task before its Slot was swapped: a Log of that Task's own, without the Slot.
+			const mine = here?.task.id === t.id;
+			const l = mkLog(o, t, `${o.id}|@${withoutRounds(e.path)}${mine ? '' : `|${t.id}`}`, mine ? here.slot : null);
 			const isSet = !e.values._summary && Object.keys(e.values).some((k) => (metrics.get(k)?.repeats ?? false));
 			if (isSet) l.sets.push(e.values);
 			else {
@@ -1058,7 +1063,8 @@ export interface CardResult {
 	records?: { label: string; value: number; unit: string; kind: ValueKind; date: ISODate | null; occId: string | null }[];
 	rows?: { key: string; label: string; total: number | null; best: number | null; last: number | null; lastDate: ISODate | null; logs: number }[];
 	grid?: { rows: string[]; cols: string[]; values: (number | null)[][] };
-	sessions?: { date: ISODate; occId: string; habit: string; task: string; text: string; met: number | null }[];
+	/** `instead`: the plan's Task it was done instead of, for a Task swapped in for the day (see insteadOf). */
+	sessions?: { date: ISODate; occId: string; habit: string; task: string; instead: string | null; text: string; met: number | null }[];
 	streaks?: { habitId: string; name: string; current: number; unit: 'streak' | 'percent' | 'days' | 'withinDays' | 'withinWeeks'; best: number | null; atRisk: boolean; strip: { date: ISODate; status: string }[] }[];
 	goalRows?: { key: string; label: string; value: number | null; goal: number | null; goalMax: number | null; period: string }[];
 	breakdown?: { key: string; label: string; value: number; share: number }[];
@@ -1519,6 +1525,9 @@ function recordsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range, points:
 	return out;
 }
 
+/** The plan's Task a log was done instead of: its Slot's own, when another Task was swapped in for the day; else null. */
+export const insteadOf = (l: Log, P: Prepared): string | null => (l.slot?.taskId && l.slot.taskId !== l.task.id ? (P.tasks.get(l.slot.taskId)?.name ?? null) : null);
+
 /** "80 kg × 6, 6, 6, 5" for sets with the same weight, otherwise each set in full. */
 export function describeLog(l: Log, P: Prepared): string {
 	const ms = P.metricsByTask.get(l.task.id) ?? [];
@@ -1570,6 +1579,7 @@ function sessionsFor(card: StatCard, P: Prepared, ctx: Ctx, range: Range): NonNu
 		occId: l.occ.id,
 		habit: l.habit.name,
 		task: l.task.name,
+		instead: insteadOf(l, P),
 		text: describeLog(l, P),
 		met: targetMetOfLog(l, P)
 	}));
