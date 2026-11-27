@@ -9,20 +9,22 @@
    list column (a phone), it keeps a section's step from the days under it. */
 .today-side .days { margin-block-start: var(--space-section); }
 .page-main > .days { margin-block-end: var(--space-section); }
-/* GroupHeading's line: the title on the rows' name column (its foldColumn; .slotted is its slotOpen), ‹ › ⋯ quiet glyphs
-   (24px) and the ⋯'s glyph on the rows' verb edge, as its .more. A coarse pointer puts them 20px apart, so their 44px
-   areas meet and never cover each other. */
-.days-head { display: flex; align-items: center; gap: var(--space-tight); margin-block-end: var(--space-inline); padding-inline: calc(1px + var(--space-indent)) calc(var(--space-group) + 1px); }
+/* GroupHeading's line: its 4px over the title, so the title sits level with a heading beside it; the title on the rows'
+   name column (its foldColumn; .slotted is its slotOpen), ‹ › ⋯ quiet glyphs (24px) and the ⋯'s glyph on the rows' verb
+   edge, as its .more. A coarse pointer puts them 20px apart, so their 44px areas meet and never cover each other. */
+.days-head { display: flex; align-items: center; gap: var(--space-tight); margin-block-end: var(--space-inline); padding-block-start: var(--space-tight); padding-inline: calc(1px + var(--space-indent)) calc(var(--space-group) + 1px); }
 .days-head.slotted { padding-inline-start: calc(1px + var(--space-indent) + var(--handle-slot)); }
 @media (pointer: coarse) { .days-head { column-gap: calc(var(--target-touch) - var(--target-min)); } }
 .days-more { flex: none; display: flex; position: relative; margin-inline-end: calc(-1 * var(--space-tight)); }
 .days-name { flex: 1 1 auto; min-inline-size: 0; }
 .days-title { position: relative; margin: 0; }
 .days-sub { margin: 0; }
-/* The way back stays in the 20px meta line; Button's coarse area still makes it 44px. */
+/* The way back stays in the 20px meta line. Under a coarse pointer its area grows down only (into the gap over the card),
+   so it meets the title's area above it and never covers the title. */
 .days-back { min-height: 0; }
-/* The title is the picker: a word, not a box. */
-.days-pick { min-height: 0; padding: 0; border: 0; background: none; font: inherit; gap: var(--space-tight); }
+@media (pointer: coarse) { .days-back::before { inset-block-start: 0; } }
+/* The title is the picker: a word, not a box. A title that wraps (a phone) stays on the name column. */
+.days-pick { min-height: 0; padding: 0; border: 0; background: none; font: inherit; gap: var(--space-tight); justify-content: flex-start; text-align: start; }
 .days-pick > .chev { rotate: 90deg; color: var(--ink-muted); }
 .days-pick[aria-expanded='true'] > .chev { rotate: -90deg; }
 .days-card { padding: var(--space-inline); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface-raised); }

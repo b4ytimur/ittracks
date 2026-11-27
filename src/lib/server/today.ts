@@ -765,6 +765,8 @@ export interface TodayItem {
 		variantName: string | null;
 		slotCount: number;
 		level: Level | null;
+		/** Logged on a day it wasn't due: shown, never counted. */
+		extra: boolean;
 	} | null;
 	streak: string;
 	/** Never miss twice: the last one was missed. */
@@ -998,7 +1000,8 @@ export function loadToday(accountId: string, today: string) {
 							? db.select({ id: slot.id }).from(slot).where(eq(slot.variantId, occ.variantId)).all()
 									.length
 							: 0,
-						level: occ.level ?? null
+						level: occ.level ?? null,
+						extra: occ.extra
 					}
 				: null,
 			streak: st ? describeStreak(st, rule) : '',

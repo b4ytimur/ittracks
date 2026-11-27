@@ -73,6 +73,9 @@ export function markOf(d: ISODate, c: Count | undefined, today: ISODate, first: 
 export const wordsOf = (m: Mark, c?: Count): string =>
 	m === 'future' ? 'still to come' : m === 'before' ? 'before you started' : c && c[1] ? `${c[0]} of ${c[1]} done` : 'nothing due';
 
+/** Today's rows that count, as dayCounts counts a day: a group or routine through the habits inside it, a log on a day off never. */
+export const countedRows = <T extends { group: unknown; occurrence: { extra?: boolean } | null }>(rows: T[]): T[] => rows.filter((b) => !b.group && !b.occurrence?.extra);
+
 /** A day's [done, due] from its habits' statuses, as dayCounts counts: a skip is neither. */
 export const statusCount = (statuses: string[]): Count => [statuses.filter((s) => s === 'done').length, statuses.filter((s) => s !== 'skipped').length];
 

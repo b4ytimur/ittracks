@@ -45,6 +45,12 @@ describe('the days block', () => {
 	it('names the one habit it counts', () => {
 		expect(draw('week', { habit: 'g', counts: {} })).toMatch(/<p class="days-sub meta muted">Gym · /);
 	});
+	it('names seven days before today by their dates, short enough for a phone', () => {
+		const out = draw('seven', { chosen: '2026-11-20' });
+		expect(out).toMatch(/<h2[^>]*aria-label="Nov 14\s–\s20"/);
+		expect(out).toMatch(/<p class="days-sub meta muted">Seven days</);
+		expect(draw('seven')).toMatch(/<h2[^>]*aria-label="Last seven days"/);
+	});
 	it('has no way back on the day the page is on', () => {
 		expect(draw('seven', { chosen: '2026-11-20' })).not.toContain('days-back');
 		expect(draw('week', { chosen: '2026-11-10' })).toContain('days-back');

@@ -59,8 +59,9 @@ export function daysData(accountId: string, today: string, saved: { show: Show; 
 	const habits = dayHabits(accountId);
 	const habitId = habits.some((h) => h.id === saved.habit) ? saved.habit : null;
 	// The span `show` puts round `at` and the week under it (the 12 months' week): from the first of them to the last.
-	const ends = [...spanOf(saved.show, at, today), weekStart(at), addDays(weekStart(at), 6)].sort(), year = yearStart(today);
-	const lo = ends[0], hi = ends[3] < today ? ends[3] : today;
+	// The 12 months' own span is this year's, counted already.
+	const ends = [...(saved.show === 'year' ? [] : spanOf(saved.show, at, today)), weekStart(at), addDays(weekStart(at), 6)].sort(), year = yearStart(today);
+	const lo = ends[0], last = ends[ends.length - 1], hi = last < today ? last : today;
 	const counts = { ...dayCounts(accountId, year, today, habitId), ...(lo < year ? dayCounts(accountId, lo, hi, habitId) : {}) };
 	return { today, first: firstDay(accountId), habits, show: saved.show, habit: habitId, counts };
 }

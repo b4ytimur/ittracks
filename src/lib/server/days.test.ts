@@ -14,7 +14,7 @@ import { saveHabit } from './repo/habits';
 import { dayCounts, dayHabits, daysData, firstDay } from './days';
 import { habitForm } from '$lib/forms';
 import { addDays, daysBetween } from '$lib/engine/dates';
-import { yearStart } from '$lib/days/days';
+import { countedRows, statusCount, yearStart } from '$lib/days/days';
 import { appActor, type Actor } from './core/actor';
 import { runAction } from './core/actions';
 
@@ -60,6 +60,10 @@ describe('a day in the days block', () => {
 		const month = Object.keys(daysData(me, today, { show: 'month', habit: null }, '2000-01-01').counts);
 		expect(month).toHaveLength(year + daysBetween('1999-12-27', '2000-01-31') + 1);
 		expect(month).toContain('2000-01-31');
+		// The 12 months: the week its day is in, and nothing between.
+		const twelve = Object.keys(daysData(me, today, { show: 'year', habit: null }, '2000-01-05').counts);
+		expect(twelve).toHaveLength(year + 7);
+		expect(twelve).not.toContain('2000-01-10');
 		expect(Object.keys(daysData(me, today, { show: 'week', habit: null }).counts)).toHaveLength(year);
 	});
 
@@ -72,6 +76,18 @@ describe('a day in the days block', () => {
 		run('log_done', { habit: stretch, date: d(-2), extra: true });
 		expect(rowOn(stretch, d(-2))).toMatchObject({ status: 'done', extra: true });
 		expect(dayCounts(me, d(-2), d(-2))[d(-2)]).toEqual([0, 2]);
+	});
+
+	it('Today counts today as the server counts it: a log on a day off shows, and counts for nothing', async () => {
+		await fresh('extra-today');
+		habitEvery('Read', 1, 3);
+		const stretch = habitEvery('Stretch', 2, 1); // due yesterday and tomorrow: today is a day off
+		settleAll(me, today);
+		run('log_done', { habit: stretch, date: today, extra: true });
+		const { build } = loadToday(me, today);
+		expect(build.map((b) => b.name).sort()).toEqual(['Read', 'Stretch']);
+		expect(statusCount(countedRows(build).map((b) => b.occurrence!.status))).toEqual(dayCounts(me, today, today)[today]);
+		expect(dayCounts(me, today, today)[today]).toEqual([0, 1]);
 	});
 
 	it("an archived habit's day left open never comes due; its days before still count", async () => {

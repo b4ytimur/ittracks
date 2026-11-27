@@ -4,6 +4,7 @@
 	// choice, kept for every page; the band says so, with Undo). Pressing a day goes to it: `href` says where.
 	import { tick, untrack } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
+	import { invalidateAll } from '$app/navigation';
 	import MenuButton, { type Way } from '$lib/ui/MenuButton.svelte';
 	import { saveLayout, viewOp } from '$lib/viewclient';
 	import { showToast } from '$lib/toast.svelte';
@@ -47,10 +48,11 @@
 	} = $props();
 
 	const uid = $props.id();
-	let show = $state(untrack(() => saved));
+	/** The saved choice: what the page loaded, or what was chosen here since, until the page loads again. */
+	let show = $derived(saved);
 	/** What is on screen: the saved choice, or a week where the 12 months are not offered. */
 	const view = $derived<Show>(show === 'year' && !twelve ? 'week' : show);
-	let lens = $state(untrack(() => savedHabit));
+	let lens = $derived(savedHabit);
 	let at = $state(untrack(() => chosen ?? today));
 	let hover = $state<string | null>(null);
 	/** The live line: what is on screen after a step, a pick or the way back. */
@@ -106,11 +108,13 @@
 	const isNow = $derived(showsNow(view, at, today, chosen));
 	/** The one habit counted, named wherever the block says what it counts. */
 	const lensName = $derived(habits.find((h) => h.id === lens)?.name);
+	// Seven days before today are named by their dates (short enough for a phone's name column); the sub says what they are,
+	// or the way back says it.
 	const title = $derived(
-		view === 'week' ? `Week ${isoWeek(at)}` : view === 'seven' ? (at === today ? 'Last seven days' : `Seven days to ${DM.format(noon(at))}`) : view === 'month' ? (at.slice(0, 4) === today.slice(0, 4) ? MONTH : MONTH_Y).format(noon(at)) : 'Last 12 months'
+		view === 'week' ? `Week ${isoWeek(at)}` : view === 'seven' ? (at === today ? 'Last seven days' : range(span[0], span[1])) : view === 'month' ? (at.slice(0, 4) === today.slice(0, 4) ? MONTH : MONTH_Y).format(noon(at)) : 'Last 12 months'
 	);
 	const sub = $derived(
-		[lensName, view === 'week' ? range(week, addDays(week, 6)) + (isNow ? ' · this week' : '') : view === 'seven' ? range(span[0], span[1]) : view === 'month' ? at.slice(0, 4) + (isNow ? ' · this month' : '') : range(week, addDays(week, 6))].filter(Boolean).join(' · ')
+		[lensName, view === 'week' ? range(week, addDays(week, 6)) + (isNow ? ' · this week' : '') : view === 'seven' ? (at === today ? range(span[0], span[1]) : isNow ? 'Seven days' : '') : view === 'month' ? at.slice(0, 4) + (isNow ? ' · this month' : '') : range(week, addDays(week, 6))].filter(Boolean).join(' · ')
 	);
 	const back = $derived({ week: 'This week', seven: 'Last seven days', month: 'This month', year: 'This week' }[view]);
 	const foot = $derived.by(() => {
@@ -122,6 +126,8 @@
 		return [c[1] ? `${c[0]} of ${c[1]} done` : 'Nothing due', view === 'month' ? pct(c) : view === 'year' ? 'in 12 months' : '', ago].filter(Boolean).join(' · ');
 	});
 	const heatWeeks = $derived(Array.from({ length: YEAR_WEEKS }, (_, i) => addDays(yearStart(today), 7 * i)));
+	/** A week of the 12 months: its column's name, and what a step to it says. */
+	const weekSays = (m: string) => ((c: Count) => `Week ${isoWeek(m)}, ${range(m, addDays(m, 6))}: ${c[1] ? `${c[0]} of ${c[1]} done` : 'nothing due'}`)(total(weekDays(m), countOf));
 
 	// ----- Choosing: kept for every page and said in the band; its Undo puts back only what it changed -----
 	const SHOWS: [Show, string, string][] = [
@@ -130,8 +136,9 @@
 		['month', 'A month', 'a month'],
 		['year', 'Last 12 months', 'the last 12 months']
 	];
-	// The server replaces `days` whole, so every save sends both fields.
-	const patch = (s: Show, h: string | null) => ({ op: 'patch', today: { days: { show: s, habit: h } } });
+	// The server changes only the field sent, so an Undo puts back its own and keeps the other as a later choice left it.
+	type Field = { show: Show } | { habit: string | null };
+	const patch = (days: Field) => ({ op: 'patch', today: { days } });
 	async function choose(s: Show | null, h?: string | null) {
 		const before = { show, lens };
 		if (s) {
@@ -140,15 +147,18 @@
 		}
 		if (h !== undefined) lens = h;
 		if (show === before.show && lens === before.lens) return;
-		if (!(await saveLayout(patch(show, lens), () => ((show = before.show), (lens = before.lens))))) return;
-		if (s) showToast(`The days now show ${SHOWS.find(([k]) => k === s)?.[2]}.`, () => put(() => (show = before.show)));
-		else showToast(lensName ? `The days now count ${lensName} only.` : 'The days now count every habit.', () => put(() => (lens = before.lens)));
+		if (!(await saveLayout(patch(s ? { show } : { habit: lens }), () => ((show = before.show), (lens = before.lens))))) return;
+		// The page loads what was saved, so a block it draws again (the strip, the other column) starts from it.
+		void invalidateAll();
+		if (s) showToast(`The days now show ${SHOWS.find(([k]) => k === s)?.[2]}.`, () => put({ show: before.show }));
+		else showToast(lensName ? `The days now count ${lensName} only.` : 'The days now count every habit.', () => put({ habit: before.lens }));
 	}
-	/** An Undo: one field back, the other as it is now. False when it was not kept, and the band says so. */
-	async function put(change: () => void) {
+	/** An Undo: its one field back (the band then loads the page again). False when it was not kept, and the band says so. */
+	async function put(days: Field) {
 		const was = { show, lens };
-		change();
-		if (await viewOp(patch(show, lens))) return true;
+		if ('show' in days) show = days.show;
+		else lens = days.habit;
+		if (await viewOp(patch(days))) return true;
 		show = was.show;
 		lens = was.lens;
 		return false;
@@ -164,7 +174,8 @@
 	function go(d: string) {
 		at = d;
 		hover = null;
-		said = `${title}: ${foot}`;
+		// Under the 12 months the title and the foot stay as they are: the week moved to is what changed.
+		said = view === 'year' ? weekSays(week) : `${title}: ${foot}`;
 	}
 	// ponytail: the pickers list the last 12 months; ‹ › go further back.
 	const pick = $derived.by<Way[]>(() => {
@@ -211,7 +222,7 @@
 			<h2 class="section-title days-title" id="{uid}-h" aria-label={title}>
 				{#if pick.length}<MenuButton class="days-pick" label="{title}, pick a {view === 'month' ? 'month' : 'week'}" menuLabel={view === 'month' ? 'Months' : 'Weeks'} items={pick} align="start">{#snippet trigger()}{title}<span class="chev" aria-hidden="true">›</span>{/snippet}</MenuButton>{:else}{title}{/if}
 			</h2>
-			<p class="days-sub meta muted">{sub}{#if !isNow}{' · '}<button type="button" class="quiet days-back" onclick={toNow}>{back}</button>{/if}</p>
+			<p class="days-sub meta muted">{sub}{#if !isNow}{sub ? ' · ' : ''}<button type="button" class="quiet days-back" onclick={toNow}>{back}</button>{/if}</p>
 		</div>
 		<button type="button" class="quiet glyph days-step" aria-label="Back to {stepName(-1)}" aria-disabled={!canBack} onclick={() => step(-1)}>‹</button>
 		<button type="button" class="quiet glyph days-step" aria-label="On to {stepName(1)}" aria-disabled={!canOn} onclick={() => step(1)}>›</button>
@@ -223,8 +234,7 @@
 			<!-- A picture: ‹ › choose the week under it. -->
 			<div class="days-heat" role="group" aria-label="The last 12 months, a column a week">
 				{#each heatWeeks as m (m)}
-					{@const c = total(weekDays(m), countOf)}
-					<span class="days-col" class:chosen={m === week} role="img" aria-label="Week {isoWeek(m)}, {range(m, addDays(m, 6))}: {c[1] ? `${c[0]} of ${c[1]} done` : 'nothing due'}">{#each weekDays(m) as d (d)}<i data-day={markAt(d)}></i>{/each}</span>
+					<span class="days-col" class:chosen={m === week} role="img" aria-label={weekSays(m)}>{#each weekDays(m) as d (d)}<i data-day={markAt(d)}></i>{/each}</span>
 				{/each}
 			</div>
 		{/if}

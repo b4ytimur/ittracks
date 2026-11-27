@@ -124,10 +124,14 @@ export function changeViews(accountId: string, raw: unknown): ViewsChanged {
 			break;
 		case 'patch': {
 			// Zod fills defaults for keys that weren't sent; only apply what the request named.
-			const sent = (group: string, parsedGroup: Record<string, unknown> | undefined) =>
-				Object.fromEntries(Object.keys(sentRaw?.[group] ?? {}).filter((k) => parsedGroup && k in parsedGroup).map((k) => [k, parsedGroup![k]]));
+			const named = (raw: unknown, parsed: Record<string, unknown> | undefined) =>
+				Object.fromEntries(Object.keys(raw ?? {}).filter((k) => parsed && k in parsed).map((k) => [k, parsed![k]]));
+			const sent = (group: string, parsedGroup: Record<string, unknown> | undefined) => named(sentRaw?.[group], parsedGroup);
+			const today = sent('today', b.today);
+			// The days block's choice field by field too: its Undo puts back the one it changed and keeps the other as it is now.
+			if (today.days) today.days = { ...v.today.days, ...named(sentRaw?.today?.days, b.today?.days) };
 			const patch = {
-				today: sent('today', b.today),
+				today,
 				habits: sent('habits', b.habits),
 				history: sent('history', b.history),
 				hidden: sentRaw && 'hidden' in sentRaw && b.hidden ? b.hidden : undefined

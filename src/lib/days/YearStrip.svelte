@@ -1,7 +1,8 @@
 <script lang="ts">
-	// History's last 12 months: a column a week across the page, every day a tile. From 40rem each day goes to it, in one
-	// tab stop (arrows move a day up and down, a week left and right), and the line under it says the day in focus or under
-	// the pointer. On a phone it is a picture: the days block and the list are the way to a day there.
+	// History's last 12 months: a column a week across the page, every day a tile. From 40rem with a fine pointer each day
+	// goes to it, in one tab stop (arrows move a day up and down, a week left and right), and the line under it says the day
+	// in focus or under the pointer. On a phone or a touch tablet its tiles are far under a finger's size, so it is a
+	// picture: the days block and the list are the way to a day there.
 	// It folds to its heading (GroupHeading's fold), and History remembers it folded.
 	import { untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
@@ -17,7 +18,7 @@
 		open = !open;
 		void saveLayout({ op: 'patch', history: { year: open } }, () => (open = was));
 	}
-	const wide = new MediaQuery('min-width: 40rem');
+	const wide = new MediaQuery('(min-width: 40rem) and (pointer: fine)');
 	/** The strip's one tab stop, and the day its line says. */
 	let stop = $state(untrack(() => today));
 	let shown = $state<string | null>(null);

@@ -35,7 +35,7 @@
 	import { mergeOrder } from '$lib/ui/list';
 	import { usualWay } from '$lib/log/usual';
 	import DaysBlock from '$lib/days/DaysBlock.svelte';
-	import { statusCount } from '$lib/days/days';
+	import { countedRows, statusCount } from '$lib/days/days';
 	import {
 		STARTERS,
 		STATS,
@@ -405,8 +405,8 @@
 	const identityNames = $derived([...new Set([...data.build, ...data.breaking].flatMap((b) => b.identities))].sort());
 	const wordsCtx = $derived({ areas: data.areas, identities: hidden('identities') ? [] : identityNames, parts: data.ranges.length > 0, breaking: data.breaking.length > 0 });
 	const words = $derived(todayWords(view, wordsCtx));
-	// A group is counted through the habits inside it, as the days block counts.
-	const dueLeaves = $derived(data.build.filter((b) => !b.group));
+	// Counted as the days block and History count a day.
+	const dueLeaves = $derived(countedRows(data.build));
 	const doneCount = $derived(dueLeaves.filter(isDone).length);
 	/** Everything due is done or skipped. */
 	const allDone = $derived(dueLeaves.length > 0 && doneCount === dueLeaves.length && view.direction !== 'break');
