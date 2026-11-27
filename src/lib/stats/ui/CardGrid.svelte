@@ -9,7 +9,9 @@
 	import type { BoardFilter, Chart, CustomMeasure, Size, StatCard } from '../model';
 	import { autoTitle } from '../catalog';
 	import { fit, measureLabel, withChart, type Offer, type SlotKey } from '../sentence';
-	import { statsOp } from '../client';
+	import { statsOp, undoOp } from '../client';
+	import { cardAdded } from '../habit-tab';
+	import { keepFocus } from '$lib/ui/focus';
 	import StatCardView from './StatCardView.svelte';
 	import CardBuilder from './CardBuilder.svelte';
 	import AddCard from './AddCard.svelte';
@@ -32,7 +34,6 @@
 		hidden,
 		suggested,
 		gallery,
-		grips = true,
 		readonly = false,
 		adding = $bindable(false),
 		csv,
@@ -47,16 +48,14 @@
 		hidden: string[];
 		suggested: { group: string; cards: StatCard[] }[];
 		gallery: { group: string; cards: StatCard[] }[];
-		/** A grip on each card: drag it, use the arrow keys, or tap it for the Move menu (a habit's tab: only in its Edit, for now). */
-		grips?: boolean;
-		/** Charts only: no editing (a Task's history). */
+		/** Charts only: no editing and no grips (a Task's history). Otherwise each card has a grip: drag it, use the arrow keys, or tap it for the Move menu. */
 		readonly?: boolean;
 		adding?: boolean;
 		/** Link to a card's CSV, by card id. */
 		csv?: (cardId: string) => string;
 		/** Cards shown on Today (habit tab only). */
 		headlines?: string[];
-		onheadline?: (card: StatCard) => void;
+		onheadline?: (card: StatCard, title: string) => void;
 	} = $props();
 
 	let building = $state<StatCard | null>(null);
@@ -68,11 +67,10 @@
 	const offer = $derived<Offer>({ catalog, measures, hidden });
 	const titleOf = (c: StatCard) => c.title || autoTitle(c, catalog, measures) || measureLabel(c.perLog, measures);
 
-	async function op(body: Record<string, unknown>, done?: string) {
+	async function op(body: Record<string, unknown>) {
 		try {
 			const r = await statsOp(body);
 			await invalidateAll();
-			if (done) showToast(done);
 			return r;
 		} catch (e) {
 			showToast((e as Error).message);
@@ -82,13 +80,24 @@
 
 	async function save(card: StatCard) {
 		saving = true;
-		const r = await op({ op: 'card.save', where, card });
+		const at = where;
+		const r = await op({ op: 'card.save', where: at, card });
 		saving = false;
 		if (r) {
 			building = null;
-			adding = false;
-			if (r.warnings?.length) showToast(r.warnings[0]);
+			added(card, at, r);
 		}
+	}
+	/** The picker closes; focus that fell to the page goes back to the title line's New card, which opened it. */
+	function closePicker() {
+		adding = false;
+		void keepFocus('.titlebar [data-add]');
+	}
+	/** One band line for a new card; its Undo takes the card off again. */
+	function added(card: StatCard, at: typeof where, r: { id?: string; warnings?: string[] }) {
+		closePicker();
+		const a = cardAdded(at, r.id ?? card.id, titleOf(card), r.warnings);
+		showToast(a.said, undoOp(a.undo));
 	}
 	/** The card whose settings are open, as it was when they opened, with its one entry in the band. */
 	let settings = $state.raw<{ card: StatCard; was: StatCard; entry: number | null } | null>(null);
@@ -119,8 +128,9 @@
 		return true;
 	}
 	async function addNow(card: StatCard) {
-		const r = await op({ op: 'card.save', where, card }, `Added “${card.title}”`);
-		if (r) adding = false;
+		const at = where;
+		const r = await op({ op: 'card.save', where: at, card });
+		if (r) added(card, at, r);
 	}
 	async function remove(item: Item, title: string) {
 		const index = items.indexOf(item);
@@ -169,7 +179,7 @@
 </script>
 
 {#if adding}
-	<AddCard {suggested} {gallery} onadd={addNow} onbuild={(c) => (building = c)} oncancel={() => (adding = false)} />
+	<AddCard {suggested} {gallery} onadd={addNow} onbuild={(c) => (building = c)} oncancel={closePicker} />
 {/if}
 
 <EditableList
@@ -181,7 +191,7 @@
 	label={(item) => titleOf(item.card)}
 	itemClass={(item) => `size-${item.card.look.size}`}
 	ariaLabel="Cards"
-	onmove={grips && !readonly ? (_, order, text) => (void reorder(order, text), true) : undefined}
+	onmove={!readonly ? (_, order, text) => (void reorder(order, text), true) : undefined}
 >
 	{#snippet row(item, ctx)}
 		{@const title = titleOf(item.card)}
@@ -204,7 +214,7 @@
 			ondrill={item.result ? (from, to, series) => openDrill(item, from, to, series) : undefined}
 			onclose={() => (drill = null)}
 			onall={() => drill && (drill = { ...drill, all: true })}
-			onheadline={onheadline && item.card.look.chart === 'tile' ? () => onheadline(item.card) : undefined}
+			onheadline={onheadline && item.card.look.chart === 'tile' ? () => onheadline(item.card, title) : undefined}
 			headline={headlines.includes(item.card.id)}
 		/>
 	{/snippet}

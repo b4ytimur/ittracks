@@ -9,3 +9,6 @@ export async function statsOp<T = { ok: true; id?: string; warnings?: string[] }
 	}
 	return res.json();
 }
+
+/** A band Undo that sends `body`: true when it went through, else what the server said (the band shows it, with Retry). */
+export const undoOp = (body: Record<string, unknown>) => () => statsOp(body).then(() => true, (e: Error) => e.message);

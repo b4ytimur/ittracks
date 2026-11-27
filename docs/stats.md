@@ -48,7 +48,9 @@ A habit's logs count in the Area it had on their day, both when a card splits by
 
 ## A habit's Stats tab
 
-Each habit has a **Stats** tab (from its editor or chain) with cards made automatically from what it logs. They change like any card; **Back to the automatic cards** undoes your changes. **Last times** on a Task's page shows its charts.
+Each habit has a **Stats** tab (from its editor or chain) with cards made automatically from what it logs. It has no Edit: its cards change like any card, in their words and their ⋯, and move by their ⠿. **New card** is in its title line. The first change makes the cards your own; while they are, the **⋯** in the title line has **Back to the automatic cards**, with **Undo**. **Show on Today** in a number card's ⋯ makes it the number Today shows for the habit.
+
+**Last times** on a Task's page shows its charts.
 
 ## Measures
 
