@@ -756,8 +756,22 @@ export function nextEarly(habitId: string, schedule: ScheduleForm, today: string
 	return nextInRotation(plan, historyOn(schedule as Schedule, history(habitId, today), today), today)?.variantId ?? null;
 }
 
+/** For a habit resting today: the next day it is due, within two months, or null. */
+export function nextDue(habitId: string, schedule: ScheduleForm, today: string): string | null {
+	const past = history(habitId, addDays(today, 1));
+	const parent = followDue(habitId, schedule, today);
+	// ponytail: one day at a time, 62 at most; a schedule that is due less often than that says nothing.
+	for (let d = 1; d <= 62; d++) {
+		const date = addDays(today, d);
+		if (dueOn(schedule as Schedule, past, date, parent)) return date;
+	}
+	return null;
+}
+
 export interface TodayItem {
 	habitId: string;
+	/** Resting today: the next day it is due. */
+	nextDue?: string | null;
 	name: string;
 	occurrence: {
 		id: string;
@@ -1074,6 +1088,7 @@ export function loadToday(accountId: string, today: string) {
 			const early = nextEarly(h.id, schedule, today);
 			const v = variants.find((x) => x.id === early);
 			item.earlyVariant = v ? { id: v.id, name: v.name } : null;
+			item.nextDue = nextDue(h.id, schedule, today);
 			resting.push(item);
 		}
 	}

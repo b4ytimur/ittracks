@@ -1,6 +1,8 @@
 // Ordering for Today: Habits with a cue time come first in time order, and a stacked
 // Habit ("after X") follows straight after its anchor. Pure, so it is easy to test.
 
+import { dayOrder } from './day';
+
 export interface Stackable {
 	id: string;
 	/** Cue time as HH:MM, or null. */
@@ -45,4 +47,53 @@ export function makesLoop(id: string, afterId: string | null, anchors: Map<strin
 		cur = anchors.get(cur) ?? null;
 	}
 	return false;
+}
+
+// Today by time: the day as a timeline.
+
+export interface Timed {
+	id: string;
+	/** When it is due as HH:MM (a part of the day counts from its start), or null: any time. */
+	clock: string | null;
+	/** What the timeline says for that time: the clock time, or the part of the day's name. */
+	label: string | null;
+	/** A group's habits, each with its own time (null: the group's). A routine is done in one go, so it passes none. */
+	kids?: Timed[];
+}
+
+export interface Slot<T> {
+	/** The clock time, or '' for any time. */
+	key: string;
+	label: string | null;
+	items: T[];
+	/** A group standing in more than one slot: the ids of the habits it holds in this one. */
+	only: Map<string, Set<string>>;
+}
+
+/**
+ * One slot per time, in the order the day is lived, split at `now` into what is past (and still shown) and what is
+ * ahead; the habits with no time come between them, since they fit now. A group whose habits are at different times
+ * stands in each of their slots, holding only the habits at that time. Items keep their order within a slot.
+ */
+export function timeline<T extends Timed>(items: T[], now: string, dayStart = '00:00') {
+	const slots = new Map<string, Slot<T>>();
+	const put = (clock: string | null, label: string | null, item: T, kids?: string[]) => {
+		const key = clock ?? '';
+		let s = slots.get(key);
+		if (!s) slots.set(key, (s = { key, label: clock ? label : null, items: [], only: new Map() }));
+		if (!s.items.includes(item)) s.items.push(item);
+		if (kids) s.only.set(item.id, new Set([...(s.only.get(item.id) ?? []), ...kids]));
+	};
+	for (const it of items) {
+		const at = new Map<string | null, Timed[]>();
+		for (const k of it.kids ?? []) at.set(k.clock ?? it.clock, [...(at.get(k.clock ?? it.clock) ?? []), k]);
+		const labelOf = (ks: Timed[]) => (ks[0].clock ? ks[0].label : it.label);
+		if (at.size > 1) for (const [c, ks] of at) put(c, labelOf(ks), it, ks.map((k) => k.id));
+		else if (at.size === 1) put([...at.keys()][0], labelOf([...at.values()][0]), it);
+		else put(it.clock, it.label, it);
+	}
+	const order = (s: Slot<T>) => dayOrder(s.key, dayStart);
+	const timed = [...slots.values()].filter((s) => s.key).sort((a, b) => order(a) - order(b));
+	const cut = dayOrder(now, dayStart);
+	return { past: timed.filter((s) => order(s) <= cut), anyTime: slots.get('') ?? null, ahead: timed.filter((s) => order(s) > cut) };
 }
