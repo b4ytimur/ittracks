@@ -9,6 +9,7 @@ import {
 	keepsEmptyAreas,
 	manualOrder,
 	movedPart,
+	sameSide,
 	partAt,
 	passes,
 	readViews,
@@ -278,6 +279,15 @@ describe('views', () => {
 	});
 	it('nothing sunk: the whole list goes back', () => {
 		expect(movedPart(['c', 'a', 'b'], 'c', new Set())).toEqual(['c', 'a', 'b']);
+	});
+	it('the grips offer no move across the done line, which would change nothing, and none inside', () => {
+		// Today shows b c a, a done: c can't go below a, nor a above c; b and c still swap.
+		const done = new Set(['a']);
+		expect(sameSide(done, { key: 'c', target: 'a', position: 'after' })).toBe(false);
+		expect(sameSide(done, { key: 'a', target: 'c', position: 'before' })).toBe(false);
+		expect(sameSide(done, { key: 'b', target: 'c', position: 'after' })).toBe(true);
+		expect(sameSide(new Set(['a', 'd']), { key: 'd', target: 'a', position: 'before' })).toBe(true);
+		expect(sameSide(new Set(), { key: 'c', target: 'b', position: 'inside' })).toBe(false);
 	});
 
 	it('finds the part of day, including ranges past midnight', () => {

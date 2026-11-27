@@ -85,6 +85,9 @@ export function moveChoices(keys: string[], key: string, o: { allowed: (m: Move)
 	return out;
 }
 
+/** Whether the right arrow can put some row inside the row above it here (`allowed`, the list's canDrop): only then does the grip's hint say so. */
+export const nestsAny = (keys: string[], allowed: (m: Move) => boolean) => keys.some((key, i) => i > 0 && allowed({ key, target: keys[i - 1], position: 'inside' }));
+
 /**
  * A press on a grip that has moved (dx, dy) but not lifted its row: still a tap ("stay"), a drag ("lift": a
  * mouse or pen lifts on moving), or a swipe ("scroll": a finger, `hold`, lifts only by holding still, so moving

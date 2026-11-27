@@ -776,6 +776,11 @@ export function manualOrder<T>(items: T[], order: string[], id: (t: T) => string
  * then never sends a done one to the end of the order for good, and the done ones keep their order among themselves.
  */
 export const movedPart = (part: string[], key: string, sunk: Set<string>) => part.filter((k) => sunk.has(k) === sunk.has(key));
+/**
+ * Which moves the grips offer in that list: a row goes before or after the rows on its own side of the line, never across
+ * it (movedPart would keep the order as it was) and never inside another row.
+ */
+export const sameSide = (sunk: Set<string>, m: { key: string; target: string; position: string }) => m.position !== 'inside' && sunk.has(m.key) === sunk.has(m.target);
 
 /** Does an item pass the Area, direction and Identity filters? */
 export function passes(s: ViewState, i: Groupable): boolean {

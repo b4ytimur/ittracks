@@ -24,7 +24,7 @@
 	import { flip } from 'svelte/animate';
 	import { prefersReducedMotion } from 'svelte/motion';
 	import { menuFit, menuKeys, menuNudge } from './MenuButton.svelte';
-	import { applyMove, dropDepth, dropPosition, gridDrop, moveChoices, nearest, pressMoved, rangeKeys, refocusAt, withDescendants, type Move, type MoveChoice, type Position, type RowContext } from './list';
+	import { applyMove, dropDepth, dropPosition, gridDrop, moveChoices, nearest, nestsAny, pressMoved, rangeKeys, refocusAt, withDescendants, type Move, type MoveChoice, type Position, type RowContext } from './list';
 
 	let {
 		items,
@@ -138,6 +138,8 @@
 	let list = $state<HTMLUListElement>();
 	let announce = $state('');
 	const allowed = (m: Move) => (canDrop ? canDrop(m) : m.position !== 'inside');
+	/** Some row can go inside the row above it: a canDrop that never allows it (Today, Area blocks) keeps that out of the hint. */
+	const nests = $derived(axis !== 'grid' && nestsAny(keys, allowed));
 	/** A move that leaves the order as it is isn't shown or sent. */
 	const changes = (m: Move) => m.position === 'inside' || applyMove(keys, m).join('\n') !== keys.join('\n');
 
@@ -653,7 +655,7 @@
 {/if}
 {#if grips}
 	<span id="{uid}-hint" class="vh"
-		>Press to choose a move, drag, or use the {axis === 'grid' ? '' : 'up and down '}arrow keys.{canDrop && axis !== 'grid' ? ' The right arrow puts it inside the row above, where it fits.' : ''}{onoutdent
+		>Press to choose a move, drag, or use the {axis === 'grid' ? '' : 'up and down '}arrow keys.{nests ? ' The right arrow puts it inside the row above, where it fits.' : ''}{onoutdent
 			? ' The left arrow takes it out of this list.'
 			: ''}</span
 	>

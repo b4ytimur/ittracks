@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyMove, dropDepth, dropPosition, gridDrop, mergeOrder, moveBy, moveChoices, moveKey, nearest, pressMoved, rangeKeys, refocusAt, reorderFrom, selectionState, withDescendants, type Move } from './list';
+import { applyMove, dropDepth, dropPosition, gridDrop, mergeOrder, moveBy, moveChoices, moveKey, nearest, nestsAny, pressMoved, rangeKeys, refocusAt, reorderFrom, selectionState, withDescendants, type Move } from './list';
 
 const keys = ['a', 'b', 'c', 'd'];
 
@@ -229,5 +229,18 @@ describe('refocusAt', () => {
 	});
 	it('has nowhere to go when the row has no controls', () => {
 		expect(refocusAt([del], 0, [])).toBe(-1);
+	});
+});
+
+describe('nestsAny: the grip hint names the right arrow only where it can put a row inside another', () => {
+	it('never, in a list whose rule keeps every row at one level', () => {
+		expect(nestsAny(['a', 'b', 'c'], (m) => m.position !== 'inside')).toBe(false);
+	});
+	it('when some row has a row above it that takes it', () => {
+		expect(nestsAny(['a', 'b', 'c'], (m) => m.position === 'inside' && m.target === 'b')).toBe(true);
+	});
+	it('not when the only row that takes others has none below it', () => {
+		expect(nestsAny(['a', 'b', 'c'], (m) => m.position === 'inside' && m.target === 'c')).toBe(false);
+		expect(nestsAny(['a'], () => true)).toBe(false);
 	});
 });

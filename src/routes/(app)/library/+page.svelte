@@ -7,7 +7,7 @@
 	import EditableList from '$lib/ui/EditableList.svelte';
 	import TitleLine from '$lib/ui/TitleLine.svelte';
 	import MenuButton from '$lib/ui/MenuButton.svelte';
-	import { backToMore, focusBox, keepFocus } from '$lib/ui/row-more';
+	import { backToMore, focusBox, keepFocus, pressedRow } from '$lib/ui/row-more';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
 	import GroupHeading from '$lib/ui/GroupHeading.svelte';
 	import StatusTag from '$lib/ui/StatusTag.svelte';
@@ -30,6 +30,7 @@
 	let selecting = $state(false);
 	/** The Task whose name is a box now (its ⋯ › Rename). */
 	let renaming = $state<string | null>(null);
+	let renamingRow: Element | null = null;
 
 	// Search, filters and sort are a view: remembered between visits and savable by name.
 	let views = $state(untrack(() => data.views));
@@ -228,7 +229,7 @@
 				{#snippet row(t)}
 					{@const o = outcome.get(t.id)}
 					{#if renaming === t.id}<span class="name"
-							><InlineText value={t.name} bind:open={() => renaming === t.id, (v) => !v && ((renaming = null), backToMore(t.id))} label="Name of {t.name}" maxlength={120} onsave={(v) => rename(t, v)} /></span
+							><InlineText value={t.name} bind:open={() => renaming === t.id, (v) => !v && ((renaming = null), backToMore(renamingRow))} label="Name of {t.name}" maxlength={120} onsave={(v) => rename(t, v)} /></span
 						>
 					{:else if selecting}<span class="name">{t.name}</span>
 					{:else}<a class="name" href="/library/{t.id}">{t.name}</a>{/if}
@@ -246,7 +247,7 @@
 							class="quiet glyph"
 							label="More on {t.name}"
 							items={[
-								{ label: 'Rename', onselect: () => ((renaming = t.id), focusBox(t.id)) },
+								{ label: 'Rename', onselect: () => ((renamingRow = pressedRow()), (renaming = t.id), focusBox(renamingRow)) },
 								{ label: t.deleteAfter ? 'Put back' : t.archived ? 'Unarchive' : 'Archive', onselect: () => keepFocus(() => archive(t)) }
 							]}
 						/></span

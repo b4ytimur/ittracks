@@ -44,6 +44,7 @@
 		movedPart,
 		partAt,
 		passes,
+		sameSide,
 		type FeatureKey,
 		type LineKey,
 		type StatKey
@@ -260,12 +261,12 @@
 	const opened = new SvelteSet<string>();
 	const rankOf = (id: string) => (opened.has(id) ? 3 : Math.max(RANK[view.rows], id === upNext && view.rows !== 'names' ? 2 : 0));
 	/** A kind of line shows on a row: its feature is on, the view keeps it, and the row says that much. */
-	const shows = (id: string, k: LineKey) => featureOn(k) && !view.hide.includes(k) && rankOf(id) >= NEED[k];
+	const shows = (id: string, k: LineKey, r = rankOf(id)) => featureOn(k) && !view.hide.includes(k) && r >= NEED[k];
 	/** An open row lists the hidden kinds too, each with its verb (TS.9). */
-	const listed = (id: string, k: LineKey) => featureOn(k) && (opened.has(id) || shows(id, k));
+	const listed = (id: string, k: LineKey, open = opened.has(id)) => featureOn(k) && (open || shows(id, k));
 	/** A tracker shows its last value unless it has a number of its own; its logs read "logged". */
-	const headlineOf = (item: Item, tracker = false) => {
-		if (view.rows === 'names' && !opened.has(item.habitId)) return '';
+	const headlineOf = (item: Item, tracker = false, r = rankOf(item.habitId)) => {
+		if (!r) return ''; // names only, and the row not opened
 		const kind = headlineKind(views.today.headlineFor[item.habitId], view.num, tracker);
 		if (kind === 'none') return '';
 		return data.headlines[item.habitId] ?? headlineText(kind, item.stats, item.streak, { last: item.last, tracker });
@@ -465,26 +466,26 @@
 	type Item = (typeof data.build)[number];
 	const cueLine = (c: Item['cue']) =>
 		[c.after ? `after ${c.after}` : null, c.time ?? c.range, c.place].filter(Boolean).join(' · ');
-	const meta = (item: Item) => {
+	const meta = (item: Item, r = rankOf(item.habitId)) => {
 		const o = item.occurrence!;
 		const st = item.group ? groupNow(item).status : statusOf(o);
 		const g = item.group ? groupNow(item) : null;
-		const open = rankOf(item.habitId) >= 2;
-		const says = rankOf(item.habitId) >= 1;
+		const open = r >= 2;
+		const says = r >= 1;
 		return [
 			open && view.group !== 'area' ? areaOf(item.areaId)?.name : null,
 			st === 'due' && item.inProgress ? 'In progress' : null,
 			says && item.multiVariant ? o.variantName : null,
 			g?.total ? rollupText(g) : null,
 			says && item.progress && st !== 'skipped' && (st === 'due' || isPartial(item.progress)) ? progressText(item.progress) : null,
-			shows(item.habitId, 'cue') ? cueLine(item.cue) : says ? (item.cue.time ?? item.cue.range) : null,
-			headlineOf(item)
+			shows(item.habitId, 'cue', r) ? cueLine(item.cue) : says ? (item.cue.time ?? item.cue.range) : null,
+			headlineOf(item, false, r)
 		]
 			.filter(Boolean)
 			.join(' · ');
 	};
 	/** The lines under a row's meta, as much as the view and the row say (TS.4); an open row lists the hidden kinds too (listed). */
-	const rowLines = (item: Item, st: string) => {
+	const rowLines = (item: Item, st: string, open = opened.has(item.habitId)) => {
 		const o = item.occurrence!;
 		const out: { k: LineKey; text: string }[] = [];
 		if (item.levels?.minimum && st === 'due') out.push({ k: 'levels', text: `Minimum: ${item.levels.minimum}` });
@@ -492,8 +493,18 @@
 		if (item.reframe) out.push({ k: 'reframe', text: item.reframe });
 		if (item.reward?.jar) out.push({ k: 'reward', text: `Jar: ${fmt(item.reward.jar.total)} ${item.reward.jar.unit}${item.reward.jar.goal ? ` toward ${item.reward.jar.goal}` : ''}` });
 		if (item.identities.length) out.push({ k: 'identities', text: item.identities.join(' · ') });
-		return out.filter((l) => listed(item.habitId, l.k));
+		return out.filter((l) => listed(item.habitId, l.k, open));
 	};
+	/**
+	 * Opening the row changes it, so it has a ›. A habit's open row has its Number; a group or routine has none, so it opens
+	 * only when it would then list a line with its Hide or Show, or say more than it does now.
+	 */
+	const opens = (item: Item, st: string) =>
+		!item.group ||
+		opened.has(item.habitId) ||
+		rowLines(item, st, true).length > 0 ||
+		(!!item.progression && st === 'due' && featureOn('progression')) ||
+		meta(item, 3) !== meta(item);
 	/** Finished, in words: "Done at Minimum". */
 	const ended = (item: Item) => {
 		const st = item.group ? groupNow(item).status : statusOf(item.occurrence!);
@@ -668,7 +679,8 @@
 {/snippet}
 
 <!-- A row's ›, after its name: it opens the row until the page is left (TS.4). A habit's and a tracker's always shows,
-     since an open row holds its lines' Hide and Show and its Number; a Breaking row's only while the row says less than all. -->
+     since an open row holds its lines' Hide and Show and its Number; a group's or routine's only when opening it changes
+     the row (opens); a Breaking row's only while the row says less than all. -->
 {#snippet fold1(id: string, name: string, always: boolean)}
 	{#if always || opened.has(id) || rankOf(id) < 3}
 		<button type="button" class="fold row-fold" aria-expanded={opened.has(id)} aria-label="{opened.has(id) ? 'Less' : 'More'} about {name}" onclick={() => (opened.has(id) ? opened.delete(id) : opened.add(id))}><span class="chev" aria-hidden="true">›</span></button>
@@ -707,6 +719,7 @@
 		holder={(b) => !!b.group && kidsOf(b.habitId).length > 0}
 		itemClass={(b) => [isDone(b) && statusOf(b.occurrence!) === 'skipped' ? 'skipped' : isDone(b) ? 'done' : '', just.has(b.habitId) ? 'just-done' : '', b.afterHabitId && view.group !== 'area' ? 'stacked' : ''].join(' ')}
 		ariaLabel={name}
+		canDrop={(m) => sameSide(sunk, m)}
 		onmove={gripped ? (m, order, text) => reorderHabits(m.key, order, text) : undefined}
 		actions={verb}
 	>
@@ -722,7 +735,7 @@
 	{@const open = opened.has(item.habitId)}
 	{@const lines = rowLines(item, st)}
 	<a class="name" href="/habits/{item.habitId}/chain">{item.name}</a>
-	{@render fold1(item.habitId, item.name, true)}
+	{#if opens(item, st)}{@render fold1(item.habitId, item.name, true)}{/if}
 	{#if item.habitId === upNext || (item.progression && featureOn('progression') && !view.hide.includes('progression') && !shows(item.habitId, 'progression') && st === 'due')}
 		<span class="tags">{#if item.habitId === upNext}<StatusTag status="upNext" />{/if}{#if item.progression && featureOn('progression') && !view.hide.includes('progression') && !shows(item.habitId, 'progression') && st === 'due'}<span class="tag">Raise?</span>{/if}</span>
 	{/if}
@@ -1029,6 +1042,11 @@
 		justify-content: center;
 		color: var(--ink-muted);
 		cursor: pointer;
+	}
+	/* The name leaves room for the › (its box and the gap before it), so the › never takes a flex line of its own: a long
+	   name wraps within that width, and the › stays on its first line. */
+	.name:has(+ .row-fold) {
+		max-width: calc(100% - var(--target-min) - var(--space-inline));
 	}
 	@media (pointer: coarse) {
 		.row-fold::after {

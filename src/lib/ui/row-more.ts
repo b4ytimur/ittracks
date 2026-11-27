@@ -2,20 +2,24 @@
 // EditableList's li[data-key] > .card, its ⋯ the button in its .verb.
 import { tick } from 'svelte';
 
-const card = (key: string) => `li[data-key="${CSS.escape(key)}"] > .card`;
+/**
+ * The row whose ⋯ was just used: its menu gives the focus back to the ⋯ before an item acts. Found from the focus, not by key,
+ * since one item can have several rows on a page (a habit under each of its Identities).
+ */
+export const pressedRow = () => document.activeElement?.closest('li[data-key]') ?? null;
 
 /** Rename opened the row's name as a box (InlineText, opened by the page): put the cursor in it, the text selected. */
-export async function focusBox(key: string) {
+export async function focusBox(row: Element | null) {
 	await tick();
-	const box = document.querySelector<HTMLInputElement>(`${card(key)} input.inline-text`);
+	const box = row?.querySelector<HTMLInputElement>(':scope > .card input.inline-text');
 	box?.focus();
 	box?.select();
 }
 
-/** The box closed: Enter or Esc leave the focus nowhere, so it goes back to the row's ⋯; a press elsewhere keeps its own. */
-export async function backToMore(key: string) {
+/** The box closed: Enter or Esc leave the focus nowhere, so it goes back to that row's ⋯; a press elsewhere keeps its own. */
+export async function backToMore(row: Element | null) {
 	await tick();
-	if (document.activeElement === document.body) document.querySelector<HTMLElement>(`${card(key)} > .verb button`)?.focus();
+	if (document.activeElement === document.body) row?.querySelector<HTMLElement>(':scope > .card > .verb button')?.focus();
 }
 
 /** The first of `list` after `at` that is still `here`, else the nearest before it. */

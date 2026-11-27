@@ -10,7 +10,7 @@
 	import AreaGroups from '$lib/ui/AreaGroups.svelte';
 	import TitleLine from '$lib/ui/TitleLine.svelte';
 	import MenuButton from '$lib/ui/MenuButton.svelte';
-	import { backToMore, focusBox, keepFocus } from '$lib/ui/row-more';
+	import { backToMore, focusBox, keepFocus, pressedRow } from '$lib/ui/row-more';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
 	import GroupHeading from '$lib/ui/GroupHeading.svelte';
 	import StatusTag from '$lib/ui/StatusTag.svelte';
@@ -33,8 +33,9 @@
 	let selecting = $state(false);
 	const selected = new SvelteSet<string>();
 	let outcome = $state(new Map<string, { tag?: string; reason?: string }>());
-	/** The habit whose name is a box now (its ⋯ › Rename). */
+	/** The row whose name is a box now (its ⋯ › Rename): its group's key and the habit, as grouped by Identity a habit has a row under each. */
 	let renaming = $state<string | null>(null);
+	let renamingRow: Element | null = null;
 	const areaOptions = $derived(data.areas.map((a) => ({ value: a.id, label: a.name })));
 
 	let views = $state(untrack(() => data.views));
@@ -291,14 +292,14 @@
 			{#snippet group(g)}
 				<!-- A habit inside a group sits in a list of its own under it; one whose group isn't listed sits at the top. -->
 				{@const tree = forest(g.items)}
-				{@render habitList(tree.roots, tree.kids, g.label || 'Habits', null)}
+				{@render habitList(tree.roots, tree.kids, g.label || 'Habits', null, g.key)}
 			{/snippet}
 		</AreaGroups>
 	</div>
 	{#if wide.current}<aside class="page-side" aria-label="Around your habits">{@render side()}</aside>{/if}
 </div>
 
-{#snippet habitList(items: Habit[], kids: Map<string, Habit[]>, name: string, holder: Habit | null)}
+{#snippet habitList(items: Habit[], kids: Map<string, Habit[]>, name: string, holder: Habit | null, gk: string)}
 	<EditableList
 		{items}
 		key={(h) => h.id}
@@ -319,8 +320,8 @@
 	>
 		{#snippet row(h)}
 			{@const o = outcome.get(h.id)}
-			{#if renaming === h.id}<span class="name"
-					><InlineText value={h.name} bind:open={() => renaming === h.id, (v) => !v && ((renaming = null), backToMore(h.id))} label="Name of {h.name}" maxlength={120} onsave={(v) => rename(h, v)} /></span
+			{#if renaming === `${gk}:${h.id}`}<span class="name"
+					><InlineText value={h.name} bind:open={() => renaming === `${gk}:${h.id}`, (v) => !v && ((renaming = null), backToMore(renamingRow))} label="Name of {h.name}" maxlength={120} onsave={(v) => rename(h, v)} /></span
 				>
 			{:else if selecting}<span class="name">{h.name}</span>
 			{:else}<a class="name" href="/habits/{h.id}">{h.name}</a>{/if}
@@ -334,7 +335,7 @@
 					class="quiet glyph"
 					label="More on {h.name}"
 					items={[
-						{ label: 'Rename', onselect: () => ((renaming = h.id), focusBox(h.id)) },
+						{ label: 'Rename', onselect: () => ((renamingRow = pressedRow()), (renaming = `${gk}:${h.id}`), focusBox(renamingRow)) },
 						{ label: h.deleteAfter ? 'Put back' : h.archived ? 'Unarchive' : 'Archive', onselect: () => keepFocus(() => archive(h)) }
 					]}
 				/></span
@@ -342,7 +343,7 @@
 		{/snippet}
 		{#snippet children(h)}
 			{#if kids.get(h.id)?.length}
-				{@render habitList(kids.get(h.id)!, kids, `Inside ${h.name}`, h)}
+				{@render habitList(kids.get(h.id)!, kids, `Inside ${h.name}`, h, gk)}
 			{/if}
 		{/snippet}
 	</EditableList>

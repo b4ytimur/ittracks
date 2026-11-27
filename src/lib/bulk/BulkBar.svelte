@@ -6,7 +6,7 @@
 	import { untrack } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import { band, showToast } from '$lib/toast.svelte';
-	import { buttonsFor, openingButton, TARGETS, type BulkButton, type TargetKind } from './catalog';
+	import { buttonsFor, openingButton, takesAnswer, TARGETS, type BulkButton, type TargetKind } from './catalog';
 	import { initialValues, type FieldSources } from './fields';
 	import BulkForm from './BulkForm.svelte';
 
@@ -105,8 +105,8 @@
 		busy = apply;
 		error = '';
 		const r = await call('bulk', input(apply));
-		// The selection or the input changed while it was away.
-		if (mine !== asked) return;
+		// The selection or the input changed while it was away: an old preview is dropped, an apply's result never is.
+		if (!takesAnswer(apply, mine, asked)) return;
 		busy = false;
 		if (!r.ok) {
 			error = r.error;
