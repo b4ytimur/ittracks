@@ -18,9 +18,9 @@
 	import { units } from '$lib/units-here';
 	import { enqueue, isOffline, outbox, save, sendAhead } from '$lib/outbox.svelte';
 	import { waitingSwaps } from '$lib/queue';
-	import { postAction, showError, showToast, undoWith } from '$lib/toast.svelte';
+	import { postAction, runAction, showError, showToast, undoWith } from '$lib/toast.svelte';
 	import { differs, revOf, type LogContent } from '$lib/logrev';
-	import { besides, carryOver, doneBefore, doneLine, fromDraft, placeKey, setsToDo, swapGroups, swapText, usedText, withWaiting, type Logged } from '$lib/log/places';
+	import { besides, carryOver, doneBefore, doneLine, fromDraft, keptText, loggedAt, placeKey, setsToDo, swapGroups, swapText, usedText, withWaiting, type Logged } from '$lib/log/places';
 	import SwapSheet from '$lib/log/SwapSheet.svelte';
 	import NoteBox from '$lib/NoteBox.svelte';
 	import Markdown from '$lib/Markdown.svelte';
@@ -837,12 +837,13 @@
 		items.forEach((it, i) => {
 			const g = out.find((x) => x.id === it.slotId);
 			if (g) return void g.at.push(i);
-			out.push({ id: it.slotId, name: it.task?.name ?? 'No matching Task', task: it.task?.id ?? null, numbers: [], rows: [], at: [i] });
+			out.push({ id: it.slotId, name: it.task?.name ?? 'No matching Task', task: it.task?.id ?? null, replace: null, numbers: [], rows: [], at: [i] });
 		});
 		for (const g of out) {
 			const it = items[g.at[0]];
 			const s = slotIn(data.plan ?? [], g.id);
 			const t = it.task;
+			if (s?.taskId && !s.fillRule) g.replace = nameOf(s.taskId) ?? null;
 			if (s && t && (inRows(it) || s.sets)) {
 				const n = inRows(it) ? log[g.at[0]].sets.length : s.sets!;
 				const w = inRows(it) || !it.kids ? { one: t.rowOne, many: t.rowMany } : roundWords(t);
@@ -940,6 +941,11 @@
 		};
 		void gone();
 	}
+	/** Replace…: another Task in a fixed Slot, from now on, as Keep in the plan does. */
+	async function editReplace(slot: string, task: string) {
+		const r = await keepInPlan(slot, task);
+		if (typeof r === 'string') showError(r);
+	}
 	function editAdd(task: string) {
 		const name = data.library.find((l) => l.id === task)?.name;
 		void editPlan(withTask(data.plan!, data.variantId!, crypto.randomUUID(), task), `Added ${name} to ${data.habitName}, from now on.`);
@@ -999,19 +1005,53 @@
 					return true;
 				}
 			: undefined;
+		// A Task swapped into a fixed Slot can stay there, from now on. Offline, Keep says it isn't saved, with Retry.
+		const keep = task && how === 'swap' && keepable(it.slotId) ? { label: 'Keep in the plan', run: () => keepInPlan(it.slotId, task) } : undefined;
 		// Offline it waits, and the place shows it at once when this page holds the Task's fields (see `items`).
 		if (a.kind === 'later') {
 			const name = data.library.find((l) => l.id === task)?.name;
-			showToast(`${name ? swapText(was?.name ?? null, name, how, oneDay) : `Picking another Task, ${oneDay}.`} It will sync when you're back online.`, undo);
+			showToast(`${name ? swapText(was?.name ?? null, name, how, oneDay) : `Picking another Task, ${oneDay}.`} It will sync when you're back online.`, undo, undefined, keep);
 			return void openSwapped(it.slotId);
 		}
 		await invalidateAll();
 		const now = items.find((x) => x.slotId === it.slotId && x.depth === 0);
-		showToast(swapText(was?.name ?? null, now?.task?.name ?? 'another Task', how, oneDay), undo);
+		showToast(swapText(was?.name ?? null, now?.task?.name ?? 'another Task', how, oneDay), undo, undefined, keep);
 		await openSwapped(it.slotId);
 	}
-	/** The swap picker, for a place, and what had focus before it, to go back to. */
-	let picking = $state<{ it: Item; from: HTMLElement | null } | null>(null);
+	/** A fixed Slot of the plan this log can change (today's open log): a Task swapped in there can be kept. */
+	function keepable(slot: string) {
+		const s = data.plan && slotIn(data.plan, slot);
+		return !!s?.taskId && !s.fillRule;
+	}
+	/**
+	 * Keep in the plan: a Task becomes its fixed Slot's own in this Variant, from now on, with the Slot's place and sets,
+	 * aiming for what it did here today, else its last time (see aimFor). One plan change: its Undo puts the Slot back
+	 * exactly, and today stays on the Task it shows. Offline: "Not saved. Are you online?" with Retry.
+	 */
+	async function keepInPlan(slot: string, task: string): Promise<string | void> {
+		if (!mounted) return 'Open the log to keep it in the plan.';
+		const s = data.plan && slotIn(data.plan, slot);
+		if (!s?.taskId || s.fillRule) return 'Not kept: that Slot is not in the plan any more.';
+		if (s.taskId === task) return;
+		const at = items.find((x) => x.slotId === slot && x.depth === 0);
+		// With no swap today the place follows the plan and changes too (Replace…): what is ticked is saved first, as Remove does.
+		if (at?.task?.id === s.taskId) {
+			const first = await saveFirst();
+			if (first.kind !== 'saved') return void showError(first.kind === 'refused' ? first.why : 'Not saved. Are you online?', first.kind === 'refused' ? undefined : () => void keepInPlan(slot, task));
+		}
+		// What it did in this Slot today: in its place, and before a swap took it away.
+		const today = loggedAt([...items.flatMap((it, i) => entriesAt(it, i, false)), ...elsewhere()], task, at?.path ?? slot);
+		const a = await runAction<{ targets: Record<string, number>; aim: string }>(`/log/${data.occurrence.id}?/aim`, { slot, task, today: JSON.stringify(today) });
+		if (!a.ok || !a.data) return void showError(a.error ?? 'Not saved. Are you online?', () => void keepInPlan(slot, task));
+		// The plan as it stands now: it may have loaded again while that was on its way.
+		const plan = data.plan;
+		const was = plan && slotIn(plan, slot);
+		if (!plan || !was?.taskId || was.fillRule) return 'Not kept: that Slot is not in the plan any more.';
+		const variant = plan.find((v) => v.slots.some((x) => x.id === slot))?.name ?? data.variantName ?? '';
+		await editPlan(withSlot(plan, slot, { taskId: task, targets: a.data.targets, minTargets: {}, stretchTargets: {} }), keptText(nameOf(was.taskId) ?? "the plan's Task", nameOf(task) ?? 'another Task', variant, a.data.aim));
+	}
+	/** The swap picker, for a place, and what had focus before it, to go back to. `plan`: Replace… in Edit, from now on. */
+	let picking = $state<{ it: Item; from: HTMLElement | null; plan?: boolean } | null>(null);
 	const nameOf = (id: string) => data.library.find((l) => l.id === id)?.name ?? data.alts[id]?.task.name;
 	const dayText = (date: string) => LIST.format(new Date(date + 'T12:00:00'));
 	/** "Instead of Bench press, today only": a fixed Slot whose Task is swapped for this log. */
@@ -1032,7 +1072,7 @@
 		return [...info, ...(info.length && swaps.length ? ['-' as const] : []), ...swaps];
 	}
 	/** The swap's one home: the plan's Task, the one in use (ticked) and up to 2 used here before, then the picker. */
-	function swapWays(it: Item): Way[] {
+	function swapWays(it: Item): (Way | '-')[] {
 		const more: Way = { label: 'Swap for another…', onselect: () => (picking = { it, from: document.activeElement as HTMLElement | null }) };
 		// An auto-filled Slot has no Task of its own: it picks again from its Fill rule.
 		if (!it.own) return [...(it.open ? [{ label: 'Pick another', onselect: () => void swapTask(it) }] : []), more];
@@ -1046,7 +1086,9 @@
 				.filter((u) => u.taskId !== now && nameOf(u.taskId))
 				.slice(0, 2)
 				.map((u) => ({ label: nameOf(u.taskId)!, value: usedText(u, dayText), checked: false, onselect: () => void swapTask(it, u.taskId) })),
-			more
+			more,
+			// Later in the visit, as the band's Keep in the plan.
+			...(it.task && now !== own && keepable(it.slotId) ? ['-' as const, { label: `Keep ${it.task.name} in the plan`, onselect: () => void keepInPlan(it.slotId, now!) }] : [])
 		];
 	}
 	const hint = $derived(
@@ -1206,7 +1248,7 @@
 {/snippet}
 
 {#if editing}
-	<EditPlaces places={editPlaces} open={items.find((it) => placeKey(it) === row?.key)?.slotId ?? null} onorder={editOrder} onname={editName} onnumber={editNumber} onrows={editRows} onremove={editRemove} onadd={editAdd} library={data.library.filter((l) => !l.archived)} />
+	<EditPlaces places={editPlaces} open={items.find((it) => placeKey(it) === row?.key)?.slotId ?? null} onorder={editOrder} onname={editName} onnumber={editNumber} onrows={editRows} onremove={editRemove} onadd={editAdd} onreplace={(p) => (picking = { it: items.find((x) => x.slotId === p.id && x.depth === 0)!, from: document.activeElement as HTMLElement | null, plan: true })} library={data.library.filter((l) => !l.archived)} />
 {:else}
 <ul class="elist lg-page lg-places" data-mode="use" aria-label="What to log">
 	{#each items as it, i (placeKey(it))}
@@ -1348,9 +1390,9 @@
 	{@const plan = p.it.own && nameOf(p.it.own)}
 	{@const like = plan ? { id: p.it.own!, name: plan } : p.it.task}
 	<SwapSheet
-		title={like ? `Instead of ${like.name}` : 'A Task for this Slot'}
-		groups={(query) => swapGroups({ library: data.library, used: p.it.used, like, current: p.it.task?.id ?? null, query, day: dayText, away: (id) => !navigator.onLine && !onDevice(id)?.task })}
-		onpick={(id) => void swapTask(p.it, id)}
+		title={p.plan ? `Replace ${plan}` : like ? `Instead of ${like.name}` : 'A Task for this Slot'}
+		groups={(query) => swapGroups({ library: data.library, used: p.it.used, like, current: p.plan ? p.it.own : (p.it.task?.id ?? null), query, day: dayText, away: (id) => !p.plan && !navigator.onLine && !onDevice(id)?.task })}
+		onpick={(id) => void (p.plan ? editReplace(p.it.slotId, id) : swapTask(p.it, id))}
 		onclose={() => {
 			picking = null;
 			p.from?.focus();

@@ -1,5 +1,6 @@
 // What is being logged, by where it sits: a place's path and the Task in it. Never by its number
 // in the list, so a swap, a reroll or a part added elsewhere never moves another place's values.
+import { rowText, type Field } from './run';
 
 export interface At {
 	path: string;
@@ -108,6 +109,47 @@ export function carryOver(from: Named[], rows: Record<string, unknown>[], to: Na
 	const out = rows.map((r) => Object.fromEntries(pairs.filter(([, f]) => r[f] !== undefined && r[f] !== null && r[f] !== '').map(([m, f]) => [m, r[f]])));
 	return { rows: out, ids: pairs.map(([m]) => m).filter((m) => out.some((r) => m in r)) };
 }
+
+/** The number most of these rows hold in a field; on a tie, the one held last. None without a number. */
+function most(rows: Record<string, unknown>[], id: string): number | undefined {
+	const n = new Map<number, number>();
+	let best: number | undefined;
+	for (const r of rows) {
+		const v = r[id];
+		if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+		n.set(v, (n.get(v) ?? 0) + 1);
+		if (best === undefined || n.get(v)! >= n.get(best)!) best = v;
+	}
+	return best;
+}
+
+/**
+ * The targets a Task aims for once it is a Slot's own (Keep in the plan, Replace…): only in the fields the Task it
+ * replaces had a target in, matched by name and unit (none had one: none). Each is what most of `today`'s rows of it
+ * (its done sets, its once-per-log values) used, on a tie the last one's; with none, its `last` time's; else none.
+ */
+export function aimFor(from: Named[], targets: Record<string, number>, to: Named[], today: Record<string, unknown>[], last: Record<string, unknown>[]): Record<string, number> {
+	const out: Record<string, number> = {};
+	for (const m of to) {
+		if (!from.some((f) => targets[f.id] !== undefined && sameField(f, m))) continue;
+		const v = most(today, m.id) ?? most(last, m.id);
+		if (v !== undefined) out[m.id] = v;
+	}
+	return out;
+}
+
+/** What a log holds of a Task at a place, shown there or done before a swap took it away: the `today` of aimFor. */
+export const loggedAt = (entries: Logged[], task: string, path: string) => entries.filter((e) => e.taskId === task && e.path === path).map((e) => e.values);
+
+/** What a Slot aims for, as the band says it: "4 × 50 kg × 8", its once-per-log targets after. "" with no targets. */
+export function aimText(sets: number | null, fields: (Field & { repeats: boolean })[], targets: Record<string, number>): string {
+	if (!Object.keys(targets).length) return '';
+	const row = rowText(fields.filter((f) => f.repeats), targets);
+	return [row && sets ? `${sets} × ${row}` : row, rowText(fields.filter((f) => !f.repeats), targets)].filter(Boolean).join(' · ');
+}
+
+/** The band's line for a Task kept in the plan, naming the Variant: "Replaced Bench press with Incline bench press in Push day A, from now on." */
+export const keptText = (was: string, now: string, variant: string, aim: string) => `Replaced ${was} with ${now} in ${variant}, from now on${aim ? `, aiming for ${aim}` : ''}.`;
 
 /** A Task used in a Slot before, as its ⋯ and the picker say it: "Used here 12 Nov · 8 × 50 kg". */
 export const usedText = (u: { date: string; text: string }, day: (date: string) => string) => `Used here ${day(u.date)}${u.text ? ` · ${u.text}` : ''}`;

@@ -9,7 +9,7 @@ import { currentForm } from '$lib/server/habit-patch';
 import { ensurePicks, lastEntries, recount, userToday } from '$lib/server/today';
 import { finishAs } from '$lib/server/progress';
 import { PATH_RE, place, startsRound } from '$lib/engine/parts';
-import { goneFrom } from '$lib/log/places';
+import { aimFor, aimText, goneFrom } from '$lib/log/places';
 import { partIdsIn, plannedSlots, positionsOf } from '$lib/server/positions';
 import { getSettings, getUnits } from '$lib/server/settings';
 import { recapFor } from '$lib/server/stats';
@@ -412,6 +412,32 @@ export const actions: Actions = {
 			if (e.code === 'not_found') error(404);
 			return fail(400, { error: e.message });
 		}
+	},
+
+	/**
+	 * What a Task would aim for as a fixed Slot's own (Keep in the plan, Replace…), by aimFor: from `today`, what it
+	 * logged in the Slot today (sent, since it may not be saved yet), else its last time. The page then changes the plan.
+	 */
+	aim: async ({ request, locals, params }) => {
+		const accountId = locals.account!.id;
+		const o = ownedOccurrence(accountId, params.id);
+		if (!o || !o.occ.variantId) error(404);
+		const f = await request.formData();
+		const s = db.select().from(slot).where(and(eq(slot.id, String(f.get('slot'))), eq(slot.variantId, o.occ.variantId))).get();
+		const t = db.select({ id: task.id }).from(task).where(and(eq(task.id, String(f.get('task'))), eq(task.accountId, accountId), isNull(task.deleteAfter), isNull(task.parentTaskId))).get();
+		if (!s || !t) error(404);
+		// An auto-filled Slot keeps its Fill rule: a Task is pinned there in the habit's editor.
+		if (!s.taskId || s.fillRule) return fail(400, { error: 'An auto-filled Slot picks its Task by its rule.' });
+		let today: Record<string, unknown>[] = [];
+		try {
+			today = z.array(z.record(z.string(), z.unknown())).max(200).parse(JSON.parse(String(f.get('today') ?? '[]')));
+		} catch {
+			/* nothing logged today that it can read: its last time */
+		}
+		const fields = (id: string) => db.select().from(metric).where(and(eq(metric.taskId, id), eq(metric.archived, false))).orderBy(asc(metric.sortOrder)).all();
+		const to = fields(t.id);
+		const targets = aimFor(fields(s.taskId), s.targets ?? {}, to, today, lastEntries(t.id, o.occ.id, s.id));
+		return { targets, aim: aimText(s.sets, to, targets) };
 	},
 
 	/** Use a Task of your choice in a Slot, for this Occurrence only. */

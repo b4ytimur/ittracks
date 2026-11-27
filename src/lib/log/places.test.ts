@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { besides, carryOver, doneBefore, doneLine, fromDraft, goneFrom, placeKey, setsToDo, swapGroups, swapText, usedText, withWaiting, type Pickable } from './places';
+import { aimFor, aimText, besides, carryOver, doneBefore, doneLine, fromDraft, goneFrom, keptText, loggedAt, placeKey, setsToDo, swapGroups, swapText, usedText, withWaiting, type Pickable } from './places';
 
 const at = (path: string, task: string | null) => ({ path, task: task ? { id: task } : null });
 const squat = at('s1', 'squat');
@@ -151,6 +151,55 @@ describe('swapping a Task in', () => {
 		expect(carryOver(bench, [{ bw: 60 }], [f('d', 'Distance', 'number', 'km')])).toEqual({ rows: [{}], ids: [] });
 		expect(carryOver(bench, [], bench)).toEqual({ rows: [], ids: [] });
 		expect(carryOver(bench, [{ bw: '' }], bench).ids).toEqual([]);
+	});
+
+	describe('kept in the plan', () => {
+		const incline = [f('iw', 'Weight', 'number', 'kg'), f('ir', 'Reps', 'count'), f('it', 'Tempo', 'number', 'min'), f('ig', 'Grip', 'choice')];
+		const planned = { bw: 60, br: 8, bt: 3, bg: 1 };
+		it('aims only in the fields the old Task had a target in, matched by name and unit', () => {
+			const today = [{ iw: 50, ir: 8, it: 2, ig: 'wide' }];
+			expect(aimFor(bench, { bw: 60 }, incline, today, [])).toEqual({ iw: 50 });
+			// Another unit is another number, and a Choice's values are its own options.
+			expect(aimFor(bench, planned, incline, today, [])).toEqual({ iw: 50, ir: 8 });
+			// The old Task had no targets: none.
+			expect(aimFor(bench, {}, incline, today, [])).toEqual({});
+		});
+		it("takes what most of today's sets used; on a tie, the last one's", () => {
+			const rows = (...kg: number[]) => kg.map((iw) => ({ iw, ir: 8 }));
+			expect(aimFor(bench, planned, incline, rows(50, 52.5, 52.5), [])).toEqual({ iw: 52.5, ir: 8 });
+			expect(aimFor(bench, planned, incline, rows(52.5, 50, 50, 52.5), [])).toEqual({ iw: 52.5, ir: 8 });
+			expect(aimFor(bench, planned, incline, rows(50, 50, 55, 55, 60), [])).toEqual({ iw: 55, ir: 8 });
+		});
+		it('with nothing done today, its last time; with no last time, no target', () => {
+			const last = [{ iw: 47.5, ir: 10 }, { iw: 47.5, ir: 9 }, { _summary: true, note: 'ok' }];
+			expect(aimFor(bench, planned, incline, [], last)).toEqual({ iw: 47.5, ir: 9 });
+			// A field left empty today falls back on its own; a set with nothing in it isn't a number.
+			expect(aimFor(bench, planned, incline, [{ iw: 50, ir: null }, { done: true }], last)).toEqual({ iw: 50, ir: 9 });
+			expect(aimFor(bench, planned, incline, [], [])).toEqual({});
+		});
+		it("aims from what the Task did in that Slot today, in its place and before a swap took it away; never another Task's or another Slot's", () => {
+			const shown = [{ taskId: 'incline', path: 's1', values: { iw: 55 } }, { taskId: 'press', path: 's2', values: { iw: 40 } }];
+			const before = [{ taskId: 'incline', path: 's1', values: { iw: 50 } }, { taskId: 'bench', path: 's1', values: { bw: 60 } }, { taskId: 'incline', path: 's3', values: { iw: 30 } }];
+			expect(loggedAt([...shown, ...before], 'incline', 's1')).toEqual([{ iw: 55 }, { iw: 50 }]);
+			expect(loggedAt(shown, 'dumbbell', 's1')).toEqual([]);
+		});
+		it("aims once-per-log fields too, from the place's own values", () => {
+			const time = [f('d', 'Time', 'duration')];
+			expect(aimFor(time, { d: 20 }, time, [{ d: 25, _summary: true }], [{ d: 15, _summary: true }])).toEqual({ d: 25 });
+		});
+		it('says the aim: the sets, then a row of the targets, then the once-per-log ones', () => {
+			const field = (id: string, name: string, unit: string | null, repeats: boolean, times = false) => ({ id, name, type: 'number', unit, repeats, times, prefill: 'last', choices: null });
+			const fields = [field('w', 'Weight', 'kg', true), field('r', 'Reps', null, true, true), field('d', 'Time', 'min', false)];
+			expect(aimText(4, fields, { w: 50, r: 8 })).toBe('4 × 50 kg × 8');
+			expect(aimText(null, fields, { w: 50 })).toBe('50 kg');
+			expect(aimText(3, fields, { w: 50, d: 20 })).toBe('3 × 50 kg · 20 min');
+			expect(aimText(4, fields, { d: 20 })).toBe('20 min');
+			expect(aimText(4, fields, {})).toBe('');
+		});
+		it("names the Variant in the band's line, and the aim when there is one", () => {
+			expect(keptText('Bench press', 'Incline bench press', 'Push day A', '4 × 50 kg × 8')).toBe('Replaced Bench press with Incline bench press in Push day A, from now on, aiming for 4 × 50 kg × 8.');
+			expect(keptText('Bench press', 'Plank', 'Push day A', '')).toBe('Replaced Bench press with Plank in Push day A, from now on.');
+		});
 	});
 
 	it('says where a Task was used before, and its first set there when there was one', () => {

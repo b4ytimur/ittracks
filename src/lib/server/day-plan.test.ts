@@ -262,3 +262,92 @@ describe('the Tasks used in a Slot before, for its ⋯ and the swap picker', () 
 		expect(open(id).items.every((it) => !it.used.length)).toBe(true);
 	});
 });
+
+describe('Keep in the plan and Replace…: what the Task kept aims for, as one change to the plan', () => {
+	let push: string;
+	let mine: typeof slot.$inferSelect;
+	let filled: typeof slot.$inferSelect;
+	let pin: string;
+	const pushDay = () => db.select().from(occurrence).where(and(eq(occurrence.habitId, push), eq(occurrence.date, today))).get()!;
+	const aim = async (fields: Record<string, string>, occ = pushDay().id) => {
+		const { actions } = await import('../../routes/(app)/log/[id]/+page.server');
+		const body = new FormData();
+		for (const [k, v] of Object.entries(fields)) body.set(k, v);
+		const event = { request: new Request('http://x/', { method: 'POST', body }), locals: { account: { id: me } }, params: { id: occ }, cookies: { get: () => undefined } };
+		return (await (actions.aim as unknown as (e: unknown) => Promise<unknown>)(event)) as { targets?: Record<string, number>; aim?: string; status?: number; data?: { error: string } };
+	};
+
+	beforeAll(() => {
+		runAction(app, 'setup', {
+			changes: [
+				lift('Floor press'),
+				lift('Pin press'),
+				{ op: 'add_task', task: { name: 'Plank hold', metrics: [{ name: 'Time', type: 'duration', repeats: true }] } },
+				{
+					op: 'add_habit',
+					habit: {
+						name: 'Push',
+						startDate: addDays(today, -5),
+						schedule: { kind: 'interval', every: 1 },
+						variants: [{ name: 'Push day B', slots: [{ taskId: 'Floor press', sets: 4, targets: { Weight: 60 } }, { taskId: null, fillRule: {} }] }]
+					}
+				}
+			],
+			apply: true
+		});
+		push = db.select().from(habit).where(and(eq(habit.accountId, me), eq(habit.name, 'Push'))).get()!.id;
+		const v = db.select().from(variant).where(eq(variant.habitId, push)).get()!;
+		[mine, filled] = db.select().from(slot).where(eq(slot.variantId, v.id)).orderBy(slot.sortOrder).all();
+		pin = taskId('Pin press');
+		// With levels, the Slot aims for a Minimum and a Stretch too.
+		db.update(habit).set({ levels: { enabled: true, minimum: 'Easy', target: 'Usual', stretch: 'Hard' } }).where(eq(habit.id, push)).run();
+		const fw = field(taskId('Floor press'), 'Weight');
+		db.update(slot).set({ minTargets: { [fw]: 50 }, stretchTargets: { [fw]: 65 } }).where(eq(slot.id, mine.id)).run();
+		// Pin press last time, 3 days back: 55, 57.5, 57.5 kg.
+		const past = randomUUID();
+		db.insert(occurrence).values({ id: past, habitId: push, date: addDays(today, -3), status: 'done', finishedAt: new Date(), variantId: v.id }).run();
+		[55, 57.5, 57.5].forEach((kg, n) => set(past, pin, mine.id, kg, n));
+		runAction(app, 'today', {});
+	});
+
+	it("aims for what most of today's sets used, on a tie the last one's, only where the old Task had a target; the Slot's sets stay", async () => {
+		const w = field(pin, 'Weight');
+		const r = field(pin, 'Reps');
+		const today = [50, 52.5, 52.5, 50].map((kg) => ({ [w]: kg, [r]: 8 }));
+		expect(await aim({ slot: mine.id, task: pin, today: JSON.stringify(today) })).toEqual({ targets: { [w]: 50 }, aim: '4 × 50 kg' });
+	});
+	it('with nothing done today, its last time; a Task with no field like the old target, none', async () => {
+		expect(await aim({ slot: mine.id, task: pin, today: '[]' })).toEqual({ targets: { [field(pin, 'Weight')]: 57.5 }, aim: '4 × 57.5 kg' });
+		// Nothing sent, or nothing it can read, is nothing done today.
+		expect((await aim({ slot: mine.id, task: pin, today: 'not json' })).targets).toEqual({ [field(pin, 'Weight')]: 57.5 });
+		expect(await aim({ slot: mine.id, task: taskId('Plank hold') })).toEqual({ targets: {}, aim: '' });
+	});
+	it('is never for an auto-filled Slot, nor for a Slot of another Variant or a Task of another account', async () => {
+		expect(await aim({ slot: filled.id, task: pin })).toMatchObject({ status: 400, data: { error: expect.stringMatching(/rule/) } });
+		await expect(aim({ slot: fixed.id, task: pin })).rejects.toMatchObject({ status: 404 });
+		await expect(aim({ slot: mine.id, task: randomUUID() })).rejects.toMatchObject({ status: 404 });
+		// A part inside a Task is no Slot's Task, as a swap refuses it.
+		const part = randomUUID();
+		db.insert(task).values({ id: part, accountId: me, name: 'Pin press lockout', parentTaskId: pin }).run();
+		await expect(aim({ slot: mine.id, task: part })).rejects.toMatchObject({ status: 404 });
+	});
+	it('Keep changes this Slot only, clears Minimum and Stretch, and its Undo puts the Slot back exactly; today stays on the Task swapped in', async () => {
+		const { currentForm, patchHabit } = await import('./habit-patch');
+		const { withSlot, slotIn } = await import('$lib/log/plan');
+		swapSlot(app, pushDay(), mine.id, pin);
+		const before = currentForm(me, push)!.variants;
+		const { targets } = await aim({ slot: mine.id, task: pin, today: '[]' });
+		const kept = withSlot(before, mine.id, { taskId: pin, targets, minTargets: {}, stretchTargets: {} });
+		expect(patchHabit(me, push, { set: { variants: kept }, was: { variants: before }, applies: 'today', keep: false }, today)).not.toHaveProperty('error');
+		const now = currentForm(me, push)!.variants;
+		expect(slotIn(now, mine.id)).toMatchObject({ taskId: pin, sets: 4, targets: { [field(pin, 'Weight')]: 57.5 }, minTargets: {}, stretchTargets: {} });
+		expect(slotIn(now, filled.id)).toEqual(slotIn(before, filled.id));
+		expect(ownTask(pushDay(), mine.id, db.select().from(slot).where(eq(slot.id, mine.id)).get())).toBe(pin);
+		// Undo: the reverse change, as the band sends it.
+		const back = patchHabit(me, push, { set: { variants: before }, was: { variants: kept }, applies: 'today', keep: false }, today);
+		expect(back).not.toHaveProperty('moved');
+		expect(currentForm(me, push)!.variants).toEqual(before);
+		expect(slotIn(before, mine.id)).toMatchObject({ taskId: taskId('Floor press'), minTargets: { [field(taskId('Floor press'), 'Weight')]: 50 }, stretchTargets: { [field(taskId('Floor press'), 'Weight')]: 65 } });
+		expect(pushDay().picks?.[mine.id]).toBe(pin);
+	});
+});
