@@ -57,7 +57,7 @@ export const load: PageServerLoad = ({ locals, url, cookies }) => {
 	};
 };
 
-/** Edit mode on the list: rename and archive in place, the same as the Task editor does. */
+/** A Task's ⋯ on the list: rename and archive in place, the same as the Task editor does. */
 export const actions: Actions = {
 	rename: async ({ request, locals }) => {
 		const f = await request.formData();

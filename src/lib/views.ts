@@ -724,7 +724,7 @@ export function groupBy<T extends Groupable>(
 	items: T[],
 	group: string,
 	ctx: { areas: { id: string; name: string; icon: string; color: string }[]; parts?: string[] },
-	opts: { /** Areas with no items show too (while editing). */ keepEmpty?: boolean } = {}
+	opts: { /** Areas with no items show too (keepsEmptyAreas). */ keepEmpty?: boolean } = {}
 ): Group<T>[] {
 	if (group === 'area') {
 		const known = (id: string | null) => !!id && ctx.areas.some((a) => a.id === id);
@@ -785,6 +785,9 @@ export function passes(s: ViewState, i: Groupable): boolean {
 	if (s.identity && !(i.identities ?? []).includes(s.identity)) return false;
 	return true;
 }
+
+/** Grouped by Area with nothing narrowing the list, every Area shows, empty ones too, so each can be kept where it stands (MO). */
+export const keepsEmptyAreas = (s: ViewState) => s.group === 'area' && !activeFilters(s);
 
 /** How many filters are on, to show on the Customize button. */
 export function activeFilters(s: ViewState): number {

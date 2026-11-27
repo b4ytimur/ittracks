@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { habitsWords, historyWords, inMyOrder, libraryWords, ownNumber, sentence, todayWords, type TodayCtx } from './view-words';
+import { habitsInMyOrder, habitsWords, historyWords, inMyOrder, libraryWords, ownNumber, sentence, todayWords, type TodayCtx } from './view-words';
 import { viewState } from './views';
 
 const ctx: TodayCtx = { areas: [{ id: 'a1', name: 'Fitness' }, { id: 'a2', name: 'Focus' }], identities: ['I am a non-smoker.'], parts: true, breaking: true };
@@ -67,6 +67,24 @@ describe('grips on Today: while the sentence reads "in my order" (MO)', () => {
 	});
 	it('grouped, the sentence reads the grouping, so there are none even in My order', () => {
 		for (const group of ['area', 'part', 'identity']) expect(inMyOrder(viewState.parse({ sort: 'manual', group })), group).toBe(false);
+	});
+});
+
+describe('grips on Habits: while its sort word reads "in my order" (MO)', () => {
+	const sortWord = (sort: string, group = 'none') => habitsWords(viewState.parse({ sort, group }), { areas: [{ id: 'a1', name: 'Fitness' }], identities: [], lines: [], setLines: () => {} }).find((w) => w.key === 'sort')!;
+	const shown = (w: ReturnType<typeof sortWord>) => w.options.find((o) => o.value === w.value)!.label;
+	it('My order has grips, grouped or not: the order word is its own', () => {
+		for (const group of ['none', 'area', 'direction', 'identity']) {
+			expect(habitsInMyOrder(viewState.parse({ sort: 'manual', group })), group).toBe(true);
+			expect(shown(sortWord('manual', group))).toBe('in my order');
+		}
+	});
+	it('a sort the page has no word for reads "in my order", so it has grips too', () => {
+		expect(habitsInMyOrder(viewState.parse({ sort: 'cue' }))).toBe(true);
+		expect(shown(sortWord('cue'))).toBe('in my order');
+	});
+	it('by name, by consistency and newest first have none', () => {
+		for (const sort of ['name', 'consistency', 'created']) expect(habitsInMyOrder(viewState.parse({ sort })), sort).toBe(false);
 	});
 });
 

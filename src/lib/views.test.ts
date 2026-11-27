@@ -6,6 +6,7 @@ import {
 	groupBy,
 	initialState,
 	initialView,
+	keepsEmptyAreas,
 	manualOrder,
 	movedPart,
 	partAt,
@@ -424,4 +425,18 @@ it('folded headings: the defaults for old views, kept over a template switch', (
 	const v = readViews(old);
 	expect(v.today.folded).toEqual(['done', 'focus:later', 'blocks:later']);
 	expect(switchTemplate({ ...v, today: { ...v.today, folded: ['area:x'] } }, 'focus', { keep: false }).today.folded).toEqual(['area:x']);
+});
+
+describe('empty Areas (MO: Areas are kept where they stand)', () => {
+	it('show while grouped by Area with nothing narrowing the list', () => {
+		expect(keepsEmptyAreas(viewState.parse({ group: 'area' }))).toBe(true);
+		expect(keepsEmptyAreas(viewState.parse({ group: 'area', sort: 'name', archived: true }))).toBe(true);
+	});
+	it('a filter or a search hides them: an empty Area matches nothing', () => {
+		for (const f of [{ areas: ['a1'] }, { direction: 'build' }, { identity: 'I read' }, { query: 'run' }, { tags: ['Legs'] }, { collection: 'c1' }])
+			expect(keepsEmptyAreas(viewState.parse({ group: 'area', ...f })), JSON.stringify(f)).toBe(false);
+	});
+	it('not grouped by Area, there are no Area headings to keep', () => {
+		for (const group of ['none', 'identity', 'direction', 'part']) expect(keepsEmptyAreas(viewState.parse({ group })), group).toBe(false);
+	});
 });

@@ -114,7 +114,7 @@ Logging slips and resisted cravings is covered in [Logging](logging.md#slips-and
 
 ## Archive, delete, duplicate
 
-- **Archive** hides the habit from Today and keeps its history. **Unarchive** brings it back. You can also archive from the Habits page in [edit mode](views-and-edit-mode.md#edit-mode).
+- **Archive** hides the habit from Today and keeps its history. **Unarchive** brings it back. You can also archive from a habit's **⋯** on the [Habits page](views-and-edit-mode.md#habits).
 - **Delete** removes the habit and its history, with no question. **Undo** in the band brings it back. Until a day later it also waits among archived habits (**Include archived** in the Habits filters) and on its own page, with **Put back**; then it goes for good with its logs.
 - **Duplicate** opens a copy in the editor.
 - **Share as template** downloads a file others can import. See [Templates](templates.md).

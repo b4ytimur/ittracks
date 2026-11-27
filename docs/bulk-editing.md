@@ -4,7 +4,7 @@ Change many habits, Tasks or days in one go: skip a sick week, pause habits for 
 
 ## Select
 
-1. On the **Habits** page, the **Library** or **History**, press **Select**.
+1. On the **Habits** page, the **Library** or **History**, press **Select** in the title line.
 2. Tick rows. A tap anywhere on a row ticks it, and Shift-click ticks a range. **Select all N shown** ticks everything the current filter shows, so filter first to select "all Fitness habits".
 3. Pick an action on the bar and fill in its form. The preview runs by itself a moment after each change, once the form has what it needs.
 4. Each row says what will happen to it: a row that changes shows the change, and a row left as it is says why (a reminder needs a time, a group can't be paused). The bar counts what changes and what stays, and **Jump to next** brings the next row that changes into view. Press **Apply N changes**, or **Cancel**.
@@ -12,7 +12,7 @@ Change many habits, Tasks or days in one go: skip a sick week, pause habits for 
 
 Undo puts back everything the change did. Items you changed again since are kept as they are now, and the message says how many.
 
-**Select** and **Edit** are two modes of the same list: turning one on turns the other off.
+While **Select** is on, a tap ticks a row instead of opening it, the title line stays at the top and its other buttons step aside. Esc or a second press of **Select** leaves.
 
 ## Actions on habits
 
@@ -30,7 +30,7 @@ Undo puts back everything the change did. Items you changed again since are kept
 
 ### Archive
 
-**Archive** or **Bring back**, as **Archive** in the Library's edit mode. Archived Tasks keep their logs and leave the pickers.
+**Archive** or **Bring back**, as **Archive** in a Task's **⋯** in the Library. Archived Tasks keep their logs and leave the pickers.
 
 ### Change a unit
 

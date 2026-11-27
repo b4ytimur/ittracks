@@ -36,7 +36,7 @@ Today, Habits, Library and History each show their view as a sentence, such as "
 
 ## Edit mode
 
-Pages edit in place. The switch at the top of a page (**Use**, **Edit**, and **Select** where there is something to change together) turns the same list into one you can edit; Esc goes back to Use. Today has no switch: see below. Drag the ⠿ handle with a mouse or pen, or hold it a moment with a finger and then drag (a swipe that starts on it still scrolls), or focus it and use the arrow keys. A tap on ⠿ (or Enter) opens the moves it can make: **Move up**, **Move down**, **Put inside** the row above and **Take out of** the row that holds it, where they apply. A layout change that can't be saved goes back, and the line above the tabs offers **Retry**.
+Pages edit in place. Today, Habits and the Library have no Edit: everything changes where it stands, and each change says so in the line above the tabs, with **Undo**. The pages that still have a switch at the top (**Use** and **Edit**) turn into one you can edit with it; Esc goes back to Use. Wherever the order you see is yours, its rows carry the ⠿ handle: drag it with a mouse or pen, or hold it a moment with a finger and then drag (a swipe that starts on it still scrolls), or focus it and use the arrow keys. A tap on ⠿ (or Enter) opens the moves it can make: **Move up**, **Move down**, **Put inside** the row above and **Take out of** the row that holds it, where they apply. A layout change that can't be saved goes back, and the line above the tabs offers **Retry**.
 
 ### Today
 
@@ -53,18 +53,19 @@ Sections and groups fold, and stay folded. Every count on Today (the count under
 
 ### Habits
 
-- Drag to reorder (this is **My order**, shared with Today).
-- Tap a name to rename it.
-- **Archive** strikes a habit where it stands; **Unarchive** takes that back. When you leave Edit it goes, and the line above the tabs has the Undo.
+Habits has no Edit. Its one other state is **Select**, in the title line: see [Bulk editing](bulk-editing.md).
+
+- While the sentence's order reads **in my order**, each habit has its ⠿ grip (this is **My order**, shared with Today). Sorted by name, by consistency or newest first there are no grips; pick **in my order** to bring them back. A habit's **Inside** line on its own page moves it into a group or routine in any order.
 - Up and down picks the place; sideways picks how deep. To the right puts a habit inside the group or routine above it, to the left takes it out; the line's start says which. With the keyboard, the right arrow puts a habit inside the one above and the left arrow takes it out. See [Groups and routines](groups-and-routines.md).
+- A habit's **⋯** holds **Rename**, which opens its name as a box where it stands, and **Archive** (**Unarchive**, or **Put back** for a deleted one). Archive acts at once: the habit leaves the list, and the line above the tabs has the Undo.
 
 ### Library
 
-Tap a Task's name to rename it, and **Archive** Tasks in place. Archived Tasks keep their logs and leave the pickers.
+The Library has no Edit either. A Task's **⋯** holds **Rename** and **Archive**, as on Habits. Archived Tasks keep their logs and leave the pickers. Tasks have no order of their own, so they have no grips. **Select** changes several at once.
 
 ### Areas
 
-Group Habits or the Library by Area, then choose **Edit**: drag an Area's heading to reorder, tap its name to rename it, press its dot for its colour and icon, **Delete** it (with Undo; nothing in it is deleted), or add one at the end.
+Group Habits or the Library by Area. Each Area's heading has its ⠿ grip, to reorder the Areas, and a **⋯** with **Rename** (its name opens where it stands), **Colour and icon**, and **Delete** (with Undo; nothing in it is deleted). While nothing filters the list, empty Areas show too, and **New Area** at the end adds one.
 
 Changing a habit's Area counts from today on, like moving it into a group: Stats and History keep its past days in the Area they had, so moving a chore from one kid to another doesn't move the credit for what was done before. The band offers **Past days too** to put every day in the new Area, with an Undo. A bulk Area change also counts from today on.
 
@@ -72,7 +73,7 @@ Changing a habit's Area counts from today on, like moving it into a group: Stats
 
 Stats has no Edit. Every card shows its ⠿, a board's tab drags to move the board, and the ⋯ beside the tabs holds **Rename this board**, **Move…** and **Delete board**. What a card shows is changed in its own words. See [Stats](stats.md).
 
-**Select** on the Habits page and the Library is the other mode of the same list: see [Bulk editing](bulk-editing.md).
+**Select** on the Habits page and the Library is their one other state: a tap ticks a row instead of opening it. See [Bulk editing](bulk-editing.md).
 
 ## Switch features off
 

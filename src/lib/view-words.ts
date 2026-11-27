@@ -247,6 +247,10 @@ export interface HabitsCtx {
 	setLines: (lines: HabitLine[], said: string) => void;
 }
 
+const HABIT_SORT = { manual: 'in my order', name: 'by name', consistency: 'by consistency', created: 'newest first' } as const;
+/** Habits' sentence reads "in my order" (its own sort word, whatever the grouping): the order you see is yours, so each habit has its grip (MO). */
+export const habitsInMyOrder = (s: ViewState) => !(s.sort in HABIT_SORT) || s.sort === 'manual';
+
 /** Habits: "Default shows every habit, by Area in my order, with schedule and time." */
 export function habitsWords(s: ViewState, c: HabitsCtx): Word[] {
 	const areaNames = s.areas.map((id) => c.areas.find((a) => a.id === id)?.name ?? 'no Area');
@@ -267,7 +271,6 @@ export function habitsWords(s: ViewState, c: HabitsCtx): Word[] {
 		tail
 	);
 	const GROUP = { area: 'by Area', direction: 'by build and break', identity: 'by Identity', none: 'in one list' } as const;
-	const SORT = { manual: 'in my order', name: 'by name', consistency: 'by consistency', created: 'newest first' } as const;
 	const group: Word = {
 		key: 'group',
 		what: 'How it is grouped',
@@ -279,9 +282,9 @@ export function habitsWords(s: ViewState, c: HabitsCtx): Word[] {
 	const sort: Word = {
 		key: 'sort',
 		what: 'Its order',
-		value: s.sort in SORT ? s.sort : 'manual',
+		value: s.sort in HABIT_SORT ? s.sort : 'manual',
 		after: ',',
-		options: (Object.keys(SORT) as (keyof typeof SORT)[]).map((k) => opt(k, SORT[k], `is now ${SORT[k]}`)),
+		options: (Object.keys(HABIT_SORT) as (keyof typeof HABIT_SORT)[]).map((k) => opt(k, HABIT_SORT[k], `is now ${HABIT_SORT[k]}`)),
 		pick: (v) => ({ ...s, sort: v })
 	};
 	const key = (ls: HabitLine[]) => [...ls].sort().join(',') || 'none';
