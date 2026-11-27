@@ -31,7 +31,7 @@
 		grip?: Snippet;
 		/** The slot opens with no grip in it: the rows under it have grips or checkboxes. */
 		slotOpen?: boolean;
-		/** No fold, over rows: the fold's column stays empty, so the title is on the rows' name column as a folding one's is. */
+		/** No fold: the fold's column stays empty, so the title is on the rows' name column as a folding one's is. */
 		foldColumn?: boolean;
 		onrename?: (name: string) => void;
 		/** With onrename: the title is a box now. It goes false when the box closes. */

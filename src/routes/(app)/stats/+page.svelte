@@ -37,8 +37,18 @@
 	async function patch(p: { range: string } | { filter: Partial<BoardFilter> }) {
 		if (!board || ('range' in p && p.range === board.range)) return;
 		const { id, name, filter } = board;
-		// Only the words this change sets, so its Undo keeps the ones changed since.
-		const was = 'range' in p ? { range: board.range } : { filter: Object.fromEntries(Object.keys(p.filter).map((k) => [k, filter[k as keyof BoardFilter]])) };
+		// Only the words this change sets, so its Undo keeps the ones changed since; an Area or Tag list goes back one
+		// by one (Clear filters' Undo), so one toggled on since stays.
+		const lists = ['areas', 'tags'] as const;
+		const words = (f: Partial<BoardFilter>) => Object.fromEntries(Object.keys(f).filter((k) => !(lists as readonly string[]).includes(k)).map((k) => [k, filter[k as keyof BoardFilter]]));
+		const back = (f: Partial<BoardFilter>) =>
+			lists.flatMap((list) => {
+				const to = f[list];
+				if (!to) return [];
+				const from = filter[list];
+				return [...from.filter((v) => !to.includes(v)).map((value) => ({ list, value, on: true })), ...to.filter((v) => !from.includes(v)).map((value) => ({ list, value, on: false }))];
+			});
+		const was = 'range' in p ? { range: board.range } : { filter: words(p.filter), toggle: back(p.filter) };
 		const said = boardSaid(name, 'range' in p ? p : { filter: { ...filter, ...p.filter } });
 		if (await op({ op: 'board.patch', id, ...p })) showToast(said, undoOp({ op: 'board.patch', id, ...was }));
 	}
@@ -49,7 +59,7 @@
 		const { id, name, filter } = board;
 		const on = !filter[list].includes(value);
 		const said = boardSaid(name, { filter: { ...filter, [list]: on ? [...filter[list], value] : filter[list].filter((x) => x !== value) } });
-		if (await op({ op: 'board.patch', id, toggle: { list, value, on } })) showToast(said, undoOp({ op: 'board.patch', id, toggle: { list, value, on: !on } }));
+		if (await op({ op: 'board.patch', id, toggle: [{ list, value, on }] })) showToast(said, undoOp({ op: 'board.patch', id, toggle: [{ list, value, on: !on }] }));
 	}
 
 	async function addBoard(template: string | null) {

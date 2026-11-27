@@ -9,6 +9,7 @@ import { createAccount } from '../auth';
 import { getSettings, saveSettings } from '../settings';
 import { getStats } from '../stats';
 import { pausesOf } from '../pauses';
+import { listAreas } from '../repo/areas';
 import { getHabitForm } from '../repo/habits';
 import { getTaskForm } from '../repo/tasks';
 import { appActor, ActionError, type Actor } from './actor';
@@ -328,6 +329,19 @@ describe('setup: the account', () => {
 		fails(() => run('setup_undo', { undo: a.undo }), 'conflict', /already undone/);
 		expect(stats().measures).toEqual([]);
 		expect(stats().boards.some((b) => b.name === 'Running')).toBe(false);
+	});
+
+	it("names an Area in a board's filter, and keeps its id", () => {
+		const a = setup([{ op: 'area', area: 'Filtered' }, { op: 'stats', change: { op: 'board.add', name: 'Setup' } }], { apply: true });
+		const id = listAreas(me).find((x) => x.name === 'Filtered')!.id;
+		const filter = () => stats().boards.find((x) => x.name === 'Setup')!.filter;
+		const b = setup([{ op: 'stats', change: { op: 'board.patch', board: 'Setup', toggle: [{ list: 'areas', value: 'filtered', on: true }] } }], { apply: true });
+		expect(filter().areas).toEqual([id]);
+		const c = setup([{ op: 'stats', change: { op: 'board.patch', board: 'Setup', filter: { areas: ['Filtered'] } } }], { apply: true });
+		expect(filter().areas).toEqual([id]);
+		fails(() => setup([{ op: 'stats', change: { op: 'board.patch', board: 'Setup', toggle: [{ list: 'areas', value: 'Nope', on: true }] } }]), 'not_found', /No Area “Nope”/);
+		for (const x of [c, b, a]) run('setup_undo', { undo: x.undo });
+		expect(stats().boards.some((x) => x.name === 'Setup')).toBe(false);
 	});
 
 	it('changes settings lines through the Settings checks, and puts them back', () => {

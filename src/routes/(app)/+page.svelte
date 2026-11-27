@@ -653,7 +653,7 @@
 		</div>
 		<div class="today-side">
 			{#if wide.current}
-				<GroupHeading title="Last seven days" />
+				<GroupHeading title="Last seven days" slotOpen={gripped} foldColumn />
 				<div class="day-week week-side" role="group" aria-label="The last seven days">{@render sevenDays()}</div>
 			{/if}
 			{#if !view.first && breakingShown.length}{@render breaking()}{/if}
