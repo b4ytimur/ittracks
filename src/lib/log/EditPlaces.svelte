@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Edit on a log: the Tasks in plan order with their names and the plan's numbers to change, and
+	// Change the plan, on a log: the Tasks in plan order with their names and the plan's numbers to change, and
 	// inside an open Task its rows to drag. The plan changes from now on; a row's place is this log's only.
 	import EditableList from '$lib/ui/EditableList.svelte';
 	import InlineText from '$lib/ui/InlineText.svelte';

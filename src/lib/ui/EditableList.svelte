@@ -429,10 +429,14 @@
 		void keys;
 		const was = leaving;
 		leaving = null;
-		if (!was || keys.includes(was.key)) return;
+		if (!was) return;
 		const now = document.activeElement;
 		if (now && now !== document.body && now.isConnected) return;
 		const rs = rows();
+		// A row that only moved drops its focus as its node moves, too: when the order comes back from the server (the
+		// Log's plan), after focusHandle has run. It gets it back on the same control.
+		const same = rs.find((r) => r.dataset.key === was.key);
+		if (same) return void controls(same)[was.at]?.focus();
 		const next = rs[nearest(was.index, rs.length)];
 		const cs = next ? controls(next) : [];
 		(cs[refocusAt(was.kinds, was.at, cs.map(kindOf))] ?? ghostSlot())?.focus();
