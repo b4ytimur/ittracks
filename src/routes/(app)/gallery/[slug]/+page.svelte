@@ -1,7 +1,7 @@
 <script lang="ts">
 	import TemplateSentence from '$lib/say/TemplateSentence.svelte';
 	import { addFrom } from '$lib/say/add';
-	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import TitleLine from '$lib/ui/TitleLine.svelte';
 
 	let { data } = $props();
 	const inside = $derived(data.template.children.length);
@@ -18,7 +18,7 @@
 
 <svelte:head><title>{data.template.name} · Gallery · ittracks</title></svelte:head>
 
-<EditChrome title={data.template.name} modes={['use']} back={{ href: '/gallery', label: 'Gallery' }} hints={{ use: data.template.description.split('\n')[0] }} />
+<TitleLine title={data.template.name} back={{ href: '/gallery', label: 'Gallery' }} hint={data.template.description.split('\n')[0]} />
 
 {#if data.saved}<p class="notice" role="status"><span class="notice-text">Saved to your Gallery. Add it from here whenever you like, or download it to send to someone.</span></p>{/if}
 

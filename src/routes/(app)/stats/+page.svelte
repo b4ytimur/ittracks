@@ -96,6 +96,7 @@
 		onmode={(m) => ((editing = m === 'edit'), (adding = false))}
 		hints={{ use: board ? `${board.cards.length} ${board.cards.length === 1 ? 'card' : 'cards'}` : '', edit: 'Drag a card to move it. Press a word to change it.' }}
 		add={board ? { label: 'New card', onclick: () => (adding = true) } : undefined}
+		addHidden={adding}
 	/>
 
 	<nav class="subtabs boards" aria-label="Boards">

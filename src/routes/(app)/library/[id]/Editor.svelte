@@ -8,7 +8,7 @@
 	import * as W from '$lib/detail/words';
 	import EditableList from '$lib/ui/EditableList.svelte';
 	import { focusOn, rowOf } from '$lib/ui/focus';
-	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import TitleLine from '$lib/ui/TitleLine.svelte';
 	import GroupHeading from '$lib/ui/GroupHeading.svelte';
 	import type { Way } from '$lib/ui/MenuButton.svelte';
 	import { dismiss, showToast } from '$lib/toast.svelte';
@@ -700,21 +700,18 @@
 
 {/snippet}
 
-<EditChrome
+<TitleLine
 	title={data.isNew ? 'New task' : t.name || 'Task'}
 	back={{ href: '/library', label: 'Library' }}
-	modes={['use']}
-	hints={data.usage
-		? {
-				use: [
-					data.usage.habits.length ? `In ${data.usage.habits.map((h) => h.name).join(', ')}` : 'Not used in any habit',
-					data.usage.inside.length ? `inside ${data.usage.inside.map((p) => p.name).join(', ')}` : '',
-					data.usage.lastLogged ? `logged ${data.usage.timesLogged} ${data.usage.timesLogged === 1 ? 'time' : 'times'}, last on ${ago(data.usage.lastLogged)}` : ''
-				]
-					.filter(Boolean)
-					.join(' · ')
-			}
-		: {}}
+	hint={data.usage
+		? [
+				data.usage.habits.length ? `In ${data.usage.habits.map((h) => h.name).join(', ')}` : 'Not used in any habit',
+				data.usage.inside.length ? `inside ${data.usage.inside.map((p) => p.name).join(', ')}` : '',
+				data.usage.lastLogged ? `logged ${data.usage.timesLogged} ${data.usage.timesLogged === 1 ? 'time' : 'times'}, last on ${ago(data.usage.lastLogged)}` : ''
+			]
+				.filter(Boolean)
+				.join(' · ')
+		: undefined}
 	more={menu}
 />
 

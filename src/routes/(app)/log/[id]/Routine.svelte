@@ -5,7 +5,7 @@
 	import { invalidateAll, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { runAction, showError, showToast, undoWith } from '$lib/toast.svelte';
-	import EditChrome from '$lib/ui/EditChrome.svelte';
+	import TitleLine from '$lib/ui/TitleLine.svelte';
 	import MenuButton, { type Way } from '$lib/ui/MenuButton.svelte';
 	import type { RoutineDay } from '$lib/server/routine-day';
 	import { leftText, type LeftOpen } from '$lib/engine/rollup';
@@ -85,7 +85,7 @@
 
 <svelte:head><title>{r.name} · ittracks</title></svelte:head>
 
-<EditChrome title={r.name} modes={['use']} back={{ href: back, label: backLabel(back) }} hints={{ use: [day, said(r.status, r.level), r.count].filter(Boolean).join(' · ') }} more={canLog ? all : []} />
+<TitleLine title={r.name} back={{ href: back, label: backLabel(back) }} hint={[day, said(r.status, r.level), r.count].filter(Boolean).join(' · ')} more={canLog ? all : []} />
 
 {#if !canLog}
 	<div class="notice"><span class="notice-text">This day is further back than Settings allow logging, so it can only be looked at.</span><span class="notice-acts"><a class="quiet" href="/settings#past">Change it in Settings</a></span></div>
