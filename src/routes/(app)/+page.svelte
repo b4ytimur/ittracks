@@ -297,16 +297,16 @@
 	/** A list was reordered by its grips: it goes into the one habit order (My order), shared with the Habits page. */
 	function reorderHabits(key: string, part: string[], said: string) {
 		const was = views.today.order;
-		const ids = [...data.build, ...data.tracking, ...data.resting].map((b) => b.habitId);
+		const ids = [...data.build, ...data.tracking, ...data.breaking, ...data.paused, ...data.resting].map((b) => b.habitId);
 		moved({ order: mergeOrder([...was, ...ids.filter((id) => !was.includes(id))], movedPart(part, key, sunk)) }, said, async () => !!(await setToday({ order: was })));
 		return true;
 	}
-	/** A habit's own number, from its open row: said in the band, with Undo. */
+	/** A habit's own number, from its open row: said in the band, with the Undo that puts back this habit's number only, so numbers picked since stay. */
 	function setHeadline(item: { habitId: string; name: string }, v: StatKey | '') {
-		const was = views.today.headlineFor;
-		if ((was[item.habitId] ?? '') === v) return;
-		const { next, said } = ownNumber(was, item.habitId, item.name, v);
-		moved({ headlineFor: next }, said, async () => !!(await setToday({ headlineFor: was })));
+		const was = views.today.headlineFor[item.habitId] ?? '';
+		if (was === v) return;
+		const { next, said } = ownNumber(views.today.headlineFor, item.habitId, item.name, v);
+		moved({ headlineFor: next }, said, async () => !!(await setToday({ headlineFor: ownNumber(views.today.headlineFor, item.habitId, item.name, was).next })));
 	}
 
 	// The time of day, for "what fits now". Ticks once a minute.
@@ -384,7 +384,14 @@
 	/** The habits a list stands for: a group or routine counts through the habits inside it, at any depth. */
 	const leavesOf = (items: Item[]): Item[] => items.flatMap((b) => (b.group ? leavesOf(kidsOf(b.habitId)) : [b]));
 	const groups = $derived(groupBy(shownBuild.map((b) => ({ ...b, part: partOf(b) })), view.group, { areas: data.areas, parts: partNames }));
-	const breakingShown = $derived(view.direction === 'build' ? [] : data.breaking.filter((b) => passes(view, { ...b, direction: 'break' })));
+	/** Break habits the view lets through: in My order too, which every habit shares with the Habits page. */
+	const breakingShown = $derived.by(() => {
+		if (view.direction === 'build') return [];
+		const list = data.breaking.filter((b) => passes(view, { ...b, direction: 'break' }));
+		return view.sort === 'manual' ? manualOrder(list, views.today.order, (b) => b.habitId) : list;
+	});
+	const pausedShown = $derived(view.sort === 'manual' ? manualOrder(data.paused, views.today.order, (b) => b.habitId) : data.paused);
+	const restingShown = $derived(view.sort === 'manual' ? manualOrder(data.resting, views.today.order, (b) => b.habitId) : data.resting);
 	/** Trackers the view lets through, in its order: by name, or in My order. */
 	const trackingShown = $derived.by(() => {
 		if (view.direction === 'break') return [];
@@ -674,7 +681,7 @@
 {/if}
 
 {#snippet breaking()}
-	<GroupHeading title={limiting ? 'Breaking and limiting' : 'Breaking'} />
+	<GroupHeading title={limiting ? 'Breaking and limiting' : 'Breaking'} slotOpen={gripped} />
 	{@render breakingSection()}
 {/snippet}
 
@@ -813,7 +820,7 @@
 {/snippet}
 
 {#snippet breakingSection()}
-	<EditableList items={breakingShown} key={(b) => b.habitId} label={(b) => b.name} rowCard ariaLabel={limiting ? 'Limits' : 'Breaking'}>
+	<EditableList items={breakingShown} key={(b) => b.habitId} label={(b) => b.name} rowCard ariaLabel={limiting ? 'Limits' : 'Breaking'} onmove={gripped ? (m, order, text) => reorderHabits(m.key, order, text) : undefined}>
 		{#snippet row(b)}
 			{@const plan = b.ifThen}
 			<a class="name" href="/habits/{b.habitId}/chain">{b.name}</a>
@@ -918,7 +925,7 @@
 {/snippet}
 
 {#snippet pausedSection()}
-	<EditableList items={data.paused} key={(x) => x.habitId} label={(x) => x.name} rowCard ariaLabel="Paused">
+	<EditableList items={pausedShown} key={(x) => x.habitId} label={(x) => x.name} rowCard ariaLabel="Paused" onmove={gripped ? (m, order, text) => reorderHabits(m.key, order, text) : undefined}>
 		{#snippet row(item)}
 			<span class="name">{item.name}</span>
 			<p class="meta-line">Paused until {shortDate(item.pausedUntil!)}. Streak is safe.</p>
@@ -942,7 +949,7 @@
 {/snippet}
 
 {#snippet restingSection()}
-	<EditableList items={data.resting} key={(x) => x.habitId} label={(x) => x.name} rowCard ariaLabel="Not due today">
+	<EditableList items={restingShown} key={(x) => x.habitId} label={(x) => x.name} rowCard ariaLabel="Not due today" onmove={gripped ? (m, order, text) => reorderHabits(m.key, order, text) : undefined}>
 		{#snippet row(item)}
 			<span class="name">{item.name}</span>
 			{#if item.streak}<p class="meta-line">{item.streak}</p>{/if}

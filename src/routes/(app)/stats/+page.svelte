@@ -33,14 +33,16 @@
 		}
 	}
 
-	/** The board's range or filter changes in place, with its line in the band and the Undo that puts the old one back. */
-	async function patch(p: { range: string } | { filter: BoardFilter }) {
+	/** The board's range or filter words change in place, with its line in the band and the Undo that puts back what this change touched. */
+	async function patch(p: { range: string } | { filter: Partial<BoardFilter> }) {
 		if (!board || ('range' in p && p.range === board.range)) return;
-		const { id, name } = board;
-		const was = 'range' in p ? { range: board.range } : { filter: board.filter };
-		if (await op({ op: 'board.patch', id, ...p })) showToast(boardSaid(name, p), undoOp({ op: 'board.patch', id, ...was }));
+		const { id, name, filter } = board;
+		// Only the words this change sets, so its Undo keeps the ones changed since.
+		const was = 'range' in p ? { range: board.range } : { filter: Object.fromEntries(Object.keys(p.filter).map((k) => [k, filter[k as keyof BoardFilter]])) };
+		const said = boardSaid(name, 'range' in p ? p : { filter: { ...filter, ...p.filter } });
+		if (await op({ op: 'board.patch', id, ...p })) showToast(said, undoOp({ op: 'board.patch', id, ...was }));
 	}
-	const setFilter = (f: Partial<BoardFilter>) => board && patch({ filter: { ...board.filter, ...f } });
+	const setFilter = (f: Partial<BoardFilter>) => patch({ filter: f });
 	const toggle = <T,>(xs: T[], x: T) => (xs.includes(x) ? xs.filter((y) => y !== x) : [...xs, x]);
 
 	async function addBoard(template: string | null) {
@@ -57,11 +59,12 @@
 		if (!board) return;
 		const index = data.boards.findIndex((b) => b.id === board.id);
 		const copy = $state.snapshot(board);
+		const open = data.open === board.id;
 		const r = await op({ op: 'board.delete', id: board.id });
 		if (r) {
 			await goto('/stats', { keepFocus: true }); // focus stays on the Boards ⋯, as a board pick keeps it
 			showToast(`Deleted the board “${copy.name}”`, async () => {
-				await statsOp({ op: 'board.restore', board: copy, index });
+				await statsOp({ op: 'board.restore', board: copy, index, open });
 				await goto(`/stats?board=${copy.id}`);
 			});
 		}

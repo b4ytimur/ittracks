@@ -194,19 +194,21 @@
 		const gone = views.saved.find((s) => s.id === id);
 		if (!gone) return;
 		await flushViews();
-		const before = $state.snapshot(views) as ViewSettings;
+		// Its Undo puts back only this view (and what the page opens with, when that was it), never changes made since.
+		const view = $state.snapshot(gone);
+		const index = views.saved.findIndex((s) => s.id === id);
+		const open = views.open[page] === id;
 		const r = await viewOp({ op: 'delete', id });
-		if (!r) return showError(`Couldn't delete ${gone.name}. It is still here.`);
+		if (!r) return showError(`Couldn't delete ${view.name}. It is still here.`);
 		views = r.views;
 		active = DEFAULT_VIEW;
 		current = copy(viewStateOf(views, page, DEFAULT_VIEW)!);
-		showToast(`Deleted ${gone.name}.`, async () => {
-			const b = await viewOp({ op: 'restore', views: before });
+		showToast(`Deleted ${view.name}.`, async () => {
+			const b = await viewOp({ op: 'undelete', view, index, open });
 			if (!b) return false;
 			views = b.views;
 			active = id;
-			current = copy(gone.state);
-			void viewOp({ op: 'select', page, view: id });
+			current = copy(view.state);
 		});
 	}
 	function resetDefault() {

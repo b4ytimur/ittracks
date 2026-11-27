@@ -18,14 +18,19 @@ const id = z.string().max(64);
 /** Where a card lives: a board, or a habit's Stats tab. */
 export const cardWhere = z.union([z.object({ board: id }), z.object({ habit: id })]);
 
+const f = boardFilter.shape;
+/** board.patch's filter: only the words it names change, so an Undo puts back its own words and keeps the ones changed since. */
+const filterWords = z.object({ areas: f.areas.unwrap(), tags: f.tags.unwrap(), habit: f.habit.unwrap(), identity: f.identity.unwrap(), direction: f.direction.unwrap() }).partial();
+
 export const statsChange = z.discriminatedUnion('op', [
 	z.object({ op: z.literal('board.add'), template: z.string().max(40).refine((x) => !!seedById(x), 'No such board').nullable().default(null), name: z.string().trim().min(1).max(40).optional() }),
-	z.object({ op: z.literal('board.patch'), id, name: z.string().trim().min(1).max(40).optional(), range: rangeValue.optional(), filter: boardFilter.optional() }),
+	z.object({ op: z.literal('board.patch'), id, name: z.string().trim().min(1).max(40).optional(), range: rangeValue.optional(), filter: filterWords.optional() }),
 	z.object({ op: z.literal('board.delete'), id }),
 	z.object({ op: z.literal('board.move'), id, dir: z.union([z.literal(-1), z.literal(1)]) }),
 	/** Put the boards in this order (a tab dragged, or Move… in the Boards ⋯). Boards not listed keep their order after these. */
 	z.object({ op: z.literal('board.order'), ids: z.array(id).max(MAX_BOARDS) }),
-	z.object({ op: z.literal('board.restore'), board, index: z.number().int().min(0).max(MAX_BOARDS) }),
+	/** Undo of board.delete: the board back in its place, and Stats opening with it again when it did. */
+	z.object({ op: z.literal('board.restore'), board, index: z.number().int().min(0).max(MAX_BOARDS), open: z.boolean().default(false) }),
 	z.object({ op: z.literal('card.save'), where: cardWhere, card: statCard, index: z.number().int().min(0).max(MAX_CARDS).optional() }),
 	z.object({ op: z.literal('card.delete'), where: cardWhere, id }),
 	/** Put the cards in this order (a card's ⠿ dragged or moved). Cards not listed keep their order after these. */
@@ -109,7 +114,15 @@ export function changeStats(accountId: string, raw: unknown, tz?: string): Stats
 		}
 		const h = P!.habits.get(w.habit);
 		if (!h) throw notFound('No such habit');
-		return [s.habitCards[h.id] ?? habitCards(P!, h), (cards) => (s = { ...s, habitCards: { ...s.habitCards, [h.id]: cards } })];
+		const auto = habitCards(P!, h);
+		return [
+			s.habitCards[h.id] ?? auto,
+			(cards) => {
+				// Cards that are the automatic ones again (the Undo of the first change) are not your own: the tab follows what it logs.
+				const { [h.id]: _, ...rest } = s.habitCards;
+				s = { ...s, habitCards: JSON.stringify(cards) === JSON.stringify(auto) ? rest : { ...rest, [h.id]: cards } };
+			}
+		];
 	};
 
 	/** Keep a habit's Today number in step with its cards: drop it when its card is gone. */
@@ -131,7 +144,7 @@ export function changeStats(accountId: string, raw: unknown, tz?: string): Stats
 		}
 		case 'board.patch':
 			if (!s.boards.some((x) => x.id === b.id)) throw notFound('No such board');
-			s = { ...s, boards: s.boards.map((x) => (x.id === b.id ? { ...x, name: b.name ?? x.name, range: b.range ?? x.range, filter: b.filter ?? x.filter } : x)) };
+			s = { ...s, boards: s.boards.map((x) => (x.id === b.id ? { ...x, name: b.name ?? x.name, range: b.range ?? x.range, filter: { ...x.filter, ...b.filter } } : x)) };
 			break;
 		case 'board.delete':
 			s = { ...s, boards: s.boards.filter((x) => x.id !== b.id), open: s.open === b.id ? 'last' : s.open, last: s.last === b.id ? null : s.last };
@@ -147,7 +160,7 @@ export function changeStats(accountId: string, raw: unknown, tz?: string): Stats
 			if (s.boards.length >= MAX_BOARDS) throw new ActionError('invalid', `At most ${MAX_BOARDS} boards`);
 			const boards = [...s.boards];
 			boards.splice(Math.min(b.index, boards.length), 0, b.board);
-			s = { ...s, boards };
+			s = { ...s, boards, open: b.open ? b.board.id : s.open };
 			break;
 		}
 		case 'card.save': {

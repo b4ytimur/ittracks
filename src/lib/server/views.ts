@@ -29,6 +29,8 @@ export const viewChange = z.discriminatedUnion('op', [
 	/** A new named view with this state; the page is on it after. */
 	z.object({ op: z.literal('save'), page, name: z.string().trim().min(1).max(40), state: viewState }),
 	z.object({ op: z.literal('delete'), id: z.string().max(64) }),
+	/** Undo of delete: the view back where it stood, the page on it, and what the page opens with when that was it. Nothing else changes. */
+	z.object({ op: z.literal('undelete'), view: savedView, index: z.number().int().min(0), open: z.boolean().default(false) }),
 	/** A saved view's new name, typed where it stands in the sentence (TS.10). */
 	z.object({ op: z.literal('rename'), id: z.string().max(64), name: z.string().trim().min(1).max(40) }),
 	/** What the page opens with: "last", "default", or a saved view id. */
@@ -101,6 +103,13 @@ export function changeViews(accountId: string, raw: unknown): ViewsChanged {
 				if (active[p] === b.id) delete active[p];
 			}
 			next = { ...v, open, active, saved: v.saved.filter((s) => s.id !== b.id) };
+			break;
+		}
+		case 'undelete': {
+			const p = b.view.page;
+			const saved = [...v.saved];
+			if (!saved.some((s) => s.id === b.view.id)) saved.splice(Math.min(b.index, saved.length), 0, b.view);
+			next = { ...v, saved, active: { ...v.active, [p]: b.view.id }, open: b.open ? { ...v.open, [p]: b.view.id } : v.open };
 			break;
 		}
 		case 'rename':
