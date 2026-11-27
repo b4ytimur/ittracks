@@ -34,12 +34,12 @@ A habit's page is one page of lines. Each line says what it means ("Weekly on Mo
 
 When a habit's page shows more than one section, each heading has a ⠿: drag it, use the arrow keys on it, or tap it for **Move up** and **Move down**. The order is the same on every habit of that kind (build habits, groups, trackers, habits you break), with Undo. While it isn't the order they came in, the page's ⋯ has **Reset section order**, also with Undo.
 
-A build habit holds one or more **Variants**. Most habits have one. Add more with **Add another Variant (for A/B plans)** when you alternate plans, like Push day A and Pull day B. Each Variant can be renamed, moved, duplicated or removed. One you logged something on is archived instead: past days keep it, and **Bring back** stands under the list.
+A build habit holds one or more **Variants**. Most habits have one. Add more with **+ Another Variant (for A/B plans)** when you alternate plans, like Push day A and Pull day B. Each Variant can be renamed, moved, duplicated or removed. One you logged something on is archived instead: past days keep it, and **Bring back** stands under the list.
 
 Each Variant holds **Slots**, one per thing you log:
 
-- **Add a Task** puts a fixed Task from your [Library](tasks.md) in the Slot. Pick **+ New Task…** in the list to make one on the spot from a Task type.
-- **Add an auto-filled slot** picks a Task for you each time from tags you choose. See [auto-filled slots](tasks.md#auto-filled-slots).
+- **+ Task** puts a fixed Task from your [Library](tasks.md) in the Slot. Pick **+ New Task…** in the list to make one on the spot from a Task type.
+- **+ Auto-filled** picks a Task for you each time from tags you choose. See [auto-filled slots](tasks.md#auto-filled-slots).
 
 For each Slot you can set:
 
@@ -65,7 +65,7 @@ Push needs HTTPS (or `localhost`). On iPhone and iPad it works only after adding
 
 ## Levels
 
-Tick **Use levels** to give the habit a two-minute **Minimum**, your **Target**, and a **Stretch**, each with a short description ("Put on running shoes", "Run 5 km", "Run 10 km"). Then set numbers per level in each Slot. On Today, **Or log** offers Minimum and Stretch next to the main buttons. Whether a Minimum day keeps the streak alive is a [streak setting](streaks.md#a-day-that-falls-short).
+Tick **Use levels** to give the habit a two-minute **Minimum**, your **Target**, and a **Stretch**, each with a short description ("Put on running shoes", "Run 5 km", "Run 10 km"). Then set numbers per level in each Slot. On Today, the habit's **⋯** offers **Minimum**, **Target** and **Stretch** next to its button. Whether a Minimum day keeps the streak alive is a [streak setting](streaks.md#a-day-that-falls-short).
 
 ## Streak settings
 
@@ -115,7 +115,7 @@ Logging slips and resisted cravings is covered in [Logging](logging.md#slips-and
 ## Archive, delete, duplicate
 
 - **Archive** hides the habit from Today and keeps its history. **Unarchive** brings it back. You can also archive from a habit's **⋯** on the [Habits page](views-and-edit-mode.md#habits).
-- **Delete** removes the habit and its history, with no question. **Undo** in the band brings it back. Until a day later it also waits among archived habits (**Include archived** in the Habits filters) and on its own page, with **Put back**; then it goes for good with its logs.
+- **Delete** removes the habit and its history, with no question. **Undo** in the band brings it back. Until a day later it also waits among archived habits (**and the archived** in the Habits sentence) and on its own page, with **Put back**; then it goes for good with its logs.
 - **Duplicate** opens a copy in the editor.
 - **Share as template** downloads a file others can import. See [Templates](templates.md).
 

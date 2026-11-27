@@ -241,7 +241,7 @@ export const TEMPLATES: ViewTemplate[] = [
 		id: 'minimal',
 		name: 'Minimal',
 		blurb: 'A plain checklist. Nothing extra.',
-		summary: 'Today shows only what is due, done items fold away, and extras like Identities, Levels and Rewards are hidden.',
+		summary: 'Today shows names only, done items fold away, and extras like Identities, Levels and Rewards are hidden.',
 		patch: {
 			today: {
 				sections: [
@@ -265,7 +265,7 @@ export const TEMPLATES: ViewTemplate[] = [
 		id: 'gym',
 		name: 'Week first',
 		blurb: 'The week at a glance and your progress.',
-		summary: 'Adds a week strip and progress to Today, shows "done this week" on each habit, and sorts the Library by most logged.',
+		summary: 'Today shows open rows with this week’s count on each habit, and the Library sorts by most logged.',
 		patch: {
 			today: {
 				widgets: ['progress', 'week'],
@@ -289,7 +289,7 @@ export const TEMPLATES: ViewTemplate[] = [
 		id: 'quitter',
 		name: 'Quitter',
 		blurb: 'For breaking habits: counters and money saved first.',
-		summary: 'Puts Breaking first, adds quit counters and money saved, and hides Levels and prep.',
+		summary: 'Puts Breaking first and hides Levels and prep.',
 		patch: {
 			today: {
 				widgets: ['quit', 'atRisk'],
@@ -310,7 +310,7 @@ export const TEMPLATES: ViewTemplate[] = [
 		id: 'data',
 		name: 'Data nerd',
 		blurb: 'Every number, everywhere.',
-		summary: 'Adds every widget, shows consistency on each habit, values in History, and every line on the Habits list.',
+		summary: 'Today shows every line and consistency on each habit, History shows values, and the Habits list shows every line.',
 		patch: {
 			today: { widgets: ['progress', 'week', 'atRisk', 'quit'], headline: 'consistency', lines: allLines },
 			defaults: { today: { group: 'area', rows: 'full', num: 'consistency', done: 'keep' } },

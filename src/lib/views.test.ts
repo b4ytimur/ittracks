@@ -50,6 +50,10 @@ describe('views', () => {
 		}
 	});
 
+	it('no template summary promises Today widgets, which nothing renders', () => {
+		for (const t of TEMPLATES) expect(t.summary).not.toMatch(/widget|week strip|progress|counter|money saved/i);
+	});
+
 	it('routine groups Today by part of day, in my order, time-aware', () => {
 		const v = fromTemplate('routine');
 		expect(v.defaults.today).toMatchObject({ group: 'part', sort: 'manual' });

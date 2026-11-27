@@ -74,10 +74,13 @@
 	}
 	const hrefOf = (o: Occ, date: string) => (o.status === 'done' || logged(o) ? `/log/${o.id}` : `/day/${date}`);
 
-	function toggleValues() {
+	/** Show or hide what each log holds, from the sentence or the ⋯: the line above the tabs says so, with Undo. */
+	function setValues(on: boolean, said = true) {
+		if (on === views.history.values) return;
 		const before = views.history;
-		views.history = { ...views.history, values: !views.history.values };
-		saveLayout({ op: 'patch', history: { values: views.history.values } }, () => (views.history = before), toggleValues);
+		views.history = { ...before, values: on };
+		saveLayout({ op: 'patch', history: { values: on } }, () => (views.history = before), () => setValues(on, false));
+		if (said) showToast(on ? 'History now shows what each log holds.' : 'History now shows logs without their values.', () => setValues(!on, false));
 	}
 	/** The address for these filters; browsing keeps how far back it goes. */
 	function at(o: { q?: string; notes?: boolean; mood?: string; days?: number }) {
@@ -108,8 +111,9 @@
 		: [`${withLogs} ${withLogs === 1 ? 'day' : 'days'} with logs`, yesterday.of ? `${yesterday.done} of ${yesterday.of} done yesterday` : ''].filter(Boolean).join(' · ')}
 	state={data.notesOnly ? undefined : { label: 'Select days', pressed: selecting, onchange: (on) => (selecting = on), hint: 'Tick days to skip them together.' }}
 	add={data.canBackfill ? { label: 'Log a past day', href: '/day' } : undefined}
+	addHidden={!!data.setup}
 	more={[
-		{ label: views.history.values ? 'Hide what a log holds' : 'Show what a log holds', onselect: toggleValues },
+		{ label: views.history.values ? 'Hide what a log holds' : 'Show what a log holds', onselect: () => setValues(!views.history.values) },
 		...(data.journal ? [{ label: 'Export the journal', href: '/journal/export' }] : [])
 	]}
 />
@@ -133,11 +137,7 @@
 			areas: data.areas,
 			habits: data.habits,
 			values: views.history.values,
-			setValues: (on) => {
-				if (on === views.history.values) return;
-				toggleValues();
-				showToast(on ? 'History now shows what each log holds.' : 'History now shows logs without their values.', () => toggleValues());
-			}
+			setValues
 		})}
 	/>
 {/if}

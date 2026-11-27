@@ -4,20 +4,20 @@ What each page shows, and in what order, is saved as data for your account. It s
 
 ## View templates
 
-A view template is a starting layout. Pick one in **Settings → View template** (or the first time you open Today):
+A view template is a starting layout. On Today, **New view** in the view-name menu offers each template's sentence under **Or start from**:
 
 | Template | For |
 | --- | --- |
 | **Morning and evening routine** | Your day in order: what fits now first, grouped by part of the day, in your own order |
 | **Standard** | Everything on, sorted by time of day |
-| **Minimal** | A plain checklist. Only what is due; done items fold away; extras hidden |
-| **Week first** | Plans: a week strip and progress on Today, "done this week" on each habit, the Library sorted by most logged |
-| **Quitter** | Breaking habits: Breaking first, quit counters and money saved, no Levels or prep |
+| **Minimal** | A plain checklist: names only, done items fold away, extras hidden |
+| **Week first** | Plans: open rows with this week's count on Today, the Library sorted by most logged |
+| **Quitter** | Breaking habits: Breaking first, no Levels or prep |
 | **Data nerd** | Every line, consistency as the headline number, logged values in History |
 
-After picking one, every setting can still be changed on its own. Your changes are listed under **Your own changes**, each with **Reset**. When you switch template, **Keep my own changes** carries them over.
+After that, every word can still be changed on its own.
 
-Some ready-made habits suggest a view. The Habits page offers it once, with **Switch to …** or **No thanks**.
+Some ready-made habits suggest a template. The Habits page offers it once, with **Switch to …** (it sets the template on every page, with Undo) or **No thanks**.
 
 **Start page** sets which page opens from the app icon, a bookmark or the address bar.
 
