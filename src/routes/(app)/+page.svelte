@@ -539,6 +539,9 @@
 		if (st === 'done') return `Done${item.levels || (item.group && item.occurrence?.level === 'minimum') ? ` at ${levelName[item.occurrence?.level ?? 'target']}` : ''}`;
 		return st === 'skipped' ? 'Skipped' : null;
 	};
+	/** What a finished row's control says (option B): the level it was logged at where levels count, else Done; or Skipped. */
+	const doneWord = (item: Item, st: string) =>
+		st === 'skipped' ? 'Skipped' : item.levels || (item.group && item.occurrence?.level === 'minimum') ? levelName[item.occurrence?.level ?? 'target'] : 'Done';
 	/** The usual way to log a habit, and the others. */
 	function waysOf(item: Item): { act: Way; ways: (Way | '-')[] } {
 		const o = item.occurrence!;
@@ -659,8 +662,9 @@
 					<li class="now-line"><span class="when num">{now}</span><span class="now">Now</span></li>
 					{#if tl.anyTime}{@render slot(tl.anyTime)}{/if}
 					{#each tl.ahead as s (s.key)}{@render slot(s)}{/each}
+					<!-- Done at the end: on the timeline's column too, under its own word. -->
+					{#if sunk.size}{@render slot({ key: 'done', label: 'Done', items: shownBuild.filter((b) => sunk.has(b.habitId)), only: new Map() })}{/if}
 				</ol>
-				{#if sunk.size}{@render habitList(shownBuild.filter((b) => sunk.has(b.habitId)), 'Done today')}{/if}
 			{:else}
 				{#each groups as g (g.key)}
 					{@const a = view.group === 'area' ? areaOf(g.key) : undefined}
@@ -773,10 +777,11 @@
 	{#if item.habitId === upNext || (item.progression && featureOn('progression') && !view.hide.includes('progression') && !shows(item.habitId, 'progression') && st === 'due')}
 		<span class="tags">{#if item.habitId === upNext}<StatusTag status="upNext" />{/if}{#if item.progression && featureOn('progression') && !view.hide.includes('progression') && !shows(item.habitId, 'progression') && st === 'due'}<span class="tag">Raise?</span>{/if}</span>
 	{/if}
-	{#if done || meta(item)}
-		<p class="meta-line">
-			{#if done}<span class="mark" aria-hidden="true">{st === 'skipped' ? '↷' : '✓'}</span> {done}{#if just.get(item.habitId)?.words}{' · '}{just.get(item.habitId)?.words}{/if}{meta(item) ? ' · ' : ''}{/if}{meta(item)}
-		</p>
+	<!-- A finished row's control says Done (or Skipped); a group, done through the habits inside it, says it here. -->
+	{@const said = item.group && !item.group.routine ? done : null}
+	{@const line = [said, done ? just.get(item.habitId)?.words : null, meta(item)].filter(Boolean).join(' · ')}
+	{#if line}
+		<p class="meta-line">{#if said}<span class="mark" aria-hidden="true">{st === 'skipped' ? '↷' : '✓'}</span> {/if}{line}</p>
 	{/if}
 {/snippet}
 
@@ -827,19 +832,19 @@
 	{:else if st === 'due'}
 		{@const w = waysOf(item)}
 		<LogControl name={item.name} act={w.act} ways={w.ways} primary={item.habitId === upNext} />
-	{:else if !pending[o.id]}
-		{#if item.group || o.slotCount > 0}<a class="quiet" href="/log/{o.id}" aria-label="View {item.name}">View</a>{/if}
-		{@const undo = just.get(item.habitId)?.undo}
-		{#if undo}
-			<button type="button" class="quiet" aria-label="Undo {item.name}" onclick={undo}>Undo</button>
-		{:else if !undoShows(band.entries, o.id) && (!item.group || item.group.undoable)}
-			<!-- One Undo at a time: the band's while its line is this one, else the row's (after a reload too).
-			     A routine done only through the habits inside it has nothing of its own to undo. -->
-			<form method="POST" action="?/undo" use:enhance={() => async ({ result, update }) => { await update(); if (result.type === 'success') reopened(item); }}>
-				<input type="hidden" name="occurrence" value={o.id} />
-				<button class="quiet" aria-label="Undo {item.name}">Undo</button>
-			</form>
-		{/if}
+	{:else}
+		<!-- Logged: the control says what it came to, its ⋯ holds View and Undo; for the hold, Undo stands in for ⋯.
+		     One Undo at a time: the band's while its line is this one, else the row's (after a reload too). A routine done
+		     only through the habits inside it has nothing of its own to undo; offline, nothing until it syncs. -->
+		{@const ways = pending[o.id]
+			? []
+			: [
+					...(item.group || o.slotCount > 0 ? [{ label: 'View', href: `/log/${o.id}` }] : []),
+					...(!undoShows(band.entries, o.id) && (!item.group || item.group.undoable)
+						? [{ label: 'Undo', action: '?/undo', fields: { occurrence: o.id }, submit: (() => async ({ result, update }) => { await update(); if (result.type === 'success') reopened(item); }) satisfies SubmitFunction }]
+						: [])
+				]}
+		<LogControl name={item.name} done={{ word: doneWord(item, st), said: ended(item) ?? doneWord(item, st), skipped: st === 'skipped' }} undo={pending[o.id] ? undefined : just.get(item.habitId)?.undo} {ways} />
 	{/if}
 {/snippet}
 
