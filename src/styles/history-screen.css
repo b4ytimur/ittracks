@@ -12,5 +12,6 @@
 .hi-end { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-inline) var(--space-group); margin-block: var(--space-section) var(--space-group); }
 .hi-daynote { margin-block-end: var(--space-group); }
 .hi-read { margin-block: var(--space-inline); }
-/* The day the year strip or the days block went to: a bar at its start. */
-.hi-day:target { box-shadow: inset 3px 0 0 var(--ink); padding-inline-start: var(--space-inline); }
+/* The day the year strip or the days block went to: the chosen bar at its heading's start, inside the 1px edge before the
+   name column, so nothing moves. */
+.hi-day:target > .group-heading { box-shadow: inset var(--chosen-width) 0 0 var(--ink); }

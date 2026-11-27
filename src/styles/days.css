@@ -1,80 +1,78 @@
-/* Days: the days block (DaysBlock.svelte) and History's year strip (YearStrip.svelte).
-     the block       section.days > .days-head (title, ‹ › ⋯) + .days-card (a .day-week, a .days-month, or .days-heat over a .day-week) + .days-foot
-     the month       .days-month: week number, seven 28px tiles (a.days-tile > i[data-day]), the row's dates; on an even 6px grid
-     a heat cell     i[data-heat]: the last 12 months, colour by how much got done (the block's 5px columns, History's strip) */
+/* Days: the days block (DaysBlock.svelte) and History's year strip (YearStrip.svelte). Every day is DayTile's mark
+   (i[data-day], day-tile.css), so a meaning has one shape in a line, a month and the last 12 months.
+     the block       section.days > .days-head (title and sub, ‹ › ⋯) + .days-card (a .day-week, a .days-month, or .days-heat over a .day-week) + .days-foot
+     the month       .days-month: seven tiles (a.days-tile > i[data-day]) at DayTile's cover size, then the row's dates
+     the 12 months   a column a week of marks: the block's .days-col (a picture), History's .year-col (a link a day) */
 
 /* In Today's and a day's side column it opens where a section heading would, level with the list's first heading.
-   Elsewhere (under the hint line on a phone, first in History's side) what is above it owns the gap. */
+   Elsewhere (under the hint line on a phone, first in History's side) what is above it owns the gap. First in History's
+   list column (a phone), it keeps a section's step from the days under it. */
 .today-side .days { margin-block-start: var(--space-section); }
-/* The title where GroupHeading's foldColumn puts it, on the rows' name column; .slotted is its slotOpen. */
-.days-head { position: relative; display: flex; align-items: center; gap: var(--space-tight); margin-block-end: var(--space-inline); padding-inline-start: calc(1px + var(--space-indent)); }
+.page-main > .days { margin-block-end: var(--space-section); }
+/* GroupHeading's line: the title on the rows' name column (its foldColumn; .slotted is its slotOpen), ‹ › ⋯ quiet glyphs
+   (24px) and the ⋯'s glyph on the rows' verb edge, as its .more. A coarse pointer puts them 20px apart, so their 44px
+   areas meet and never cover each other. */
+.days-head { display: flex; align-items: center; gap: var(--space-tight); margin-block-end: var(--space-inline); padding-inline: calc(1px + var(--space-indent)) calc(var(--space-group) + 1px); }
 .days-head.slotted { padding-inline-start: calc(1px + var(--space-indent) + var(--handle-slot)); }
+@media (pointer: coarse) { .days-head { column-gap: calc(var(--target-touch) - var(--target-min)); } }
+.days-more { flex: none; display: flex; position: relative; margin-inline-end: calc(-1 * var(--space-tight)); }
 .days-name { flex: 1 1 auto; min-inline-size: 0; }
 .days-title { position: relative; margin: 0; }
 .days-sub { margin: 0; }
+/* The way back stays in the 20px meta line; Button's coarse area still makes it 44px. */
+.days-back { min-height: 0; }
 /* The title is the picker: a word, not a box. */
 .days-pick { min-height: 0; padding: 0; border: 0; background: none; font: inherit; gap: var(--space-tight); }
 .days-pick > .chev { rotate: 90deg; color: var(--ink-muted); }
 .days-pick[aria-expanded='true'] > .chev { rotate: -90deg; }
-.days-step { inline-size: var(--control-md); min-height: var(--control-md); padding: 0; }
-.days-step:disabled { opacity: 0.4; cursor: default; }
 .days-card { padding: var(--space-inline); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface-raised); }
-.days-foot { display: flex; justify-content: space-between; gap: var(--space-inline); margin: var(--space-tight) 0 0; }
+.days-foot { margin: var(--space-tight) 0 0; }
 
-/* The days in a line: today's words in ink and 600, days to come and before the first quieter, the day you are on ringed. */
-.days .day-cell:has(> i[aria-current='date']) > .note { color: var(--ink); font-weight: 600; }
+/* The days in a line: days to come and before the first quieter, the day you are on in the chosen look. Today's words
+   and bar are DayTile's (aria-current on the cell). */
 .days .day-cell.later > .note { color: var(--ink-muted); }
-.days .day-cell.chosen { border-radius: var(--radius-inset); box-shadow: inset 0 0 0 var(--chosen-width) var(--line-chosen, var(--ink)); }
+.days .day-cell.chosen { box-shadow: var(--chosen-shadow); }
 .days .day-cell.chosen > .note { color: var(--ink); font-weight: 600; }
 
-/* ---------- The month: tiles, not cells, so the rows and columns line up ---------- */
-.days-month { display: grid; grid-template-columns: 2rem repeat(7, 1.75rem) minmax(0, 1fr); gap: 6px; align-items: center; }
+/* ---------- The month: tiles, not cells, so the rows and columns line up; 24 + 8 = a 32px pitch ---------- */
+.days-month { display: grid; grid-template-columns: repeat(7, var(--control-sm)) minmax(0, 1fr); gap: var(--space-inline); align-items: center; }
 .days-wd { text-align: center; }
-.days-wk { justify-self: start; min-height: 0; padding: 0; border: 0; background: none; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
-.days-wk.now { color: var(--ink); font-weight: 600; }
 .days-dates { text-align: end; white-space: nowrap; }
-.days-tile { display: block; inline-size: 1.75rem; block-size: 1.75rem; border-radius: var(--radius-indicator); }
+.days-tile { display: block; position: relative; inline-size: var(--control-sm); block-size: var(--control-sm); border-radius: var(--radius-indicator); }
 .days-tile > i[data-day] { display: block; inline-size: 100%; block-size: 100%; border-radius: inherit; }
-/* DayTile's shapes over a quiet tile for every day: nothing due is the quiet tile alone; days to come and before the
-   first an outline. Today keeps its bar, 2px under the tile, in the 6px gap. */
-.days-tile > i[data-day='rest'] { background: var(--surface-tint); }
-.days-tile > i[data-day='due'] { background: linear-gradient(var(--line-control), var(--line-control)) center / calc(100% / 3) calc(100% / 3) no-repeat, var(--surface-tint); }
+/* DayTile's shapes; nothing due is a quiet tile (in the 12 months too), days to come and before the first an outline.
+   Today keeps DayTile's bar, 2px under the tile, in the gap. */
+:is(.days-tile, .days-col, .year-col, .year-key) i[data-day='rest'] { background: var(--surface-tint); }
 .days-tile > i:is([data-day='future'], [data-day='before']) { box-shadow: inset 0 0 0 1px var(--line); }
-.days-tile.chosen { outline: var(--chosen-width) solid var(--line-chosen, var(--ink)); outline-offset: 2px; }
-@media (hover: hover) { a.days-tile:hover:not(.chosen) { outline: 1px solid var(--ink-muted); outline-offset: 2px; } }
+.days-tile.chosen { outline: var(--chosen-width) solid var(--line-chosen); outline-offset: var(--chosen-width); }
+@media (hover: hover) { a.days-tile:hover:not(.chosen) { outline: 1px solid var(--ink-muted); outline-offset: var(--chosen-width); } }
+/* A coarse pointer's area is the tile's whole pitch: neighbours' areas meet and never cover each other's tile. */
+@media (pointer: coarse) { a.days-tile::before { content: ''; position: absolute; inset: calc(var(--space-inline) / -2); } }
 
-/* ---------- The last 12 months: a column a week ---------- */
-i[data-heat] { display: block; aspect-ratio: 1; border-radius: 1px; }
-i[data-heat='done'] { background: var(--good); }
-i[data-heat='partial'] { background: color-mix(in srgb, var(--good) 45%, transparent); }
-i:is([data-heat='missed'], [data-heat='due']) { background: var(--line-control); }
-i[data-heat='rest'] { background: var(--surface-tint); }
+/* ---------- The last 12 months: a column a week, DayTile's marks at the column's width ---------- */
 .days-heat, .days-heat-months { display: grid; grid-template-columns: repeat(52, minmax(0, 1fr)); gap: 1px; }
-.days-heat-months { font-size: var(--font-size-note); line-height: 1rem; color: var(--ink-muted); }
 .days-heat-months > span { white-space: nowrap; overflow: visible; }
-.days-heat { margin-block: 2px var(--space-inline); }
-.days-col { display: grid; gap: 1px; min-height: 0; padding: 0; border: 0; border-radius: 1px; background: none; }
-.days-col[aria-pressed='true'] { outline: 1px solid var(--ink); outline-offset: 1px; }
+.days-heat { margin-block: var(--space-tight) var(--space-inline); }
+.days-col { display: grid; gap: 1px; }
+.days-col.chosen { outline: 1px solid var(--ink); outline-offset: 1px; }
+:is(.days-col, .year-col) i[data-day] { display: block; min-inline-size: 0; min-block-size: 0; aspect-ratio: 1; }
+/* Forced colours: DayTile's remap draws the marks; nothing due draws nothing, as DayTile's rest, and the outlines go grey. */
+@media (forced-colors: active) { :is(.days, .year) i[data-day] { --surface-tint: Canvas; --line: GrayText; } }
 
-@media (forced-colors: active) {
-	i[data-heat] { forced-color-adjust: none; --good: CanvasText; --line-control: GrayText; --surface-tint: Canvas; border: 1px solid CanvasText; }
-}
-
-/* ---------- History's year strip: the same heat, a tile a day, across the page ---------- */
-.year { margin-block-start: var(--space-inline); padding: var(--space-tight) var(--space-inline); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface-raised); }
-.year-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-inline); }
-.year-fold { gap: var(--space-tight); padding: 0; border: 0; background: none; font-weight: 600; }
-.year-fold[aria-expanded='true'] > .chev { rotate: 90deg; }
-.year-months, .year-grid { display: grid; grid-template-columns: 1rem repeat(52, minmax(0, 1fr)); gap: 2px; }
-.year-months { font-size: var(--font-size-note); line-height: 1rem; color: var(--ink-muted); }
+/* ---------- History's year strip: the same marks, a tile a day, across the page, under GroupHeading's fold ---------- */
+/* What is above owns the gap over its heading (the sentence's 16, as over the list); a section's step to the days under it. */
+.year > .group-heading { margin-block-start: 0; }
+.year + .page-cols { margin-block-start: var(--space-section); }
+.year-card { padding: var(--space-tight) var(--space-inline); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface-raised); }
+.year-months, .year-grid { display: grid; grid-template-columns: var(--space-group) repeat(52, minmax(0, 1fr)); gap: 2px; }
 .year-months > span { white-space: nowrap; overflow: visible; }
 .year-col { display: grid; gap: 2px; }
-.year-col > * { display: block; border-radius: 2px; }
-.year-col i[data-heat] { aspect-ratio: 4 / 3; border-radius: 2px; }
-.year-wd > span { font-size: 0.625rem; line-height: 1; align-self: center; color: var(--ink-muted); }
+.year-col > * { display: block; border-radius: var(--radius-indicator); }
+.year-col i[data-day] { aspect-ratio: 4 / 3; }
+.year-wd > span { font-size: var(--font-size-note); line-height: 1; align-self: center; color: var(--ink-muted); }
 .year-col > [aria-current='date'] > i { box-shadow: inset 0 -2px var(--ink); }
 @media (hover: hover) { .year-col > a:hover > i { outline: 1px solid var(--ink); outline-offset: 1px; } }
 .year-key { display: flex; flex-wrap: wrap; gap: var(--space-inline) var(--space-group); margin: var(--space-tight) 0 0; }
-.year-key i[data-heat] { display: inline-block; inline-size: 0.625rem; margin-inline-end: var(--space-tight); vertical-align: -1px; }
-/* A phone: 52 columns in the width, so the gaps go to 1px. */
+.year-key i[data-day] { margin-inline-end: var(--space-tight); }
+/* A phone: 52 columns in the width, so the gaps go to 1px and the weekday letters go. */
 @media (max-width: 40rem) { .year-months, .year-grid, .year-col { gap: 1px; } .year-wd { display: none; } .year-months, .year-grid { grid-template-columns: repeat(52, minmax(0, 1fr)); } .year-months > span:first-child { display: none; } }

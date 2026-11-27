@@ -189,8 +189,8 @@ export const load: PageServerLoad = ({ locals, cookies, url }) => {
 		areas: listAreas(accountId),
 		views,
 		initial: initialState(views, 'history'),
-		/** The last seven days, whether or not anything was logged: yesterday's count. */
-		strip: Array.from({ length: 7 }, (_, i) => addDays(today, i - 6)),
+		/** For yesterday's count under the title. */
+		yesterday: addDays(today, -1),
 		/** The days block in the side column, and the last 12 months across the top, every habit counted. */
 		block: daysData(accountId, today, views.today.days),
 		year: { open: views.history.year, counts: dayCounts(accountId, yearStart(today), today) },

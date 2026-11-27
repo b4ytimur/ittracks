@@ -10,6 +10,12 @@ On a new account Today asks one thing: **What do you want to track?** Write it a
 
 Below it are the [starter packs](packs.md), the Gallery, and **Add a file**. Nothing else is asked until it matters: the first time you open Today after midnight it asks whether that still counts as the day before (change it any time under **Settings → Day starts**), and a part of the day is made when a sentence first uses one.
 
+### The days block
+
+The days block shows how your days went: on Today at the top of the side column (on a phone, press the date under the title), on a day's page, and in History's side column (on a phone, over the days). Each day is a mark: full when everything due was done, half when some of it was, a ring when none was, a small square for today while something is still due, and nothing on a day with nothing due. Press a day to go to it. **‹** and **›** step back and on, the title picks a week or a month, and **This week** (or **This month**) comes back.
+
+Its **⋯** chooses what it shows: **A week**, **Last seven days**, **A month** (a tile a day) or **Last 12 months** (a column a week), and whether it counts **All habits** or one. The choice is one for every page, and the line above the tabs says so, with **Undo**. History draws the last 12 months across the page, so there the block shows a week instead.
+
 ### Logging a habit
 
 Each habit that is due has one control: the usual way to log it on the button, and the others behind **⋯**. The habit that is up next stands out.
@@ -61,7 +67,7 @@ A duration field has a timer: **Stopwatch**, **Countdown** to the target, or a *
 
 ## Log a past day
 
-Open a day from **Log a past day** on Today or History, a day in Today's week strip, **Log this day** in History, or a cell in a habit's chain. The day page shows:
+Open a day from **Log a past day** on Today or History, a day in the [days block](#the-days-block) or History's last 12 months, **Log this day** in History, or a cell in a habit's chain. The day page shows:
 
 - **Due that day**: each habit with the same control as on Today (the usual way, and the others behind **⋯**), or **Change** and **Clear** (take the log away) when it is logged, and a Variant picker. **Same as last** copies the last log from before that day, never one from a later day.
 - **Not due that day**, folded: habits that weren't due, so you can log an extra day.
@@ -88,6 +94,6 @@ Today shows the feelings that come up most ("Most slips: Stressed"). Remove a sl
 
 ## History and the chain
 
-**History** is one page of days, newest first: what was done, skipped, missed and slipped, and what you wrote. The strip on top is the last seven days; press a day to go to it. A day's count is done of what was due: a skip was not due, a log on a day off changes nothing, and a group or routine counts through the habits inside it, as on Today. Today's count includes what is still to do. Press a row to open its log, or its day when it was missed or skipped. Search, filter by status, habit, Area and more, and use **⋯ → Show what a log holds** to see values like "80 kg × 8". **Show older** goes back further. **Notes only** is the [journal](notes-and-journal.md).
+**History** is one page of days, newest first: what was done, skipped, missed and slipped, and what you wrote. **Last 12 months** across the top is a column a week, a tile a day: press a day to go to it (to its place in the list when the list shows it), or use the arrow keys to move from day to day. It folds to its heading and stays folded. On a phone it is a picture, and the [days block](#the-days-block) over the days is the way to a day. A day's count is done of what was due: a skip was not due, a log on a day off changes nothing, and a group or routine counts through the habits inside it, as on Today. Today's count includes what is still to do. Press a row to open its log, or its day when it was missed or skipped. Search, filter by status, habit, Area and more, and use **⋯ → Show what a log holds** to see values like "80 kg × 8". **Show older** goes back further. **Notes only** is the [journal](notes-and-journal.md).
 
 A habit's **Chain** tab is twelve weeks, a column a week. Press a day to read it, again to open it; the arrow keys move from day to day. The legend names the marks there are: **Done**, **Minimum**, **Stretch**, **Missed, forgiven** (a single miss under "never miss twice"), **Missed**, **Skipped**, **Not logged**; for a break habit **Clean**, **Within limit** or **Slip**.

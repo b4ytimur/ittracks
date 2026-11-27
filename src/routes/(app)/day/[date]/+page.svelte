@@ -143,7 +143,7 @@
 
 <svelte:head><title>{short(data.date)} · ittracks</title></svelte:head>
 
-<!-- A swipe is a second way to move a day; the seven days are the first, for every pointer and the keyboard. -->
+<!-- A swipe is a second way to move a day; the days block is the first, for every pointer and the keyboard. -->
 <svelte:window ontouchstart={touch} ontouchend={swipe} />
 <div class="travels">
 <TitleLine title={titleOf}>

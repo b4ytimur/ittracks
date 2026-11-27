@@ -1,22 +1,26 @@
 // The days block and History's year strip: done and due on each day of a span, for every habit or one.
-import { and, eq, gte, isNull, lte, min } from 'drizzle-orm';
+import { and, eq, gte, isNull, lte, min, ne, or } from 'drizzle-orm';
 import { db } from './db';
 import { habit, occurrence } from './db/schema';
 import { addDays, weekStart } from '$lib/engine/dates';
 import { isGroup } from '$lib/engine/schedule';
-import { spanOf, YEAR_WEEKS, type Count, type Show } from '$lib/days/days';
+import { spanOf, yearStart, type Count, type Show } from '$lib/days/days';
 
 const counted = (accountId: string) =>
-	// A group's day is already counted in the habits inside it, and a tracker's never counts.
-	and(eq(habit.accountId, accountId), eq(habit.scoring, 'habit'), isNull(occurrence.rollup));
+	// As History's dayCount: a group's day is already counted in the habits inside it, a tracker's never counts and a log
+	// on a day off changes nothing. An archived habit's day left open (the day it was archived) never comes due.
+	and(eq(habit.accountId, accountId), eq(habit.scoring, 'habit'), isNull(occurrence.rollup), eq(occurrence.extra, false), or(eq(habit.archived, false), ne(occurrence.status, 'due')));
 
-/** Every day from `from` to `to`, each [done, due]; skipped days count for neither. */
+/**
+ * Every day from `from` to `to`, each [done, due]; skipped days count for neither. With one habit its own row is the
+ * day, a routine's too (it carries the rollup of the habits inside it).
+ */
 export function dayCounts(accountId: string, from: string, to: string, habitId: string | null = null): Record<string, Count> {
 	const rows = db
 		.select({ date: occurrence.date, status: occurrence.status })
 		.from(occurrence)
 		.innerJoin(habit, eq(occurrence.habitId, habit.id))
-		.where(and(counted(accountId), gte(occurrence.date, from), lte(occurrence.date, to), habitId ? eq(habit.id, habitId) : undefined))
+		.where(and(habitId ? and(eq(habit.accountId, accountId), eq(habit.id, habitId), eq(occurrence.extra, false)) : counted(accountId), gte(occurrence.date, from), lte(occurrence.date, to)))
 		.all();
 	const out: Record<string, Count> = {};
 	for (let d = from; d <= to; d = addDays(d, 1)) out[d] = [0, 0];
@@ -47,12 +51,16 @@ export function dayHabits(accountId: string): { id: string; name: string }[] {
 }
 
 /**
- * What a page hands the days block: the last 12 months (and the span around `at`, when that is older) counted,
- * the first day, the habits, and the saved choice with a habit that is gone put back to all.
+ * What a page hands the days block: the last 12 months counted, and the span around `at` when that is older (never
+ * every day back to it: the block fetches what else it steps to), the first day, the habits, and the saved choice with
+ * a habit that is gone put back to all.
  */
 export function daysData(accountId: string, today: string, saved: { show: Show; habit: string | null }, at: string = today) {
 	const habits = dayHabits(accountId);
 	const habitId = habits.some((h) => h.id === saved.habit) ? saved.habit : null;
-	const from = [addDays(weekStart(today), -7 * (YEAR_WEEKS - 1)), spanOf(saved.show, at, today)[0], weekStart(at)].sort()[0];
-	return { today, first: firstDay(accountId), habits, show: saved.show, habit: habitId, counts: dayCounts(accountId, from, today, habitId) };
+	// The span `show` puts round `at` and the week under it (the 12 months' week): from the first of them to the last.
+	const ends = [...spanOf(saved.show, at, today), weekStart(at), addDays(weekStart(at), 6)].sort(), year = yearStart(today);
+	const lo = ends[0], hi = ends[3] < today ? ends[3] : today;
+	const counts = { ...dayCounts(accountId, year, today, habitId), ...(lo < year ? dayCounts(accountId, lo, hi, habitId) : {}) };
+	return { today, first: firstDay(accountId), habits, show: saved.show, habit: habitId, counts };
 }

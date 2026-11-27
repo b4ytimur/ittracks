@@ -7,8 +7,7 @@
 	import ViewSentence from '$lib/ViewSentence.svelte';
 	import DaysBlock from '$lib/days/DaysBlock.svelte';
 	import YearStrip from '$lib/days/YearStrip.svelte';
-	import { daysBetween } from '$lib/engine/dates';
-	import type { Count } from '$lib/days/days';
+	import { historyHref, type Count } from '$lib/days/days';
 	import { historyWords } from '$lib/view-words';
 	import { showToast } from '$lib/toast.svelte';
 	import EditableList from '$lib/ui/EditableList.svelte';
@@ -65,7 +64,7 @@
 	/** A day's logs as its count sees them: today's also holds what is still to do. */
 	const countedOn = <T extends DayLog>(date: string, logs: T[]): DayLog[] => (date === data.today ? [...logs, ...data.openToday] : logs);
 	const logsOf = $derived(new Map(data.history.map(([date, d]) => [date, countedOn(date, d.occurrences)])));
-	const yesterday = $derived(dayCount(logsOf.get(data.strip[5]) ?? []));
+	const yesterday = $derived(dayCount(logsOf.get(data.yesterday) ?? []));
 	const wide = new MediaQuery('min-width: 64rem');
 	const withLogs = $derived(data.history.filter(([, d]) => d.occurrences.some((o) => o.status === 'done')).length);
 
@@ -96,9 +95,9 @@
 		const s = p.toString().replace(/notes=(&|$)/, 'notes$1');
 		return `/history${s ? `?${s}` : ''}`;
 	}
-	/** A day with something due opens in the list, loaded back that far; one without, on its own page. */
-	const dayHref = (d: string, c: Count | undefined) =>
-		c?.[1] ? `${daysBetween(d, data.today) < data.days ? '' : at({ days: daysBetween(d, data.today) + 1 })}#d-${d}` : d === data.today ? '/' : `/day/${d}`;
+	/** The days the list draws now: a day goes to its place in it, else (historyHref) to the list loaded back to it or its page. */
+	const listed = $derived(new Set(days.map((x) => x.date)));
+	const dayHref = (d: string, c: Count | undefined) => historyHref(d, data.today, listed, data.days, !!c?.[1], (n) => at({ days: n }));
 	const find = (e: Event) => {
 		e.preventDefault();
 		goto(at({ q: q.trim() }), { keepFocus: true, noScroll: true });
@@ -149,11 +148,14 @@
 	/>
 {/if}
 
-<!-- The last 12 months across the top, folding to its heading; the days block at the top of the side column. -->
+<!-- The last 12 months across the top, folding to its heading; the days block at the top of the side column, or over the
+     days on a phone. It leaves the 12 months to the strip. -->
 {#if !data.notesOnly && !data.q}<YearStrip today={data.today} first={data.block.first} counts={data.year.counts} open={data.year.open} href={dayHref} />{/if}
+{#snippet block()}<DaysBlock {...data.block} twelve={false} href={(d) => dayHref(d, data.year.counts[d])} />{/snippet}
 
 <div class="page-cols">
 	<div class="page-main">
+		{#if !data.notesOnly && !data.q && !wide.current}{@render block()}{/if}
 		{#if selecting}
 			<BulkBar kind="day" {selected} bind:outcome visible={days.flatMap((d) => d.occurrences.map((o) => o.id))} today={data.today} />
 		{/if}
@@ -255,7 +257,7 @@
 		{/if}
 	</div>
 	{#if !data.notesOnly && !data.q && wide.current}
-		<aside class="page-side" aria-label="Days"><DaysBlock {...data.block} href={(d) => dayHref(d, data.year.counts[d])} /></aside>
+		<aside class="page-side">{@render block()}</aside>
 	{/if}
 </div>
 

@@ -35,6 +35,7 @@
 	import { mergeOrder } from '$lib/ui/list';
 	import { usualWay } from '$lib/log/usual';
 	import DaysBlock from '$lib/days/DaysBlock.svelte';
+	import { statusCount } from '$lib/days/days';
 	import {
 		STARTERS,
 		STATS,
@@ -230,7 +231,6 @@
 	}
 	// A hint stands once, and goes for good when its thing is done.
 	const anyDone = $derived(data.build.some((b) => b.occurrence?.status === 'done'));
-	const hint = $derived(hintNow(data.hints, data.build.some((b) => b.occurrence?.status === 'due') ? ['done'] : []));
 	let retired = $state<string[]>([]);
 	function retire(id: HintId) {
 		if (retired.includes(id)) return;
@@ -405,7 +405,7 @@
 	const identityNames = $derived([...new Set([...data.build, ...data.breaking].flatMap((b) => b.identities))].sort());
 	const wordsCtx = $derived({ areas: data.areas, identities: hidden('identities') ? [] : identityNames, parts: data.ranges.length > 0, breaking: data.breaking.length > 0 });
 	const words = $derived(todayWords(view, wordsCtx));
-	// A group is counted through the habits inside it, as the strip counts.
+	// A group is counted through the habits inside it, as the days block counts.
 	const dueLeaves = $derived(data.build.filter((b) => !b.group));
 	const doneCount = $derived(dueLeaves.filter(isDone).length);
 	/** Everything due is done or skipped. */
@@ -417,6 +417,8 @@
 	let strip = $state(false);
 	/** From 64rem the side column holds the days block, always shown (TS.11). */
 	const wide = new MediaQuery('min-width: 64rem');
+	// One at a time, in the hint line: 'done' while something is due, then 'days' while the days block is on screen.
+	const hint = $derived(hintNow([...data.hints, ...retired], [...(data.build.some((b) => b.occurrence?.status === 'due') ? ['done' as const] : []), ...(wide.current || strip ? ['days' as const] : [])]));
 	/** Prepare for tomorrow, Paused and Not due today: one folded line at the end (TS.7). */
 	const laterSays = $derived(
 		[
@@ -550,7 +552,7 @@
 
 <svelte:head><title>Today · ittracks</title></svelte:head>
 
-<!-- No second state: Today keeps its own ⋯ and, under the title, the date (which opens the last seven days) and the count. -->
+<!-- No second state: Today keeps its own ⋯ and, under the title, the date (which opens the days block) and the count. -->
 {#snippet dayLine()}
 	<span class="today-line">
 		{#if wide.current}<span class="date">{dateLabel}</span>{:else}<button type="button" class="date" aria-expanded={strip} aria-controls="today-strip" onclick={() => (strip = !strip)}>{dateLabel} <span class="chev" aria-hidden="true">›</span></button>{/if}
@@ -574,7 +576,8 @@
 {/if}
 
 {#snippet days()}
-	<DaysBlock {...data.block} todayCount={[doneCount, dueLeaves.length]} href={(d) => (d < data.today ? `/day/${d}` : null)} hint={!data.hints.includes('days') && !retired.includes('days')} onused={() => retire('days')} slotOpen={gripped && wide.current} />
+	<!-- Today as the server counts a day (a skip is neither done nor due), with what was just pressed. -->
+	<DaysBlock {...data.block} todayCount={statusCount(dueLeaves.map((b) => statusOf(b.occurrence!)))} href={(d) => (d < data.today ? `/day/${d}` : null)} onused={() => retire('days')} slotOpen={gripped && wide.current} />
 {/snippet}
 
 {#if data.askDay}
@@ -613,7 +616,7 @@
 	</section>
 {:else}
 	<ViewSentence bind:this={sentenceBar} page="today" bind:views bind:current={view} {words} starters={STARTERS()} reset={fromTemplate(views.template).defaults.today} say={(s) => sentence(todayWords(s, wordsCtx))} />
-	{#if hint && !retired.includes(hint)}
+	{#if hint}
 		<div class="notice ob-hint" role="note"><span class="notice-text">{HINTS[hint]}</span><span class="notice-acts"><button type="button" class="quiet" onclick={() => hint && retire(hint)}>Got it</button></span></div>
 	{/if}
 
@@ -980,7 +983,7 @@
 		min-width: 0;
 		overflow-wrap: anywhere;
 	}
-	/* Under the title: the date, which opens the last seven days, and the one count (TS.5). */
+	/* Under the title: the date, which opens the days block, and the one count (TS.5). */
 	.today-line {
 		display: flex;
 		align-items: center;

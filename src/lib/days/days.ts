@@ -54,6 +54,14 @@ export function canStep(show: Show, at: ISODate, n: -1 | 1, today: ISODate, firs
 	return first !== null && to >= first && (show !== 'year' || weekStart(at) > yearStart(today));
 }
 
+/** Whether `at` shows now: this week, this month, the seven days to the day the page is on (today on Today). */
+export function showsNow(show: Show, at: ISODate, today: ISODate, chosen: ISODate | null = null): boolean {
+	if (show === 'year') return weekStart(at) === weekStart(today);
+	if (show === 'seven') return at === (chosen ?? today);
+	const [a, b] = spanOf(show, at, today);
+	return a <= today && today <= b;
+}
+
 export function markOf(d: ISODate, c: Count | undefined, today: ISODate, first: ISODate | null): Mark {
 	if (d > today) return 'future';
 	if (first === null || d < first) return 'before';
@@ -64,6 +72,19 @@ export function markOf(d: ISODate, c: Count | undefined, today: ISODate, first: 
 
 export const wordsOf = (m: Mark, c?: Count): string =>
 	m === 'future' ? 'still to come' : m === 'before' ? 'before you started' : c && c[1] ? `${c[0]} of ${c[1]} done` : 'nothing due';
+
+/** A day's [done, due] from its habits' statuses, as dayCounts counts: a skip is neither. */
+export const statusCount = (statuses: string[]): Count => [statuses.filter((s) => s === 'done').length, statuses.filter((s) => s !== 'skipped').length];
+
+/**
+ * Where History sends a day: to it in the list when the list draws it, to the list loaded back that far when it is
+ * older than the list goes and something was due, else today to Today and any other day to its page.
+ */
+export function historyHref(d: ISODate, today: ISODate, listed: Set<string>, days: number, due: boolean, older: (days: number) => string): string {
+	if (listed.has(d)) return `#d-${d}`;
+	if (due && daysBetween(d, today) >= days) return `${older(daysBetween(d, today) + 1)}#d-${d}`;
+	return d === today ? '/' : `/day/${d}`;
+}
 
 /** Done and due over some days. */
 export function total(days: ISODate[], countOf: (d: ISODate) => Count | undefined): Count {

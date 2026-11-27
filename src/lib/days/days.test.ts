@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addMonths, canStep, isoWeek, markOf, monthEnd, monthWeeks, spanOf, stepOf, total, wordsOf } from './days';
+import { addMonths, canStep, historyHref, isoWeek, markOf, monthEnd, monthWeeks, showsNow, spanOf, statusCount, stepOf, total, wordsOf } from './days';
 
 const today = '2026-11-26';
 describe('the days block', () => {
@@ -43,5 +43,33 @@ describe('the days block', () => {
 		expect(markOf('2026-11-22', [0, 0], today, '2026-01-01')).toBe('rest');
 		expect(wordsOf('missed', [0, 2])).toBe('0 of 2 done');
 		expect(total(['a', 'b', 'c'], (d) => (d === 'c' ? undefined : [1, 2]))).toEqual([2, 4]);
+	});
+	it('shows now: the seven days to the day the page is on, so the way back is gone there', () => {
+		expect(showsNow('seven', today, today)).toBe(true);
+		expect(showsNow('seven', '2026-11-25', today, '2026-11-25')).toBe(true);
+		expect(showsNow('seven', '2026-11-18', today, '2026-11-25')).toBe(false);
+		expect(showsNow('seven', '2026-11-25', today)).toBe(false);
+		expect(showsNow('week', '2026-11-29', today)).toBe(true);
+		expect(showsNow('month', '2026-11-02', today)).toBe(true);
+		expect(showsNow('month', '2026-10-31', today)).toBe(false);
+		expect(showsNow('year', '2026-11-24', today)).toBe(true);
+		expect(showsNow('year', '2026-11-19', today)).toBe(false);
+	});
+	it("counts today as the server counts a day: a skip is neither done nor due", () => {
+		expect(statusCount(['done', 'skipped'])).toEqual([1, 1]);
+		expect(statusCount(['due', 'skipped'])).toEqual([0, 1]);
+		expect(statusCount(['done', 'due', 'missed'])).toEqual([1, 3]);
+	});
+	it('sends a day to the list only where the list draws it', () => {
+		const older = (n: number) => `/history?days=${n}`;
+		const listed = new Set(['2026-11-25']);
+		expect(historyHref('2026-11-25', today, listed, 90, true, older)).toBe('#d-2026-11-25');
+		// Nothing logged today: the list has no today, so today goes to Today.
+		expect(historyHref(today, today, listed, 90, true, older)).toBe('/');
+		// Within the list's days but not drawn (filtered out, or nothing logged): its page.
+		expect(historyHref('2026-11-24', today, listed, 90, true, older)).toBe('/day/2026-11-24');
+		// Older than the list goes: the list loaded back to it.
+		expect(historyHref('2026-08-01', today, listed, 90, true, older)).toBe('/history?days=118#d-2026-08-01');
+		expect(historyHref('2026-08-01', today, listed, 90, false, older)).toBe('/day/2026-08-01');
 	});
 });

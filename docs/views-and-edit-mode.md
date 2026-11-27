@@ -58,7 +58,7 @@ The sentence at the top of Today is its view: what it shows (everything, what is
 - **›** after a habit's or tracker's name opens its row. An open row lists each kind of line under it (the Minimum, treats, reframe lines, jars and savings, identities, suggestions to raise) with **Hide** or **Show**, a hidden one struck. It belongs to the view, so each saved view has its own. When and where, and the number, follow the sentence's words for rows and the number.
 - **Number** in an open row gives that habit a number of its own instead of the view's.
 
-Sections and groups fold, and stay folded. Every count on Today (the count under the title, each section, the week strip) counts the habits themselves: a group or routine counts through the habits inside it. A group that is done by its rule while a habit inside is still due stays with what is still to do, so that habit isn't filed under Done.
+Sections and groups fold, and stay folded. Every count on Today (the count under the title, each section, the days block) counts the habits themselves: a group or routine counts through the habits inside it. A group that is done by its rule while a habit inside is still due stays with what is still to do, so that habit isn't filed under Done.
 
 ### Habits
 
