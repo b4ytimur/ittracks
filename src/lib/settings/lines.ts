@@ -94,7 +94,7 @@ export function settingGroups(s: Now): Group[] {
 			id: 'track',
 			title: 'What you track',
 			lines: [
-				{ id: 'newhabits', label: 'New habits', words: s.guidedSetup ? 'Ask how to start.' : 'Open the full page.', says: 'What + Habit opens. Which lines it starts with is chosen there, and on any habit’s page in Edit.', also: 'guided setup editor sections gallery' },
+				{ id: 'newhabits', label: 'New habits', words: s.guidedSetup ? 'Ask how to start.' : 'Open the full page.', says: 'What + Habit opens. Which lines it starts with is chosen there, and at the end of any habit’s page, under On every new habit.', also: 'guided setup editor sections gallery' },
 				{ id: 'units', label: 'Units', words: `${names(s.units.filter((k) => !k.off).map((k) => (k.id === TIME ? k.name : `${k.name} in ${k.shown}`)), 6)}.`, says: 'Every number you log can have a unit, and it can be any word. Units of one kind convert into each other; a word that is in no kind never does.', also: `kinds convert step ${s.units.flatMap((k) => k.units.flatMap((x) => [x.name, ...x.also])).join(' ')}` },
 				{ id: 'measures', label: 'Measures', words: s.measures.some((m) => !m.off) ? `${names(s.measures.filter((m) => !m.off).map((m) => m.name))}.` : 'None yet.', says: 'A measure is a formula over the fields you log, such as [Weight] * [Reps] or [Distance] / [Time] * 60. Stats cards count logs by them, and a Task’s records list the ones you want.', also: `formula stats records ${s.measures.map((m) => m.name).join(' ')} epley brzycki lombardi` },
 				{ id: 'groupings', label: 'Groupings', words: `${names(s.groupings.map((g) => g.name))}.`, says: 'A grouping has members, the tags a Task carries, and levels that say how much. Splitting a Stats card by one counts a log toward each of its Task’s members by the level’s weight: 1 in full, 0.5 half, 0 not at all. Auto-filled slots compare levels by their order.', also: `tags levels stats muscle groups ${s.groupings.flatMap((g) => [g.one, ...g.levels.map((l) => l.name)]).join(' ')}` },
@@ -149,7 +149,7 @@ export function settingGroups(s: Now): Group[] {
 
 /** What is set where it acts: the place, and the way there. */
 export const ELSEWHERE: { label: string; place: string; href: string; also: string }[] = [
-	{ label: 'Areas', place: 'Habits, on their headings in Edit', href: '/habits', also: 'colours groups' },
+	{ label: 'Areas', place: 'Habits, grouped by Area: on each Area’s heading', href: '/habits', also: 'colours groups' },
 	{ label: 'What a page shows, and its views', place: 'The sentence under each page’s title', href: '/', also: 'views filters sort group layout sections widgets lines rows done customize' },
 	{ label: 'View templates', place: 'Today: the view’s name, then Start from', href: '/', also: 'template minimal standard routine week first quitter data nerd starter' },
 	{ label: 'Stats boards', place: 'Stats, the boards’ ⋯', href: '/stats', also: 'cards open' },

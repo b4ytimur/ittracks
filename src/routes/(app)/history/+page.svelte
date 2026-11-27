@@ -182,7 +182,7 @@
 		{#if data.dayNote !== null && !data.q && !data.mood}<div class="hi-daynote"><DayNote date={data.today} text={data.dayNote} link={false} /></div>{/if}
 		{#if data.lookBack.length}
 			<GroupHeading title="On this day" />
-			<ul class="elist" data-mode="use" aria-label="On this day">
+			<ul class="elist" aria-label="On this day">
 				{#each data.lookBack as x (x.date)}
 					<li><div class="card link"><span class="slot"></span><div class="content"><a class="name" href={x.href}>{x.label}</a><p class="meta-line">{title(x.date)}</p><p class="row-line">{dayExcerpt(x.day!) || x.day!.moods.map((m) => `${m.field}: ${m.value}`).join(' · ')}</p></div></div></li>
 				{/each}
@@ -228,14 +228,15 @@
 							{#snippet row(o)}
 								{@const out = outcome.get(o.id)}
 								{#if !selecting}<a class="name" href={hrefOf(o, day.date)}>{o.habit}</a>{:else}<span class="name">{o.habit}</span>{/if}
-								{#if out?.tag}<span class="tags"><span class="tag pending"><span aria-hidden="true">→</span> {out.tag}</span></span>{/if}
+								<!-- The row is the day, so its tag says what happens to it: Skip is the only bulk action on days. -->
+								{#if out?.tag}<span class="tags"><span class="tag pending"><span aria-hidden="true">→</span> Skipped</span></span>{/if}
 								<p class="meta-line">{#if logged(o)}<span class="mark" aria-hidden="true">•</span>{' '}{:else if o.status !== 'missed'}<span class="mark" aria-hidden="true">{o.status === 'done' ? '✓' : '↷'}</span>{' '}{/if}{out?.reason ?? words(o)}</p>
 								{#each day.notes.row.get(o.id) ?? [] as it, i (i)}{@render note(it, `${o.id}:${i}`, day.date)}{/each}
 							{/snippet}
 						</EditableList>
 					{/if}
 					{#if day.slips.length}
-						<ul class="elist slips" data-mode="use" data-density="compact" aria-label="Slips on {title(day.date)}">
+						<ul class="elist slips" data-density="compact" aria-label="Slips on {title(day.date)}">
 							{#each day.slips as s, i (i)}
 								<li><div class="card link"><span class="slot"></span><div class="content"><a class="name" href="/day/{day.date}">{s.habit}</a><p class="meta-line">Slip{s.count !== 1 ? ` × ${s.count}` : ''}</p>{#each day.notes.slip.get(i) ?? [] as it, n (n)}{@render note(it, `${day.date}:s${i}:${n}`, day.date)}{/each}</div></div></li>
 							{/each}

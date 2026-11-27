@@ -110,7 +110,7 @@ describe('Areas in place', () => {
 		expect(listAreas(me).slice(0, 2).map((x) => x.name)).toEqual([b.name, 'Body']);
 	});
 
-	it('shows Areas with nothing in them while editing', () => {
+	it('shows Areas with nothing in them when nothing narrows the list', () => {
 		const areas = listAreas(me);
 		expect(groupBy([], 'area', { areas })).toEqual([]);
 		expect(groupBy([], 'area', { areas }, { keepEmpty: true }).map((g) => g.key)).toEqual(areas.map((a) => a.id));

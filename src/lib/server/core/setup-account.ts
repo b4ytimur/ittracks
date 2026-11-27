@@ -316,6 +316,9 @@ export const ACCOUNT_OPS: { [K in AccountOp]: Op<K> } = {
 			return { op: c.op, summary: `Delete the identity “${hit.statement}” (${plural(deleted.habitIds.length, 'habit')} had it)` };
 		}
 		if (!hit) {
+			// Two identities never say the same: adding a sentence another one says finds that one.
+			const twin = all.find((i) => low(i.statement) === low(c.statement ?? c.identity));
+			if (twin) return { op: c.op, summary: `Identity “${twin.statement}”: nothing changes` };
 			const id = addIdentity(run.accountId, c.statement ?? c.identity);
 			run.undo.push({ k: 'identity', added: id } satisfies AccountUndo);
 			return { op: c.op, summary: `Add the identity “${c.statement ?? c.identity}”` };

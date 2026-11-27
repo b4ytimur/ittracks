@@ -404,6 +404,7 @@ describe('setup: the account', () => {
 		expect(r2.identities.map((i) => i.statement)).toContain('I run');
 		// Two identities never say the same: rewording one as another's sentence is refused, as adding it finds that one.
 		fails(() => setup([{ op: 'identity', identity: 'I lift' }, { op: 'identity', identity: 'I run', statement: 'i lift' }]), 'invalid', /Another identity says “i lift” already/);
+		expect(setup([{ op: 'identity', identity: 'I swim', statement: 'i RUN' }]).changes[0].summary).toBe('Identity “I run”: nothing changes');
 		expect(r2.tags.some((t) => t.name === 'bum')).toBe(true);
 		expect(r2.pauses).toEqual([]);
 		expect(r2.shortcuts).toEqual([]);

@@ -12,7 +12,6 @@
 	import * as W from '$lib/detail/words';
 	import TitleLine from '$lib/ui/TitleLine.svelte';
 	import GroupHeading from '$lib/ui/GroupHeading.svelte';
-	import InlineText from '$lib/ui/InlineText.svelte';
 	import MenuButton, { type Way } from '$lib/ui/MenuButton.svelte';
 	import RecordTabs from '$lib/detail/RecordTabs.svelte';
 	import { dismiss, showError, showToast } from '$lib/toast.svelte';

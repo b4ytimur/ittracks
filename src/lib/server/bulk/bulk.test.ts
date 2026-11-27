@@ -416,8 +416,6 @@ describe('skip: days picked one by one', () => {
 		const picked = [occ.id, `Walk@${d}`, `${ids.water}@${d}`, `Read@${addDays(today, -9)}`, `Walk@${addDays(today, 2)}`, `Quit smoking@${d}`];
 		const p = bulk({ action: { name: 'skip' }, ids: picked });
 		expect(p.count).toBe(2);
-		// Each picked day's tag on its row says what happens to it, not its date again.
-		expect(p.changes.map((c) => c.detail)).toEqual(['Skipped', 'Skipped']);
 		const why = reasons(p);
 		expect(why['Done, and it stays done. Undo it on its day first to skip it']).toEqual(['Read']);
 		expect(why["Days after today can't be skipped yet. Pause the habit for them instead"]).toEqual(['Walk']);
@@ -426,7 +424,7 @@ describe('skip: days picked one by one', () => {
 		const r = bulk({ action: { name: 'skip' }, ids: picked, apply: true });
 		expect(r.summary).toBe('Skipped 2 days of 2 habits');
 		expect([statusOn(ids.water, d), statusOn(ids.walk, d)]).toEqual(['skipped', 'skipped']);
-		expect(r.changes[0]).toMatchObject({ id: occ.id, label: 'Drink water', detail: 'Skipped' });
+		expect(r.changes[0]).toMatchObject({ id: occ.id, label: 'Drink water' });
 		undo(r.batch!);
 		expect([statusOn(ids.water, d), statusOn(ids.walk, d)]).toEqual(['missed', 'missed']);
 	});

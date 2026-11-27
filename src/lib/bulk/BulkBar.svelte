@@ -193,18 +193,18 @@
 			<form
 				bind:this={form}
 				class="stack panel"
-				inert={busy}
 				onsubmit={(e) => {
 					e.preventDefault();
 					if (ready) run(true);
 				}}
 			>
-				<BulkForm fields={open.fields} bind:values sources={lists} />
+				<!-- Applying: all but the status line is inert, so its Applying… is still announced. -->
+				<div class="part" inert={busy}><BulkForm fields={open.fields} bind:values sources={lists} /></div>
 				<div class="selbar-commit">
 					<p class="selbar-say" role="status">{say}</p>
-					{#if (preview?.count ?? 0) > 1}<button class="link meta" type="button" onclick={jump}>Jump to next</button>{/if}
-					<span class="selbar-go">
-						<button class="small primary" aria-disabled={!ready} aria-busy={busy}>{busy ? 'Applying…' : preview?.count ? `Apply ${preview.count} ${preview.count === 1 ? 'change' : 'changes'}` : 'Apply'}</button>
+					{#if (preview?.count ?? 0) > 1}<button class="link meta" type="button" onclick={jump} inert={busy}>Jump to next</button>{/if}
+					<span class="selbar-go" inert={busy}>
+						<button class="small primary" aria-disabled={!ready}>{busy ? 'Applying…' : preview?.count ? `Apply ${preview.count} ${preview.count === 1 ? 'change' : 'changes'}` : 'Apply'}</button>
 						<button class="small" type="button" onclick={close}>Cancel</button>
 					</span>
 				</div>
@@ -220,5 +220,8 @@
 	}
 	.panel {
 		margin-top: var(--space-inline);
+	}
+	.part {
+		display: contents;
 	}
 </style>

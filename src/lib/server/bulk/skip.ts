@@ -165,8 +165,7 @@ export const skipPicked: Run<'skip'> = (ctx, picked) => {
 		}
 		const r = skipDay(ctx, h, d, pauses, along, false);
 		if (r === 'skipped') {
-			// The day is the row it tags (History), so its tag says what happens to it.
-			report.change({ ...line, detail: 'Skipped' });
+			report.change(line);
 			habits.add(h.id);
 			days++;
 		} else

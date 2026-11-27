@@ -1,4 +1,4 @@
-// Edit on the log: the plan's numbers and order, changed where they stand.
+// Change the plan, on a log: the plan's numbers and order, changed where they stand.
 import type { HabitForm } from '$lib/forms';
 import type { RowState } from './run';
 

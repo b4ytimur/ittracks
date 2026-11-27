@@ -140,12 +140,6 @@ export function rangeKeys(keys: string[], from: string, to: string): string[] {
 	return keys.slice(Math.min(a, b), Math.max(a, b) + 1);
 }
 
-/** How many of a list's keys are selected: none, some or all (for a "select all" box). */
-export function selectionState(keys: string[], selected: { has(k: string): boolean }): 'none' | 'some' | 'all' {
-	const n = keys.filter((k) => selected.has(k)).length;
-	return n === 0 ? 'none' : n === keys.length ? 'all' : 'some';
-}
-
 interface Box {
 	left: number;
 	top: number;

@@ -1226,7 +1226,7 @@
 {/snippet}
 
 {#snippet stations(c: Circuit, k: number, word: string)}
-	<ul class="elist lg-stations" data-mode="use" style="--gap: 0px; --depth: 1" aria-label="In {word} {k + 1}">
+	<ul class="elist lg-stations" style="--gap: 0px; --depth: 1" aria-label="In {word} {k + 1}">
 		{#each c.rounds[k] as j (placeKey(items[j]))}
 			{@const x = items[j]}
 			{@const t = x.task}
@@ -1276,7 +1276,7 @@
 {#if editing}
 	<EditPlaces places={editPlaces} open={items.find((it) => placeKey(it) === row?.key)?.slotId ?? null} onorder={editOrder} onname={editName} onnumber={editNumber} onrows={editRows} onremove={editRemove} onadd={editAdd} onreplace={(p) => (picking = { it: items.find((x) => x.slotId === p.id && x.depth === 0)!, from: document.activeElement as HTMLElement | null, plan: true })} library={data.library.filter((l) => !l.archived)} />
 {:else}
-<ul class="elist lg-page lg-places" data-mode="use" aria-label="What to log">
+<ul class="elist lg-page lg-places" aria-label="What to log">
 	{#each items as it, i (placeKey(it))}
 		{@const t = it.task}
 		{@const key = placeKey(it)}

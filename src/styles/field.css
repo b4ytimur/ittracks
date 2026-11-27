@@ -8,7 +8,7 @@
        <label class="label" for="f-goal">Goal per week</label>
        <p class="field-hint meta" id="f-goal-h">Days in a week, 1 to 7.</p>
        <input id="f-goal" inputmode="numeric" value="4" aria-describedby="f-goal-h">
-       <p class="invalid-message error meta" id="f-goal-m">…</p>       one slot: States' message or BlockedReason's line
+       <p class="error meta" id="f-goal-m">…</p>                       one slot: States' message or BlockedReason's line
      </div>
      <fieldset class="field-group"><legend class="label">Mood</legend> <div class="chips">…</div></fieldset>       one field, several options (D4.9)
      <fieldset class="field-group l-stack"><legend class="card-title">Reminder</legend> <div class="field">…</div> …  several fields
@@ -50,7 +50,7 @@
 
 /* ---------- The frame: label, optional hint, the control, one message slot ---------- */
 /* One column, each part 4px (space-tight: a label to its input) under the one above: a field is 20 + 4 + 32 = 56, 80
-   with a hint, 24 more with its message, all whole pitches. The slot holds States' .invalid-message or BlockedReason's
+   with a hint, 24 more with its message, all whole pitches. The slot holds States' .error message or BlockedReason's
    line, never both (a blocked control can't turn invalid); it renders only when it has words. Fields in a form stack on
    Layout's .l-stack, 16 apart (space-group). */
 .field { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; min-width: 0; }
