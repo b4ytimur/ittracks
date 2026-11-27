@@ -8,8 +8,8 @@
      <h2 class="group-heading section-title [slotted]">
        <button class="fold" aria-expanded="true" aria-labelledby="t1"><span class="chev" aria-hidden="true">›</span></button>
        <span class="slot"></span>                                                 the grip, when the headings can be moved
-       <span class="icon" aria-hidden="true">⌂</span>                            an Area's icon, if it has one
        <span class="swatch" style="--c: #16a34a"></span>                         Areas only: the Area's colour
+       <span class="icon" aria-hidden="true">⌂</span>                            an Area's icon, if it has one
        <span class="title" id="t1">Health</span>                                 input.inline-text inside while renaming
        <span class="tags"><span class="tag count">2</span></span>
        <a class="quiet verb" href="/day/…">Log this day</a>                     a verb, if one is passed
@@ -92,8 +92,8 @@ li:has(> .group-heading:focus-within) > * .group-heading.stuck { z-index: calc(v
 .group-heading:has(> .fold, > .title > input) .handle::before { inset-inline: 0; }
 
 /* ---------- Title, icon, swatch, count ---------- */
-/* The title (an Area's icon first) starts on the rows' name column in every state.
-   The swatch and the count follow it, space-inline apart, so they slide 16px with it and nothing else moves:
+/* The heading's first mark (an Area's swatch, else its icon, else the title) starts on the rows' name column in every
+   state. The icon, the title and the count follow it, so they slide 16px with it and nothing else moves:
    InlineEditor drops its 24ch floor in a heading, so a renamable title's dashed rule is as wide as its text. */
 .group-heading > .title { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; } /* wraps, never truncates */
 .group-heading > .title, .group-heading > .swatch, .group-heading > .tags { margin-inline-end: var(--space-inline); }
