@@ -171,6 +171,18 @@ function resolveStats(run: SetupRun, raw: Record<string, unknown>): Record<strin
 		return all.find((x) => x.id === r)?.id ?? all.find((x) => low(x.title) === low(r))?.id ?? String(r);
 	};
 	if (typeof c.op === 'string' && ['board.patch', 'board.delete', 'board.move'].includes(c.op)) c.id = board(c.id ?? c.board);
+	if (c.op === 'board.patch') {
+		// A board's filter keeps ids: an Area, a habit and an identity may be named.
+		const area = (a: unknown) => pick(listAreas(run.accountId), String(a), (x) => x.name, 'Area').id;
+		if (isObj(c.filter)) {
+			const f = { ...c.filter };
+			if (Array.isArray(f.areas)) f.areas = f.areas.map(area);
+			if (typeof f.habit === 'string') f.habit = run.habit(f.habit);
+			if (typeof f.identity === 'string') f.identity = pick(listIdentities(run.accountId), f.identity, (i) => i.statement, 'identity').id;
+			c.filter = f;
+		}
+		if (Array.isArray(c.toggle)) c.toggle = c.toggle.map((t) => (isObj(t) && t.list === 'areas' ? { ...t, value: area(t.value) } : t));
+	}
 	if (c.op === 'board.add' && typeof c.template === 'string' && !seedById(c.template)) throw notFound(`No board template “${c.template}”. setup_read ref "stats" lists them.`);
 	if (c.op === 'open' && c.value !== 'last') c.value = board(c.value);
 	if (isObj(c.where)) {

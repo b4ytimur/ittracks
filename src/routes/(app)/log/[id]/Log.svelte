@@ -19,6 +19,7 @@
 	import { enqueue, isOffline, outbox, save, sendAhead } from '$lib/outbox.svelte';
 	import { waitingSwaps } from '$lib/queue';
 	import { postAction, runAction, showError, showToast, undoWith } from '$lib/toast.svelte';
+	import { inSentence } from '$lib/echo';
 	import { differs, revOf, type LogContent } from '$lib/logrev';
 	import { besides, carryOver, doneBefore, doneLine, fromDraft, keptText, loggedAt, placeKey, setsToDo, startedLog, swapGroups, swapText, usedText, waitingText, withWaiting, type Logged } from '$lib/log/places';
 	import SwapSheet from '$lib/log/SwapSheet.svelte';
@@ -699,7 +700,7 @@
 		const key = placeKey(items[i]);
 		at = null;
 		if (gone)
-			showToast(`Removed ${items[i].task?.rowOne} ${log[i].sets.length + 1} of ${items[i].task?.name}, for this log.`, () => {
+			showToast(`Removed ${items[i].task?.rowOne} ${log[i].sets.length + 1} of ${inSentence(items[i].task?.name ?? '')}, for this log.`, () => {
 				if (!mounted) return 'Open the log to put it back.';
 				places[key].sets.push(gone);
 			});
@@ -721,7 +722,7 @@
 		if (v === layout) return;
 		picked = v === 'all' ? 'all' : 'current';
 		const { [data.habitId]: _, ...rest } = data.logLayouts;
-		const why = await saveSetting({ logLayouts: v === 'all' ? { ...rest, [data.habitId]: 'all' } : rest }, () => ({ logLayouts: data.logLayouts }), `${data.habitName} shows ${v === 'all' ? 'all of its log open' : 'one open at a time'}.`);
+		const why = await saveSetting({ logLayouts: v === 'all' ? { ...rest, [data.habitId]: 'all' } : rest }, () => ({ logLayouts: data.logLayouts }), `${inSentence(data.habitName)} shows ${v === 'all' ? 'all of its log open' : 'one open at a time'}.`);
 		// Not saved: it stays as picked for this visit, and says so.
 		if (why) return showError(why);
 		picked = null;
@@ -748,7 +749,7 @@
 		offered = true;
 		const { bases: _, ...rest } = JSON.parse(was.payload);
 		const undo = undoWith(`/log/${data.occurrence.id}?/save`, { payload: JSON.stringify(rest) });
-		showToast(`Changed the log of ${data.habitName}, ${dateLabel}.`, async () => {
+		showToast(`Changed the log of ${inSentence(data.habitName)}, ${dateLabel}.`, async () => {
 			if (mounted) dropAutosave();
 			if (!(await undo())) return false;
 			offered = false;
@@ -911,10 +912,10 @@
 		edit(`/api/habits/${data.habitId}`, { variants: next }, { variants: data.plan }, words, local, pick);
 	function editOrder(order: string[], moved: string) {
 		const name = editPlaces.find((p) => p.id === moved)?.name;
-		void editPlan(inOrder(data.plan!, order), `Moved ${name} to ${order.indexOf(moved) + 1} of ${order.length} in ${data.habitName}, from now on.`);
+		void editPlan(inOrder(data.plan!, order), `Moved ${inSentence(name ?? '')} to ${order.indexOf(moved) + 1} of ${order.length} in ${inSentence(data.habitName)}, from now on.`);
 	}
 	function editName(p: EditPlace, name: string) {
-		void edit(`/api/tasks/${p.task}`, { name }, { name: p.name }, `Renamed ${p.name} to ${name}, everywhere.`);
+		void edit(`/api/tasks/${p.task}`, { name }, { name: p.name }, `Renamed ${inSentence(p.name)} to ${inSentence(name)}, everywhere.`);
 	}
 	function editNumber(p: EditPlace, id: string, n: number) {
 		const i = items.findIndex((it) => it.slotId === p.id);
@@ -927,7 +928,7 @@
 			const seconds = Math.min(3600, Math.round(n));
 			const set = seconds ? { restTimerEnabled: true, restTimerSeconds: seconds } : { restTimerEnabled: false, restTimerSeconds: t.restTimerSeconds };
 			if (JSON.stringify(set) === JSON.stringify(was)) return;
-			return void edit(`/api/tasks/${t.id}`, set, was, seconds ? `${t.betweenName} after ${t.rowMany} of ${p.name} is ${seconds} s now, everywhere.` : `No ${t.betweenName.toLowerCase()} after ${t.rowMany} of ${p.name} any more.`);
+			return void edit(`/api/tasks/${t.id}`, set, was, seconds ? `${t.betweenName} after ${t.rowMany} of ${inSentence(p.name)} is ${seconds} s now, everywhere.` : `No ${t.betweenName.toLowerCase()} after ${t.rowMany} of ${inSentence(p.name)} any more.`);
 		}
 		if (!id) {
 			const count = Math.max(1, Math.round(n));
@@ -935,7 +936,7 @@
 			const w = inRows(it) || !it.kids ? { one: it.task!.rowOne, many: it.task!.rowMany } : roundWords(it.task!);
 			const word = count === 1 ? w.one : w.many;
 			if (count === rows.length && count === s.sets) return;
-			return void editPlan(withSlot(data.plan!, p.id, { sets: count }), `Set ${p.name} to ${count} ${word} for ${data.habitName}, from now on.`, (back) => {
+			return void editPlan(withSlot(data.plan!, p.id, { sets: count }), `Set ${inSentence(p.name)} to ${count} ${word} for ${inSentence(data.habitName)}, from now on.`, (back) => {
 				if (inRows(it)) places[key].sets = back ? (places[key].sets.length === count ? rows : places[key].sets) : toCount(places[key].sets, count);
 				at = null;
 			});
@@ -943,7 +944,7 @@
 		const m = it.task!.metrics.find((x) => x.id === id)!;
 		const before = s.targets[id];
 		if (n === before) return;
-		void editPlan(withSlot(data.plan!, p.id, { targets: { ...s.targets, [id]: n } }), `Set ${p.name} to ${n} ${m.unit || m.name.toLowerCase()} for ${data.habitName}, from now on.`, (back) => {
+		void editPlan(withSlot(data.plan!, p.id, { targets: { ...s.targets, [id]: n } }), `Set ${inSentence(p.name)} to ${n} ${m.unit || m.name.toLowerCase()} for ${inSentence(data.habitName)}, from now on.`, (back) => {
 			// Rows still to do that start from the target follow it, unless their number was changed here.
 			if (m.prefill !== 'target') return;
 			const [from, to] = back ? [n, before] : [before, n];
@@ -953,13 +954,13 @@
 	}
 	/** Out of the plan, from now on. A log that has values in it keeps it. */
 	function editRemove(p: EditPlace) {
-		if (!slotIn(data.plan!, p.id)) return void showToast(`${p.name} is not in the plan any more. This log keeps it.`);
+		if (!slotIn(data.plan!, p.id)) return void showToast(`${inSentence(p.name)} is not in the plan any more. This log keeps it.`);
 		const here = items.some((it, i) => it.slotId === p.id && hasLog(log[i], starts[i]));
 		// What is ticked here is saved first, so the log keeps its place.
 		const gone = async () => {
 			const first = await saveFirst();
 			if (first.kind !== 'saved') return void showError(first.kind === 'refused' ? first.why : 'Not saved. Are you online?');
-			await editPlan(withoutSlot(data.plan!, p.id), `Took ${p.name} out of ${data.habitName}, from now on.${here ? ' This log keeps it.' : ''}`);
+			await editPlan(withoutSlot(data.plan!, p.id), `Took ${inSentence(p.name)} out of ${inSentence(data.habitName)}, from now on.${here ? ' This log keeps it.' : ''}`);
 		};
 		void gone();
 	}
@@ -970,14 +971,14 @@
 	}
 	function editAdd(task: string) {
 		const name = data.library.find((l) => l.id === task)?.name;
-		void editPlan(withTask(data.plan!, data.variantId!, crypto.randomUUID(), task), `Added ${name} to ${data.habitName}, from now on.`);
+		void editPlan(withTask(data.plan!, data.variantId!, crypto.randomUUID(), task), `Added ${inSentence(name ?? '')} to ${inSentence(data.habitName)}, from now on.`);
 	}
 	function editRows(key: string, rows: RowState[], moved: RowState) {
 		const before = [...places[key].sets];
 		const it = items.find((x) => placeKey(x) === key)!;
 		places[key].sets = rows;
 		at = null;
-		showToast(`Moved ${it.task!.rowOne} ${before.indexOf(moved) + 1} of ${it.task!.name} to ${rows.indexOf(moved) + 1} of ${rows.length}, for this log.`, () => {
+		showToast(`Moved ${it.task!.rowOne} ${before.indexOf(moved) + 1} of ${inSentence(it.task!.name)} to ${rows.indexOf(moved) + 1} of ${rows.length}, for this log.`, () => {
 			if (!mounted) return 'Open the log to move it back.';
 			const now = places[key].sets;
 			places[key].sets = [...before.filter((x) => now.includes(x)), ...now.filter((x) => !before.includes(x))];
@@ -1001,7 +1002,7 @@
 	async function swapTask(it: Item, task?: string) {
 		if (task && task === it.task?.id) return;
 		// Queued, it would say the Task is in use while the card can't show it: nothing is swapped.
-		if (task && away(task)) return void showError(`Not swapped: ${nameOf(task) ?? 'that Task'} needs a connection.`);
+		if (task && away(task)) return void showError(`Not swapped: ${inSentence(nameOf(task) ?? 'that Task')} needs a connection.`);
 		const first = await saveFirst();
 		if (first.kind === 'refused') return void showError(`${first.why} Nothing was swapped.`);
 		// What was still to do here, for a Task swapped in that has no last time of its own.
@@ -1549,7 +1550,7 @@
 	}
 	.lg-end {
 		display: grid;
-		gap: var(--space-group);
+		gap: var(--gap); /* log-screen.css: space-section */
 	}
 	.lg-form {
 		display: grid;

@@ -5,13 +5,13 @@
    role-less panel's button and a), .menu-label, .menu-note, .menu-check, .menu > hr, the open row's rise.
    Markup:
      <div class="menu" role="menu" id="m-gym" aria-label="More ways to log Gym" [data-side="up"] hidden>
-       <button role="menuitem" tabindex="-1"><span class="menu-label">Minimum</span></button>
-       <button role="menuitem" tabindex="-1"><span class="menu-label">Target</span> <span class="menu-note note">What Done logs</span></button>
+       <button role="menuitem" tabindex="-1"><span class="menu-label">Minimum</span><span class="menu-note meta">10 min</span></button>
+       <button role="menuitem" tabindex="-1"><span class="menu-label">Target</span><span class="menu-note meta">45 min</span></button>
        <a role="menuitem" tabindex="-1" href="/log/…"><span class="menu-label">Log details…</span></a>
        <hr>
        <button role="menuitem" tabindex="-1"><span class="menu-label">Skip today</span></button>
      </div>
-   A setting: <button role="menuitemradio" aria-checked="true" tabindex="-1"><span class="menu-check" aria-hidden="true">✓</span><span class="menu-label">Outline</span> <span class="menu-note note">…</span></button>
+   A setting: <button role="menuitemradio" aria-checked="true" tabindex="-1"><span class="menu-check" aria-hidden="true">✓</span><span class="menu-label">Outline</span><span class="menu-note meta">…</span></button>
    A span (no hr) inside phrasing content, such as the hint line's p. */
 
 /* ---------- The box ---------- */

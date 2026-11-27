@@ -151,7 +151,7 @@ export function settingGroups(s: Now): Group[] {
 export const ELSEWHERE: { label: string; place: string; href: string; also: string }[] = [
 	{ label: 'Areas', place: 'Habits, grouped by Area: on each Area’s heading', href: '/habits', also: 'colours groups' },
 	{ label: 'What a page shows, and its views', place: 'The sentence under each page’s title', href: '/', also: 'views filters sort group layout sections widgets lines rows done customize' },
-	{ label: 'View templates', place: 'Today: the view’s name, then Start from', href: '/', also: 'template minimal standard routine week first quitter data nerd starter' },
+	{ label: 'View templates', place: 'Today: the view’s name, New view, then Or start from', href: '/', also: 'template minimal standard routine week first quitter data nerd starter' },
 	{ label: 'Stats boards', place: 'Stats, the boards’ ⋯', href: '/stats', also: 'cards open' },
 	{ label: 'App icon shortcuts', place: 'On a habit’s page', href: '/habits', also: 'home screen pinned' },
 	{ label: 'Identities', place: 'Identities', href: '/identities', also: 'who you want to be' }

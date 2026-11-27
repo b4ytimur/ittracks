@@ -17,6 +17,7 @@
                                                                                  the heading's own acts, if it has any (an Area's)
      </h2>
    .slotted: the slot is open, with the grip in it or empty (slotOpen) beside rows that have grips or checkboxes.
+   .fold-column: no fold, but its column stays empty (foldColumn), so the title is on the name column of the rows under it.
    Each heading and its rows share one li of a ul.elist (no overflow set on it or any ancestor below the scroller),
    so the li's end pushes a stuck heading out. Each heading sets its own .stuck from an IntersectionObserver. */
 
@@ -72,6 +73,9 @@ li:has(> .group-heading:focus-within) > * .group-heading.stuck { z-index: calc(v
 	margin-inline: calc(var(--space-inline) - var(--fold-w)) var(--space-inline);
 	padding-inline-start: calc(var(--fold-w) - var(--space-inline));
 }
+/* A heading that doesn't fold (Today's Due today, Last seven days and Breaking) keeps the fold's space-indent empty,
+   so every heading on Today has its title on the name column. */
+.group-heading.fold-column { padding-inline-start: calc(1px + var(--space-indent)); }
 
 /* The whole heading line is the fold's hit area (a stretched pseudo-element on the sticky heading). A .slotted heading
    (a grip, or rows with grips or checkboxes) keeps it to the chevron, so the grip, a renamable title and the verb take their own taps. The focus

@@ -198,9 +198,11 @@ export const statCard = z.object({
 export type StatCard = z.infer<typeof statCard>;
 export type StatCardInput = z.input<typeof statCard>;
 
+/** The most Areas, and the most Tags, a board filters by. */
+export const MAX_FILTER = 50;
 export const boardFilter = z.object({
-	areas: z.array(id).max(50).default([]),
-	tags: z.array(str(100)).max(50).default([]),
+	areas: z.array(id).max(MAX_FILTER).default([]),
+	tags: z.array(str(100)).max(MAX_FILTER).default([]),
 	habit: id.nullable().default(null),
 	identity: str(64).nullable().default(null),
 	direction: z.enum(['all', 'build', 'break']).default('all')

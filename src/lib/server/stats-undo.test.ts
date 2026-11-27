@@ -70,6 +70,45 @@ it("a filter change's Undo puts back only its own word, so a word changed since 
 	changeStats(me, { op: 'board.delete', id });
 });
 
+it("an Area or Tag toggle's Undo turns back only that one, so one toggled since stays", () => {
+	const id = changeStats(me, { op: 'board.add', name: 'Toggles' }).id!;
+	const filter = () => getStats(me).boards.find((b) => b.id === id)!.filter;
+	changeStats(me, { op: 'board.patch', id, toggle: [{ list: 'tags', value: 'A', on: true }] });
+	changeStats(me, { op: 'board.patch', id, toggle: [{ list: 'tags', value: 'B', on: true }] });
+	// The Undo of A, as the Stats page sends it.
+	changeStats(me, { op: 'board.patch', id, toggle: [{ list: 'tags', value: 'A', on: false }] });
+	expect(filter().tags).toEqual(['B']);
+	// Off twice, or on when it is on, changes nothing.
+	changeStats(me, { op: 'board.patch', id, toggle: [{ list: 'tags', value: 'A', on: false }] });
+	changeStats(me, { op: 'board.patch', id, toggle: [{ list: 'tags', value: 'B', on: true }] });
+	expect(filter().tags).toEqual(['B']);
+	changeStats(me, { op: 'board.patch', id, toggle: [{ list: 'areas', value: 'a1', on: true }] });
+	expect(filter()).toMatchObject({ areas: ['a1'], tags: ['B'] });
+	changeStats(me, { op: 'board.delete', id });
+});
+
+it("Clear filters' Undo puts back only what it cleared, so an Area or Tag toggled on since stays", () => {
+	const id = changeStats(me, { op: 'board.add', name: 'Clear' }).id!;
+	const filter = () => getStats(me).boards.find((b) => b.id === id)!.filter;
+	changeStats(me, { op: 'board.patch', id, toggle: [{ list: 'tags', value: 'A', on: true }], filter: { direction: 'build' } });
+	changeStats(me, { op: 'board.patch', id, filter: { areas: [], tags: [], habit: null, identity: null, direction: 'all' } });
+	changeStats(me, { op: 'board.patch', id, toggle: [{ list: 'tags', value: 'C', on: true }] });
+	// The Undo of Clear filters, as the Stats page builds it.
+	changeStats(me, { op: 'board.patch', id, filter: { habit: null, identity: null, direction: 'build' }, toggle: [{ list: 'tags', value: 'A', on: true }] });
+	expect(filter()).toMatchObject({ tags: ['C', 'A'], direction: 'build' });
+	changeStats(me, { op: 'board.delete', id });
+});
+
+it('a toggle past a filter limit says which limit', () => {
+	const id = changeStats(me, { op: 'board.add', name: 'Limits' }).id!;
+	changeStats(me, { op: 'board.patch', id, toggle: Array.from({ length: 50 }, (_, i) => ({ list: 'tags', value: `t${i}`, on: true })) });
+	expect(() => changeStats(me, { op: 'board.patch', id, toggle: [{ list: 'tags', value: 't50', on: true }] })).toThrow('A board filters by at most 50 Areas or Tags');
+	// One already on is no change, so it isn't refused.
+	changeStats(me, { op: 'board.patch', id, toggle: [{ list: 'tags', value: 't0', on: true }] });
+	expect(() => changeStats(me, { op: 'board.patch', id, toggle: [{ list: 'areas', value: 'x'.repeat(80), on: true }] })).toThrow(/^Not a stats change: toggle\.0\.value/);
+	changeStats(me, { op: 'board.delete', id });
+});
+
 it('undoing Delete board brings back "Stats opens with this board" when it did, and only then', () => {
 	const id = changeStats(me, { op: 'board.add', name: 'Opens' }).id!;
 	changeStats(me, { op: 'open', value: id });

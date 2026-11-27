@@ -37,13 +37,30 @@
 	async function patch(p: { range: string } | { filter: Partial<BoardFilter> }) {
 		if (!board || ('range' in p && p.range === board.range)) return;
 		const { id, name, filter } = board;
-		// Only the words this change sets, so its Undo keeps the ones changed since.
-		const was = 'range' in p ? { range: board.range } : { filter: Object.fromEntries(Object.keys(p.filter).map((k) => [k, filter[k as keyof BoardFilter]])) };
+		// Only the words this change sets, so its Undo keeps the ones changed since; an Area or Tag list goes back one
+		// by one (Clear filters' Undo), so one toggled on since stays.
+		const lists = ['areas', 'tags'] as const;
+		const words = (f: Partial<BoardFilter>) => Object.fromEntries(Object.keys(f).filter((k) => !(lists as readonly string[]).includes(k)).map((k) => [k, filter[k as keyof BoardFilter]]));
+		const back = (f: Partial<BoardFilter>) =>
+			lists.flatMap((list) => {
+				const to = f[list];
+				if (!to) return [];
+				const from = filter[list];
+				return [...from.filter((v) => !to.includes(v)).map((value) => ({ list, value, on: true })), ...to.filter((v) => !from.includes(v)).map((value) => ({ list, value, on: false }))];
+			});
+		const was = 'range' in p ? { range: board.range } : { filter: words(p.filter), toggle: back(p.filter) };
 		const said = boardSaid(name, 'range' in p ? p : { filter: { ...filter, ...p.filter } });
 		if (await op({ op: 'board.patch', id, ...p })) showToast(said, undoOp({ op: 'board.patch', id, ...was }));
 	}
 	const setFilter = (f: Partial<BoardFilter>) => patch({ filter: f });
-	const toggle = <T,>(xs: T[], x: T) => (xs.includes(x) ? xs.filter((y) => y !== x) : [...xs, x]);
+	/** An Area or Tag on or off: its Undo turns that one back on the filter as it is then, so one toggled since stays. */
+	async function toggle(list: 'areas' | 'tags', value: string) {
+		if (!board) return;
+		const { id, name, filter } = board;
+		const on = !filter[list].includes(value);
+		const said = boardSaid(name, { filter: { ...filter, [list]: on ? [...filter[list], value] : filter[list].filter((x) => x !== value) } });
+		if (await op({ op: 'board.patch', id, toggle: [{ list, value, on }] })) showToast(said, undoOp({ op: 'board.patch', id, toggle: [{ list, value, on: !on }] }));
+	}
 
 	async function addBoard(template: string | null) {
 		const r = await op({ op: 'board.add', template, name: template ? undefined : boardName.trim() || 'New board' });
@@ -159,7 +176,7 @@
 							<div class="muted meta">Areas</div>
 							<div class="chips">
 								{#each data.catalog.areas as a (a.id)}
-									<button type="button" class="toggle" aria-pressed={board.filter.areas.includes(a.id)} onclick={() => setFilter({ areas: toggle(board.filter.areas, a.id) })}>{a.name}</button>
+									<button type="button" class="toggle" aria-pressed={board.filter.areas.includes(a.id)} onclick={() => toggle('areas', a.id)}>{a.name}</button>
 								{/each}
 							</div>
 						</div>
@@ -169,7 +186,7 @@
 							<div class="muted meta">Tags</div>
 							<div class="chips">
 								{#each data.catalog.tags as t (t)}
-									<button type="button" class="toggle" aria-pressed={board.filter.tags.includes(t)} onclick={() => setFilter({ tags: toggle(board.filter.tags, t) })}>{t}</button>
+									<button type="button" class="toggle" aria-pressed={board.filter.tags.includes(t)} onclick={() => toggle('tags', t)}>{t}</button>
 								{/each}
 							</div>
 						</div>

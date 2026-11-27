@@ -46,7 +46,7 @@
 }
 
 /* ---------- Actions: one single-choice set of Chip pills; the chosen one is ink, so Apply is the only fill ---------- */
-.selbar-acts { margin-top: var(--space-group); }
+.selbar > .selbar-acts { margin-top: var(--space-group); } /* over base's .chips 4 */
 
 /* ---------- Commit line: one sentence, Jump to next, then Apply and Cancel ---------- */
 .selbar-commit {

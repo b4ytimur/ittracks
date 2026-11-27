@@ -264,7 +264,7 @@ export const TEMPLATES: ViewTemplate[] = [
 	{
 		id: 'gym',
 		name: 'Week first',
-		blurb: 'The week at a glance and your progress.',
+		blurb: 'This week’s count on each habit.',
 		summary: 'Today shows open rows with this week’s count on each habit, and the Library sorts by most logged.',
 		patch: {
 			today: {
@@ -288,7 +288,7 @@ export const TEMPLATES: ViewTemplate[] = [
 	{
 		id: 'quitter',
 		name: 'Quitter',
-		blurb: 'For breaking habits: counters and money saved first.',
+		blurb: 'For breaking habits: Breaking comes first.',
 		summary: 'Puts Breaking first and hides Levels and prep.',
 		patch: {
 			today: {

@@ -181,7 +181,7 @@
 		{/if}
 		{#if data.dayNote !== null && !data.q && !data.mood}<div class="hi-daynote"><DayNote date={data.today} text={data.dayNote} link={false} /></div>{/if}
 		{#if data.lookBack.length}
-			<GroupHeading title="On this day" />
+			<GroupHeading title="On this day" foldColumn />
 			<ul class="elist" aria-label="On this day">
 				{#each data.lookBack as x (x.date)}
 					<li><div class="card link"><span class="slot"></span><div class="content"><a class="name" href={x.href}>{x.label}</a><p class="meta-line">{title(x.date)}</p></div><div class="lines"><p class="row-line">{dayExcerpt(x.day!) || x.day!.moods.map((m) => `${m.field}: ${m.value}`).join(' · ')}</p></div></div></li>
@@ -208,7 +208,7 @@
 		<div class="hi-days">
 			{#each days as day (day.date)}
 				<section class="hi-day" id="d-{day.date}">
-					<GroupHeading title={title(day.date)} slotOpen={selecting} count={!data.notesOnly && day.count.of ? `${day.count.done} of ${day.count.of}` : undefined} verb={data.canBackfill && day.date < data.today && (!data.windowFrom || day.date >= data.windowFrom) ? verb : undefined} />
+					<GroupHeading title={title(day.date)} slotOpen={selecting} foldColumn count={!data.notesOnly && day.count.of ? `${day.count.done} of ${day.count.of}` : undefined} verb={data.canBackfill && day.date < data.today && (!data.windowFrom || day.date >= data.windowFrom) ? verb : undefined} />
 					{#snippet verb()}<a class="quiet verb" href="/day/{day.date}" aria-label="Log {title(day.date)}">Log this day</a>{/snippet}
 					{#each day.notes.day as it, i (i)}{@render note(it, `${day.date}:d${i}`, day.date, it.title)}{/each}
 					{#if day.moods.length}<p class="tags moods">{#each day.moods as m (m.field + m.value)}<span class="tag">{m.field}: {m.value}</span>{/each}</p>{/if}
@@ -261,7 +261,7 @@
 	</div>
 	{#if !data.notesOnly && !data.q && wide.current}
 		<aside class="page-side" aria-label="The last seven days">
-			<GroupHeading title="Last seven days" />
+			<GroupHeading title="Last seven days" foldColumn />
 			<div class="day-week side-card" role="group" aria-label="The last seven days">{@render week()}</div>
 		</aside>
 	{/if}

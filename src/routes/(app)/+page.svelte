@@ -635,7 +635,7 @@
 		<div class="today-day">
 			{#if view.first && breakingShown.length}{@render breaking()}{/if}
 			<!-- Beside Breaking, the day takes a heading of the same kind, so both columns start alike (TS.11). -->
-			{#if wide.current && !view.first && groups.length && !groups[0].label}<GroupHeading title="Due today" slotOpen={gripped} />{/if}
+			{#if wide.current && !view.first && groups.length && !groups[0].label}<GroupHeading title="Due today" slotOpen={gripped} foldColumn />{/if}
 			{#if allDone}<p class="all-done">Everything due today is done.</p>{/if}
 			{#if nothingShown}<EmptyState kind="filtered" text="Nothing today matches {words[0].shown ?? 'this view'}." onclear={() => sentenceBar?.change({ ...view, fits: false, status: 'all', direction: 'all', areas: [], identity: null }, 'now shows everything', 'Everything')} />{/if}
 			{#each groups as g (g.key)}
@@ -653,7 +653,7 @@
 		</div>
 		<div class="today-side">
 			{#if wide.current}
-				<GroupHeading title="Last seven days" />
+				<GroupHeading title="Last seven days" slotOpen={gripped} foldColumn />
 				<div class="day-week week-side" role="group" aria-label="The last seven days">{@render sevenDays()}</div>
 			{/if}
 			{#if !view.first && breakingShown.length}{@render breaking()}{/if}
@@ -681,7 +681,7 @@
 {/if}
 
 {#snippet breaking()}
-	<GroupHeading title={limiting ? 'Breaking and limiting' : 'Breaking'} slotOpen={gripped} />
+	<GroupHeading title={limiting ? 'Breaking and limiting' : 'Breaking'} slotOpen={gripped} foldColumn />
 	{@render breakingSection()}
 {/snippet}
 
