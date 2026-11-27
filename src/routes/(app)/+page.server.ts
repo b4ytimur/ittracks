@@ -73,6 +73,8 @@ export const load: PageServerLoad = ({ locals, cookies, url, request }) => {
 		flash: takeFlash(cookies),
 		views,
 		ranges: settings.ranges,
+		/** When the user's day starts: by time, 01:00 comes after 23:00 when the day starts at 04:00. */
+		dayStart: settings.dayStart ?? '00:00',
 		areas: listAreas(accountId),
 		/** J3: the day note, when it is on (Settings) and the Journal feature is too. */
 		dayNote: settings.dayNote && !isHidden(views, 'journal') ? getDayNote(accountId, today) : null

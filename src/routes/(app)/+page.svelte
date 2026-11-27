@@ -33,6 +33,8 @@
 	import { MediaQuery, SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { keepFocus, rowOf } from '$lib/ui/focus';
 	import { mergeOrder } from '$lib/ui/list';
+	import { cueClock } from '$lib/engine/day';
+	import { timeline, type Slot } from '$lib/engine/stack';
 	import { usualWay } from '$lib/log/usual';
 	import DaysBlock from '$lib/days/DaysBlock.svelte';
 	import { countedRows, statusCount } from '$lib/days/days';
@@ -377,9 +379,37 @@
 	const doneFolded = $derived(view.done === 'collapse' ? sorted.filter((b) => !timeHidden.has(b.habitId) && settled(b)) : []);
 	/** Done habits sunk to the end of the list (done at the end), which a move puts back apart from the rest. */
 	const sunk = $derived(new Set(view.done === 'bottom' ? shownBuild.filter(settled).map((b) => b.habitId) : []));
+	/** A habit's time on the timeline: its cue's, or its anchor's when it is stacked after one. */
+	const timeOf = (b: Item, depth = 0): { clock: string | null; label: string | null } => {
+		const clock = cueClock(b.cue, data.ranges);
+		if (clock) return { clock, label: b.cue.time ?? b.cue.range };
+		const anchor = b.afterHabitId && depth < 8 ? data.build.find((x) => x.habitId === b.afterHabitId) : undefined;
+		return anchor ? timeOf(anchor, depth + 1) : { clock: null, label: null };
+	};
+	/**
+	 * By time with no groups: the day as a timeline, with a Now line (Today, option B). Done rows sunk to the end stay
+	 * after it. Null when nothing has a time, so the list stays as it was.
+	 */
+	const tl = $derived.by(() => {
+		if (view.sort !== 'cue' || view.group !== 'none') return null;
+		const items = shownBuild
+			.filter((b) => !sunk.has(b.habitId))
+			.map((b) => {
+				const kids = b.group && !b.group.routine ? kidsOf(b.habitId).map((k) => ({ id: k.habitId, ...timeOf(k) })) : undefined;
+				// A routine is done in one go: it stands at its own time, else at its first habit's.
+				const own = timeOf(b);
+				const first = !own.clock && b.group?.routine ? kidsOf(b.habitId).map((k) => timeOf(k)).find((t) => t.clock) : undefined;
+				return { ...b, id: b.habitId, ...(first ?? own), kids };
+			});
+		const t = timeline(items, now, data.dayStart);
+		return t.past.length || t.ahead.length ? t : null;
+	});
+	/** The habits a group holds in one slot of the timeline: those at that time, or all of them. */
+	const kidsIn = (s: Slot<Item> | undefined, id: string) => kidsOf(id).filter((k) => !s?.only.get(id) || s.only.get(id)!.has(k.habitId));
 	/** The one row whose Log stands out: what is stacked on something done, or else the first one due. */
 	const upNext = $derived.by(() => {
-		const due = shownBuild.flatMap((b) => [b, ...kidsOf(b.habitId)]).filter((b) => !isDone(b) && !(b.group && !b.group.routine && kidsOf(b.habitId).length));
+		const tops: [Item, Slot<Item> | undefined][] = tl ? [...tl.past, ...(tl.anyTime ? [tl.anyTime] : []), ...tl.ahead].flatMap((s) => s.items.map((b): [Item, Slot<Item>] => [b, s])) : shownBuild.map((b) => [b, undefined]);
+		const due = tops.flatMap(([b, s]) => [b, ...kidsIn(s, b.habitId)]).filter((b) => !isDone(b) && !(b.group && !b.group.routine && kidsOf(b.habitId).length));
 		return (due.find((b) => b.upNext) ?? due[0])?.habitId;
 	});
 	const areaOf = (id: string | null) => data.areas.find((a) => a.id === id);
@@ -462,6 +492,9 @@
 		n.toLocaleString(undefined, { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
 	const shortDate = (d: string) =>
 		new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+	/** "tomorrow, Nov 28", or the day and date further off ("Mon, Nov 30"): when a card that isn't for today is for. */
+	const dueWhen = (d: string) =>
+		d === addDays(data.today, 1) ? `tomorrow, ${new Date(d + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : shortDate(d);
 	const limiting = $derived(data.breaking.some((b) => b.limit));
 	const nowTime = () => new Date().toTimeString().slice(0, 5);
 	const levelName = { minimum: 'Minimum', target: 'Target', stretch: 'Stretch' } as const;
@@ -627,13 +660,24 @@
 			{#if wide.current && !view.first && groups.length && !groups[0].label}<GroupHeading title="Due today" slotOpen={gripped} foldColumn />{/if}
 			{#if allDone}<p class="all-done">Everything due today is done.</p>{/if}
 			{#if nothingShown}<EmptyState kind="filtered" text="Nothing today matches {words[0].shown ?? 'this view'}." onclear={() => sentenceBar?.change({ ...view, fits: false, status: 'all', direction: 'all', areas: [], identity: null }, 'now shows everything', 'Everything')} />{/if}
-			{#each groups as g (g.key)}
-				{@const a = view.group === 'area' ? areaOf(g.key) : undefined}
-				{#if g.label}
-					<GroupHeading title={a?.name ?? g.label} icon={a?.icon} color={g.color} folded={folded(`group:${g.key}`)} onfold={() => fold(`group:${g.key}`)} />
-				{/if}
-				{#if !g.label || !folded(`group:${g.key}`)}{@render habitList(g.items, g.label || 'Today')}{/if}
-			{/each}
+			{#if tl}
+				<!-- By time: each time once, in the gutter, and a Now line between what is past and what is ahead. -->
+				<ol class="timeline" aria-label="Today by time">
+					{#each tl.past as s (s.key)}{@render slot(s)}{/each}
+					<li class="now-line"><span class="when num">{now}</span><span class="now">Now</span></li>
+					{#if tl.anyTime}{@render slot(tl.anyTime)}{/if}
+					{#each tl.ahead as s (s.key)}{@render slot(s)}{/each}
+				</ol>
+				{#if sunk.size}{@render habitList(shownBuild.filter((b) => sunk.has(b.habitId)), 'Done today')}{/if}
+			{:else}
+				{#each groups as g (g.key)}
+					{@const a = view.group === 'area' ? areaOf(g.key) : undefined}
+					{#if g.label}
+						<GroupHeading title={a?.name ?? g.label} icon={a?.icon} color={g.color} folded={folded(`group:${g.key}`)} onfold={() => fold(`group:${g.key}`)} />
+					{/if}
+					{#if !g.label || !folded(`group:${g.key}`)}{@render habitList(g.items, g.label || 'Today')}{/if}
+				{/each}
+			{/if}
 			{@render timeLine()}
 			{#if doneFolded.length}
 				<GroupHeading title="Done" slotOpen={gripped} count={String(leavesOf(doneFolded).length)} folded={folded('done')} onfold={() => fold('done')} />
@@ -655,8 +699,8 @@
 					<button type="button" class="later-line" aria-expanded={!folded('later')} onclick={() => fold('later')}><span class="chev" aria-hidden="true">›</span><span>{laterSays}</span></button>
 					{#if !folded('later')}
 						{@render prepSection()}
-						{#if data.paused.length}{@render pausedSection()}{/if}
-						{#if data.resting.length}{@render restingSection()}{/if}
+						{#if data.paused.length}<h3 class="card-title later-head">Paused</h3>{@render pausedSection()}{/if}
+						{#if data.resting.length}<h3 class="card-title later-head">Not due today</h3>{@render restingSection()}{/if}
 					{/if}
 				</section>
 			{/if}
@@ -705,14 +749,21 @@
 	</p>
 {/snippet}
 
-{#snippet habitList(items: Item[], name: string)}
+{#snippet slot(s: Slot<Item>)}
+	<li class="slot">
+		<span class="when num">{s.label ?? 'Any time'}</span>
+		<div class="slot-rows">{@render habitList(s.items, s.label ?? 'Any time', s)}</div>
+	</li>
+{/snippet}
+
+{#snippet habitList(items: Item[], name: string, s?: Slot<Item>)}
 	<EditableList
 		{items}
 		key={(b) => b.habitId}
 		label={(b) => b.name}
 		rowCard
 		holder={(b) => !!b.group && kidsOf(b.habitId).length > 0}
-		itemClass={(b) => [isDone(b) && statusOf(b.occurrence!) === 'skipped' ? 'skipped' : isDone(b) ? 'done' : '', just.has(b.habitId) ? 'just-done' : '', b.afterHabitId && view.group !== 'area' ? 'stacked' : ''].join(' ')}
+		itemClass={(b) => [isDone(b) && statusOf(b.occurrence!) === 'skipped' ? 'skipped' : isDone(b) ? 'done' : '', just.has(b.habitId) ? 'just-done' : '', b.afterHabitId && view.group !== 'area' && (!s || s.items.some((x) => x.habitId === b.afterHabitId)) ? 'stacked' : ''].join(' ')}
 		ariaLabel={name}
 		canDrop={(m) => sameSide(sunk, m)}
 		onmove={gripped ? (m, order, text) => reorderHabits(m.key, order, text) : undefined}
@@ -720,7 +771,7 @@
 		lines={habitLines}
 	>
 		{#snippet row(item)}{@render habitRow(item)}{/snippet}
-		{#snippet children(item)}{@render habitList(kidsOf(item.habitId), `Inside ${item.name}`)}{/snippet}
+		{#snippet children(item)}{@render habitList(kidsIn(s, item.habitId), `Inside ${item.name}`)}{/snippet}
 	</EditableList>
 {/snippet}
 
@@ -901,10 +952,12 @@
 
 {#snippet prepSection()}
 	{#if data.prep.length && !hidden('prep')}
+		<h3 class="card-title later-head">Prepare for tomorrow</h3>
 		<ul class="list">
 			{#each data.prep as p (p.habitId)}
 				<li class="card">
 					<strong>{p.name}</strong>
+					<p class="meta-line">For {dueWhen(p.date)}</p>
 					{#each p.items as it (it.item)}
 						<form method="POST" action="?/prep" use:enhance={() => async ({ update }) => update({ reset: false })}>
 							<input type="hidden" name="habit" value={p.habitId} />
@@ -950,7 +1003,7 @@
 	<EditableList items={restingShown} key={(x) => x.habitId} label={(x) => x.name} rowCard ariaLabel="Not due today" onmove={gripped ? (m, order, text) => reorderHabits(m.key, order, text) : undefined}>
 		{#snippet row(item)}
 			<span class="name">{item.name}</span>
-			{#if item.streak}<p class="meta-line">{item.streak}</p>{/if}
+			{#if item.nextDue || item.streak}<p class="meta-line">{[item.nextDue ? `Due ${dueWhen(item.nextDue)}` : '', item.streak].filter(Boolean).join(' · ')}</p>{/if}
 		{/snippet}
 		{#snippet actions(item)}
 			{#if item.earlyVariant}
@@ -1112,6 +1165,73 @@
 	}
 	.later {
 		margin-block-start: var(--space-group);
+	}
+	/* Each list under the end line has its heading, on the cards' name column, so its cards never run into the next list's. */
+	.later-head {
+		margin: var(--space-section) 0 var(--space-inline);
+		padding-inline: var(--space-group);
+	}
+	/* By time: each time once, in a gutter on its rows' first line, and a Now line between what is past and what is ahead. */
+	.timeline {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		grid-template-columns: max-content minmax(0, 1fr);
+		column-gap: var(--space-group);
+		row-gap: var(--space-inline);
+	}
+	.timeline > li {
+		grid-column: 1 / -1;
+		display: grid;
+		grid-template-columns: subgrid;
+		align-items: start;
+	}
+	/* On its first row's name line: below the card's edge and padding, in the name's line height (the body's). */
+	.timeline .when {
+		padding-block-start: var(--space-group);
+		font-size: var(--font-size-meta);
+		text-align: end;
+		color: var(--ink-muted);
+	}
+	.timeline > .now-line {
+		align-items: center;
+		padding-block: var(--space-inline);
+	}
+	.timeline .now-line > span {
+		padding-block-start: 0;
+		color: var(--ink);
+		font-weight: 600;
+	}
+	.now-line .now {
+		font-size: var(--font-size-meta);
+		display: flex;
+		align-items: center;
+		gap: var(--space-inline);
+	}
+	.now-line .now::after {
+		content: '';
+		flex: 1;
+		border-block-start: var(--chosen-width) solid var(--line-chosen);
+	}
+	/* A phone keeps the cards' width: the time goes over its rows, on their name column. */
+	@media (max-width: 28rem) {
+		.timeline {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.timeline .when {
+			padding-block-start: 0;
+			padding-inline-start: var(--space-group);
+			text-align: start;
+		}
+		.timeline > .now-line {
+			display: flex;
+			align-items: center;
+			gap: var(--space-inline);
+		}
+		.now-line .now {
+			flex: 1;
+		}
 	}
 	.later-line {
 		display: flex;
