@@ -2,9 +2,9 @@
 // rotation's next Variant early, swapping or picking again a Slot's Task for one day, and answering
 // Today's "raise the targets?" with Raise or Not yet. Today, the log screen and the AI tools
 // (core/plan.ts, and setup's progression change) all call these, so each works the same everywhere.
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lt, lte, max, ne, sql } from 'drizzle-orm';
 import { db } from './db';
-import { habit, occurrence, prepTick, slot, task, variant, type SlotGoals } from './db/schema';
+import { entry, habit, metric, occurrence, prepTick, slot, task, taskPart, taskTag, variant, type SlotGoals } from './db/schema';
 import { candidates, createOccurrence, ensurePicks } from './today';
 import { getGroups } from './settings';
 import { keepGoals, stepsOf } from './progress';
@@ -13,6 +13,8 @@ import { addDays } from '$lib/engine/dates';
 import { pickTask, type FillRule } from '$lib/engine/fill';
 import { ActionError, type Actor } from './core/actor';
 import { emit } from './core/events';
+import { rowText } from '$lib/log/run';
+import { isSet } from '$lib/log/places';
 
 type OccLike = { id: string; habitId: string; date: string; variantId: string | null; goals: Record<string, SlotGoals> | null };
 
@@ -91,6 +93,86 @@ export function swapSlot(actor: Actor, occ: OccLike, slotId: string, taskId: str
 	if (!t) throw new ActionError('not_found', 'No such Task');
 	setPick(actor, occ, s, t.id, 'swap');
 }
+
+/** A Task used in a Slot on an earlier day: that day, and its first set done there in words ("50 kg × 8"), or "". */
+export interface Used {
+	taskId: string;
+	date: string;
+	text: string;
+}
+
+/**
+ * The Tasks used in a Slot before this day, newest first, each once: the picks of earlier finished logs of its
+ * Variant. For a fixed Slot every pick is a swap (rerollSlot refuses one), so this needs no storage of its own.
+ * Archived and deleted Tasks are left out.
+ */
+export function usedBefore(occ: { id: string; variantId: string | null; date: string }, slotId: string, limit = 5): Used[] {
+	if (!occ.variantId) return [];
+	const days = db
+		.select({ id: occurrence.id, date: occurrence.date, picks: occurrence.picks })
+		.from(occurrence)
+		.where(and(eq(occurrence.variantId, occ.variantId), eq(occurrence.status, 'done'), lt(occurrence.date, occ.date), ne(occurrence.id, occ.id), sql`json_extract(${occurrence.picks}, ${`$."${slotId}"`}) is not null`))
+		.orderBy(desc(occurrence.date))
+		.all();
+	const out: Used[] = [];
+	for (const d of days) {
+		const id = d.picks?.[slotId];
+		if (!id || out.some((u) => u.taskId === id)) continue;
+		const t = db.select({ archived: task.archived, deleteAfter: task.deleteAfter }).from(task).where(eq(task.id, id)).get();
+		if (!t || t.archived || t.deleteAfter) continue;
+		const fields = db.select().from(metric).where(and(eq(metric.taskId, id), eq(metric.repeats, true), eq(metric.archived, false))).orderBy(asc(metric.sortOrder)).all();
+		const first = db
+			.select({ values: entry.values })
+			.from(entry)
+			.where(and(eq(entry.occurrenceId, d.id), eq(entry.taskId, id), eq(entry.path, slotId)))
+			.orderBy(asc(entry.sortOrder))
+			.all()
+			.find((e) => isSet(e.values));
+		out.push({ taskId: id, date: d.date, text: first && fields.length ? rowText(fields, first.values) : '' });
+		if (out.length === limit) break;
+	}
+	return out;
+}
+
+/**
+ * What the swap picker says of each Task of the Library: its Tags (for "Like Bench press"), and when it was last
+ * done before this log with the first set done that day in words ("50 kg × 8", or "" with none).
+ */
+export function swapLibrary(accountId: string, occ: { id: string; date: string }) {
+	const tags: Record<string, string[]> = {};
+	for (const r of db.select({ taskId: taskTag.taskId, tagId: taskTag.tagId }).from(taskTag).innerJoin(task, eq(task.id, taskTag.taskId)).where(eq(task.accountId, accountId)).all())
+		(tags[r.taskId] ??= []).push(r.tagId);
+	const before = and(eq(occurrence.status, 'done'), lte(occurrence.date, occ.date), ne(occurrence.id, occ.id));
+	const lastDay = db
+		.select({ taskId: entry.taskId, date: max(occurrence.date).as('last_date') })
+		.from(entry)
+		.innerJoin(occurrence, eq(occurrence.id, entry.occurrenceId))
+		.innerJoin(task, eq(task.id, entry.taskId))
+		.where(and(eq(task.accountId, accountId), before))
+		.groupBy(entry.taskId)
+		.as('last_day');
+	// Only the Entries of each Task's last day come back, newest log first, each in its order.
+	const rows = db
+		.select({ taskId: entry.taskId, date: occurrence.date, values: entry.values })
+		.from(entry)
+		.innerJoin(occurrence, eq(occurrence.id, entry.occurrenceId))
+		.innerJoin(lastDay, and(eq(lastDay.taskId, entry.taskId), eq(lastDay.date, occurrence.date)))
+		.where(before)
+		.orderBy(desc(occurrence.finishedAt), asc(occurrence.id), asc(entry.sortOrder))
+		.all();
+	const ids = [...new Set(rows.map((r) => r.taskId))];
+	const fields = ids.length ? db.select().from(metric).where(and(inArray(metric.taskId, ids), eq(metric.repeats, true), eq(metric.archived, false))).orderBy(asc(metric.sortOrder)).all() : [];
+	const last: Record<string, { date: string; text: string }> = {};
+	for (const r of rows) {
+		const l = (last[r.taskId] ??= { date: r.date, text: '' });
+		const own = fields.filter((f) => f.taskId === r.taskId);
+		if (!l.text && own.length && isSet(r.values)) l.text = rowText(own, r.values);
+	}
+	return { tags, last };
+}
+
+/** A Task with parts inside: its places come from the server, so a swap to it shows only once it is saved there. */
+export const hasParts = (taskId: string) => !!db.select({ id: taskPart.id }).from(taskPart).where(and(eq(taskPart.taskId, taskId), eq(taskPart.archived, false))).get();
 
 /** Raise: Target and Stretch go up in every Slot by the habit's progression; logs before keep what they aimed for. */
 export function raiseTargets(actor: Actor, h: { id: string; progression: Progression | null }, today: string) {

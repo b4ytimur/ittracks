@@ -26,6 +26,7 @@
 		logged,
 		menu,
 		targetOf,
+		carried,
 		onopen,
 		onunfold,
 		ondone,
@@ -62,6 +63,8 @@
 		logged: number | null;
 		menu: (Way | '-')[];
 		targetOf: (id: string) => number | undefined;
+		/** A Task swapped in that has no last time starts from the Task it replaced, in these fields: "From Bench press". */
+		carried?: { from: string; ids: string[] };
 		onopen: (row: number | null) => void;
 		onunfold: () => void;
 		ondone: (row: number, keyboard: boolean) => void;
@@ -119,7 +122,8 @@
 			const from = sets[k].own?.includes(f.id) ? -1 : sets.findLastIndex((s, j) => j < k && s.own?.includes(f.id));
 			return from >= 0 ? `${d}, as ${words.one} ${from + 1}` : d;
 		}
-		return f.prefill === 'target' && v != null && v === targetOf(f.id) ? 'Target' : '';
+		if (f.prefill === 'target' && v != null && v === targetOf(f.id)) return 'Target';
+		return carried?.ids.includes(f.id) && v != null && v === b && !sets[k].own?.includes(f.id) ? `From ${carried.from}` : '';
 	}
 
 	const act = $derived.by(() => {

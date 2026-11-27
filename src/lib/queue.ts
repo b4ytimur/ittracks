@@ -67,6 +67,13 @@ export const keyOf = (q: Pick<Queued, 'url' | 'fields'>) => {
 export const ahead = (items: Queued[], q: Pick<Queued, 'url' | 'fields'>) =>
 	items.filter((x) => !x.refused && x.url.split('?')[0] === q.url.split('?')[0] && keyOf(x) !== keyOf(q)).map((x) => x.id);
 
+/**
+ * The swaps of a log (its `?/swap` url) that wait to be sent, by Slot: the Task each Slot shows until they sync.
+ * A refused one waits for someone to look at it, so the Slot shows what the server has.
+ */
+export const waitingSwaps = (items: Queued[], url: string): Record<string, string> =>
+	Object.fromEntries(items.filter((q) => q.url === url && !q.refused).flatMap((q) => [[field(q.fields, 'slot'), field(q.fields, 'task')]]).filter((p): p is [string, string] => !!p[0] && !!p[1]));
+
 /** The same save, not held back by what changed elsewhere since: the payload without the versions it grew from. */
 export function overriding(fields: [string, string][]): [string, string][] {
 	return fields.map(([k, v]) => {

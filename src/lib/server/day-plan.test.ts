@@ -5,13 +5,13 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { and, eq } from 'drizzle-orm';
 import { db } from './db';
-import { entry, habit, metric, occurrence, slot, task, variant } from './db/schema';
+import { entry, habit, metric, occurrence, slot, tag, task, taskPart, taskTag, variant } from './db/schema';
 import { createAccount } from './auth';
 import { saveSettings } from './settings';
 import { appActor, type Actor } from './core/actor';
 import { runAction } from './core/actions';
 import { todayFor } from './core/log';
-import { ownTask, rerollSlot, swapSlot } from './day-plan';
+import { hasParts, ownTask, rerollSlot, swapLibrary, swapSlot, usedBefore } from './day-plan';
 import { lastEntries } from './today';
 import { recapFor } from './stats';
 import { finishAs, keepGoals, progressForIds, verdictsFor } from './progress';
@@ -110,7 +110,9 @@ describe('swapping a Slot for the day', () => {
 
 	it('what was done with each Task counts for that Task, and the Slot counts as done', () => {
 		const occ = day(today);
-		// Two sets of Bench press, then swapped for Incline bench press; the auto-filled Slot done too.
+		// Two sets of Bench press, then swapped for Incline bench press; the auto-filled Slot done too, with
+		// Squat (its pick is random, and Incline there would count for Incline as well).
+		swapSlot(app, occ, auto.id, taskId('Squat'));
 		set(occ.id, bench, fixed.id, 60, 0);
 		set(occ.id, bench, fixed.id, 60, 1);
 		set(occ.id, picks()[auto.id], auto.id, 40, 2);
@@ -157,5 +159,106 @@ describe('swapping a Slot for the day', () => {
 		expect(picks()[fixed.id]).toBe(taskId('Squat'));
 		swapSlot(app, day(today), fixed.id, bench);
 		expect(fixed.id in picks()).toBe(false);
+	});
+});
+
+describe('the Tasks used in a Slot before, for its ⋯ and the swap picker', () => {
+	const log = (date: string, status: 'done' | 'missed', pick: string | null) => {
+		const id = randomUUID();
+		db.insert(occurrence).values({ id, habitId: gym().id, date, status, variantId: fixed.variantId, picks: pick ? { [fixed.id]: pick } : null }).run();
+		return id;
+	};
+
+	it('newest first, each Task once, from earlier finished logs of the Variant, with the first set done there', () => {
+		const at = (n: number) => addDays(today, -40 + n);
+		const squat = taskId('Squat');
+		const lunge = taskId('Lunge');
+		const first = log(at(0), 'done', incline);
+		set(first, incline, fixed.id, 45, 0);
+		log(at(1), 'done', squat);
+		const newest = log(at(3), 'done', incline);
+		// A Slot's once-per-log values come before its sets: the first set is what counts.
+		db.insert(entry).values({ id: randomUUID(), occurrenceId: newest, taskId: incline, path: fixed.id, values: { _summary: true }, sortOrder: 0 }).run();
+		set(newest, incline, fixed.id, 50, 1);
+		set(newest, incline, fixed.id, 52.5, 2);
+		// Not counted: a day that was missed, a Task archived since, and anything on or after the day asked about.
+		log(at(4), 'missed', taskId('Bench press'));
+		const gone = randomUUID();
+		db.insert(task).values({ id: gone, accountId: me, name: 'Old press', archived: true }).run();
+		log(at(2), 'done', gone);
+		log(at(6), 'done', lunge);
+		const occ = { id: randomUUID(), variantId: fixed.variantId, date: at(6) };
+		const used = usedBefore(occ, fixed.id);
+		expect(used.map((u) => [u.taskId, u.date])).toEqual([
+			[incline, at(3)],
+			[squat, at(1)]
+		]);
+		expect(used[0].text).toMatch(/^50 kg.*8$/);
+		// Squat was swapped in but nothing was logged with it: only the date.
+		expect(used[1].text).toBe('');
+		expect(usedBefore(occ, fixed.id, 1)).toHaveLength(1);
+		// Another Slot, and a day with no Variant, have none.
+		expect(usedBefore(occ, auto.id).some((u) => u.taskId === incline)).toBe(false);
+		expect(usedBefore({ ...occ, variantId: null }, fixed.id)).toEqual([]);
+	});
+
+	it('the picker knows each Task\'s Tags and when it was last done before the log; a Task with parts is not one to show offline', () => {
+		const push = randomUUID();
+		db.insert(tag).values({ id: push, accountId: me, name: 'Push' }).run();
+		db.insert(taskTag).values([{ taskId: bench, tagId: push }, { taskId: incline, tagId: push }]).run();
+		const { tags, last } = swapLibrary(me, { id: randomUUID(), date: today });
+		expect(tags[bench]).toEqual([push]);
+		expect(tags[incline]).toEqual([push]);
+		expect(tags[taskId('Squat')]).toBeUndefined();
+		expect(last[bench].date).toBe(today);
+		// Before a day, only what was done by then; the log itself never counts. With the first set done that day.
+		const yesterday = { date: addDays(today, -1), text: expect.stringMatching(/^57.5 kg.*8$/) };
+		expect(swapLibrary(me, { id: randomUUID(), date: addDays(today, -1) }).last[bench]).toEqual(yesterday);
+		expect(swapLibrary(me, { id: day(today).id, date: today }).last[bench]).toEqual(yesterday);
+		// Done with nothing in sets that day: only the day.
+		const rope = randomUUID();
+		const done = randomUUID();
+		db.insert(task).values({ id: rope, accountId: me, name: 'Rope' }).run();
+		db.insert(occurrence).values({ id: done, habitId: gym().id, date: addDays(today, -60), status: 'done' }).run();
+		db.insert(entry).values({ id: randomUUID(), occurrenceId: done, taskId: rope, path: null, values: { _summary: true, feel: 'easy' } }).run();
+		expect(swapLibrary(me, { id: randomUUID(), date: today }).last[rope]).toEqual({ date: addDays(today, -60), text: '' });
+		expect(swapLibrary(me, { id: randomUUID(), date: today }).last[taskId('Lunge')]).toBeUndefined();
+		expect(hasParts(bench)).toBe(false);
+		const part = randomUUID();
+		const circuit = taskId('Lunge');
+		db.insert(taskPart).values({ id: part, taskId: circuit, childTaskId: taskId('Squat') }).run();
+		expect(hasParts(circuit)).toBe(true);
+		db.update(taskPart).set({ archived: true }).where(eq(taskPart.id, part)).run();
+		expect(hasParts(circuit)).toBe(false);
+	});
+
+	it("an open log's fixed Slot lists them, less the plan's Task and the one in use, and holds the fields of those its ⋯ shows", async () => {
+		const { load } = await import('../../routes/(app)/log/[id]/+page.server');
+		const open = (id: string) =>
+			(load as unknown as (e: unknown) => { items: { slotId: string; own: string | null; task: { id: string } | null; used: { taskId: string }[] }[]; alts: Record<string, { task: { id: string }; previous: unknown[] }>; library: { id: string; last: unknown }[] })({
+				locals: { account: { id: me } },
+				params: { id },
+				cookies: { get: () => undefined },
+				url: new URL(`http://x/log/${id}`)
+			});
+		// The plan's Slot uses Squat by now; this day, 30 days back and still open, swapped it for Bench press.
+		const id = randomUUID();
+		db.insert(occurrence).values({ id, habitId: gym().id, date: addDays(today, -30), status: 'due', variantId: fixed.variantId, picks: { [fixed.id]: bench } }).run();
+		const data = open(id);
+		const slotOf = (s: string) => data.items.find((it) => it.slotId === s)!;
+		expect(slotOf(fixed.id)).toMatchObject({ own: taskId('Squat'), task: { id: bench } });
+		expect(slotOf(fixed.id).used.map((u) => u.taskId)).toEqual([taskId('Lunge'), incline]);
+		// The plan's Task and the 2 the ⋯ shows can be swapped to at once, also offline.
+		expect(Object.keys(data.alts).sort()).toEqual([incline, taskId('Lunge'), taskId('Squat')].sort());
+		expect(data.alts[incline].previous.length).toBeGreaterThan(0);
+		// An auto-filled Slot picks from its Fill rule: it lists none.
+		expect(slotOf(auto.id).used).toEqual([]);
+		// The picker's "Last 50 kg × 8": the first set of the day each Task was last done, before this one.
+		expect(data.library.find((l) => l.id === incline)?.last).toEqual({ date: addDays(today, -37), text: expect.stringMatching(/^50 kg.*8$/) });
+		expect(data.library.find((l) => l.id === bench)?.last).toBeNull();
+		// A finished log swaps nothing.
+		db.update(occurrence).set({ status: 'done' }).where(eq(occurrence.id, id)).run();
+		expect(open(id).alts).toEqual({});
+		expect(open(id).items.every((it) => !it.used.length)).toBe(true);
 	});
 });

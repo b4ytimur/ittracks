@@ -16,7 +16,7 @@ import { recapFor } from '$lib/server/stats';
 import { planOfToday, replanToday, windowFor } from '$lib/server/backfill';
 import { NOTE_MAX, type ScheduleForm } from '$lib/forms';
 import { ActionError, appActor } from '$lib/server/core/actor';
-import { ownTask, rerollSlot, swapSlot } from '$lib/server/day-plan';
+import { hasParts, ownTask, rerollSlot, swapLibrary, swapSlot, usedBefore, type Used } from '$lib/server/day-plan';
 import { emit } from '$lib/server/core/events';
 import { doneOcc, leftOpen, reopenOcc, skipOcc, undoClears } from '$lib/server/core/log';
 import { routineDay, routineSteps, undoRoutine, withRoutineUndo } from '$lib/server/routine-day';
@@ -38,6 +38,8 @@ export interface LogTask {
 	open: boolean;
 	/** The Task its Slot has in the plan, without this log's swap: null for an auto-filled one. */
 	own: string | null;
+	/** An open log's fixed Slot: the other Tasks used in it before, newest first, for its ⋯ and the swap picker. */
+	used: Used[];
 	sets: number | null;
 	targets: Record<string, number>;
 	minTargets: Record<string, number>;
@@ -120,6 +122,18 @@ function loadTask(id: string, kept: Set<string>) {
 	};
 }
 
+/** The Library, for the done lines' names, the plan editor and, in an open log, the swap picker: its Tags and last time too. */
+function libraryFor(accountId: string, occ: { id: string; date: string }, swaps: boolean) {
+	const rows = db
+		.select({ id: task.id, name: task.name, archived: task.archived, rowOne: task.rowOne, rowMany: task.rowMany })
+		.from(task)
+		.where(and(eq(task.accountId, accountId), isNull(task.parentTaskId), isNull(task.deleteAfter)))
+		.orderBy(asc(task.name))
+		.all();
+	const { tags, last } = swaps ? swapLibrary(accountId, occ) : { tags: {}, last: {} };
+	return rows.map((r) => ({ ...r, tags: tags[r.id] ?? [], last: last[r.id] ?? null }));
+}
+
 /** Where to go back to: a page of this app, or null. */
 const safeBack = (v: string | null | undefined) => (v && /^\/(?!\/)[\w\-/.?=&%]*$/.test(v) && v.length <= 200 ? v : null);
 
@@ -173,6 +187,7 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 			roundHead: head,
 			open: p.depth === 0 && !!s?.fillRule,
 			own: ownTask(o.occ, p.slotId, s),
+			used: [],
 			sets: p.sets,
 			targets: p.targets ?? {},
 			minTargets: p.minTargets ?? {},
@@ -188,9 +203,22 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 	for (const s of plan)
 		if (!s.taskId) {
 			const at = items.findIndex((it) => plan.findIndex((x) => x.slotId === it.slotId) > plan.indexOf(s));
-			const empty: LogTask = { path: s.slotId, slotId: s.slotId, depth: 0, kids: 0, roundHead: null, open: !!slots.find((x) => x.id === s.slotId)?.fillRule, own: null, sets: s.sets, targets: {}, minTargets: {}, stretchTargets: {}, task: null, saved: [], previous: [] };
+			const empty: LogTask = { path: s.slotId, slotId: s.slotId, depth: 0, kids: 0, roundHead: null, open: !!slots.find((x) => x.id === s.slotId)?.fillRule, own: null, used: [], sets: s.sets, targets: {}, minTargets: {}, stretchTargets: {}, task: null, saved: [], previous: [] };
 			if (at < 0) items.push(empty);
 			else items.splice(at, 0, empty);
+		}
+	// An open log can swap: each fixed Slot's ⋯ lists the plan's Task and up to 2 used there before. Their fields and
+	// last time come along (Tasks with parts don't: their places are the server's), so a swap to one shows at once offline.
+	const canLog = win === 'ok' || win === 'today';
+	const alts: Record<string, { task: NonNullable<LogTask['task']>; previous: Record<string, unknown>[] }> = {};
+	if (o.occ.status !== 'done' && canLog)
+		for (const it of items) {
+			if (it.depth || it.open || !it.own) continue;
+			it.used = usedBefore(o.occ, it.slotId).filter((u) => u.taskId !== it.own && u.taskId !== it.task?.id);
+			for (const id of [...(it.task?.id === it.own ? [] : [it.own]), ...it.used.slice(0, 2).map((u) => u.taskId)]) {
+				const t = alts[id] || hasParts(id) ? null : taskOf(id);
+				if (t) alts[id] = { task: t, previous: lastEntries(id, o.occ.id, it.slotId) };
+			}
 		}
 	// What this log holds that no place in it shows now (a part removed, a Slot swapped):
 	// sent back with every save, so it is never lost.
@@ -216,7 +244,7 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		/** A past day: no autosave or timer, and Back goes to that day. */
 		past,
 		/** False for a past day outside the window in Settings: only a finished log can be changed. */
-		canLog: win === 'ok' || win === 'today',
+		canLog,
 		back,
 		levels: o.habit.levels?.enabled ? o.habit.levels : null,
 		variantName: v?.name ?? null,
@@ -225,21 +253,17 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		/** The plan this log follows, to change where it stands: an open log of today only. */
 		plan: !past && o.occ.status === 'due' && v && !v.archived ? (currentForm(accountId, o.habit.id)?.variants ?? null) : null,
 		items,
+		alts,
 		orphans,
 		orphanNames,
 		/** "Last time … · best …" per Task. */
 		recap: recapFor(
 			accountId,
-			items.flatMap((it) => (it.task ? [it.task.id] : [])),
+			[...items.flatMap((it) => (it.task ? [it.task.id] : [])), ...Object.keys(alts)],
 			o.occ.id,
 			o.occ.date
 		),
-		library: db
-			.select({ id: task.id, name: task.name, archived: task.archived, rowOne: task.rowOne, rowMany: task.rowMany })
-			.from(task)
-			.where(and(eq(task.accountId, accountId), isNull(task.parentTaskId), isNull(task.deleteAfter)))
-			.orderBy(asc(task.name))
-			.all()
+		library: libraryFor(accountId, o.occ, o.occ.status !== 'done' && canLog)
 	};
 };
 

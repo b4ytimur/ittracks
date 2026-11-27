@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { besides, doneBefore, doneLine, fromDraft, goneFrom, placeKey, setsToDo, swapText } from './places';
+import { besides, carryOver, doneBefore, doneLine, fromDraft, goneFrom, placeKey, setsToDo, swapGroups, swapText, usedText, withWaiting, type Pickable } from './places';
 
 const at = (path: string, task: string | null) => ({ path, task: task ? { id: task } : null });
 const squat = at('s1', 'squat');
@@ -43,6 +43,36 @@ describe('what is being logged, by place', () => {
 		});
 		it('a place swapped back is shown again, and saved as it shows', () => {
 			expect(besides({ [placeKey(squat)]: [set('squat', 's1', 60)] }, [squat, press], [])).toEqual([]);
+		});
+		it('swapped back offline, what the server holds for the place shown is saved once, by the place', () => {
+			// The server still has Leg press in the Slot, so its Squat sets sit aside until the swap reaches it.
+			const server = [set('squat', 's1', 60), set('squat', 's1', 62.5)];
+			expect(besides({ [placeKey(squat)]: server, [placeKey(legPress)]: [set('legpress', 's1', 100)] }, [squat, press], server)).toEqual([set('legpress', 's1', 100)]);
+			expect(besides({}, [squat, press], server)).toEqual([]);
+		});
+	});
+
+	describe('a swap made offline, shown before it is sent', () => {
+		type It = { path: string; slotId: string; depth: number; kids: number; task: { id: string } | null; saved: Record<string, unknown>[]; previous: Record<string, unknown>[]; targets: Record<string, number> };
+		const spot = (path: string, task: string, more: Partial<It> = {}): It => ({ path, slotId: path.split('/')[0], depth: path.split('/').length - 1, kids: 0, task: { id: task }, saved: [], previous: [], targets: {}, ...more });
+		const log = [spot('s1', 'legpress', { kids: 1, saved: [{ kg: 100 }], targets: { lp: 120 } }), spot('s1/warm', 'bar'), spot('s2', 'press')];
+		const here: Record<string, { task: { id: string }; previous: Record<string, unknown>[] }> = { squat: { task: { id: 'squat' }, previous: [{ kg: 80 }] } };
+		const onDevice = (id: string) => here[id];
+		const set = (task: string, path: string, kg: number) => ({ taskId: task, path, values: { kg } as Record<string, unknown> });
+
+		it('shows the Task waiting in its Slot, without the old one\'s parts, from its own last time; the Slot keeps its targets', () => {
+			const shown = withWaiting(log, { s1: 'squat' }, onDevice, []);
+			expect(shown.map(placeKey)).toEqual(['s1|squat', 's2|press']);
+			expect(shown[0]).toMatchObject({ kids: 0, previous: [{ kg: 80 }], saved: [], targets: { lp: 120 } });
+		});
+		it('swapped back to a Task done there before, starts from what the server holds for it', () => {
+			const orphans = [set('squat', 's1', 60), set('squat', 's1', 62.5), { taskId: 'squat', path: 's1', values: { _summary: true } }, set('squat', 's2', 1), set('lunge', 's1', 20)];
+			expect(withWaiting(log, { s1: 'squat' }, onDevice, orphans)[0].saved).toEqual([{ kg: 60 }, { kg: 62.5 }]);
+		});
+		it('a Task this page has no fields for, or the one the server shows already, leaves the place as it is', () => {
+			expect(withWaiting(log, { s1: 'curl' }, onDevice, [])).toEqual(log);
+			expect(withWaiting(log, { s2: 'press' }, () => ({ task: { id: 'press' }, previous: [] }), [])).toEqual(log);
+			expect(withWaiting(log, {}, onDevice, [])).toEqual(log);
 		});
 	});
 
@@ -97,6 +127,88 @@ describe('what is being logged, by place', () => {
 		it('names what Pick another picked, and what it showed before', () => {
 			expect(swapText('Squat', 'Lunge', 'reroll', 'today only')).toBe('Picked Lunge instead of Squat, today only.');
 			expect(swapText(null, 'Lunge', 'reroll', 'today only')).toBe('Picked Lunge, today only.');
+		});
+	});
+});
+
+describe('swapping a Task in', () => {
+	const f = (id: string, name: string, type = 'number', unit: string | null = null) => ({ id, name, type, unit });
+	const bench = [f('bw', 'Weight', 'number', 'kg'), f('br', 'Reps', 'count'), f('bg', 'Grip', 'choice'), f('bt', 'Tempo', 'number', 's')];
+
+	it('starts from the old Task\'s values still to do, where name and unit match', () => {
+		const incline = [f('ir', 'reps', 'count'), f('iw', 'Weight', 'number', 'kg'), f('ig', 'Grip', 'choice'), f('it', 'Tempo', 'number', 'min'), f('in', 'Note', 'text')];
+		const rows = [
+			{ bw: 60, br: 8, bg: 'wide', bt: 3 },
+			{ bw: 62.5, br: null, bg: 'wide', bt: 3 }
+		];
+		expect(carryOver(bench, rows, incline)).toEqual({
+			rows: [{ ir: 8, iw: 60 }, { iw: 62.5 }],
+			// A Choice's values are its own options, another unit is another number, a field Bench press hasn't stays blank.
+			ids: ['ir', 'iw']
+		});
+	});
+	it('with nothing that matches, or nothing left to do, nothing carries over', () => {
+		expect(carryOver(bench, [{ bw: 60 }], [f('d', 'Distance', 'number', 'km')])).toEqual({ rows: [{}], ids: [] });
+		expect(carryOver(bench, [], bench)).toEqual({ rows: [], ids: [] });
+		expect(carryOver(bench, [{ bw: '' }], bench).ids).toEqual([]);
+	});
+
+	it('says where a Task was used before, and its first set there when there was one', () => {
+		const day = (d: string) => `day ${d}`;
+		expect(usedText({ date: '2026-11-12', text: '50 kg × 8' }, day)).toBe('Used here day 2026-11-12 · 50 kg × 8');
+		expect(usedText({ date: '2026-11-03', text: '' }, day)).toBe('Used here day 2026-11-03');
+	});
+
+	describe('the picker', () => {
+		const t = (id: string, tags: string[] = [], date: string | null = null, archived = false, text = ''): Pickable => ({ id, name: id, tags, last: date ? { date, text } : null, archived });
+		const library = [
+			t('Bench press', ['push', 'chest'], '2026-11-20'),
+			t('Arnold press', ['push'], '2026-11-01'),
+			t('Close-grip bench press', ['push', 'chest']),
+			t('Dumbbell bench press', ['push', 'chest'], '2026-11-10'),
+			t('Incline bench press', ['push', 'chest'], '2026-11-12'),
+			t('Old press', ['push'], null, true),
+			t('Squat', ['legs'], '2026-11-19', false, '100 kg × 5'),
+			t('Dips', ['push']),
+			t('Push-up', ['push']),
+			t('Pec fly', ['chest']),
+			t('Plank')
+		];
+		const base = { library, used: [{ taskId: 'Incline bench press', date: '2026-11-12', text: '50 kg × 8' }], like: { id: 'Bench press', name: 'Bench press' }, current: 'Bench press', query: '', day: (d: string) => d.slice(5), away: () => false };
+		const names = (gs: ReturnType<typeof swapGroups>) => gs.map((g) => [g.label, g.rows.map((r) => r.name)]);
+
+		it('used here first, then up to 5 alike (most Tags shared first), then the rest A–Z; the one in use and archived ones never', () => {
+			expect(names(swapGroups(base))).toEqual([
+				['Used here before', ['Incline bench press']],
+				['Like Bench press', ['Close-grip bench press', 'Dumbbell bench press', 'Arnold press', 'Dips', 'Pec fly']],
+				['In the Library', ['Plank', 'Push-up', 'Squat']]
+			]);
+			const rows = swapGroups(base).flatMap((g) => g.rows);
+			expect(rows.find((r) => r.id === 'Incline bench press')?.meta).toBe('Used here 11-12 · 50 kg × 8');
+			// Last time's first set, or only the day when nothing was done in sets.
+			expect(rows.find((r) => r.id === 'Squat')?.meta).toBe('Last 100 kg × 5');
+			expect(rows.find((r) => r.id === 'Arnold press')?.meta).toBe('Last 11-01');
+			expect(rows.find((r) => r.id === 'Plank')?.meta).toBe('Never done');
+		});
+		it('swapped already, the plan\'s Task is offered again and the one in use is not', () => {
+			const rows = swapGroups({ ...base, used: [], current: 'Incline bench press' }).flatMap((g) => g.rows.map((r) => r.id));
+			expect(rows).not.toContain('Incline bench press');
+			expect(rows).toContain('Bench press');
+		});
+		it('a search keeps the names that hold it, in their groups, and drops empty groups', () => {
+			expect(names(swapGroups({ ...base, query: ' PRESS ' }))).toEqual([
+				['Used here before', ['Incline bench press']],
+				['Like Bench press', ['Close-grip bench press', 'Dumbbell bench press', 'Arnold press']]
+			]);
+			expect(swapGroups({ ...base, query: 'nothing like it' })).toEqual([]);
+		});
+		it('with no Task to be like, or none alike, there is no such group', () => {
+			expect(names(swapGroups({ ...base, like: null, used: [] })).map(([l]) => l)).toEqual(['In the Library']);
+		});
+		it('offline, a Task whose fields are not on this device needs a connection', () => {
+			const rows = swapGroups({ ...base, away: (id) => id !== 'Incline bench press' }).flatMap((g) => g.rows);
+			expect(rows.find((r) => r.id === 'Incline bench press')).toMatchObject({ disabled: false });
+			expect(rows.find((r) => r.id === 'Squat')).toEqual({ id: 'Squat', name: 'Squat', meta: 'Needs a connection', disabled: true });
 		});
 	});
 });
