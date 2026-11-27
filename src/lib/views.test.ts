@@ -50,8 +50,8 @@ describe('views', () => {
 		}
 	});
 
-	it('no template summary promises Today widgets, which nothing renders', () => {
-		for (const t of TEMPLATES) expect(t.summary).not.toMatch(/widget|week strip|progress|counter|money saved/i);
+	it('no template blurb or summary promises Today widgets, which nothing renders', () => {
+		for (const t of TEMPLATES) for (const words of [t.blurb, t.summary]) expect(words).not.toMatch(/widget|week strip|at a glance|progress|counter|money saved/i);
 	});
 
 	it('routine groups Today by part of day, in my order, time-aware', () => {

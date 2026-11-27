@@ -19,6 +19,7 @@
 	import { enqueue, isOffline, outbox, save, sendAhead } from '$lib/outbox.svelte';
 	import { waitingSwaps } from '$lib/queue';
 	import { postAction, runAction, showError, showToast, undoWith } from '$lib/toast.svelte';
+	import { inSentence } from '$lib/echo';
 	import { differs, revOf, type LogContent } from '$lib/logrev';
 	import { besides, carryOver, doneBefore, doneLine, fromDraft, keptText, loggedAt, placeKey, setsToDo, startedLog, swapGroups, swapText, usedText, waitingText, withWaiting, type Logged } from '$lib/log/places';
 	import SwapSheet from '$lib/log/SwapSheet.svelte';
@@ -911,7 +912,7 @@
 		edit(`/api/habits/${data.habitId}`, { variants: next }, { variants: data.plan }, words, local, pick);
 	function editOrder(order: string[], moved: string) {
 		const name = editPlaces.find((p) => p.id === moved)?.name;
-		void editPlan(inOrder(data.plan!, order), `Moved ${name} to ${order.indexOf(moved) + 1} of ${order.length} in ${data.habitName}, from now on.`);
+		void editPlan(inOrder(data.plan!, order), `Moved ${inSentence(name ?? '')} to ${order.indexOf(moved) + 1} of ${order.length} in ${inSentence(data.habitName)}, from now on.`);
 	}
 	function editName(p: EditPlace, name: string) {
 		void edit(`/api/tasks/${p.task}`, { name }, { name: p.name }, `Renamed ${p.name} to ${name}, everywhere.`);
@@ -977,7 +978,7 @@
 		const it = items.find((x) => placeKey(x) === key)!;
 		places[key].sets = rows;
 		at = null;
-		showToast(`Moved ${it.task!.rowOne} ${before.indexOf(moved) + 1} of ${it.task!.name} to ${rows.indexOf(moved) + 1} of ${rows.length}, for this log.`, () => {
+		showToast(`Moved ${it.task!.rowOne} ${before.indexOf(moved) + 1} of ${inSentence(it.task!.name)} to ${rows.indexOf(moved) + 1} of ${rows.length}, for this log.`, () => {
 			if (!mounted) return 'Open the log to move it back.';
 			const now = places[key].sets;
 			places[key].sets = [...before.filter((x) => now.includes(x)), ...now.filter((x) => !before.includes(x))];
@@ -1549,7 +1550,7 @@
 	}
 	.lg-end {
 		display: grid;
-		gap: var(--space-group);
+		gap: var(--gap); /* log-screen.css: space-section */
 	}
 	.lg-form {
 		display: grid;

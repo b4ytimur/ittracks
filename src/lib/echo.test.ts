@@ -41,6 +41,8 @@ describe('one full stop', () => {
 	});
 	it('takes a name’s own stop off inside a sentence, but not an ellipsis', () => {
 		expect(`Moved ${inSentence('I am someone who trains.')} to 2 of 4.`).toBe('Moved I am someone who trains to 2 of 4.');
+		// Lines built outside EditableList (Habits' move, the Log's) clean every name they put mid-sentence.
+		expect(oneStop(`Moved ${inSentence('I run.')} into ${inSentence('Fitness.')}, from today on.`)).toBe('Moved I run into Fitness, from today on.');
 		expect(inSentence('Bench press')).toBe('Bench press');
 		expect(inSentence('And then...')).toBe('And then...');
 	});

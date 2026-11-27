@@ -16,6 +16,7 @@
 		onfold,
 		grip,
 		slotOpen = false,
+		foldColumn = false,
 		onrename,
 		renaming = $bindable(false),
 		verb,
@@ -30,6 +31,8 @@
 		grip?: Snippet;
 		/** The slot opens with no grip in it: the rows under it have grips or checkboxes. */
 		slotOpen?: boolean;
+		/** No fold, over rows: the fold's column stays empty, so the title is on the rows' name column as a folding one's is. */
+		foldColumn?: boolean;
 		onrename?: (name: string) => void;
 		/** With onrename: the title is a box now. It goes false when the box closes. */
 		renaming?: boolean;
@@ -67,7 +70,7 @@
 </script>
 
 <!-- With a grip inside, the heading is named by its title alone, never "Move X X" (a heading reads as its title). -->
-<h2 class="group-heading section-title" aria-labelledby={grip ? `${id}-t` : undefined} class:stuck class:slotted bind:this={el}>
+<h2 class="group-heading section-title" aria-labelledby={grip ? `${id}-t` : undefined} class:stuck class:slotted class:fold-column={foldColumn && !onfold} bind:this={el}>
 	{#if onfold}
 		<button type="button" class="fold" aria-expanded={!folded} aria-labelledby="{id}-t" onclick={onfold}><span class="chev" aria-hidden="true">›</span></button>
 	{/if}

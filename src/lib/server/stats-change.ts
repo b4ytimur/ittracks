@@ -11,7 +11,7 @@ import { statCtx, type Catalog } from '$lib/stats/catalog';
 import { formulaProblem } from '$lib/stats/formula';
 import { boardFrom, habitCards, seedById } from '$lib/stats/auto';
 import { manualOrder } from '$lib/views';
-import { cardsUsing, board, boardFilter, customMeasure, MAX_BOARDS, MAX_CARDS, newId, rangeValue, statCard, statsSettings, type StatCard, type StatsSettings } from '$lib/stats/model';
+import { cardsUsing, board, boardFilter, customMeasure, MAX_BOARDS, MAX_CARDS, newId, rangeValue, statCard, statsSettings, type BoardFilter, type StatCard, type StatsSettings } from '$lib/stats/model';
 import { ActionError } from './core/actor';
 
 const id = z.string().max(64);
@@ -21,10 +21,12 @@ export const cardWhere = z.union([z.object({ board: id }), z.object({ habit: id 
 const f = boardFilter.shape;
 /** board.patch's filter: only the words it names change, so an Undo puts back its own words and keeps the ones changed since. */
 const filterWords = z.object({ areas: f.areas.unwrap(), tags: f.tags.unwrap(), habit: f.habit.unwrap(), identity: f.identity.unwrap(), direction: f.direction.unwrap() }).partial();
+/** board.patch's toggle: one Area or Tag on or off in the filter, so its Undo turns back that one and keeps the others. */
+const filterToggle = z.object({ list: z.enum(['areas', 'tags']), value: z.string().max(100), on: z.boolean() });
 
 export const statsChange = z.discriminatedUnion('op', [
 	z.object({ op: z.literal('board.add'), template: z.string().max(40).refine((x) => !!seedById(x), 'No such board').nullable().default(null), name: z.string().trim().min(1).max(40).optional() }),
-	z.object({ op: z.literal('board.patch'), id, name: z.string().trim().min(1).max(40).optional(), range: rangeValue.optional(), filter: filterWords.optional() }),
+	z.object({ op: z.literal('board.patch'), id, name: z.string().trim().min(1).max(40).optional(), range: rangeValue.optional(), filter: filterWords.optional(), toggle: filterToggle.optional() }),
 	z.object({ op: z.literal('board.delete'), id }),
 	z.object({ op: z.literal('board.move'), id, dir: z.union([z.literal(-1), z.literal(1)]) }),
 	/** Put the boards in this order (a tab dragged, or Move… in the Boards ⋯). Boards not listed keep their order after these. */
@@ -142,10 +144,17 @@ export function changeStats(accountId: string, raw: unknown, tz?: string): Stats
 			s = { ...s, boards: [...s.boards, nb], last: nb.id };
 			break;
 		}
-		case 'board.patch':
+		case 'board.patch': {
 			if (!s.boards.some((x) => x.id === b.id)) throw notFound('No such board');
-			s = { ...s, boards: s.boards.map((x) => (x.id === b.id ? { ...x, name: b.name ?? x.name, range: b.range ?? x.range, filter: { ...x.filter, ...b.filter } } : x)) };
+			const t = b.toggle;
+			const toggled = (f: BoardFilter): BoardFilter => {
+				if (!t) return f;
+				const list = f[t.list];
+				return { ...f, [t.list]: t.on ? (list.includes(t.value) ? list : [...list, t.value]) : list.filter((v) => v !== t.value) };
+			};
+			s = { ...s, boards: s.boards.map((x) => (x.id === b.id ? { ...x, name: b.name ?? x.name, range: b.range ?? x.range, filter: toggled({ ...x.filter, ...b.filter }) } : x)) };
 			break;
+		}
 		case 'board.delete':
 			s = { ...s, boards: s.boards.filter((x) => x.id !== b.id), open: s.open === b.id ? 'last' : s.open, last: s.last === b.id ? null : s.last };
 			break;

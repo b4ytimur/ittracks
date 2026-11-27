@@ -70,6 +70,23 @@ it("a filter change's Undo puts back only its own word, so a word changed since 
 	changeStats(me, { op: 'board.delete', id });
 });
 
+it("an Area or Tag toggle's Undo turns back only that one, so one toggled since stays", () => {
+	const id = changeStats(me, { op: 'board.add', name: 'Toggles' }).id!;
+	const filter = () => getStats(me).boards.find((b) => b.id === id)!.filter;
+	changeStats(me, { op: 'board.patch', id, toggle: { list: 'tags', value: 'A', on: true } });
+	changeStats(me, { op: 'board.patch', id, toggle: { list: 'tags', value: 'B', on: true } });
+	// The Undo of A, as the Stats page sends it.
+	changeStats(me, { op: 'board.patch', id, toggle: { list: 'tags', value: 'A', on: false } });
+	expect(filter().tags).toEqual(['B']);
+	// Off twice, or on when it is on, changes nothing.
+	changeStats(me, { op: 'board.patch', id, toggle: { list: 'tags', value: 'A', on: false } });
+	changeStats(me, { op: 'board.patch', id, toggle: { list: 'tags', value: 'B', on: true } });
+	expect(filter().tags).toEqual(['B']);
+	changeStats(me, { op: 'board.patch', id, toggle: { list: 'areas', value: 'a1', on: true } });
+	expect(filter()).toMatchObject({ areas: ['a1'], tags: ['B'] });
+	changeStats(me, { op: 'board.delete', id });
+});
+
 it('undoing Delete board brings back "Stats opens with this board" when it did, and only then', () => {
 	const id = changeStats(me, { op: 'board.add', name: 'Opens' }).id!;
 	changeStats(me, { op: 'open', value: id });

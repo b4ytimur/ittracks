@@ -21,6 +21,7 @@
 	import { consistencyText } from '$lib/engine/stats';
 	import { saveLayout, viewOp } from '$lib/viewclient';
 	import { runAction, showToast, undoWith } from '$lib/toast.svelte';
+	import { inSentence } from '$lib/echo';
 	import { goneAt } from '$lib/undelete';
 	import { groupBy, keepsEmptyAreas, manualOrder, passes, type HabitLineKey } from '$lib/views';
 
@@ -153,7 +154,7 @@
 		const last = mine(habits.filter((x) => x.parentId === into && x.id !== id)).at(-1);
 		// A habit with past days: the move counts from today on, or, asked here, from its start.
 		const past = !!h && h.startDate < data.today;
-		moveTo(id, into, last?.id ?? into, `Moved ${h?.name} into ${g?.name}${past ? ', from today on' : ''}.`, past ? { label: 'Past days too', run: () => pastToo(id, into) } : undefined);
+		moveTo(id, into, last?.id ?? into, `Moved ${inSentence(h?.name ?? '')} into ${inSentence(g?.name ?? '')}${past ? ', from today on' : ''}.`, past ? { label: 'Past days too', run: () => pastToo(id, into) } : undefined);
 	}
 	/** The move counts on the habit's past days too, with an Undo back to from today on. */
 	async function pastToo(id: string, into: string) {
@@ -161,12 +162,12 @@
 		if (!r.ok) return r.error ?? false;
 		const undo = r.data?.undo;
 		const g = byId(into);
-		const start = r.data?.groupStart ? ` ${g?.name} now starts ${new Date(r.data.groupStart + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}.` : '';
-		showToast(`${byId(id)?.name} counts in ${g?.name} on its past days too.${start}`, undo ? () => undoTo(undo) : undefined);
+		const start = r.data?.groupStart ? ` ${inSentence(g?.name ?? '')} now starts ${new Date(r.data.groupStart + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}.` : '';
+		showToast(`${inSentence(byId(id)?.name ?? '')} counts in ${inSentence(g?.name ?? '')} on its past days too.${start}`, undo ? () => undoTo(undo) : undefined);
 	}
 	const undoTo = async (token: string) => (await fetch('/api/undo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: token }) }).catch(() => null))?.ok ?? false;
 	function outdent(id: string, from: Habit) {
-		moveTo(id, from.parentId, from.id, `Moved ${byId(id)?.name} out of ${from.name}.`);
+		moveTo(id, from.parentId, from.id, `Moved ${inSentence(byId(id)?.name ?? '')} out of ${inSentence(from.name)}.`);
 	}
 
 	async function rename(h: Habit, name: string) {

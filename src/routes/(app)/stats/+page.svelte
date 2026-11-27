@@ -43,7 +43,14 @@
 		if (await op({ op: 'board.patch', id, ...p })) showToast(said, undoOp({ op: 'board.patch', id, ...was }));
 	}
 	const setFilter = (f: Partial<BoardFilter>) => patch({ filter: f });
-	const toggle = <T,>(xs: T[], x: T) => (xs.includes(x) ? xs.filter((y) => y !== x) : [...xs, x]);
+	/** An Area or Tag on or off: its Undo turns that one back on the filter as it is then, so one toggled since stays. */
+	async function toggle(list: 'areas' | 'tags', value: string) {
+		if (!board) return;
+		const { id, name, filter } = board;
+		const on = !filter[list].includes(value);
+		const said = boardSaid(name, { filter: { ...filter, [list]: on ? [...filter[list], value] : filter[list].filter((x) => x !== value) } });
+		if (await op({ op: 'board.patch', id, toggle: { list, value, on } })) showToast(said, undoOp({ op: 'board.patch', id, toggle: { list, value, on: !on } }));
+	}
 
 	async function addBoard(template: string | null) {
 		const r = await op({ op: 'board.add', template, name: template ? undefined : boardName.trim() || 'New board' });
@@ -159,7 +166,7 @@
 							<div class="muted meta">Areas</div>
 							<div class="chips">
 								{#each data.catalog.areas as a (a.id)}
-									<button type="button" class="toggle" aria-pressed={board.filter.areas.includes(a.id)} onclick={() => setFilter({ areas: toggle(board.filter.areas, a.id) })}>{a.name}</button>
+									<button type="button" class="toggle" aria-pressed={board.filter.areas.includes(a.id)} onclick={() => toggle('areas', a.id)}>{a.name}</button>
 								{/each}
 							</div>
 						</div>
@@ -169,7 +176,7 @@
 							<div class="muted meta">Tags</div>
 							<div class="chips">
 								{#each data.catalog.tags as t (t)}
-									<button type="button" class="toggle" aria-pressed={board.filter.tags.includes(t)} onclick={() => setFilter({ tags: toggle(board.filter.tags, t) })}>{t}</button>
+									<button type="button" class="toggle" aria-pressed={board.filter.tags.includes(t)} onclick={() => toggle('tags', t)}>{t}</button>
 								{/each}
 							</div>
 						</div>

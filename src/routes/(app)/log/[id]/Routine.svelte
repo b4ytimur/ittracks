@@ -148,6 +148,6 @@
 	}
 	.lg-end {
 		display: grid;
-		gap: var(--space-group);
+		gap: var(--gap); /* log-screen.css: space-section */
 	}
 </style>
