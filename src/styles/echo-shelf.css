@@ -16,9 +16,8 @@
    .tucked: the layout's scroll listener adds it on scroll down and drops it on scroll up, after 900ms at rest and on
    every new line. The CSS below refuses it in select mode, with the history open and with keyboard focus in the bar.
    The band is out of the bar's flow, so the layout's one ResizeObserver observes both .band and .tabbar and writes
-   tabbar height + max(band height, a one-line band) + space-section to --tabbar-clear on <html>. Tucking is a
-   transform, so it never changes the band's box: the observer never sees it, and the reserve keeps the band while
-   it is tucked.
+   their two heights, added, to --tabbar-height on <html>; the reserve below takes it. Tucking is a transform, so it
+   never changes the band's box: the observer never sees it, and the reserve keeps the band while it is tucked.
    echo:floor (R2.6): the scroll listener, each time it toggles .tucked, and the observer's callback
    (the band mounts or resizes) dispatch it on window. detail.floor = the resting floor, tabbar top - band.offsetHeight
    (offsetHeight ignores the tuck and is 0 while idle), or the tab bar's top while tucked. Open menus re-place on it. */
@@ -26,10 +25,11 @@
 /* ---------- Reserve: the page never ends under the bar (focus never lands under it either, WCAG 2.4.11) ---------- */
 /* The app's main takes --tabbar-clear as its padding-bottom. A one-line band is always reserved (R2.15):
    from the start, while idle and while tucked. The band appears with a change, often one made on the last row, and
-   must not land on it (24 - 32 would cover 8px). The value here is the fallback until the layout measures; a wrapped
-   message, the select-mode band or tabs wrapped at 200% text only raise the measure, never below one line. */
+   must not land on it (24 - 32 would cover 8px). Taller than that (a wrapped message, the select-mode band with its
+   fields, tabs wrapped at 200% text), the measured bar plus space-section takes over, so the last row still scrolls
+   clear of the band; it never lowers the reserve. */
 html:has(.tabbar) {
-	--tabbar-clear: calc(var(--space-tabbar-clear) + var(--band-height));
+	--tabbar-clear: max(calc(var(--space-tabbar-clear) + var(--band-height)), calc(var(--tabbar-height, 0px) + var(--space-section)));
 	scroll-padding-bottom: var(--tabbar-clear);
 }
 
@@ -122,7 +122,7 @@ html:has(.tabbar) {
 
 /* ---------- Touch: the band is 44px, so Undo, Retry and the count get 44px hit areas ---------- */
 @media (pointer: coarse) {
-	html:has(.tabbar) { --tabbar-clear: calc(var(--space-tabbar-clear) + var(--target-touch)); }
+	html:has(.tabbar) { --tabbar-clear: max(calc(var(--space-tabbar-clear) + var(--target-touch)), calc(var(--tabbar-height, 0px) + var(--space-section))); }
 	.tabbar .band, .tabbar .history > li { min-height: var(--target-touch); }
 	.echo { min-height: calc(var(--target-touch) - 1px); }
 	.echo-act::before, .echo-more::before { inset-block: calc((var(--target-min) - var(--target-touch)) / 2); }

@@ -6,12 +6,17 @@ import { dropEntry, oneStop, pushEntry, setHeld, type Entry } from './echo';
 
 let next = 1;
 
+/** An entry, with what had focus when it was posted: its Undo goes with it, and focus goes back there (Band). */
+export type Posted = Entry & { from?: Element | null };
+
 /** `select` is what a page's select mode shows in the band instead. */
-export const band = $state<{ entries: Entry[]; select: Snippet | null }>({ entries: [], select: null });
+export const band = $state<{ entries: Posted[]; select: Snippet | null }>({ entries: [], select: null });
 
 const post = (e: Omit<Entry, 'id'>) => {
 	const id = next++;
-	band.entries = pushEntry(band.entries, { id, ...e, text: oneStop(e.text) });
+	const doc = globalThis.document;
+	const entry: Posted = { id, ...e, text: oneStop(e.text), from: doc?.activeElement === doc?.body ? null : doc.activeElement };
+	band.entries = pushEntry(band.entries, entry);
 	return id;
 };
 

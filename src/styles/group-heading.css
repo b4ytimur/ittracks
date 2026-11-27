@@ -81,8 +81,11 @@ li:has(> .group-heading:focus-within) > * .group-heading.stuck { z-index: calc(v
 /* ---------- Slot: 0 wide, handle-slot when .slotted; the title slides 16px with the rows ---------- */
 .group-heading > .slot { flex: none; display: flex; align-self: stretch; align-items: center; width: 0; }
 .group-heading.slotted > .slot { width: var(--handle-slot); }
-/* The grip's hit area stays on its own 24px (8 before the slot, the slot itself): the chevron owns the 24px before it. */
-.group-heading .handle::before { inset-inline: 0; }
+/* The grip's 44px area grows toward the title (the swatch, icon and title take no taps), never leftward, where the
+   heading's 9px of gutter would run off the screen. It stays on its own 24px (8 before the slot, the slot itself)
+   beside a chevron, which owns the 24px before it, and while the title is a box being renamed, which takes taps. */
+.group-heading .handle::before { inset-inline: 0 min(0px, calc(var(--grip-w) - var(--grip-hit))); }
+.group-heading:has(> .fold, > .title > input) .handle::before { inset-inline: 0; }
 
 /* ---------- Title, icon, swatch, count ---------- */
 /* The title (an Area's icon first) starts on the rows' name column in every state.

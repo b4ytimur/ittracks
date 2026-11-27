@@ -1,7 +1,7 @@
 /* TitleLine: the title line with the back link, the page's actions and its one pressed state, and the hint line under it.
    Markup:
      <header class="titlebar" data-mode="use|state" [data-add-hidden]>
-       a.title-back, h1.page-title, div.title-actions, then button.toggle
+       a.title-back, h1.page-title, div.title-actions (div.title-swap for a state from the hint line), then button.toggle
      </header>
      a.title-back               a page with a parent only (D3.31), the back prop. Its name says where it goes; the ‹ is
                                 hidden from screen readers: <a class="title-back" href="/habits"
@@ -13,10 +13,11 @@
      button.toggle              the state: <button type="button" class="toggle" aria-pressed="true|false"><span
                                 data-reserve="Select">Select</span></button>, outside div.title-actions. Pressed, the line's
                                 data-mode is state; Esc outside a field or a second press leaves
-     div.title-actions[data-done]  a state with way 'hint' (the Log's Change the plan), while it is on: <div
+     div.title-swap             a state with way 'hint' (the Log's Change the plan): the actions (if any) and <div
                                 class="title-actions" data-done><button type="button" class="primary" aria-describedby="(the
-                                state span's id)">Done</button></div> in the actions' place, the view's one primary; Done,
-                                Esc outside a field leave. No toggle
+                                state span's id)">Done</button></div> in one cell, both rendered; the one not in use is inert
+                                and hidden. Done is the view's one primary while the state is on; Done, Esc outside a field
+                                leave. No toggle
      <p class="hint-line meta" data-mode="…">
        <span data-hint="use">…</span>                               words, or the hint snippet (a day's date and count)
          <span class="hint-tools"><button class="quiet">Change the plan</button></span>   way 'hint': the state's way
@@ -47,7 +48,11 @@
 @media (hover: hover) { .titlebar > .title-back:hover { text-decoration: underline; text-underline-offset: 3px; } }
 /* Buttons in one group, 8 apart; the group is 16 from the h1 and the state. A Button is control-md (32px), the h1's line. */
 /* position: a ⋯ menu in the title line hangs from these buttons, never from the page's far end (Menu). */
-.titlebar > .title-actions { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-inline); }
+.titlebar .title-actions { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-inline); }
+/* A state entered from the hint line: Done and the actions in one cell, as the hint line's two texts are, so the line
+   keeps the wider group's room in both states and Done never wraps it to a second row. */
+.titlebar > .title-swap { display: grid; justify-items: end; }
+.title-swap > .title-actions { grid-area: 1 / 1; }
 /* The state: Chip's toggle at control-md, the line's button size (Chip's coarse padding on every pointer), so it never
    changes the line's 40px; trailing. data-reserve keeps its width when it is pressed. */
 .titlebar > .toggle { --toggle-pad-block: calc(var(--space-inline) - 1px); min-height: var(--control-md); margin-inline-start: auto; }
@@ -66,13 +71,13 @@
    sends the focused button off-screen; the line unpins once focus moves on. */
 .titlebar[data-mode='state'], .titlebar:has(:focus-visible) { position: sticky; top: 0; z-index: var(--z-sticky); }
 /* The actions hide while the state is on (Apply is the view's one primary). visibility keeps their space, so the state
-   never jumps and the line never rewraps. */
-.titlebar[data-mode='state'] > .title-actions { visibility: hidden; opacity: 0; }
-/* A state entered from the hint line puts Done, its one primary, in the actions' place: that group stays in sight. */
-.titlebar[data-mode='state'] > .title-actions[data-done] { visibility: visible; opacity: 1; }
+   never jumps and the line never rewraps. A state entered from the hint line shows Done, its one primary, in their
+   place, and hides Done while it is off. */
+.titlebar[data-mode='state'] .title-actions:not([data-done]),
+.titlebar:not([data-mode='state']) .title-actions[data-done] { visibility: hidden; opacity: 0; }
 /* addHidden (another add is open, as Stats' card builder, or the list shows EmptyState's first, whose slot is then the
    only add): the add alone hides, space kept; the ⋯ and the links stay. */
-.titlebar[data-add-hidden] > .title-actions > [data-add] { visibility: hidden; opacity: 0; }
+.titlebar[data-add-hidden] .title-actions > [data-add] { visibility: hidden; opacity: 0; }
 .titlebar.stuck { border-bottom-color: var(--line); }
 
 /* Pinned budget: the title line plus one stuck group heading. */
@@ -113,18 +118,19 @@ html.pinned {
 
 /* ---------- Motion: one start for the whole change of state; reduced motion is one 150ms cross-fade ---------- */
 @media (prefers-reduced-motion: no-preference) {
-	.titlebar > .title-actions, .hint-line > * {
+	.titlebar .title-actions, .hint-line > * {
 		transition: opacity var(--duration-settle) var(--ease-settle), visibility var(--duration-settle) var(--ease-settle);
 	}
 }
 @media (prefers-reduced-motion: reduce) {
-	.titlebar > .title-actions, .hint-line > * {
+	.titlebar .title-actions, .hint-line > * {
 		transition: opacity var(--duration-quick) linear, visibility var(--duration-quick) linear;
 	}
 }
 /* The use text comes back visible at once and only fades in, so the way in can take focus back as Done goes;
-   leaving, visibility still waits out the fade. */
-.hint-line[data-mode='use'] > [data-hint='use'] { transition-property: opacity; }
+   leaving, visibility still waits out the fade. Done does the same as the state comes on, so it can take focus. */
+.hint-line[data-mode='use'] > [data-hint='use'],
+.titlebar[data-mode='state'] .title-actions[data-done] { transition-property: opacity; }
 /* Forced colours: the back link is LinkText by itself and takes the underline, as Button's edgeless words do. The state
    is Chip's toggle, the buttons Button's; the title line's transparent bottom border becomes a visible line by itself. */
 @media (forced-colors: active) { .titlebar > .title-back { text-decoration: underline; } }
