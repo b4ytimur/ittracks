@@ -119,16 +119,18 @@
 	async function archive(t: Task) {
 		const to = !t.archived;
 		const { deleteAfter } = t;
+		// The row shows its own way back until editing ends; struck first, so it never leaves the list mid-request
+		// (a row that leaves moves focus to its neighbour).
+		if (to) struck.add(t.id);
 		// Put back, for a deleted one: brought back, it isn't about to go any more.
 		patch(t.id, { archived: to, deleteAfter: null });
 		const r = await runAction(to ? '/library?/archive' : '/library?/unarchive', { id: t.id });
 		if (!r.ok) {
+			if (to) struck.delete(t.id);
 			patch(t.id, { archived: !to, deleteAfter });
 			return showToast(r.error ?? "Couldn't change it. Are you online?");
 		}
-		// The row shows its own way back until editing ends.
-		if (to) struck.add(t.id);
-		else if (!struck.delete(t.id)) showToast(`${t.name} is back.`, undoWith('/library?/archive', { id: t.id }));
+		if (!to && !struck.delete(t.id)) showToast(`${t.name} is back.`, undoWith('/library?/archive', { id: t.id }));
 	}
 	/** Editing ended: the struck rows go, and the band can bring them back. */
 	function leave() {
@@ -239,12 +241,13 @@
 				items={g.items}
 				key={(t) => t.id}
 				label={(t) => t.name}
-				{mode}
+				selecting={mode === 'select'}
 				{selected}
 				rowCard
-				href={(t) => `/library/${t.id}`}
+				slotOpen={mode === 'edit'}
+				href={mode === 'use' ? (t) => `/library/${t.id}` : undefined}
 				itemClass={(t) => (struck.has(t.id) ? 'struck' : '')}
-				onremove={archive}
+				onremove={mode === 'edit' ? archive : undefined}
 				removeLabel={(t) => (t.deleteAfter ? 'Put back' : t.archived ? 'Unarchive' : 'Archive')}
 				ariaLabel={g.label || 'Tasks'}
 			>

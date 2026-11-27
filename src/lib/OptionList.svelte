@@ -34,7 +34,6 @@
 		items={options}
 		key={(o) => o.id}
 		label={(o) => o.name || label}
-		mode="edit"
 		layout="bare"
 		ariaLabel={label}
 		onmove={(_, order) => (options = order.map((id) => options.find((o) => o.id === id)!))}

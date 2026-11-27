@@ -180,9 +180,8 @@
 	key={(item) => item.card.id}
 	label={(item) => titleOf(item.card)}
 	itemClass={(item) => `size-${item.card.look.size}`}
-	mode={editing && !readonly ? 'edit' : 'use'}
 	ariaLabel="Cards"
-	onmove={(_, order, text) => (void reorder(order, text), true)}
+	onmove={editing && !readonly ? (_, order, text) => (void reorder(order, text), true) : undefined}
 >
 	{#snippet row(item, ctx)}
 		{@const title = titleOf(item.card)}

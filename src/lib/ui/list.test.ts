@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyMove, dropDepth, dropPosition, gridDrop, mergeOrder, moveBy, moveKey, rangeKeys, reorderFrom, selectionState, withDescendants } from './list';
+import { applyMove, dropDepth, dropPosition, gridDrop, mergeOrder, moveBy, moveChoices, moveKey, nearest, pressMoved, rangeKeys, reorderFrom, selectionState, withDescendants, type Move } from './list';
 
 const keys = ['a', 'b', 'c', 'd'];
 
@@ -138,5 +138,76 @@ describe('withDescendants', () => {
 		const inside: Record<string, string[]> = { week: ['gym', 'evening'], evening: ['read'] };
 		expect(withDescendants('week', (k) => inside[k] ?? [])).toEqual(['week', 'gym', 'evening', 'read']);
 		expect(withDescendants('gym', (k) => inside[k] ?? [])).toEqual(['gym']);
+	});
+});
+
+describe('moveChoices', () => {
+	const names: Record<string, string> = { a: 'Gym', b: 'Read', c: 'Walk', d: 'Stretch' };
+	const nameOf = (k: string) => names[k];
+	const flat = (m: Move) => m.position !== 'inside'; // the list's rule without canDrop
+	const nests = () => true;
+	const labels = (key: string, o: Partial<Parameters<typeof moveChoices>[2]> = {}) => moveChoices(keys, key, { allowed: flat, nameOf, ...o }).map((c) => c.label);
+
+	it('in a flat list: up and down, none past either end, never inside', () => {
+		expect(labels('a')).toEqual(['Move down']);
+		expect(labels('b')).toEqual(['Move up', 'Move down']);
+		expect(labels('d')).toEqual(['Move up']);
+		expect(moveChoices(['a'], 'a', { allowed: flat, nameOf })).toEqual([]);
+	});
+	it('each choice is the move the arrow keys make', () => {
+		expect(moveChoices(keys, 'c', { allowed: nests, nameOf }).map((c) => c.move)).toEqual([
+			{ key: 'c', target: 'b', position: 'before' },
+			{ key: 'c', target: 'd', position: 'after' },
+			{ key: 'c', target: 'b', position: 'inside' }
+		]);
+	});
+	it('where rows nest: inside the row above, named, and not for the first row', () => {
+		expect(labels('a', { allowed: nests })).toEqual(['Move down']);
+		expect(labels('c', { allowed: nests })).toEqual(['Move up', 'Move down', 'Put inside Read']);
+		expect(labels('d', { allowed: nests })).toEqual(['Move up', 'Put inside Walk']);
+	});
+	it('leaves out what the list refuses', () => {
+		// Only Read holds others; nothing goes after d (a group with no Area, say).
+		const allowed = (m: Move) => (m.position === 'inside' ? m.target === 'b' : !(m.target === 'd' && m.position === 'after'));
+		expect(labels('c', { allowed })).toEqual(['Move up', 'Put inside Read']);
+		expect(labels('b', { allowed })).toEqual(['Move up', 'Move down']);
+	});
+	it("in a holder's list: Take out of the holder, after the moves, for every row", () => {
+		const kids = ['b', 'c'];
+		const of = (key: string) => moveChoices(kids, key, { allowed: flat, nameOf, outOf: 'Gym' }).map((c) => c.label);
+		expect(of('b')).toEqual(['Move down', 'Take out of Gym']);
+		expect(of('c')).toEqual(['Move up', 'Take out of Gym']);
+		expect(moveChoices(['b'], 'b', { allowed: flat, nameOf, outOf: 'Gym' })).toEqual([{ label: 'Take out of Gym', move: 'out' }]);
+		expect(moveChoices(['b'], 'b', { allowed: flat, nameOf, outOf: '' }).map((c) => c.label)).toEqual(['Take out']);
+	});
+	it('in a grid: earlier and later, never inside', () => {
+		expect(labels('b', { allowed: nests, grid: true })).toEqual(['Move earlier', 'Move later']);
+	});
+	it('offers nothing for a key the list does not have', () => {
+		expect(moveChoices(keys, 'x', { allowed: nests, nameOf, outOf: 'Gym' })).toEqual([]);
+	});
+});
+
+describe('pressMoved', () => {
+	it('a mouse or pen lifts the row once it moves past 4px', () => {
+		expect(pressMoved(0, 0, false)).toBe('stay');
+		expect(pressMoved(3, -2, false)).toBe('stay');
+		expect(pressMoved(0, 5, false)).toBe('lift');
+	});
+	it('a finger gets 10px, and moving past them first is a swipe that scrolls, never a lift', () => {
+		expect(pressMoved(6, 6, true)).toBe('stay');
+		expect(pressMoved(0, 11, true)).toBe('scroll');
+		expect(pressMoved(-11, 0, true)).toBe('scroll');
+	});
+});
+
+describe('nearest', () => {
+	it('keeps the place, or takes the last one when the place is gone', () => {
+		expect(nearest(1, 3)).toBe(1);
+		expect(nearest(3, 3)).toBe(2);
+		expect(nearest(-1, 3)).toBe(0); // a control that was in an open menu: the row's first
+	});
+	it('has nowhere to go when nothing is left', () => {
+		expect(nearest(0, 0)).toBe(-1);
 	});
 });

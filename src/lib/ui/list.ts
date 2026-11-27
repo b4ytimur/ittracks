@@ -1,20 +1,19 @@
-// The logic behind the shared editable list (EditableList.svelte), kept pure so it can be
-// tested without a browser: where a drop lands, what order a move gives, and range selection.
+// The logic behind the shared list (EditableList.svelte), kept pure so it can be tested without a
+// browser: where a drop lands, what order a move gives, what the Move menu offers, and range selection.
 // Lists work on keys (strings), never on the items themselves, so any kind of row fits.
 
 import type { Snippet } from 'svelte';
 
-/** What a list tells each row it renders. */
+/** A page's mode, the switch in its title line (EditChrome). A list takes no mode: see EditableList. */
 export type Mode = 'use' | 'edit' | 'select';
 
+/** What a list tells each row it renders. */
 export interface RowContext {
 	index: number;
-	mode: Mode;
-	editing: boolean;
 	selecting: boolean;
 	selected: boolean;
 	dragging: boolean;
-	/** The handle, for a "bare" row to put where it belongs. */
+	/** The grip (only when the list has onmove and isn't selecting), for a "bare" row to put where it belongs. */
 	grip?: Snippet;
 }
 
@@ -58,6 +57,48 @@ export function moveBy(keys: string[], key: string, by: number): string[] {
 	if (to === from) return keys;
 	const rest = keys.filter((k) => k !== key);
 	return [...rest.slice(0, to), key, ...rest.slice(to)];
+}
+
+/** One thing the Move menu offers: a move to send through onmove, or "out" for the list's onoutdent. */
+export interface MoveChoice {
+	label: string;
+	move: Move | 'out';
+}
+
+/**
+ * What the Move menu offers a row, the one-pointer way to move it (WCAG 2.5.7): the moves the arrow keys
+ * make, by name, and none that can't happen here. `allowed` is the list's rule (canDrop); `outOf` names the
+ * row holding this list, when the list can hand a row out to it (onoutdent: "" when it has no name); a grid
+ * moves one place earlier or later, never inside.
+ */
+export function moveChoices(keys: string[], key: string, o: { allowed: (m: Move) => boolean; nameOf: (key: string) => string; outOf?: string; grid?: boolean }): MoveChoice[] {
+	const i = keys.indexOf(key);
+	if (i < 0) return [];
+	const above = i > 0 ? keys[i - 1] : null;
+	const below = i < keys.length - 1 ? keys[i + 1] : null;
+	const moves: [string, Move][] = [];
+	if (above !== null) moves.push([o.grid ? 'Move earlier' : 'Move up', { key, target: above, position: 'before' }]);
+	if (below !== null) moves.push([o.grid ? 'Move later' : 'Move down', { key, target: below, position: 'after' }]);
+	if (above !== null && !o.grid) moves.push([`Put inside ${o.nameOf(above)}`, { key, target: above, position: 'inside' }]);
+	const out: MoveChoice[] = moves.filter(([, m]) => o.allowed(m)).map(([label, move]) => ({ label, move }));
+	if (o.outOf !== undefined) out.push({ label: o.outOf ? `Take out of ${o.outOf}` : 'Take out', move: 'out' });
+	return out;
+}
+
+/**
+ * A press on a grip that has moved (dx, dy) but not lifted its row: still a tap ("stay"), a drag ("lift": a
+ * mouse or pen lifts on moving), or a swipe ("scroll": a finger, `hold`, lifts only by holding still, so moving
+ * first lets the page scroll). A finger wanders more than a mouse before a press stops being a tap.
+ */
+export function pressMoved(dx: number, dy: number, hold: boolean): 'stay' | 'lift' | 'scroll' {
+	// ponytail: fixed px, not tokens; they measure a hand, not the layout.
+	if (Math.hypot(dx, dy) <= (hold ? 10 : 4)) return 'stay';
+	return hold ? 'scroll' : 'lift';
+}
+
+/** The place nearest `i` among `n` (the last when `i` is past them), or -1 when there are none: where the focus goes when its row leaves. */
+export function nearest(i: number, n: number): number {
+	return n ? Math.max(0, Math.min(i, n - 1)) : -1;
 }
 
 /** The order a move gives in one list. A move inside another row takes the key out of this list. */

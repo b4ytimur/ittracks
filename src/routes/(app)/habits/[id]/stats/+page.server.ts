@@ -21,7 +21,7 @@ export const load: PageServerLoad = ({ locals, params, cookies }) => {
 		habit: { id: h.id, name: h.name, direction: h.direction },
 		customized: !!custom,
 		items: itemsFor(cards, P, { catalog, stats: s, hidden, today, board: { range: '30d', filter: { areas: [], tags: [], habit: h.id, identity: null, direction: 'all' } } }),
-		headline: s.headlines[h.id]?.id ?? null,
+		headline: s.headlines[h.id] ?? null,
 		catalog,
 		measures: s.measures,
 		hidden,

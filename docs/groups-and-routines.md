@@ -14,7 +14,7 @@ Each habit inside keeps its own log, streak and Stats. The holder adds a streak 
 ## Put a habit inside another
 
 - In the habit's editor, pick the holder under **Inside**. The list shows **Groups** and **Routines** separately.
-- Or, on the Habits page, press **Edit** and drag the habit under a group or routine and sideways to the right to put it inside. Sideways to the left takes it out. See [edit mode](views-and-edit-mode.md#edit-mode).
+- Or, on the Habits page, press **Edit** and drag the habit under a group or routine and sideways to the right to put it inside. Sideways to the left takes it out. Or tap its ⠿ and choose **Put inside** or **Take out of**. See [edit mode](views-and-edit-mode.md#edit-mode).
 
 A habit with past days counts in its new holder **from today on**, unless you say otherwise. Under **Inside** in the editor, choose **Past days too**; on the Habits page, press **Past days too** beside the move's Undo. Then all its days count in the holder, as if it had always been there. A group that starts later than the habit reaches back to the habit's start (Started on moves back, as **Start from this day** does). A routine keeps its own start, since its days are its own plan. **Undo** puts it back to from today on.
 

@@ -446,7 +446,6 @@
 		items={t.metrics}
 		key={(m) => m.id}
 		label={(m) => m.name || 'Field'}
-		mode="edit"
 		layout="bare"
 		ariaLabel="Fields"
 		onmove={(_, order) => (t.metrics = order.map((k) => t.metrics.find((m) => m.id === k)!))}
@@ -636,7 +635,6 @@
 		items={t.parts}
 		key={(p) => p.id}
 		label={(p) => (p.kind === 'step' ? p.name || 'Step' : (choiceOf(p.taskId)?.name ?? 'Task'))}
-		mode="edit"
 		layout="bare"
 		ariaLabel="Inside this Task"
 		onmove={(_, order) => (t.parts = order.map((k) => t.parts.find((p) => p.id === k)!))}

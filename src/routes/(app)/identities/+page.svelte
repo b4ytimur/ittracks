@@ -56,15 +56,13 @@
 	items={list}
 	key={(i) => i.id}
 	label={(i) => i.statement}
-	{mode}
 	rowCard
 	ariaLabel="Identities"
-	onmove={(_, ids, text) => (void move(ids, text), true)}
-	onremove={remove}
+	onmove={mode === 'edit' ? (_, ids, text) => (void move(ids, text), true) : undefined}
+	onremove={mode === 'edit' ? remove : undefined}
 	removeLabel="Delete"
 	onadd={add}
 	addLabel="Identity"
-	addInUse
 >
 	{#snippet row(i)}
 		<span class="name"><InlineText value={i.statement} editing={mode === 'edit'} label="Change “{i.statement}”" onsave={(v) => rename(i, v)} /></span>

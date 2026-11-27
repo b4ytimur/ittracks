@@ -850,10 +850,9 @@
 		items={h.variants}
 		key={(v) => v.id}
 		label={(v) => v.name || 'Variant'}
-		mode={h.variants.length > 1 ? 'edit' : 'use'}
 		layout="bare"
 		ariaLabel="Variants"
-		onmove={(_, order) => (h.variants = order.map((k) => h.variants.find((v) => v.id === k)!))}
+		onmove={h.variants.length > 1 ? (_, order) => (h.variants = order.map((k) => h.variants.find((v) => v.id === k)!)) : undefined}
 	>
 		{#snippet row(v, ctx)}
 			<div class="holder variant">
@@ -871,10 +870,9 @@
 						items={v.slots}
 						key={(x) => x.id}
 						label={(x) => slotName(x)}
-						mode={v.slots.length ? 'edit' : 'use'}
 						layout="bare"
 						ariaLabel="Tasks{h.variants.length > 1 ? ` of ${v.name}` : ''}"
-						onmove={(_, order) => (v.slots = order.map((k) => v.slots.find((x) => x.id === k)!))}
+						onmove={v.slots.length ? (_, order) => (v.slots = order.map((k) => v.slots.find((x) => x.id === k)!)) : undefined}
 					>
 						{#snippet row(s, sctx)}
 							<div class="su-slot">
@@ -1053,7 +1051,6 @@
 			items={phases}
 			key={(p) => p.key}
 			label={(p) => `Phase ${phases.indexOf(p) + 1}`}
-			mode="edit"
 			layout="block"
 			ariaLabel="Phases"
 			onmove={(_, order) => (phases = order.map((k) => phases.find((p) => p.key === k)!))}
@@ -1722,9 +1719,9 @@
 		{#if shows('instead')}{@render line('instead', insteadPart)}{/if}
 	</div>
 
-	<EditableList items={sections} key={(x) => x} label={sectionTitle} mode={arranging} layout="bare" class="sections" ariaLabel="Sections" onmove={(m, order) => moveSection(m.key as Section, order as Section[])}>
+	<EditableList items={sections} key={(x) => x} label={sectionTitle} layout="bare" class="sections" ariaLabel="Sections" onmove={arranging === 'edit' ? (m, order) => (moveSection(m.key as Section, order as Section[]), true) : undefined}>
 		{#snippet row(x, ctx)}
-			<GroupHeading title={sectionTitle(x)} mode={arranging} grip={ctx.grip} />
+			<GroupHeading title={sectionTitle(x)} grip={ctx.grip} />
 			<div>{@render { what: whatSection, counts: countsSection, slip: slipSection, keeps: keepsSection, about: aboutSection }[x]()}</div>
 		{/snippet}
 	</EditableList>

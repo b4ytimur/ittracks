@@ -1,6 +1,7 @@
 <script lang="ts" generics="T">
-	// Groups of rows under headings. Grouped by Area, the Areas are edited where they stand: drag to
-	// reorder, rename, recolour, delete (with Undo), and add one at the end.
+	// Groups of rows under headings. Grouped by Area, the page's Edit edits the Areas where they stand: a grip
+	// to move one (drag or its Move menu), rename, recolour, delete (with Undo), and add one at the end. In Edit
+	// and Select the headings' slot opens, so their titles keep the column of the rows' grips and checkboxes.
 	import type { Snippet } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import { showError, showToast } from '$lib/toast.svelte';
@@ -33,6 +34,7 @@
 	} = $props();
 
 	const areaOf = (key: string) => (byArea ? areas.find((a) => a.id === key) : undefined);
+	const editing = $derived(mode === 'edit');
 	let picking = $state<string | null>(null);
 	let order = $state.raw<string[] | null>(null);
 	const list = $derived(order ? [...groups].sort((a, b) => rank(a.key) - rank(b.key)) : groups);
@@ -79,7 +81,7 @@
 
 {#if !byArea || groups.every((g) => !g.label)}
 	{#each groups as g (g.key)}
-		{#if g.label}<GroupHeading title={g.label} color={g.color} {mode} count={String(g.items.length)} />{/if}
+		{#if g.label}<GroupHeading title={g.label} color={g.color} slotOpen={mode !== 'use'} count={String(g.items.length)} />{/if}
 		{@render group(g)}
 	{/each}
 {:else}
@@ -87,11 +89,10 @@
 		items={list}
 		key={(g) => g.key}
 		label={(g) => areaOf(g.key)?.name ?? g.label}
-		mode={mode === 'edit' ? 'edit' : 'use'}
 		layout="bare"
 		ariaLabel="Areas"
 		canDrop={(m) => m.position !== 'inside' && !!areaOf(m.key) && (!!areaOf(m.target) || m.position === 'before')}
-		onmove={(_, keys, text) => (void move(keys, text), true)}
+		onmove={editing ? (_, keys, text) => (void move(keys, text), true) : undefined}
 	>
 		{#snippet row(g, ctx)}
 			{@const a = areaOf(g.key)}
@@ -99,12 +100,12 @@
 				title={a?.name ?? g.label}
 				color={g.color}
 				icon={a?.icon}
-				{mode}
+				slotOpen={mode !== 'use'}
 				count={String(g.items.length)}
 				grip={a ? ctx.grip : undefined}
-				onrename={a ? (name) => change(a, { name }) : undefined}
-				after={a ? swatch : undefined}
-				verb={a && mode === 'edit' ? del : undefined}
+				onrename={a && editing ? (name) => change(a, { name }) : undefined}
+				after={a && editing ? swatch : undefined}
+				verb={a && editing ? del : undefined}
 			/>
 			{#snippet swatch()}
 				<button type="button" class="quiet dot" aria-label="Colour of {a?.name}" aria-expanded={picking === g.key} onclick={() => (picking = picking === g.key ? null : g.key)}
@@ -114,7 +115,7 @@
 			{#snippet del()}
 				<button type="button" class="quiet verb" aria-label="Delete {a?.name}" onclick={() => a && remove(a)}>Delete</button>
 			{/snippet}
-			{#if a && mode === 'edit' && picking === g.key}
+			{#if a && editing && picking === g.key}
 				<div class="colors" role="group" aria-label="Colour of {a.name}">
 					{#each [...new Set([a.color, ...AREA_COLORS])] as c (c)}
 						<button type="button" class="pick-color" aria-pressed={c === a.color} aria-label={COLOR_NAMES[c] ?? c} onclick={() => ((picking = null), change(a, { color: c }))}
@@ -127,7 +128,7 @@
 			{@render group(g)}
 		{/snippet}
 	</EditableList>
-	{#if mode === 'edit'}
+	{#if editing}
 		<p class="new section-title"><InlineText value="New Area" editing label="Add an Area" onsave={add} /></p>
 	{/if}
 {/if}

@@ -210,7 +210,7 @@
 		<div class="hi-days">
 			{#each days as day (day.date)}
 				<section class="hi-day" id="d-{day.date}">
-					<GroupHeading title={title(day.date)} {mode} count={!data.notesOnly && day.count.of ? `${day.count.done} of ${day.count.of}` : undefined} verb={data.canBackfill && day.date < data.today && (!data.windowFrom || day.date >= data.windowFrom) ? verb : undefined} />
+					<GroupHeading title={title(day.date)} slotOpen={mode === 'select'} count={!data.notesOnly && day.count.of ? `${day.count.done} of ${day.count.of}` : undefined} verb={data.canBackfill && day.date < data.today && (!data.windowFrom || day.date >= data.windowFrom) ? verb : undefined} />
 					{#snippet verb()}<a class="quiet verb" href="/day/{day.date}" aria-label="Log {title(day.date)}">Log this day</a>{/snippet}
 					{#each day.notes.day as it, i (i)}{@render note(it, `${day.date}:d${i}`, day.date, it.title)}{/each}
 					{#if day.moods.length}<p class="tags moods">{#each day.moods as m (m.field + m.value)}<span class="tag">{m.field}: {m.value}</span>{/each}</p>{/if}
@@ -219,7 +219,7 @@
 							items={day.occurrences}
 							key={(o) => o.id}
 							label={(o) => `${o.habit}, ${title(day.date)}`}
-							{mode}
+							selecting={mode === 'select'}
 							{selected}
 							rowCard
 							density="compact"

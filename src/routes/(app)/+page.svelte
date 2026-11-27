@@ -74,8 +74,9 @@
 				(async () => {
 					if (!(await undo())) return void showError('Not undone. Are you online?');
 					if (entry) dismiss(entry);
-					just.delete(habitId);
+					// Due again before it loses its hold, so the row never leaves the list (focus stays its own).
 					await invalidateAll();
+					just.delete(habitId);
 					void keepFocus(nameOf(habitId));
 				})
 		});
@@ -298,8 +299,12 @@
 		const ids = [...data.build, ...data.resting].map((b) => b.habitId);
 		const all = [...views.today.order, ...ids.filter((id) => !views.today.order.includes(id))];
 		const order = reorderFrom(all, shownBuild.map((b) => b.habitId), part, view.sort === 'manual');
-		moved({ order }, said, async () => !!(await setToday({ order: was })));
-		if (view.sort !== 'manual' || view.group !== 'none') sentenceBar?.change({ ...view, sort: 'manual', group: 'none' }, 'is in my order now, shared with the Habits page', 'My order');
+		const undo = async () => !!(await setToday({ order: was }));
+		// A drag in another sort or grouping also puts the view in My order: one line, whose Undo takes back both.
+		if (sentenceBar && (view.sort !== 'manual' || view.group !== 'none')) {
+			void setToday({ order });
+			sentenceBar.change({ ...view, sort: 'manual', group: 'none' }, 'is in my order now, shared with the Habits page', 'My order', { said, undo });
+		} else moved({ order }, said, undo);
 		return true;
 	}
 	function setHeadline(habitId: string, v: string) {
@@ -615,31 +620,31 @@
 		<div class="today-day">
 			{#if view.first && breakingShown.length}{@render breaking()}{/if}
 			<!-- Beside Breaking, the day takes a heading of the same kind, so both columns start alike (TS.11). -->
-			{#if wide.current && !view.first && groups.length && !groups[0].label}<GroupHeading title="Due today" {mode} />{/if}
+			{#if wide.current && !view.first && groups.length && !groups[0].label}<GroupHeading title="Due today" slotOpen={editing} />{/if}
 			{#if allDone}<p class="all-done">Everything due today is done.</p>{/if}
 			{#if nothingShown}<EmptyState kind="filtered" text="Nothing today matches {words[0].shown ?? 'this view'}." onclear={() => sentenceBar?.change({ ...view, fits: false, status: 'all', direction: 'all', areas: [], identity: null }, 'now shows everything', 'Everything')} />{/if}
 			{#each groups as g (g.key)}
 				{@const a = view.group === 'area' ? areaOf(g.key) : undefined}
 				{#if g.label}
-					<GroupHeading title={a?.name ?? g.label} icon={a?.icon} color={g.color} {mode} folded={folded(`group:${g.key}`)} onfold={() => fold(`group:${g.key}`)} />
+					<GroupHeading title={a?.name ?? g.label} icon={a?.icon} color={g.color} slotOpen={editing} folded={folded(`group:${g.key}`)} onfold={() => fold(`group:${g.key}`)} />
 				{/if}
 				{#if !g.label || !folded(`group:${g.key}`)}{@render habitList(g.items, g.label || 'Today')}{/if}
 			{/each}
 			{@render timeLine()}
 			{#if doneFolded.length}
-				<GroupHeading title="Done" {mode} count={String(leavesOf(doneFolded).length)} folded={folded('done')} onfold={() => fold('done')} />
+				<GroupHeading title="Done" slotOpen={editing} count={String(leavesOf(doneFolded).length)} folded={folded('done')} onfold={() => fold('done')} />
 				{#if !folded('done')}{@render habitList(doneFolded, 'Done today')}{/if}
 			{/if}
 		</div>
 		<div class="today-side">
 			{#if wide.current}
-				<GroupHeading title="Last seven days" {mode} />
+				<GroupHeading title="Last seven days" slotOpen={editing} />
 				<div class="day-week week-side" role="group" aria-label="The last seven days">{@render sevenDays()}</div>
 			{/if}
 			{#if !view.first && breakingShown.length}{@render breaking()}{/if}
 			{#if trackingShown.length}
 				<!-- Trackers keep what you log: never due or missed, so they sit beside the day, not in it. -->
-				<GroupHeading title="Tracking" {mode} count={String(trackingShown.length)} folded={folded('tracking')} onfold={() => fold('tracking')} />
+				<GroupHeading title="Tracking" slotOpen={editing} count={String(trackingShown.length)} folded={folded('tracking')} onfold={() => fold('tracking')} />
 				{#if !folded('tracking')}{@render trackingSection()}{/if}
 			{/if}
 			{#if laterSays && view.direction === 'all' && !view.fits && !editing}
@@ -661,7 +666,7 @@
 {/if}
 
 {#snippet breaking()}
-	<GroupHeading title={limiting ? 'Breaking and limiting' : 'Breaking'} {mode} verb={editing ? moveBreaking : undefined} />
+	<GroupHeading title={limiting ? 'Breaking and limiting' : 'Breaking'} slotOpen={editing} verb={editing ? moveBreaking : undefined} />
 	{#snippet moveBreaking()}<button type="button" class="quiet verb" onclick={() => sentenceBar?.change({ ...view, first: !view.first }, view.first ? 'puts breaking after the day' : 'puts breaking first', 'Breaking first')}>{view.first ? 'Move last' : 'Move first'}</button>{/snippet}
 	{@render breakingSection()}
 {/snippet}
@@ -685,15 +690,14 @@
 		{items}
 		key={(b) => b.habitId}
 		label={(b) => b.name}
-		{mode}
 		rowCard
 		holder={(b) => !!b.group && kidsOf(b.habitId).length > 0}
 		itemClass={(b) => [isDone(b) && statusOf(b.occurrence!) === 'skipped' ? 'skipped' : isDone(b) ? 'done' : '', just.has(b.habitId) ? 'just-done' : '', b.afterHabitId && view.group !== 'area' ? 'stacked' : ''].join(' ')}
 		ariaLabel={name}
-		onmove={(_, order, text) => reorderHabits(order, text)}
+		onmove={editing ? (_, order, text) => reorderHabits(order, text) : undefined}
+		actions={editing ? undefined : verb}
 	>
 		{#snippet row(item)}{@render habitRow(item)}{/snippet}
-		{#snippet actions(item)}{@render verb(item)}{/snippet}
 		{#snippet children(item)}{@render habitList(kidsOf(item.habitId), `Inside ${item.name}`)}{/snippet}
 	</EditableList>
 {/snippet}
@@ -777,7 +781,7 @@
 {/snippet}
 
 {#snippet breakingSection()}
-	<EditableList items={breakingShown} key={(b) => b.habitId} label={(b) => b.name} mode="use" rowCard ariaLabel={limiting ? 'Limits' : 'Breaking'}>
+	<EditableList items={breakingShown} key={(b) => b.habitId} label={(b) => b.name} rowCard ariaLabel={limiting ? 'Limits' : 'Breaking'}>
 		{#snippet row(b)}
 			{@const plan = b.ifThen}
 			{@render fold1(b.habitId, b.name)}
@@ -884,7 +888,7 @@
 {/snippet}
 
 {#snippet pausedSection()}
-	<EditableList items={data.paused} key={(x) => x.habitId} label={(x) => x.name} mode="use" rowCard ariaLabel="Paused">
+	<EditableList items={data.paused} key={(x) => x.habitId} label={(x) => x.name} rowCard ariaLabel="Paused">
 		{#snippet row(item)}
 			<span class="name">{item.name}</span>
 			<p class="meta-line">Paused until {shortDate(item.pausedUntil!)}. Streak is safe.</p>
@@ -894,7 +898,7 @@
 {/snippet}
 
 {#snippet trackingSection()}
-	<EditableList items={trackingShown} key={(x) => x.habitId} label={(x) => x.name} mode="use" rowCard ariaLabel="Tracking">
+	<EditableList items={trackingShown} key={(x) => x.habitId} label={(x) => x.name} rowCard ariaLabel="Tracking">
 		{#snippet row(item)}
 			<span class="name">{item.name}</span>
 			{#if headlineOf(item, true)}<p class="meta-line">{headlineOf(item, true)}</p>{/if}
@@ -907,7 +911,7 @@
 {/snippet}
 
 {#snippet restingSection()}
-	<EditableList items={data.resting} key={(x) => x.habitId} label={(x) => x.name} mode="use" rowCard ariaLabel="Not due today">
+	<EditableList items={data.resting} key={(x) => x.habitId} label={(x) => x.name} rowCard ariaLabel="Not due today">
 		{#snippet row(item)}
 			<span class="name">{item.name}</span>
 			{#if item.streak}<p class="meta-line">{item.streak}</p>{/if}

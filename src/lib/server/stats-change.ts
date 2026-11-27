@@ -29,6 +29,8 @@ export const statsChange = z.discriminatedUnion('op', [
 	/** Put the cards in this order (a drag in edit mode). Cards not listed keep their order after these. */
 	z.object({ op: z.literal('card.order'), where: cardWhere, ids: z.array(id).max(MAX_CARDS) }),
 	z.object({ op: z.literal('habit.reset'), habit: id }),
+	/** Undo of habit.reset: the habit's own cards back, and its Today number unless one was picked since. */
+	z.object({ op: z.literal('habit.restore'), habit: id, cards: z.array(statCard).max(MAX_CARDS), headline: statCard.nullable().default(null) }),
 	z.object({ op: z.literal('open'), value: id }),
 	z.object({ op: z.literal('last'), id }),
 	z.object({ op: z.literal('headline'), habit: id, card: statCard.nullable() }),
@@ -80,7 +82,7 @@ const move = <T>(xs: T[], i: number, dir: number) => {
 const notFound = (what: string) => new ActionError('not_found', what);
 
 /** The changes that read logs to work out cards. */
-const NEEDS_DATA = ['board.add', 'card.save', 'card.delete', 'card.order', 'habit.reset', 'headline'];
+const NEEDS_DATA = ['board.add', 'card.save', 'card.delete', 'card.order', 'habit.reset', 'habit.restore', 'headline'];
 
 /**
  * Apply one Stats change and save it. Throws ActionError for a change that can't apply (not_found
@@ -183,6 +185,13 @@ export function changeStats(accountId: string, raw: unknown, tz?: string): Stats
 			syncHeadline(b.habit, h ? habitCards(P!, h) : []);
 			break;
 		}
+		case 'habit.restore':
+			if (!P!.habits.has(b.habit)) throw notFound('No such habit');
+			// Cards made since the reset are the newer change: Undo never overwrites them.
+			if (s.habitCards[b.habit]) throw new ActionError('conflict', 'Its cards changed since. Nothing was undone.');
+			s = { ...s, habitCards: { ...s.habitCards, [b.habit]: b.cards } };
+			if (b.headline && !s.headlines[b.habit]) s = { ...s, headlines: { ...s.headlines, [b.habit]: b.headline } };
+			break;
 		case 'open':
 			if (b.value !== 'last' && !s.boards.some((x) => x.id === b.value)) throw new ActionError('invalid', 'No such board');
 			s = { ...s, open: b.value };

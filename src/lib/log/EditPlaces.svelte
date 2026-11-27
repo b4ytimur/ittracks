@@ -56,7 +56,6 @@
 	items={places}
 	key={(p) => p.id}
 	label={(p) => p.name}
-	mode="edit"
 	rowCard
 	holder={isOpen}
 	class="lg-page lg-places"
@@ -91,7 +90,6 @@
 				items={r.sets}
 				key={idOf}
 				label={(s) => `${cap(r.one)} ${r.sets.indexOf(s) + 1}`}
-				mode="edit"
 				rowCard
 				ariaLabel="{cap(r.many)} of {r.name}"
 				onmove={(m, order) => (onrows(r.key, order.map((k) => r.sets.find((s) => idOf(s) === k)!), r.sets.find((s) => idOf(s) === m.key)!), true)}

@@ -1,26 +1,24 @@
-/* GroupHeading: one heading form at every depth, for Today's sections, Area groups (Today, Habits, Library)
-   and any block that holds rows. Owns .group-heading, .count placement, .stuck, .crumb,
-   and, under .group-heading only, the title span (.title), the Area icon (.icon) and the slot, tags and verb placement.
+/* GroupHeading: one heading form for Today's sections, Area groups (Today, Habits, Library), a habit's sections and
+   any block that holds rows. Owns .group-heading, .count placement, .stuck, .slotted, and, under .group-heading only,
+   the title span (.title), the Area icon (.icon) and the slot, tags and verb placement.
    The › fold's look (.fold, .chev) is Disclosure's; this fragment only places it (.group-heading > .fold).
    The swatch's look is Swatch's (R2.17); this fragment only places it (.group-heading > .swatch).
-   Markup (the same elements in every mode; edit fills the slot, gives the title InlineEditor's dashed name rule and adds the verb). The heading
-   takes the fold's aria-labelledby, so its name is the title and count in every mode, never its controls:
-     <h2 class="group-heading section-title" data-depth="1" data-mode="use" aria-labelledby="t1 n1">   h3 + card-title at depth 2
-       <button class="fold" aria-expanded="true" aria-labelledby="t1 n1"><span class="chev" aria-hidden="true">›</span></button>
-       <span class="slot"></span>                                                 the grip in edit mode
-       <span class="crumb" aria-hidden="true">Due today ›</span>                 depth 2 only; shows once stuck
+   Markup (the same elements in every state; a grip fills the slot, a renamable title is InlineEditor's dashed name).
+   The fold takes the title's id as its name, so the heading reads as its title, never its controls:
+     <h2 class="group-heading section-title [slotted]">
+       <button class="fold" aria-expanded="true" aria-labelledby="t1"><span class="chev" aria-hidden="true">›</span></button>
+       <span class="slot"></span>                                                 the grip, when the headings can be moved
        <span class="icon" aria-hidden="true">⌂</span>                            an Area's icon, if it has one
-       <span class="title" aria-hidden="true"><span id="t1">Health</span></span>  edit: button.inline-text inside
-       <span class="swatch" style="--c: var(--area-2)"></span>                   Areas only
-       <span class="rule" aria-hidden="true"></span>                             depth 1 only
-       <span class="tags"><span class="tag count" aria-hidden="true">1/2<span class="vh" id="n1">1 of 2 done</span></span></span>
-       <button class="quiet verb" aria-label="Hide Paused">Hide</button>          edit only: Hide/Show, Delete/Restore
+       <span class="swatch" style="--c: var(--area-2)"></span>                   Areas only (or the button that opens the colours)
+       <span class="title" id="t1">Health</span>                                 button.inline-text inside, with onrename
+       <span class="tags"><span class="tag count">2</span></span>
+       <button class="quiet verb" aria-label="Delete Health">Delete</button>     a verb, if one is passed
      </h2>
-   A heading that can't fold (Done when views.today.done = hide) has an empty <span class="fold"></span>, which keeps
-   the column. Each heading and its rows share one li of a ul.elist (no overflow set on it or any ancestor below the
-   scroller), so the li's end pushes a stuck heading out. Each heading sets its own .stuck from a sentinel. */
+   .slotted: the slot is open, with the grip in it or empty (slotOpen) beside rows that have grips or checkboxes.
+   Each heading and its rows share one li of a ul.elist (no overflow set on it or any ancestor below the scroller),
+   so the li's end pushes a stuck heading out. Each heading sets its own .stuck from an IntersectionObserver. */
 
-/* ---------- The line: 4 + 24 + 4 = 32px (8 pitches) at both depths, so a stuck h3 covers its h2 exactly ---------- */
+/* ---------- The line: 4 + 24 + 4 = 32px (8 pitches), so a stuck heading inside another's li covers it exactly ---------- */
 .group-heading {
 	/* At rest 1: just above its own rows (a frame may pass before .stuck lands), under a dragged row and an open
 	   menu's row (z-drop), so a heading below an open menu never covers it. z-heading only while stuck (D3.36). */
@@ -36,6 +34,9 @@
 	border-bottom: 1px solid transparent; /* the stuck edge, kept in every state so sticking moves nothing */
 	background: var(--surface-page);
 }
+/* While its grip's Move menu is open the heading rises above its section's own layers (a said line's label, 1-3);
+   the li it sits in is already lifted to z-drop, so it stays under the pinned title line and the band. */
+.group-heading:has(.move-at > [aria-expanded='true']) { z-index: var(--z-heading); }
 html.pinned .group-heading { top: var(--titlebar-height); } /* under the pinned title line (EditChrome) */
 /* z-heading: one under the pinned title line (z-sticky), so a heading pushed out slides under it, never over it. */
 .group-heading.stuck { z-index: var(--z-heading); border-bottom-color: var(--line); }
@@ -70,19 +71,19 @@ li:has(> .group-heading:focus-within) > * .group-heading.stuck { z-index: calc(v
 	padding-inline-start: calc(var(--fold-w) - var(--space-inline));
 }
 
-/* Use and select: the whole heading line is the fold's hit area (a stretched pseudo-element on the sticky heading).
-   Edit turns it off, so the renamable title and the verb take their own taps. The focus ring is Disclosure's, round the
-   chevron in every mode (D3.25): 10px either side of its centre, 2px before the use-mode title and clear of ⠿. */
-.group-heading:not([data-mode='edit']) > .fold::after { content: ''; position: absolute; inset: 0; }
+/* The whole heading line is the fold's hit area (a stretched pseudo-element on the sticky heading). A .slotted heading
+   (Today's Edit) keeps it to the chevron, so the grip, a renamable title and the verb take their own taps. The focus
+   ring is Disclosure's, round the chevron in every state (D3.25): 10px either side of its centre, clear of ⠿. */
+.group-heading:not(.slotted) > .fold::after { content: ''; position: absolute; inset: 0; }
 
-/* ---------- Slot: 0 wide in use mode, handle-slot in edit and select; the title slides 16px with the rows ---------- */
+/* ---------- Slot: 0 wide, handle-slot when .slotted; the title slides 16px with the rows ---------- */
 .group-heading > .slot { flex: none; display: flex; align-self: stretch; align-items: center; width: 0; }
-.group-heading:is([data-mode='edit'], [data-mode='select']) > .slot { width: var(--handle-slot); }
+.group-heading.slotted > .slot { width: var(--handle-slot); }
 /* The grip's hit area stays on its own 24px (8 before the slot, the slot itself): the chevron owns the 24px before it. */
 .group-heading .handle::before { inset-inline: 0; }
 
-/* ---------- Title, icon, swatch, count, crumb ---------- */
-/* The title (an Area's icon first, outside the rule) starts on the rows' name column at every depth and mode.
+/* ---------- Title, icon, swatch, count ---------- */
+/* The title (an Area's icon first) starts on the rows' name column in every state.
    The swatch and the count follow it, space-inline apart, so they slide 16px with it and nothing else moves:
    InlineEditor drops its 24ch floor in a heading, so a renamable title's dashed rule is as wide as its text. */
 .group-heading > .title { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; } /* wraps, never truncates */
@@ -92,33 +93,11 @@ li:has(> .group-heading:focus-within) > * .group-heading.stuck { z-index: calc(v
 /* The swatch is Swatch's look (R2.17), lifted ring included; the heading only keeps it from shrinking. */
 .group-heading > .swatch { flex: none; }
 .group-heading > .tags { flex: none; } /* Chip's tags: the count, or Hidden */
-/* Depth 1 is ruled: a 1px line from after the title (and swatch) to before the count, space-inline either side (the
-   title's or swatch's margin before it, its own after), centred on the title line. It takes the room the line has
-   left, so the count and the verb sit at the trailing end; never under space-indent, so a wrapped title still shows
-   the form. Decorative, so line; a border, not a fill, so forced colours draw it in CanvasText unasked. */
-.group-heading > .rule {
-	flex: 1 1 0; min-width: var(--space-indent);
-	border-block-start: 1px solid var(--line); margin-inline-end: var(--space-inline);
-}
-/* Whatever ends the line ends on the rows' verb edge (edge + card padding): the count in use mode, the rule on Up next. */
-.group-heading > :is(.rule, .tags):last-child { margin-inline-end: 0; }
-/* The parent's title, only while stuck. It is the one part that may truncate (it can't be edited here), and it gives
-   way first, so on a narrow phone the title keeps its words and the crumb ends in an ellipsis. */
-.group-heading > .crumb {
-	display: none; flex: 0 999 auto; min-width: 4em; margin-inline-end: var(--space-inline);
-	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-	color: var(--ink-muted); font-weight: 400;
-}
-.group-heading.stuck > .crumb { display: block; }
+/* A count that ends the line ends on the rows' verb edge (edge + card padding). */
+.group-heading > .tags:last-child { margin-inline-end: 0; }
 
-/* ---------- Edit mode: verb trails at 400 like every row verb; hidden collapses to the heading line ---------- */
+/* ---------- The verb trails at 400 like every row verb ---------- */
 .group-heading > .verb { margin-inline-start: auto; margin-inline-end: calc(-1 * var(--space-tight)); font-weight: 400; }
-.group-heading.hidden-item > .fold { visibility: hidden; } /* nothing to unfold; the column keeps its place */
-.group-heading.hidden-item > .title { color: var(--ink-muted); font-weight: 400; }
-.group-heading.hidden-item .count { display: none; }
-/* Struck (an Area deleted in edit mode): the title strikes where it stands, the grip goes, the verb flips to Restore.
-   The habits under it stay put until edit mode ends. */
-.group-heading.struck > .title { color: var(--ink-muted); text-decoration: line-through; }
 
 /* ---------- Dragging a section: it folds to its heading, which lifts like a held card (DragHandle's look) ---------- */
 /* The lifted box reaches 8px past the list's edges, so the chevron isn't on its edge. */
@@ -140,11 +119,11 @@ li:has(> .group-heading:focus-within) > * .group-heading.stuck { z-index: calc(v
    first heading's areas reached 2px into the hint line, onto Reset layout and the layout chooser. So these ::before
    rules take the place of Button's centred one. */
 @media (pointer: coarse) {
-	.group-heading:not([data-mode='edit']) > .fold::after { /* 31px padding box: -4 above, -9 below → 44 */
+	.group-heading:not(.slotted) > .fold::after { /* 31px padding box: -4 above, -9 below → 44 */
 		inset-block: calc(-1 * var(--space-tight)) calc(var(--target-min) + 3 * var(--space-tight) - 1px - var(--target-touch));
 	}
-	.group-heading[data-mode='edit'] > .fold, .group-heading > .verb { position: relative; }
-	.group-heading[data-mode='edit'] > .fold::after,
+	.group-heading.slotted > .fold, .group-heading > .verb { position: relative; }
+	.group-heading.slotted > .fold::after,
 	.group-heading > .verb::before { /* a 24px box 4px down the line: -8 above, -12 below → 44 */
 		content: ''; position: absolute; inset-inline: 0;
 		inset-block: calc(-2 * var(--space-tight)) calc(var(--target-min) + 2 * var(--space-tight) - var(--target-touch));
@@ -165,7 +144,7 @@ li:has(> .group-heading:focus-within) > * .group-heading.stuck { z-index: calc(v
 
 /* ---------- Forced colours: the stuck edge in system colours (the swatch ring is Swatch's, the fold's Disclosure's) ---------- */
 @media (forced-colors: active) {
-	/* Forced colours draw a transparent border in CanvasText, so the resting edge is Canvas: no second line under the rule. */
+	/* Forced colours draw a transparent border in CanvasText, so the resting edge is Canvas. */
 	.group-heading:not(.stuck) { border-bottom-color: Canvas; }
 	.group-heading.stuck { border-bottom-color: CanvasText; }
 	/* A lifted section: DragHandle's CanvasText outline on the li draws round the heading, its only visible part. */

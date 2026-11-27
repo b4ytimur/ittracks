@@ -2,7 +2,9 @@
    Owns .elist, .elist > li, the row card's layout, .slot, .content, .meta-line, .row-line, .verb placement (LogControl's place,
    and the quiet Undo, View, Start early and edit verbs),
    .pick-hit (the slot's hit box; the box is Checkbox's .pick), the li states .picked .struck .done .skipped
-   .hidden-item .just-done, places DayTile's .week as a row line, [data-density] and the mode slide.
+   .hidden-item .just-done, places DayTile's .week as a row line, [data-density] and the slot's slide.
+   The list says what its rows offer: .grips (onmove: a grip on each), .selecting (a checkbox on each) and .slotted
+   (the slot open: grips, checkboxes, or slotOpen to keep a column nearby). A static ul.elist has none of them.
    Pitch: name 24 + meta 20 + 15px padding and the 1px edge on each side = 76px (19 pitches). */
 
 .elist {
@@ -27,12 +29,11 @@
 	align-self: flex-start; margin-block-start: calc((1.5rem + 1.25rem - var(--target-min)) / 2);
 }
 
-/* The slot is always rendered: 0 wide in use mode, handle-slot wide in edit and select.
+/* The slot is always rendered: 0 wide, handle-slot wide in a .slotted list (a grip or a checkbox in it).
    The card's edges never move; only the name slides, 16px, on one clock. It is one name line tall
    (24px, 48px at 200% text): the grip and the checkbox centre on the row, or on its name and meta on a taller row. */
 .elist > li > .card > .slot { flex: none; display: flex; width: 0; min-height: max(var(--target-min), 1.5rem); }
-.elist[data-mode='edit'] > li > .card > .slot,
-.elist[data-mode='select'] > li > .card > .slot { width: var(--handle-slot); }
+.elist.slotted > li > .card > .slot { width: var(--handle-slot); }
 .slot > * { flex: none; } /* the grip and the pick overhang 8px into the leading padding */
 
 /* The basis is 10rem, capped at what's left beside the slot, so the content never wraps away from the slot
@@ -42,15 +43,16 @@
 	display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-inline);
 	overflow-wrap: anywhere; /* long names wrap; a name is never truncated */
 }
-.content > .name { min-width: 0; min-height: var(--target-min); } /* one name-line height in every mode */
+.content > .name { min-width: 0; min-height: var(--target-min); } /* one name-line height in every state */
 .content > a.name { color: inherit; text-decoration: none; }
 @media (hover: hover) { .content > a.name:hover { text-decoration: underline; text-underline-offset: 3px; } } /* States: hover only where a pointer hovers */
-/* href: the card stays a div in every mode, so its slot is never remounted and still slides. In use mode it
-   takes .link and the name link covers it (a stretched link): the whole card is the target, hover turns its
-   edge line-control (base), and the verb slot sits above the cover. */
+/* href: the card stays a div in every state, so its slot is never remounted and still slides. Unless the list is
+   selecting it takes .link and the name link covers it (a stretched link): the whole card is the target, hover turns
+   its edge line-control (base), and the slot and the verb sit above the cover, so the grip and the checkbox, the
+   verb and its menu take their own taps. */
 .elist > li > .card.link { position: relative; }
 .card.link > .content > a.name::after { content: ''; position: absolute; inset: 0; }
-.card.link > .verb { position: relative; z-index: 1; }
+.card.link > :is(.slot, .verb) { position: relative; z-index: 1; }
 .content > .meta-line, .content > .week { flex-basis: 100%; }
 .meta-line { color: var(--ink-muted); }
 .meta-line > .mark { display: inline-block; } /* ✓ done, ↷ skipped: the word follows it */
@@ -61,7 +63,7 @@
 .content > .row-line.warn { color: var(--warn); }
 .shelf .content > .row-line.warn { color: var(--ink); }
 
-/* The verb slot: one quiet verb in edit mode (Button's quiet, button.quiet.verb). In use mode on Today a due row's
+/* The verb slot: one quiet verb with onremove (Button's quiet, button.quiet.verb). Otherwise, on Today a due row's
    div.verb > div.log-control (R2.19; LogControl draws the joined control and its menu, this only places it);
    during a celebration Undo (button.quiet.verb) takes its place; a finished row with Slots shows a quiet View
    (a.button.quiet.verb: .button drops the link underline, Button's quiet hover brings it back) and a not-due row
@@ -82,11 +84,11 @@
 .elist[data-density='compact'] .content > .meta-line { flex: 1 1 auto; min-width: 0; }
 .elist[data-density='compact'] .content > .week { display: none; }
 
-/* ---------- Select mode ---------- */
-.elist[data-mode='select'] > li > .card { cursor: pointer; } /* a tap anywhere on the card ticks it */
+/* ---------- Selecting ---------- */
+.elist.selecting > li > .card { cursor: pointer; } /* a tap anywhere on the card ticks it */
 /* The hit area is the grip's box (DragHandle): 8px into the leading padding, never under 24px, in rem so it
    grows with text. The box is centred in it (x = 20, where DragHandle centres ⠿), so the leading mark keeps
-   one column in edit and select and ends a quarter rem (4px, 8px at 200%) before the name. Base's 2px-offset
+   one column for the grip and the checkbox and ends a quarter rem (4px, 8px at 200%) before the name. Base's 2px-offset
    focus ring traces the same 24px box as the grip's inset ring. */
 .pick-hit {
 	--pick-w: max(var(--target-min), calc(var(--handle-slot) + var(--space-inline)));
@@ -98,24 +100,24 @@
 /* Selected: the one chosen look, a 2px ink edge drawn inset (R1.1). The box is Checkbox's .pick. */
 .elist > li.picked > .card { box-shadow: var(--chosen-shadow); }
 
-/* ---------- Use mode: done and skipped sink to the page ---------- */
-/* A finished card keeps its 1px edge (transparent) so nothing shifts. Edit and select raise every card
-   again (the rule needs data-mode='use'). A finished holder, and a finished row on a shelf, keep their
-   surface and show done by name weight and the meta's mark (NestedRow, R1.4). */
-.elist[data-mode='use'] > li.done:not(.holder) > .card:not(.shelf .card),
-.elist[data-mode='use'] > li.skipped:not(.holder) > .card:not(.shelf .card) { background: var(--surface-page); border-color: transparent; }
-.elist[data-mode='use'] > li.done:not(.holder) > .card:not(.shelf .card):focus-within,
-.elist[data-mode='use'] > li.skipped:not(.holder) > .card:not(.shelf .card):focus-within { border-color: var(--line-control); }
+/* ---------- Done and skipped sink to the page ---------- */
+/* A finished card keeps its 1px edge (transparent) so nothing shifts. A list with grips or checkboxes raises every
+   card again (Today's Edit). A finished holder, and a finished row on a shelf, keep their surface and show done by
+   name weight and the meta's mark (NestedRow, R1.4). */
+.elist:not(.grips, .selecting) > li.done:not(.holder) > .card:not(.shelf .card),
+.elist:not(.grips, .selecting) > li.skipped:not(.holder) > .card:not(.shelf .card) { background: var(--surface-page); border-color: transparent; }
+.elist:not(.grips, .selecting) > li.done:not(.holder) > .card:not(.shelf .card):focus-within,
+.elist:not(.grips, .selecting) > li.skipped:not(.holder) > .card:not(.shelf .card):focus-within { border-color: var(--line-control); }
 @media (hover: hover) {
-	.elist[data-mode='use'] > li.done:not(.holder) > .card:not(.shelf .card):hover,
-	.elist[data-mode='use'] > li.skipped:not(.holder) > .card:not(.shelf .card):hover { border-color: var(--line-control); }
+	.elist:not(.grips, .selecting) > li.done:not(.holder) > .card:not(.shelf .card):hover,
+	.elist:not(.grips, .selecting) > li.skipped:not(.holder) > .card:not(.shelf .card):hover { border-color: var(--line-control); }
 }
 /* Row states reach only the row's own card (child combinators all the way down): a holder's state never
    leaks onto the rows on its shelf, which keep their own state. */
-.elist[data-mode='use'] > li.done > .card > .content > .name,
-.elist[data-mode='use'] > li.skipped > .card > .content > .name { font-weight: 400; }
+.elist:not(.grips, .selecting) > li.done > .card > .content > .name,
+.elist:not(.grips, .selecting) > li.skipped > .card > .content > .name { font-weight: 400; }
 
-/* ---------- Edit mode: struck (archived in place) and hidden ---------- */
+/* ---------- Struck (archived in place) and hidden ---------- */
 .elist > li.struck > .card > .content > .name { color: var(--ink-muted); text-decoration: line-through; }
 .elist > li.hidden-item > .card > .content > :not(.name):not(.tags) { display: none; }
 .elist > li.hidden-item > .card > .content > .name { color: var(--ink-muted); font-weight: 400; }
@@ -130,7 +132,7 @@
 
 /* ---------- Coarse pointers: 44px hit areas grown by pseudo-elements, never min-width ---------- */
 @media (pointer: coarse) {
-	/* The checkbox's slot box takes .hit in the markup; the quiet verb (edit's verb, Undo, View, Start early) is Button's,
+	/* The checkbox's slot box takes .hit in the markup; the quiet verb (Remove, Undo, View, Start early) is Button's,
 	   so Button grows it. A name link on a card that isn't .link (a .link card is the target already) grows here: a
 	   relative position on every name would shrink a .link card's stretched cover to the name. LogControl grows its own two
 	   buttons: a 44px box on each would overlap at the seam. */
