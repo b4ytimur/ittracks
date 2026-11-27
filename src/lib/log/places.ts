@@ -1,6 +1,7 @@
 // What is being logged, by where it sits: a place's path and the Task in it. Never by its number
 // in the list, so a swap, a reroll or a part added elsewhere never moves another place's values.
 import { rowText, type Field } from './run';
+import { slotOfPath } from '$lib/engine/parts';
 
 export interface At {
 	path: string;
@@ -62,18 +63,34 @@ export function withWaiting<I extends At & { slotId: string; depth: number; kids
 export const isSet = (v: Record<string, unknown>) => v._summary !== true && !(v.done === true && Object.keys(v).length === 1);
 
 /**
+ * Whether a value a log holds besides its places sits at place `it`: at its path, or, at a Slot's own Task without
+ * parts, anywhere in its Slot (the parts of a Task with parts swapped away, or picked again). Under a Task with parts
+ * only its own places count, so a part removed from it is gone from the habit.
+ */
+// ponytail: a Task with parts swapped for another with parts reads its old parts as gone; telling them from parts removed needs each part's Task.
+const sitsAt = (e: { path: string | null }, it: { path: string; kids: number }) =>
+	e.path === it.path || (!it.kids && it.path === slotOfPath(it.path) && !!e.path && slotOfPath(e.path) === it.path);
+
+/**
  * What was done at a place with another Task before its Slot was swapped, by that Task: its sets
  * (0 when it has only once-per-log values or a tick). `extra` is what the log saves besides the
  * places it shows (see `besides`); what sits at no place shown is gone from the habit instead.
  */
-export function doneBefore(extra: Logged[], it: At): { taskId: string; sets: number }[] {
+export function doneBefore(extra: Logged[], it: At & { kids: number }): { taskId: string; sets: number }[] {
 	const out = new Map<string, number>();
-	for (const e of extra) if (e.path === it.path && e.taskId !== it.task?.id) out.set(e.taskId, (out.get(e.taskId) ?? 0) + (isSet(e.values) ? 1 : 0));
+	for (const e of extra) if (sitsAt(e, it) && !(e.path === it.path && e.taskId === it.task?.id)) out.set(e.taskId, (out.get(e.taskId) ?? 0) + (isSet(e.values) ? 1 : 0));
 	return [...out].map(([taskId, sets]) => ({ taskId, sets }));
 }
 
 /** What a log holds that sits at no place it shows: gone from the habit (a part removed), not done before a swap. */
-export const goneFrom = <E extends { path: string | null }>(extra: E[], shown: { path: string }[]) => extra.filter((e) => !shown.some((it) => it.path === e.path));
+export const goneFrom = <E extends { path: string | null }>(extra: E[], shown: { path: string; kids: number }[]) => extra.filter((e) => !shown.some((it) => sitsAt(e, it)));
+
+/**
+ * Something is logged already, so Same as last fills in only the rest: saved or ticked at a place shown (`states`, by
+ * place), or held besides them (`extra`: done before a swap, a part removed), which a fresh copy would lose.
+ */
+export const startedLog = (extra: unknown[], shown: { saved: unknown[] }[], states: ({ sets: { done: boolean }[]; tick?: boolean } | undefined)[]) =>
+	extra.length > 0 || shown.some((it, i) => it.saved.length > 0 || !!states[i]?.sets.some((x) => x.done) || !!states[i]?.tick);
 
 /** A Slot's line for a Task done there before a swap, in that Task's own words: "Bench press · 2 sets done". */
 export const doneLine = (name: string, sets: number, one: string, many: string) => `${name} · ${sets ? `${sets} ${sets === 1 ? one : many} ` : ''}done`;
@@ -88,6 +105,17 @@ export const setsToDo = (planned: number, done: number) => (done ? Math.max(1, p
 export function swapText(was: string | null, now: string, how: 'swap' | 'back' | 'reroll', scope: string): string {
 	if (how === 'back') return `Back to ${now}, as planned.`;
 	return `${how === 'reroll' ? 'Picked' : 'Using'} ${now}${was ? ` instead of ${was}` : ''}, ${scope}.`;
+}
+
+/**
+ * The band's line for a swap that waits to be sent. `here`: the Task's fields are on this device, so the place shows
+ * it at once; without them the place goes on showing the Task it had, so the line says when it will swap in.
+ * With no Task named (Pick another), the server picks it once it is sent.
+ */
+export function waitingText(was: string | null, now: string | undefined, how: 'swap' | 'back' | 'reroll', scope: string, here: boolean): string {
+	if (!now) return `Picking another Task, ${scope}. It will sync when you're back online.`;
+	if (!here) return `${now} will swap in when you're back online.`;
+	return `${swapText(was, now, how, scope)} It will sync when you're back online.`;
 }
 
 /** A Task done in a Slot in place of the plan's, as a past log lists it: "Incline bench press · instead of Bench press". */
@@ -156,6 +184,9 @@ export const keptText = (was: string, now: string, variant: string, aim: string)
 
 /** A Task used in a Slot before, as its ⋯ and the picker say it: "Used here 12 Nov · 8 × 50 kg". */
 export const usedText = (u: { date: string; text: string }, day: (date: string) => string) => `Used here ${day(u.date)}${u.text ? ` · ${u.text}` : ''}`;
+
+/** The swap picker with no rows: nothing matches what was typed, or nothing else is in the Library to swap to. */
+export const noRows = (query: string) => (query.trim() ? 'Nothing in the Library is called that.' : 'Nothing else in the Library yet.');
 
 /** A Task of the Library as the swap picker has it. */
 export interface Pickable {

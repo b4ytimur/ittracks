@@ -3,6 +3,7 @@
 	import { beforeNavigate, goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onMount, tick, untrack } from 'svelte';
+	import { online } from 'svelte/reactivity/window';
 	import Timer from './Timer.svelte';
 	import Place from '$lib/log/Place.svelte';
 	import EditPlaces, { type EditPlace } from '$lib/log/EditPlaces.svelte';
@@ -20,7 +21,7 @@
 	import { waitingSwaps } from '$lib/queue';
 	import { postAction, runAction, showError, showToast, undoWith } from '$lib/toast.svelte';
 	import { differs, revOf, type LogContent } from '$lib/logrev';
-	import { besides, carryOver, doneBefore, doneLine, fromDraft, keptText, loggedAt, placeKey, setsToDo, swapGroups, swapText, usedText, withWaiting, type Logged } from '$lib/log/places';
+	import { besides, carryOver, doneBefore, doneLine, fromDraft, keptText, loggedAt, placeKey, setsToDo, startedLog, swapGroups, swapText, usedText, waitingText, withWaiting, type Logged } from '$lib/log/places';
 	import SwapSheet from '$lib/log/SwapSheet.svelte';
 	import NoteBox from '$lib/NoteBox.svelte';
 	import Markdown from '$lib/Markdown.svelte';
@@ -50,6 +51,8 @@
 
 	/** A Task whose fields and last time this page holds, so a swap to it can show at once, also offline. */
 	const onDevice = (id: string) => data.alts[id] ?? data.items.find((x) => x.depth === 0 && x.kids === 0 && x.task?.id === id);
+	/** A Task a swap can't reach now: offline, and its fields aren't on this device ("Needs a connection"). Never on the server. */
+	const away = (id: string) => online.current === false && !onDevice(id)?.task;
 	/** Swaps that wait to be sent (made offline), by Slot: shown at once, until they sync. */
 	const offlinePicks = $derived(waitingSwaps(outbox.items, `/log/${data.occurrence.id}?/swap`));
 	/** The places in the log: the server's, with a swap made offline in place of its Slot's Task (and its parts). */
@@ -453,14 +456,17 @@
 	function elsewhere() {
 		return besides(held, items, data.orphans.map((e) => ({ taskId: e.taskId, path: e.path ?? null, values: e.values })));
 	}
-	/** Sets done here with another Task before its Slot was swapped. Hoisted: the places start with it. */
+	/**
+	 * Sets done here with another Task before its Slot was swapped, at this place only: the parts of a Task with parts
+	 * swapped away get a done line each but leave the new Task its sets. Hoisted: the places start with it.
+	 */
 	function setsBefore(it: Item) {
-		return doneBefore(elsewhere(), it).reduce((n, d) => n + d.sets, 0);
+		return doneBefore(elsewhere().filter((e) => e.path === it.path), it).reduce((n, d) => n + d.sets, 0);
 	}
 	/** Done here with another Task before its Slot was swapped, a line each: "Bench press · 2 sets done". */
 	const doneLines = (it: Item) =>
 		doneBefore(elsewhere(), it).map(({ taskId, sets }) => {
-			const t = data.library.find((l) => l.id === taskId);
+			const t = data.library.find((l) => l.id === taskId) ?? data.orphanTasks[taskId];
 			return doneLine(t?.name ?? 'Another Task', sets, t?.rowOne ?? 'set', t?.rowMany ?? 'sets');
 		});
 	/** What gets saved at a place. Each value says where it sits, so the same Task in two places keeps its own. */
@@ -753,8 +759,8 @@
 	 */
 	const isPrefill = (i: number, id: string) => isOpen && !!starts[i] && isSuggestion(log[i], starts[i], id);
 
-	/** Something is logged already: Same as last fills in only the rest. */
-	const started = $derived(items.some((it, i) => it.saved.length || log[i]?.sets.some((x) => x.done) || log[i]?.tick));
+	/** Something is logged already, done before a swap too: Same as last saves it first and fills in only the rest. */
+	const started = $derived(startedLog(elsewhere(), items, log));
 
 	async function sameAsLast() {
 		// What is ticked here is saved first, so it is kept.
@@ -941,8 +947,8 @@
 		};
 		void gone();
 	}
-	/** Replace…: another Task in a fixed Slot, from now on, as Keep in the plan does. */
-	async function editReplace(slot: string, task: string) {
+	/** Keep in the plan from ⋯, or Replace… in Edit, saying why when it isn't kept (the band's Keep says that itself). */
+	async function keepOrSay(slot: string, task: string) {
 		const r = await keepInPlan(slot, task);
 		if (typeof r === 'string') showError(r);
 	}
@@ -978,6 +984,8 @@
 	 */
 	async function swapTask(it: Item, task?: string) {
 		if (task && task === it.task?.id) return;
+		// Queued, it would say the Task is in use while the card can't show it: nothing is swapped.
+		if (task && away(task)) return void showError(`Not swapped: ${nameOf(task) ?? 'that Task'} needs a connection.`);
 		const first = await saveFirst();
 		if (first.kind === 'refused') return void showError(`${first.why} Nothing was swapped.`);
 		// What was still to do here, for a Task swapped in that has no last time of its own.
@@ -1011,8 +1019,8 @@
 		const keep = task && how === 'swap' && keepable(it.slotId) ? { label: 'Keep in the plan', run: () => keepInPlan(it.slotId, task) } : undefined;
 		// Offline it waits, and the place shows it at once when this page holds the Task's fields (see `items`).
 		if (a.kind === 'later') {
-			const name = data.library.find((l) => l.id === task)?.name;
-			showToast(`${name ? swapText(was?.name ?? null, name, how, oneDay) : `Picking another Task, ${oneDay}.`} It will sync when you're back online.`, undo, undefined, keep);
+			// Sent and not answered with the Task's fields not here: the card goes on showing the old one until it syncs.
+			showToast(waitingText(was?.name ?? null, task ? nameOf(task) : undefined, how, oneDay, !!task && !!onDevice(task)?.task), undo, undefined, keep);
 			return void openSwapped(it.slotId);
 		}
 		await invalidateAll();
@@ -1035,6 +1043,9 @@
 		const s = data.plan && slotIn(data.plan, slot);
 		if (!s?.taskId || s.fillRule) return 'Not kept: that Slot is not in the plan any more.';
 		if (s.taskId === task) return;
+		// A swap of this Slot still waiting to be sent goes first: after the plan changed, it would be no pick, and Undo
+		// of the keep would put today back on the old Task.
+		if (offlinePicks[slot] && !(await sendAhead(`/log/${data.occurrence.id}?/aim`, []))) return void showError('Not saved. Are you online?', () => void keepInPlan(slot, task));
 		const at = items.find((x) => x.slotId === slot && x.depth === 0);
 		// With no swap today the place follows the plan and changes too (Replace…): what is ticked is saved first, as Remove does.
 		if (at?.task?.id === s.taskId) {
@@ -1082,15 +1093,16 @@
 		const now = it.task?.id;
 		const plan = nameOf(own);
 		return [
-			...(plan ? [{ label: plan, value: 'In the plan', checked: now === own, onselect: () => void swapTask(it, own) }] : []),
+			// Offline, a Task whose fields aren't here is left out: Swap for another… lists it as needing a connection.
+			...(plan && (now === own || !away(own)) ? [{ label: plan, value: 'In the plan', checked: now === own, onselect: () => void swapTask(it, own) }] : []),
 			...(it.task && now !== own ? [{ label: it.task.name, value: cap(oneDay), checked: true }] : []),
 			...it.used
-				.filter((u) => u.taskId !== now && nameOf(u.taskId))
+				.filter((u) => u.taskId !== now && nameOf(u.taskId) && !away(u.taskId))
 				.slice(0, 2)
 				.map((u) => ({ label: nameOf(u.taskId)!, value: usedText(u, dayText), checked: false, onselect: () => void swapTask(it, u.taskId) })),
 			more,
 			// Later in the visit, as the band's Keep in the plan.
-			...(it.task && now !== own && keepable(it.slotId) ? ['-' as const, { label: `Keep ${it.task.name} in the plan`, onselect: () => void keepInPlan(it.slotId, now!) }] : [])
+			...(it.task && now !== own && keepable(it.slotId) ? ['-' as const, { label: `Keep ${it.task.name} in the plan`, onselect: () => void keepOrSay(it.slotId, now!) }] : [])
 		];
 	}
 	const hint = $derived(
@@ -1261,7 +1273,7 @@
 		{#if it.roundHead && !quickMode}<li class="lg-heading"><h2 class="card-title">{it.roundHead}</h2></li>{/if}
 		{#if t && isYesNo(it)}
 			{#if !quickMode}
-				<li class="row lg-row" class:done={log[i].tick} style:margin-inline-start="calc({it.depth} * var(--space-indent))">
+				<li class="row lg-row" class:done={log[i].tick} data-place={key} style:margin-inline-start="calc({it.depth} * var(--space-indent))">
 					<div class="card">
 						<span class="slot"></span>
 						<div class="content"><label class="lg-tick-label" for="tick-{i}">{t.name}</label>{#if insteadOf(it)}<p class="meta-line">{insteadOf(it)}</p>{/if}{@render extraOf(it)}</div>
@@ -1393,11 +1405,12 @@
 	{@const like = plan ? { id: p.it.own!, name: plan } : p.it.task}
 	<SwapSheet
 		title={p.plan ? `Replace ${plan}` : like ? `Instead of ${like.name}` : 'A Task for this Slot'}
-		groups={(query) => swapGroups({ library: data.library, used: p.it.used, like, current: p.plan ? p.it.own : (p.it.task?.id ?? null), query, day: dayText, away: (id) => !p.plan && !navigator.onLine && !onDevice(id)?.task })}
-		onpick={(id) => void (p.plan ? editReplace(p.it.slotId, id) : swapTask(p.it, id))}
+		groups={(query) => swapGroups({ library: data.library, used: p.it.used, like, current: p.plan ? p.it.own : (p.it.task?.id ?? null), query, day: dayText, away: (id) => !p.plan && away(id) })}
+		onpick={(id) => void (p.plan ? keepOrSay(p.it.slotId, id) : swapTask(p.it, id))}
 		onclose={() => {
-			picking = null;
+			// Before it goes: `p` is `picking`, null once that is cleared.
 			p.from?.focus();
+			picking = null;
 		}}
 	/>
 {/if}

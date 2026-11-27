@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aimFor, aimText, besides, carryOver, doneBefore, doneLine, fromDraft, goneFrom, insteadLine, keptText, loggedAt, placeKey, setsToDo, swapGroups, swapText, usedText, withWaiting, type Pickable } from './places';
+import { aimFor, aimText, besides, carryOver, doneBefore, doneLine, fromDraft, goneFrom, insteadLine, keptText, loggedAt, noRows, placeKey, setsToDo, startedLog, swapGroups, swapText, usedText, waitingText, withWaiting, type Pickable } from './places';
 
 const at = (path: string, task: string | null) => ({ path, task: task ? { id: task } : null });
 const squat = at('s1', 'squat');
@@ -78,14 +78,16 @@ describe('what is being logged, by place', () => {
 
 	describe('done in a Slot before it was swapped', () => {
 		const set = (task: string, path: string | null, kg: number) => ({ taskId: task, path, values: { kg } });
-		const legPress = at('s1', 'legpress');
+		// A place, with how many parts its Task holds.
+		const spot = (path: string, task: string, kids = 0) => ({ ...at(path, task), kids });
+		const legPress = spot('s1', 'legpress');
+		const presses = spot('s2', 'press');
 		const extra = [
 			set('squat', 's1', 60),
 			set('squat', 's1', 62.5),
 			{ taskId: 'squat', path: 's1', values: { feel: 'easy', _summary: true } },
 			{ taskId: 'plank', path: 's1', values: { done: true } },
-			// A part removed, and a value from before paths: gone from the habit, not done here.
-			set('curl', 's1/gone', 10),
+			// A value from before paths: gone from the habit, not done here.
 			set('row', null, 30)
 		];
 
@@ -94,10 +96,27 @@ describe('what is being logged, by place', () => {
 				{ taskId: 'squat', sets: 2 },
 				{ taskId: 'plank', sets: 0 }
 			]);
-			expect(doneBefore(extra, press)).toEqual([]);
+			expect(doneBefore(extra, presses)).toEqual([]);
 		});
 		it('swapped back, the Task done there is the one shown, so it has no line of its own', () => {
-			expect(doneBefore([set('squat', 's1', 60), set('legpress', 's1', 100)], squat)).toEqual([{ taskId: 'legpress', sets: 1 }]);
+			expect(doneBefore([set('squat', 's1', 60), set('legpress', 's1', 100)], spot('s1', 'squat'))).toEqual([{ taskId: 'legpress', sets: 1 }]);
+		});
+		// Upper circuit (Push-up, Row) swapped for Leg press after round 1: its parts sit under the Slot, deeper.
+		const circuit = [{ taskId: 'pushup', path: 's1#1/p1', values: { done: true } }, set('row', 's1#1/p2', 40), set('row', 's1#2/p2', 40), set('legpress', 's1/p9', 90)];
+		it("a Task with parts swapped away: each part's Task gets a line in the Slot, also the Task shown now done as a part", () => {
+			expect(doneBefore(circuit, legPress)).toEqual([
+				{ taskId: 'pushup', sets: 0 },
+				{ taskId: 'row', sets: 2 },
+				{ taskId: 'legpress', sets: 1 }
+			]);
+			expect(goneFrom(circuit, [legPress, presses])).toEqual([]);
+			// Only a Slot's own Task: a part with nothing inside is no Slot.
+			expect(doneBefore(circuit, spot('s1/p3', 'curl'))).toEqual([]);
+		});
+		it('under a Task with parts still shown, a part removed from it is gone from the habit, not done before', () => {
+			const shown = [spot('s1', 'upper', 1), spot('s1#1/p2', 'row'), presses];
+			expect(doneBefore(circuit, shown[0])).toEqual([]);
+			expect(goneFrom(circuit, shown)).toEqual([circuit[0], circuit[2], circuit[3]]);
 		});
 		it('reads in the Task\'s own words', () => {
 			expect(doneLine('Bench press', 2, 'set', 'sets')).toBe('Bench press · 2 sets done');
@@ -106,7 +125,16 @@ describe('what is being logged, by place', () => {
 			expect(doneLine('Plank', 0, 'set', 'sets')).toBe('Plank · done');
 		});
 		it('only what sits at no place shown is gone from the habit', () => {
-			expect(goneFrom(extra, [legPress, press])).toEqual([set('curl', 's1/gone', 10), set('row', null, 30)]);
+			expect(goneFrom(extra, [legPress, presses])).toEqual([set('row', null, 30)]);
+			expect(goneFrom([set('curl', 's3/gone', 10)], [legPress, presses])).toEqual([set('curl', 's3/gone', 10)]);
+		});
+		it('a log is started by what a place saved or ticked, or by what it holds besides them, done before a swap too', () => {
+			const none = { sets: [{ done: false }] };
+			expect(startedLog([], [{ saved: [] }, { saved: [] }], [none, undefined])).toBe(false);
+			expect(startedLog([set('squat', 's1', 60)], [{ saved: [] }], [none])).toBe(true);
+			expect(startedLog([], [{ saved: [] }, { saved: [{ kg: 60 }] }], [none, none])).toBe(true);
+			expect(startedLog([], [{ saved: [] }], [{ sets: [{ done: false }, { done: true }] }])).toBe(true);
+			expect(startedLog([], [{ saved: [] }], [{ sets: [], tick: true }])).toBe(true);
 		});
 		it('leaves the new Task the sets still to do, at least 1', () => {
 			expect(setsToDo(4, 2)).toBe(2);
@@ -127,6 +155,11 @@ describe('what is being logged, by place', () => {
 		it('names what Pick another picked, and what it showed before', () => {
 			expect(swapText('Squat', 'Lunge', 'reroll', 'today only')).toBe('Picked Lunge instead of Squat, today only.');
 			expect(swapText(null, 'Lunge', 'reroll', 'today only')).toBe('Picked Lunge, today only.');
+		});
+		it('waiting to be sent, says it syncs later, and only says it is in use when the place can show it', () => {
+			expect(waitingText('Bench press', 'Incline bench press', 'swap', 'today only', true)).toBe("Using Incline bench press instead of Bench press, today only. It will sync when you're back online.");
+			expect(waitingText('Bench press', 'Upper circuit', 'swap', 'today only', false)).toBe("Upper circuit will swap in when you're back online.");
+			expect(waitingText('Squat', undefined, 'reroll', 'today only', false)).toBe("Picking another Task, today only. It will sync when you're back online.");
 		});
 	});
 
@@ -255,6 +288,11 @@ describe('swapping a Task in', () => {
 				['Like Bench press', ['Close-grip bench press', 'Dumbbell bench press', 'Arnold press']]
 			]);
 			expect(swapGroups({ ...base, query: 'nothing like it' })).toEqual([]);
+		});
+		it('with no rows it says why: nothing matches what was typed, or nothing else is in the Library', () => {
+			expect(noRows('')).toBe('Nothing else in the Library yet.');
+			expect(noRows('  ')).toBe('Nothing else in the Library yet.');
+			expect(noRows('dumb')).toBe('Nothing in the Library is called that.');
 		});
 		it('with no Task to be like, or none alike, there is no such group', () => {
 			expect(names(swapGroups({ ...base, like: null, used: [] })).map(([l]) => l)).toEqual(['In the Library']);

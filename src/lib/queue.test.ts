@@ -106,6 +106,8 @@ describe('sending what waits', () => {
 		expect(ahead(waiting, { url: '/log/1?/swap', fields: [['slot', 'c'], ['task', 't']] })).toEqual(['save', 'swap']);
 		expect(ahead(waiting, { url: '/log/1?/swap', fields: [['slot', 'a'], ['task', 'u']] })).toEqual(['save']);
 		expect(ahead(waiting, { url: '/log/3?/save', fields: [] })).toEqual([]);
+		// Keep in the plan's ?/aim, which names no Slot, waits behind what waits for its log: a swap of that Slot first.
+		expect(ahead(waiting, { url: '/log/1?/aim', fields: [] })).toEqual(['save', 'swap']);
 	});
 	it('a log shows the swaps that wait to be sent, by Slot, but not a refused one, Pick another, or another log\'s', () => {
 		const q = (id: string, url: string, fields: [string, string][], refused?: string): Queued => ({ id, url, fields, label: 'Gym', at: 0, ...(refused ? { refused } : {}) });

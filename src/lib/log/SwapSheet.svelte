@@ -3,7 +3,7 @@
 	// swaps and closes it, with no Use or Cancel. The search takes focus with a keyboard only, so on touch no keyboard
 	// comes up over the list. Arrows move through the search and the rows, Enter in the search takes the top match,
 	// Esc closes, and focus goes back to where it was (the Task's ⋯).
-	import type { PickRow } from './places';
+	import { noRows, type PickRow } from './places';
 
 	let {
 		title,
@@ -90,7 +90,7 @@
 					{/each}
 				</ul>
 			{:else}
-				<p class="meta muted">Nothing in the Library is called that.</p>
+				<p class="meta muted">{noRows(query)}</p>
 			{/each}
 		</div>
 	</div>

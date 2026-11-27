@@ -134,6 +134,9 @@ function libraryFor(accountId: string, occ: { id: string; date: string }, swaps:
 	return rows.map((r) => ({ ...r, tags: tags[r.id] ?? [], last: last[r.id] ?? null }));
 }
 
+/** Why a finished log refuses a swap or Pick another: what it counted is settled. */
+const FINISHED = 'This log is finished: its Tasks stay as logged.';
+
 /** Where to go back to: a page of this app, or null. */
 const safeBack = (v: string | null | undefined) => (v && /^\/(?!\/)[\w\-/.?=&%]*$/.test(v) && v.length <= 200 ? v : null);
 
@@ -223,10 +226,15 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 	// What this log holds that no place in it shows now (a part removed, a Slot swapped):
 	// sent back with every save, so it is never lost.
 	const orphans = placed.orphans.map((e) => ({ taskId: e.taskId, path: e.path, values: e.values }));
+	// Their Tasks' names and words, steps inside a Task too, which the Library leaves out.
+	const orphanTasks = Object.fromEntries(
+		[...new Set(orphans.map((e) => e.taskId))].flatMap((id) => {
+			const t = db.select({ name: task.name, rowOne: task.rowOne, rowMany: task.rowMany }).from(task).where(eq(task.id, id)).get();
+			return t ? [[id, t] as const] : [];
+		})
+	);
 	// Done in a Slot before it was swapped is shown in that Slot: only what has no place shown is gone from the habit.
-	const orphanNames = [...new Set(goneFrom(orphans, items).map((e) => e.taskId))]
-		.map((id) => db.select({ name: task.name }).from(task).where(eq(task.id, id)).get()?.name)
-		.filter((n): n is string => !!n);
+	const orphanNames = [...new Set(goneFrom(orphans, items).map((e) => e.taskId))].flatMap((id) => (orphanTasks[id] ? [orphanTasks[id].name] : []));
 
 	return {
 		routine: null,
@@ -255,6 +263,7 @@ export const load: PageServerLoad = ({ locals, params, cookies, url }) => {
 		items,
 		alts,
 		orphans,
+		orphanTasks,
 		orphanNames,
 		/** "Last time … · best …" per Task. */
 		recap: recapFor(
@@ -404,6 +413,7 @@ export const actions: Actions = {
 	reroll: async ({ request, locals, params, cookies }) => {
 		const o = ownedOccurrence(locals.account!.id, params.id);
 		if (!o || !o.occ.variantId) error(404);
+		if (o.occ.status === 'done') return fail(400, { error: FINISHED });
 		const slotId = String((await request.formData()).get('slot'));
 		try {
 			rerollSlot(appActor(locals.account!.id, cookies.get('tz')), o.occ, slotId);
@@ -444,6 +454,8 @@ export const actions: Actions = {
 	swap: async ({ request, locals, params, cookies }) => {
 		const o = ownedOccurrence(locals.account!.id, params.id);
 		if (!o || !o.occ.variantId) error(404);
+		// A band's Undo can still reach it after Finish.
+		if (o.occ.status === 'done') return fail(400, { error: FINISHED });
 		const f = await request.formData();
 		try {
 			swapSlot(appActor(locals.account!.id, cookies.get('tz')), o.occ, String(f.get('slot')), String(f.get('task') ?? '') || null);

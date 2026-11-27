@@ -125,6 +125,29 @@ describe('swapping a Slot for the day', () => {
 		expect(() => swapSlot(app, day(today), fixed.id, null)).toThrow(/own Task/);
 	});
 
+	it("a finished log refuses a swap and Pick another, so a band's Undo after Finish changes nothing", async () => {
+		const { actions } = await import('../../routes/(app)/log/[id]/+page.server');
+		const id = randomUUID();
+		db.insert(occurrence).values({ id, habitId: gym().id, date: addDays(today, -90), status: 'done', finishedAt: new Date(), variantId: fixed.variantId }).run();
+		const post = async (action: 'swap' | 'reroll', fields: Record<string, string>) => {
+			const body = new FormData();
+			for (const [k, v] of Object.entries(fields)) body.set(k, v);
+			const event = { request: new Request('http://x/', { method: 'POST', body }), locals: { account: { id: me } }, params: { id }, cookies: { get: () => undefined } };
+			return (await (actions[action] as unknown as (e: unknown) => Promise<unknown>)(event)) as { status?: number; data?: { error: string } } | undefined;
+		};
+		const picksOf = () => db.select().from(occurrence).where(eq(occurrence.id, id)).get()!.picks;
+		const refused = { status: 400, data: { error: 'This log is finished: its Tasks stay as logged.' } };
+		expect(await post('swap', { slot: fixed.id, task: incline })).toMatchObject(refused);
+		expect(await post('swap', { slot: auto.id, task: '' })).toMatchObject(refused);
+		expect(await post('reroll', { slot: auto.id })).toMatchObject(refused);
+		expect(picksOf()).toBeNull();
+		// Open again, it swaps.
+		db.update(occurrence).set({ status: 'due' }).where(eq(occurrence.id, id)).run();
+		expect(await post('swap', { slot: fixed.id, task: incline })).toBeUndefined();
+		expect(picksOf()?.[fixed.id]).toBe(incline);
+		db.delete(occurrence).where(eq(occurrence.id, id)).run();
+	});
+
 	it('what was done with each Task counts for that Task, and the Slot counts as done', () => {
 		const occ = day(today);
 		// Two sets of Bench press, then swapped for Incline bench press; the auto-filled Slot done too, with
@@ -277,6 +300,35 @@ describe('the Tasks used in a Slot before, for its ⋯ and the swap picker', () 
 		db.update(occurrence).set({ status: 'done' }).where(eq(occurrence.id, id)).run();
 		expect(open(id).alts).toEqual({});
 		expect(open(id).items.every((it) => !it.used.length)).toBe(true);
+	});
+
+	it('the parts of a Task with parts swapped away are done in its Slot, named, steps too; only what sits nowhere is no longer in the habit', async () => {
+		const { load } = await import('../../routes/(app)/log/[id]/+page.server');
+		const id = randomUUID();
+		const upper = randomUUID();
+		const step = randomUUID();
+		const old = randomUUID();
+		db.insert(task).values([
+			{ id: upper, accountId: me, name: 'Upper circuit' },
+			{ id: step, accountId: me, name: 'Arm circles', parentTaskId: upper, rowOne: 'round', rowMany: 'rounds' },
+			{ id: old, accountId: me, name: 'Old thing' }
+		]).run();
+		// Round 1 of Upper circuit, then swapped for Bench press: its parts sit under the Slot. A value from before paths sits nowhere.
+		db.insert(occurrence).values({ id, habitId: gym().id, date: addDays(today, -95), status: 'due', variantId: fixed.variantId, picks: { [fixed.id]: bench } }).run();
+		db.insert(entry).values([
+			{ id: randomUUID(), occurrenceId: id, taskId: step, path: `${fixed.id}#1/p1`, values: { done: true }, sortOrder: 0 },
+			{ id: randomUUID(), occurrenceId: id, taskId: incline, path: `${fixed.id}#1/p2`, values: { [field(incline, 'Weight')]: 40 }, sortOrder: 1 },
+			{ id: randomUUID(), occurrenceId: id, taskId: old, path: null, values: { _summary: true, note: 'x' }, sortOrder: 2 }
+		]).run();
+		const data = (load as unknown as (e: unknown) => { orphanNames: string[]; orphanTasks: Record<string, { name: string; rowOne: string; rowMany: string }> })({
+			locals: { account: { id: me } },
+			params: { id },
+			cookies: { get: () => undefined },
+			url: new URL(`http://x/log/${id}`)
+		});
+		expect(data.orphanNames).toEqual(['Old thing']);
+		expect(data.orphanTasks[step]).toEqual({ name: 'Arm circles', rowOne: 'round', rowMany: 'rounds' });
+		expect(data.orphanTasks[incline].name).toBe('Incline bench press');
 	});
 });
 
