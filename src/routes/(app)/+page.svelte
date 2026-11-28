@@ -387,25 +387,40 @@
 		return anchor ? timeOf(anchor, depth + 1) : { clock: null, label: null };
 	};
 	/**
-	 * By time with no groups: the day as a timeline, with a Now line (Today, option B). Done rows sunk to the end stay
-	 * after it. Null when nothing has a time, so the list stays as it was.
+	 * By time with no groups: the day as a timeline, with a Now line (Today, option B). Null when nothing has a time, so
+	 * the list stays as it was. A group's time whose habits are all done follows the done word too (`done`, below).
 	 */
 	const tl = $derived.by(() => {
 		if (view.sort !== 'cue' || view.group !== 'none') return null;
 		const items = shownBuild
 			.filter((b) => !sunk.has(b.habitId))
 			.map((b) => {
-				const kids = b.group && !b.group.routine ? kidsOf(b.habitId).map((k) => ({ id: k.habitId, ...timeOf(k) })) : undefined;
+				const kids = b.group && !b.group.routine ? kidsOf(b.habitId).map((k) => ({ id: k.habitId, ...timeOf(k), done: settled(k) })) : undefined;
 				// A routine is done in one go: it stands at its own time, else at its first habit's.
 				const own = timeOf(b);
 				const first = !own.clock && b.group?.routine ? kidsOf(b.habitId).map((k) => timeOf(k)).find((t) => t.clock) : undefined;
 				return { ...b, id: b.habitId, ...(first ?? own), kids };
 			});
-		const t = timeline(items, now, data.dayStart);
+		const t = timeline(items, now, data.dayStart, view.done !== 'keep');
 		return t.past.length || t.ahead.length ? t : null;
 	});
+	/**
+	 * What is finished, as the done word says: sunk to the end (the timeline's last slot, `doneSlot`) or folded into Done
+	 * (`doneFold`), whole habits and, by time, a group's finished time. Hidden, it is in neither.
+	 */
+	const doneSlot = $derived(
+		view.done === 'bottom' && tl && (sunk.size || tl.done.items.length)
+			? { ...tl.done, items: [...shownBuild.filter((b) => sunk.has(b.habitId)), ...tl.done.items] }
+			: null
+	);
+	const doneFold = $derived(
+		view.done === 'collapse' && (doneFolded.length || tl?.done.items.length)
+			? { key: 'done', label: 'Done', items: [...doneFolded, ...(tl?.done.items ?? [])], only: tl?.done.only ?? new Map<string, Set<string>>() }
+			: null
+	);
 	/** The habits a group holds in one slot of the timeline: those at that time, or all of them. */
 	const kidsIn = (s: Slot<Item> | undefined, id: string) => kidsOf(id).filter((k) => !s?.only.get(id) || s.only.get(id)!.has(k.habitId));
+	const leavesIn = (s: Slot<Item>): Item[] => s.items.flatMap((b) => (b.group ? leavesOf(kidsIn(s, b.habitId)) : [b]));
 	/** The one row whose Log stands out: what is stacked on something done, or else the first one due. */
 	const upNext = $derived.by(() => {
 		const tops: [Item, Slot<Item> | undefined][] = tl ? [...tl.past, ...(tl.anyTime ? [tl.anyTime] : []), ...tl.ahead].flatMap((s) => s.items.map((b): [Item, Slot<Item>] => [b, s])) : shownBuild.map((b) => [b, undefined]);
@@ -663,7 +678,7 @@
 					{#if tl.anyTime}{@render slot(tl.anyTime)}{/if}
 					{#each tl.ahead as s (s.key)}{@render slot(s)}{/each}
 					<!-- Done at the end: on the timeline's column too, under its own word. -->
-					{#if sunk.size}{@render slot({ key: 'done', label: 'Done', items: shownBuild.filter((b) => sunk.has(b.habitId)), only: new Map() })}{/if}
+					{#if doneSlot}{@render slot(doneSlot)}{/if}
 				</ol>
 			{:else}
 				{#each groups as g (g.key)}
@@ -675,9 +690,9 @@
 				{/each}
 			{/if}
 			{@render timeLine()}
-			{#if doneFolded.length}
-				<GroupHeading title="Done" slotOpen={gripped} count={String(leavesOf(doneFolded).length)} folded={folded('done')} onfold={() => fold('done')} />
-				{#if !folded('done')}{@render habitList(doneFolded, 'Done today')}{/if}
+			{#if doneFold}
+				<GroupHeading title="Done" slotOpen={gripped} count={String(leavesIn(doneFold).length)} folded={folded('done')} onfold={() => fold('done')} />
+				{#if !folded('done')}{@render habitList(doneFold.items, 'Done today', doneFold)}{/if}
 			{/if}
 		</div>
 		<div class="today-side">

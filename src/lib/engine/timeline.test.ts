@@ -21,6 +21,22 @@ it('splits the day at now, any time between, and a group stands at each of its t
 	expect([...t.anyTime!.only.get('vitamins')!]).toEqual(['a']);
 });
 
+it('with apart, a group time whose habits are all done leaves its slot for done', () => {
+	const back = at('back', null, [{ ...at('back-am', '08:30'), done: true }, at('back-pm', '20:30')]);
+	const kept = timeline([back], '12:30');
+	expect(ids(kept.past)).toEqual(['08:30 back']); // keep: the done word leaves it where it is
+	expect(kept.done.items).toEqual([]);
+	const t = timeline([back, at('spanish', '09:00')], '12:30', '00:00', true);
+	expect(ids(t.past)).toEqual(['09:00 spanish']);
+	expect(ids(t.ahead)).toEqual(['20:30 back']);
+	expect(t.done.items.map((i) => i.id)).toEqual(['back']);
+	expect([...t.done.only.get('back')!]).toEqual(['back-am']);
+	// one time still due keeps that time's piece in place
+	const half = timeline([at('g', null, [{ ...at('a', '08:00'), done: true }, at('b', '08:00'), at('c', '20:00')])], '12:30', '00:00', true);
+	expect(ids(half.past)).toEqual(['08:00 g']);
+	expect(half.done.items).toEqual([]);
+});
+
 it('keeps a group whole when its habits share one time, and orders by the day start', () => {
 	const t = timeline([at('late', '01:00'), at('g', null, [at('x', '23:00'), at('y', null)]), at('h', null, [at('z', '22:00')])], '23:30', '04:00');
 	expect(ids(t.past)).toEqual(['22:00 h', '23:00 g']);
