@@ -59,6 +59,8 @@ export interface Timed {
 	label: string | null;
 	/** A group's habits, each with its own time (null: the group's). A routine is done in one go, so it passes none. */
 	kids?: Timed[];
+	/** A group's habit: finished, and past its moment in place. */
+	done?: boolean;
 }
 
 export interface Slot<T> {
@@ -74,8 +76,12 @@ export interface Slot<T> {
  * One slot per time, in the order the day is lived, split at `now` into what is past (and still shown) and what is
  * ahead; the habits with no time come between them, since they fit now. A group whose habits are at different times
  * stands in each of their slots, holding only the habits at that time. Items keep their order within a slot.
+ *
+ * The view's done word reaches a whole habit before it gets here, but a group with a habit still due isn't finished, so
+ * it only meets that group's times. With `apart`, a time where all of a group's habits are done leaves its slot for
+ * `done`, which the page puts where the done word says (at the end, in the Done fold, or nowhere).
  */
-export function timeline<T extends Timed>(items: T[], now: string, dayStart = '00:00') {
+export function timeline<T extends Timed>(items: T[], now: string, dayStart = '00:00', apart = false) {
 	const slots = new Map<string, Slot<T>>();
 	const put = (clock: string | null, label: string | null, item: T, kids?: string[]) => {
 		const key = clock ?? '';
@@ -84,16 +90,24 @@ export function timeline<T extends Timed>(items: T[], now: string, dayStart = '0
 		if (!s.items.includes(item)) s.items.push(item);
 		if (kids) s.only.set(item.id, new Set([...(s.only.get(item.id) ?? []), ...kids]));
 	};
+	const done: Slot<T> = { key: 'done', label: 'Done', items: [], only: new Map() };
 	for (const it of items) {
 		const at = new Map<string | null, Timed[]>();
 		for (const k of it.kids ?? []) at.set(k.clock ?? it.clock, [...(at.get(k.clock ?? it.clock) ?? []), k]);
 		const labelOf = (ks: Timed[]) => (ks[0].clock ? ks[0].label : it.label);
-		if (at.size > 1) for (const [c, ks] of at) put(c, labelOf(ks), it, ks.map((k) => k.id));
+		if (at.size > 1)
+			for (const [c, ks] of at) {
+				if (!apart || !ks.every((k) => k.done)) put(c, labelOf(ks), it, ks.map((k) => k.id));
+				else {
+					if (!done.items.includes(it)) done.items.push(it);
+					done.only.set(it.id, new Set([...(done.only.get(it.id) ?? []), ...ks.map((k) => k.id)]));
+				}
+			}
 		else if (at.size === 1) put([...at.keys()][0], labelOf([...at.values()][0]), it);
 		else put(it.clock, it.label, it);
 	}
 	const order = (s: Slot<T>) => dayOrder(s.key, dayStart);
 	const timed = [...slots.values()].filter((s) => s.key).sort((a, b) => order(a) - order(b));
 	const cut = dayOrder(now, dayStart);
-	return { past: timed.filter((s) => order(s) <= cut), anyTime: slots.get('') ?? null, ahead: timed.filter((s) => order(s) > cut) };
+	return { past: timed.filter((s) => order(s) <= cut), anyTime: slots.get('') ?? null, ahead: timed.filter((s) => order(s) > cut), done };
 }
